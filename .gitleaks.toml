@@ -1,0 +1,28 @@
+# gitleaks 설정
+# 기본 룰셋을 그대로 확장해서 쓴다. 룰을 직접 정의하지 않는다.
+# 참고: https://github.com/gitleaks/gitleaks
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "오탐 허용 목록"
+
+paths = [
+  # 빌드 산출물 · 래퍼 바이너리
+  '''^build/''',
+  '''^\.gradle/''',
+  '''^gradle/wrapper/gradle-wrapper\.jar$''',
+]
+
+regexes = [
+  # 문서·Swagger 예시에 쓰는 명백한 더미 값
+  '''user@example\.com''',
+  '''password123!''',
+  '''\{\{[A-Z_]+\}\}''',      # INFRA.md 의 {{EC2_HOST}} 형태 마스킹
+  '''\$\{[A-Z_]+\}''',        # application.yaml 의 ${DB_PASSWORD} 환경변수 자리
+]
+
+# ⚠️ 여기에 항목을 추가할 때는 "정말 더미 값인지" 확인할 것.
+#    진짜 시크릿을 허용 목록에 넣으면 스캔의 의미가 사라진다.
+#    추가 시 PR 에서 이유를 설명한다.

@@ -1,0 +1,58 @@
+name: Gitleaks
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  schedule:
+    # 매주 월요일 09:00 KST (= 00:00 UTC) 전체 히스토리 정기 스캔
+    - cron: '0 0 * * 1'
+
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # 공식 액션(gitleaks/gitleaks-action)은 조직 레포에 라이선스 키를 요구한다.
+  # gitleaks CLI 자체는 MIT 라이선스라 바이너리를 직접 받아 쓰면 키가 필요 없다.
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  scan:
+    name: 시크릿 스캔
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v7
+        with:
+          # 커밋 히스토리 전체를 봐야 과거에 섞여 들어간 시크릿을 찾는다
+          fetch-depth: 0
+
+      - name: gitleaks 설치
+        run: |
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: 스캔
+        run: |
+          gitleaks git . \
+            --config .gitleaks.toml \
+            --redact \
+            --verbose \
+            --report-format sarif \
+            --report-path gitleaks-report.sarif
+
+      - name: 리포트 업로드 (탐지 시)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.sarif
+          retention-days: 7
