@@ -27,7 +27,22 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 |------|--------|---------|------|
 | `ci.yml` | PR·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 | ✅ |
 | `gitleaks.yml` | PR·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
+| `dependabot.yml` | 매주 월 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
 | 배포 | — | — | ⬜ 미구축 |
+
+### 🔒 액션 버전 고정 정책
+
+모든 GitHub Actions 는 **태그가 아니라 커밋 SHA 로 고정**한다.
+
+```yaml
+uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+`@v7` 같은 태그는 소유자가 다른 커밋으로 옮길 수 있어 공급망 공격 경로가 된다.
+SHA 는 불변이라 이 위험이 사라진다.
+
+수동 갱신 부담은 `.github/dependabot.yml` 이 매주 PR 로 올려 해결한다.
+주석의 `# v7.0.1` 은 Dependabot 이 버전을 인식하는 데 쓰이므로 지우지 말 것.
 
 ---
 
@@ -55,9 +70,14 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 |------|------|
 | 트리거 | `pull_request` / `push` → `develop`, `main` + 매주 월 00:00 UTC |
 | 방식 | **gitleaks CLI 바이너리 직접 실행** (v8.30.1) |
-| 설정 | `.gitleaks.toml` (기본 룰셋 확장 + 오탐 허용목록) |
+| 무결성 | 다운로드 후 **SHA-256 체크섬 검증**, 통과 시에만 압축 해제 |
+| 설정 | `.gitleaks.toml` (기본 룰셋 확장 + 경로 한정 허용목록) |
 | 범위 | `fetch-depth: 0` — 커밋 히스토리 전체 |
 | 산출물 | 탐지 시 SARIF 리포트 업로드 |
+
+> ⚠️ **버전을 올릴 때 `GITLEAKS_SHA256` 도 반드시 함께 갱신**한다.
+> 릴리스의 `gitleaks_<ver>_checksums.txt` 에서 `linux_x64` 값을 가져온다.
+> 검증 없이 받은 바이너리를 실행하면 변조된 tarball 이 CI 권한으로 실행될 수 있다.
 
 > 💡 **왜 공식 액션을 안 쓰나**: `gitleaks/gitleaks-action` 은 **조직 소유 저장소에
 > 라이선스 키(`GITLEAKS_LICENSE`)를 요구**한다. gitleaks CLI 자체는 MIT 라이선스라
@@ -72,8 +92,22 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 | **GitHub Secret Scanning** | 알려진 시크릿 패턴 탐지 | 저장소 전체 상시 | ✅ |
 | **Push Protection** | 시크릿이 포함된 push 를 **거부** | push 시점 | ✅ |
 | **Gitleaks** | 커스텀 룰 + 히스토리 스캔 | PR·push·주간 | ✅ |
-| **Dependabot 알림** | 의존성 취약점 알림 | 상시 | ✅ |
-| **CodeRabbit** | AI 코드 리뷰 | PR | 🔶 앱 설치 필요 |
+| **Dependabot 알림** | 의존성 취약점 **알림** | 상시 | ✅ |
+| **Dependabot 자동 수정 PR** | 취약점 자동 패치 PR | — | ⬜ 미사용 |
+| **Dependabot 버전 업데이트** | 액션·의존성 버전 PR | 매주 월 09:00 | ✅ |
+| **CodeRabbit** | AI 코드 리뷰 | PR | ✅ |
+
+> 📌 상태 근거 (2026-07-28 확인):
+> ```
+> gh api repos/<owner>/<repo> --jq '.security_and_analysis'
+>   → secret_scanning: enabled, secret_scanning_push_protection: enabled
+> gh api repos/<owner>/<repo>/vulnerability-alerts  → HTTP 204 (활성)
+> ```
+> 설정을 바꿨다면 위 명령으로 재확인한 뒤 이 표를 갱신할 것. 확인 없이 ✅ 로 두지 말 것.
+>
+> ⚠️ **Dependabot 은 세 가지가 서로 다르다.** 취약점 *알림*은 켜져 있지만,
+> 취약점 *자동 수정 PR*(`dependabot_security_updates`)은 꺼져 있다.
+> 버전 업데이트는 `.github/dependabot.yml` 로 별도 운영한다.
 
 ### 3중 방어선
 

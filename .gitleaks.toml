@@ -5,24 +5,39 @@
 [extend]
 useDefault = true
 
-[allowlist]
-description = "오탐 허용 목록"
-
+# ── 스캔 대상에서 아예 제외할 경로 ──────────────────────────
+# 빌드 산출물과 바이너리는 소스가 아니므로 경로 단위로 제외한다.
+[[allowlists]]
+description = "빌드 산출물 · 래퍼 바이너리"
 paths = [
-  # 빌드 산출물 · 래퍼 바이너리
   '''^build/''',
   '''^\.gradle/''',
   '''^gradle/wrapper/gradle-wrapper\.jar$''',
 ]
 
+# ── 문서·설정의 더미 값 ────────────────────────────────────
+# ⚠️ condition = "AND" 가 핵심이다.
+#    이게 없으면 regex 가 저장소 전체에 적용되어, 진짜 설정 파일에 같은 값이
+#    들어가도 스캐너가 통과시킨다. 아래 paths 안에서만 예외를 적용한다.
+[[allowlists]]
+description = "문서·설정 예시의 더미 값 (지정 경로에서만 허용)"
+condition = "AND"
+paths = [
+  '''^\.ai/''',
+  '''^src/main/resources/application.*\.ya?ml$''',
+  '''^src/test/resources/application.*\.ya?ml$''',
+  '''^README\.md$''',
+  '''^AGENTS\.md$''',
+]
 regexes = [
-  # 문서·Swagger 예시에 쓰는 명백한 더미 값
-  '''user@example\.com''',
-  '''password123!''',
-  '''\{\{[A-Z_]+\}\}''',      # INFRA.md 의 {{EC2_HOST}} 형태 마스킹
-  '''\$\{[A-Z_]+\}''',        # application.yaml 의 ${DB_PASSWORD} 환경변수 자리
+  '''user@example\.com''',        # Swagger @Schema example
+  '''password123!''',             # Swagger @Schema example
+  '''\{\{[A-Z_]+\}\}''',          # INFRA.md 의 {{EC2_HOST}} 형태 마스킹
+  '''\$\{[A-Z_]+\}''',            # application.yaml 의 ${DB_PASSWORD} 환경변수 자리
 ]
 
-# ⚠️ 여기에 항목을 추가할 때는 "정말 더미 값인지" 확인할 것.
-#    진짜 시크릿을 허용 목록에 넣으면 스캔의 의미가 사라진다.
-#    추가 시 PR 에서 이유를 설명한다.
+# ⚠️ 허용 목록에 항목을 추가할 때 지켜야 할 것
+#    1. 정말 더미 값인지 확인한다. 진짜 시크릿을 넣으면 스캔의 의미가 사라진다.
+#    2. 가능한 한 paths 로 범위를 좁히고 condition = "AND" 를 쓴다.
+#       전역 regex 는 저장소 전체에 구멍을 낸다.
+#    3. PR 에서 추가 이유를 설명한다.
