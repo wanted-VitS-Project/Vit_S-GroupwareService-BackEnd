@@ -36,20 +36,28 @@ jobs:
         with:
           # 커밋 히스토리 전체를 봐야 과거에 섞여 들어간 시크릿을 찾는다
           fetch-depth: 0
+          # 스캔에 git 인증이 필요 없다. 토큰을 .git/config 에 남기지 않는다.
+          persist-credentials: false
 
       - name: gitleaks 설치
         run: |
           set -euo pipefail
           TARBALL="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfL -o "/tmp/${TARBALL}" \
+          curl -sSfL -o "${RUNNER_TEMP}/${TARBALL}" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${TARBALL}"
 
           # ⚠️ 검증 없이 풀어서 실행하면 변조된 tarball 이 CI 권한으로 실행될 수 있다.
           #    체크섬이 맞을 때만 압축을 해제한다.
-          echo "${GITLEAKS_SHA256}  /tmp/${TARBALL}" | sha256sum --check --strict -
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${TARBALL}" | sha256sum --check --strict -
 
-          tar -xzf "/tmp/${TARBALL}" -C /usr/local/bin gitleaks
-          gitleaks version
+          # 시스템 경로(/usr/local/bin) 대신 러너 임시 디렉토리에 설치한다.
+          # 러너 이미지 변경이나 권한 설정에 덜 흔들린다.
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${TARBALL}" -C "${RUNNER_TEMP}/bin" gitleaks
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: gitleaks 버전 확인
+        run: gitleaks version
 
       - name: 스캔
         run: |
