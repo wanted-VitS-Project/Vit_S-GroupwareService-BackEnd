@@ -27,7 +27,7 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 |------|--------|---------|------|
 | `ci.yml` | PR·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 | ✅ |
 | `gitleaks.yml` | PR·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
-| `dependabot.yml` | 매주 월 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
+| `dependabot.yml` | **매월** 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
 | 배포 | — | — | ⬜ 미구축 |
 
 ### 🔒 액션 버전 고정 정책
@@ -41,7 +41,9 @@ uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 `@v7` 같은 태그는 소유자가 다른 커밋으로 옮길 수 있어 공급망 공격 경로가 된다.
 SHA 는 불변이라 이 위험이 사라진다.
 
-수동 갱신 부담은 `.github/dependabot.yml` 이 매주 PR 로 올려 해결한다.
+수동 갱신 부담은 `.github/dependabot.yml` 이 **월 1회** PR 로 올려 해결한다.
+부트캠프 기간(약 4주)과 브랜치 보호(모든 PR 에 승인 1명)를 고려해 월간으로 낮췄다.
+운영 기간이 길어지면 `interval: weekly` 로 올린다.
 주석의 `# v7.0.1` 은 Dependabot 이 버전을 인식하는 데 쓰이므로 지우지 말 것.
 
 ---
@@ -94,7 +96,7 @@ SHA 는 불변이라 이 위험이 사라진다.
 | **Gitleaks** | 커스텀 룰 + 히스토리 스캔 | PR·push·주간 | ✅ |
 | **Dependabot 알림** | 의존성 취약점 **알림** | 상시 | ✅ |
 | **Dependabot 자동 수정 PR** | 취약점 자동 패치 PR | — | ⬜ 미사용 |
-| **Dependabot 버전 업데이트** | 액션·의존성 버전 PR | 매주 월 09:00 | ✅ |
+| **Dependabot 버전 업데이트** | 액션·의존성 버전 PR | **매월** 09:00 KST | ✅ |
 | **CodeRabbit** | AI 코드 리뷰 | PR | ✅ |
 
 > 📌 상태 근거 (2026-07-28 확인):
