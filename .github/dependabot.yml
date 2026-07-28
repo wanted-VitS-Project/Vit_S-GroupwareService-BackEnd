@@ -1,16 +1,20 @@
 version: 2
 
+# 📌 부트캠프 기간(약 4주)에 맞춰 월 1회로 낮춰 운영한다.
+#    브랜치 보호로 모든 PR 에 승인 1명이 필요하므로, 주간 주기는 리뷰 부담이 크다.
+#    운영 기간이 길어지면 interval 을 weekly 로 올린다.
+
 updates:
   # GitHub Actions 를 커밋 SHA 로 고정해두면 수동 갱신이 번거롭다.
   # Dependabot 이 새 버전을 SHA 로 바꿔 PR 을 올려준다.
+  # ⚠️ SHA 고정과 이 설정은 세트다. 이걸 끄면 액션이 오래된 채로 방치된다.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "09:00"
       timezone: Asia/Seoul
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     commit-message:
       prefix: ci
     labels:
@@ -18,22 +22,20 @@ updates:
       - chore
 
   # Gradle 의존성 보안/버전 업데이트.
-  # ⚠️ 마이너 이상 업데이트는 Spring Boot 4 계열을 끌어올 수 있으므로
-  #    3.5.x 를 유지하려면 PR 내용을 반드시 확인할 것.
   - package-ecosystem: gradle
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "09:00"
       timezone: Asia/Seoul
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     commit-message:
       prefix: chore
     labels:
       - chore
     ignore:
-      # Spring Boot 는 3.5.x 유지. 메이저 업그레이드는 팀 합의 사항이다.
+      # Spring Boot 는 3.5.x 유지. 4.x 로 올리면 스타터 명칭이 전부 바뀌고
+      # springdoc 도 3.0.x 로 맞춰야 한다. 메이저 업그레이드는 팀 합의 사항이다.
       - dependency-name: org.springframework.boot
         update-types:
           - version-update:semver-major
