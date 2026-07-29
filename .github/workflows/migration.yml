@@ -1,0 +1,102 @@
+name: Migration
+
+# Flyway 마이그레이션이 실제 MySQL 에서 도는지 검증한다.
+#
+# 왜 필요한가:
+#   마이그레이션 SQL 오류는 앱을 띄우는 시점에야 드러난다. 배포 중에 발견하면 이미 늦다.
+#   PR 단계에서 실제 DB 에 적용해보면 문법 오류·순서 문제·중복 버전을 미리 잡는다.
+
+# ⚠️ paths 필터를 두지 않는다.
+#    이 잡은 브랜치 보호의 **필수 상태 체크**로 등록되어 있다.
+#    paths 로 걸러 워크플로우가 실행되지 않으면, GitHub 은 "올 예정인 체크가 안 옴" 으로 보고
+#    해당 PR 을 영구히 머지 불가 상태로 만든다. (문서만 고친 PR 도 막힌다)
+#    공개 저장소는 Actions 가 무료이고 이 잡은 약 40초라, 항상 실행하는 편이 안전하다.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: migration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: 마이그레이션 검증
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        # 태그는 이동할 수 있어 CI 가 매번 다른 버전을 쓸 수 있다.
+        # digest 로 고정해 검증 결과를 재현 가능하게 만든다. (버전 올릴 때 digest 도 함께 갱신)
+        image: mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          # CI 전용 일회성 컨테이너다. 외부에 노출되지 않으며 실행 후 폐기된다.
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: vitamins_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 마이그레이션 버전 중복 검사
+        run: |
+          set -euo pipefail
+          DIR=src/main/resources/db/migration
+          # V<버전>__<설명>.sql 에서 버전만 추출해 중복이 있는지 본다.
+          # 같은 버전이 둘이면 Flyway 가 기동 시점에 실패한다.
+          dup=$(ls "$DIR" | sed -n 's/^V\([0-9._]*\)__.*\.sql$/\1/p' | sort | uniq -d)
+          if [ -n "$dup" ]; then
+            echo "❌ 중복된 마이그레이션 버전: $dup"
+            exit 1
+          fi
+          echo "✅ 버전 중복 없음"
+          ls -1 "$DIR"
+
+      - name: MySQL 준비 대기
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -pci-root-password --silent 2>/dev/null; then
+              echo "✅ MySQL 준비 완료 (${i}s)"; exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ MySQL 기동 실패"; exit 1
+
+      # build.gradle 에는 flyway-core 라이브러리만 있고 Flyway **Gradle 플러그인**은 없다.
+      # 따라서 ./gradlew flywayMigrate 는 존재하지 않는다.
+      # 앱 빌드 없이 Flyway CLI 로 직접 적용한다 — 더 빠르고 빌드 상태와 무관하게 검증된다.
+      - name: 마이그레이션 적용 (Flyway CLI)
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -v "${{ github.workspace }}/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:11@sha256:782c5c207ffb5ac6336139fda4f4295bd9991ef63ad36919406d4268740069bb \
+            -url="jdbc:mysql://127.0.0.1:3306/vitamins_ci?useSSL=false&allowPublicKeyRetrieval=true" \
+            -user=root \
+            -password=ci-root-password \
+            -connectRetries=10 \
+            -locations=filesystem:/flyway/sql \
+            migrate
+
+      - name: 적용 결과 확인
+        run: |
+          echo "── 생성된 테이블 ──"
+          mysql -h 127.0.0.1 -P 3306 -uroot -pci-root-password vitamins_ci \
+            -e "SHOW TABLES;"
+          echo "── flyway_schema_history ──"
+          mysql -h 127.0.0.1 -P 3306 -uroot -pci-root-password vitamins_ci \
+            -e "SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;"
