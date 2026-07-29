@@ -25,9 +25,11 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 
 | 파일 | 트리거 | 하는 일 | 상태 |
 |------|--------|---------|------|
-| `ci.yml` | PR·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 | ✅ |
+| `ci.yml` | PR·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 + 테스트 결과 발행 | ✅ |
 | `gitleaks.yml` | PR·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
+| `migration.yml` | `db/migration/**` 변경 시 | 실제 MySQL 에 Flyway 적용 검증 | ✅ |
 | `dependabot.yml` | **매월** 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
+| CodeQL | GitHub 관리 (Default setup) | 코드 취약점 정적 분석 | ✅ |
 | 배포 | — | — | ⬜ 미구축 |
 
 ### 🔒 액션 버전 고정 정책
@@ -63,8 +65,33 @@ SHA 는 불변이라 이 위험이 사라진다.
 | 동시성 | 같은 ref 에 새 커밋이 오면 이전 실행 취소 |
 | 산출물 | **실패 시에만** 테스트 리포트 업로드 (7일 보관) |
 
+**테스트 결과 발행** — `mikepenz/action-junit-report`
+
+어떤 테스트가 왜 깨졌는지 PR 에서 바로 보이고, 실패한 라인에 코멘트가 달린다.
+아티팩트를 내려받아 열어볼 필요가 없다.
+
+> ⚠️ `fail_on_failure: false`, `require_tests: false` 로 두었다.
+> 초기에는 테스트가 거의 없어서 이 옵션 없이는 CI 가 계속 빨간불이 된다.
+> **테스트가 충분히 쌓이면 `fail_on_failure: true` 로 바꿀 것.**
+
 > ⚠️ 현재 테스트는 `src/test/resources/application.yaml` 에서 DataSource·JPA·Session
 > 자동설정을 제외한 상태로 돈다. DB 연결 후 이 제외를 걷어내면 CI 에 DB 준비가 필요해진다.
+
+### `migration.yml` — Flyway 마이그레이션 검증
+
+| 항목 | 내용 |
+|------|------|
+| 트리거 | `db/migration/**`, `build.gradle`, `application*.y*ml` 변경 시 |
+| DB | MySQL 8.0 서비스 컨테이너 (CI 전용, 실행 후 폐기) |
+| 검사 | ① 버전 중복 ② 실제 적용 ③ 생성 테이블·이력 출력 |
+
+**왜 필요한가**: 마이그레이션 SQL 오류는 앱을 띄우는 시점에야 드러난다.
+배포 중에 발견하면 이미 늦다. PR 단계에서 실제 DB 에 적용해 문법 오류·순서 문제·중복 버전을 잡는다.
+
+> 💡 **Gradle 이 아니라 Flyway CLI(도커)를 쓴다.**
+> `build.gradle` 에는 `flyway-core` **라이브러리만** 있고 Flyway **Gradle 플러그인**은 없어서
+> `./gradlew flywayMigrate` 태스크가 존재하지 않는다.
+> CLI 방식은 앱 빌드가 필요 없어 더 빠르고, 빌드 상태와 무관하게 마이그레이션만 검증한다.
 
 ### `gitleaks.yml` — 시크릿 스캔
 
@@ -97,7 +124,21 @@ SHA 는 불변이라 이 위험이 사라진다.
 | **Dependabot 알림** | 의존성 취약점 **알림** | 상시 | ✅ |
 | **Dependabot 자동 수정 PR** | 취약점 자동 패치 PR | — | ⬜ 미사용 |
 | **Dependabot 버전 업데이트** | 액션·의존성 버전 PR | **매월** 09:00 KST | ✅ |
+| **CodeQL** | 코드 취약점 정적 분석(SAST) | PR·push·주간 | ✅ |
 | **CodeRabbit** | AI 코드 리뷰 | PR | ✅ |
+
+### ⚠️ Dependabot 이 올리면 안 되는 업그레이드
+
+`.github/dependabot.yml` 의 `ignore` 로 차단한다. **끄지 말 것.**
+
+| 대상 | 차단 이유 |
+|------|----------|
+| `org.springframework.boot` major | 4.x 로 가면 스타터 명칭이 전부 바뀐다 |
+| `springdoc-openapi-starter-webmvc-ui` major | **3.0.x 는 Boot 4 전용.** Boot 3.5 에서 올리면 Swagger 가 깨진다 |
+| `org.springframework*` major | Boot 가 버전을 관리하므로 개별 메이저 업그레이드는 충돌을 만든다 |
+
+> 📌 2026-07-29 실제로 Dependabot 이 springdoc 3.0.3 업그레이드 PR 을 올렸다.
+> 초기 ignore 규칙에 springdoc 이 빠져 있어 생긴 일이며, 머지했다면 Swagger 가 죽었을 것이다.
 
 > 📌 상태 근거 (2026-07-28 확인):
 > ```

@@ -34,8 +34,21 @@ updates:
     labels:
       - chore
     ignore:
-      # Spring Boot 는 3.5.x 유지. 4.x 로 올리면 스타터 명칭이 전부 바뀌고
-      # springdoc 도 3.0.x 로 맞춰야 한다. 메이저 업그레이드는 팀 합의 사항이다.
+      # Spring Boot 는 3.5.x 유지. 4.x 로 올리면 스타터 명칭이 전부 바뀐다.
+      # 메이저 업그레이드는 팀 합의 사항이다.
       - dependency-name: org.springframework.boot
+        update-types:
+          - version-update:semver-major
+
+      # ⚠️ springdoc 3.0.x 는 **Spring Boot 4 전용**이다.
+      #    Boot 3.5.x 에서 올리면 Swagger 가 깨진다. 2.8.x 를 유지한다.
+      #    (2026-07-29: Dependabot 이 실제로 3.0.3 업그레이드 PR 을 올려 차단)
+      - dependency-name: org.springdoc:springdoc-openapi-starter-webmvc-ui
+        update-types:
+          - version-update:semver-major
+
+      # Boot 3.5 와 함께 쓰는 Spring Framework/Security 도 메이저는 막는다.
+      # Boot 가 버전을 관리하므로 개별 메이저 업그레이드는 충돌을 만든다.
+      - dependency-name: org.springframework*
         update-types:
           - version-update:semver-major
