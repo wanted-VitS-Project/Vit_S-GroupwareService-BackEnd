@@ -61,3 +61,8 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Secrets / Environment ###
+application-*.properties
+application-*.yml
+application-*.yaml
