@@ -1,0 +1,77 @@
+name: Gitleaks
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  schedule:
+    # 매주 월요일 09:00 KST (= 00:00 UTC) 전체 히스토리 정기 스캔
+    - cron: '0 0 * * 1'
+
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # 공식 액션(gitleaks/gitleaks-action)은 조직 레포에 라이선스 키를 요구한다.
+  # gitleaks CLI 자체는 MIT 라이선스라 바이너리를 직접 받아 쓰면 키가 필요 없다.
+  GITLEAKS_VERSION: 8.30.1
+  # 릴리스의 gitleaks_<ver>_checksums.txt 에 있는 값.
+  # 버전을 올릴 때 이 값도 반드시 함께 갱신할 것.
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  scan:
+    name: 시크릿 스캔
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 체크아웃
+        # 태그는 이동할 수 있으므로 커밋 SHA 로 고정한다 (공급망 위험 차단)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 커밋 히스토리 전체를 봐야 과거에 섞여 들어간 시크릿을 찾는다
+          fetch-depth: 0
+          # 스캔에 git 인증이 필요 없다. 토큰을 .git/config 에 남기지 않는다.
+          persist-credentials: false
+
+      - name: gitleaks 설치
+        run: |
+          set -euo pipefail
+          TARBALL="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "${RUNNER_TEMP}/${TARBALL}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${TARBALL}"
+
+          # ⚠️ 검증 없이 풀어서 실행하면 변조된 tarball 이 CI 권한으로 실행될 수 있다.
+          #    체크섬이 맞을 때만 압축을 해제한다.
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${TARBALL}" | sha256sum --check --strict -
+
+          # 시스템 경로(/usr/local/bin) 대신 러너 임시 디렉토리에 설치한다.
+          # 러너 이미지 변경이나 권한 설정에 덜 흔들린다.
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${TARBALL}" -C "${RUNNER_TEMP}/bin" gitleaks
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: gitleaks 버전 확인
+        run: gitleaks version
+
+      - name: 스캔
+        run: |
+          gitleaks git . \
+            --config .gitleaks.toml \
+            --redact \
+            --verbose \
+            --report-format sarif \
+            --report-path gitleaks-report.sarif
+
+      - name: 리포트 업로드 (탐지 시)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.sarif
+          retention-days: 7
