@@ -93,14 +93,10 @@ public class GlobalExceptionHandler {
             Exception e,
             HttpServletRequest request
     ) {
-        String message = hasText(e.getMessage())
-                ? e.getMessage()
-                : ErrorCode.COMMON_BAD_REQUEST.getMessage();
-
         return ResponseEntity.badRequest().body(ApiErrorResponse.of(
                 400,
                 ErrorCode.COMMON_BAD_REQUEST.getCode(),
-                message,
+                ErrorCode.COMMON_BAD_REQUEST.getMessage(),
                 request.getRequestURI()
         ));
     }
