@@ -13,7 +13,6 @@ on:
       - 'src/main/resources/db/migration/**'
       - 'build.gradle'
       - 'src/main/resources/application*.yml'
-      - 'src/main/resources/application*.yaml'
       - '.github/workflows/migration.yml'
   push:
     branches: [develop, main]

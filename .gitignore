@@ -63,6 +63,12 @@ out/
 .vscode/
 
 ### Secrets / Environment ###
+# 개인 로컬 설정과 시크릿이 담긴 프로필 파일을 막는다.
 application-*.properties
 application-*.yml
 application-*.yaml
+
+# 단, 아래는 실제 값이 없고 환경변수 자리(${VAR})만 담는 커밋 대상 파일이다.
+# 새 프로필을 추가할 때 커밋이 필요하면 여기에 예외를 추가한다.
+!application-prod.yml
+!application-dev.yml

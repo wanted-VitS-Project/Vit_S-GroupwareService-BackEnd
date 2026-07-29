@@ -93,8 +93,10 @@ SHA 는 불변이라 이 위험이 사라진다.
 > ⚠️ 현재 측정 대상 클래스가 사실상 0개라 리포트가 비어 있다. 그래서 커버리지 스텝에
 > `continue-on-error: true` 를 두었다. **도메인 코드가 쌓이면 이 옵션을 제거할 것.**
 
-> ⚠️ 현재 테스트는 `src/test/resources/application.yaml` 에서 DataSource·JPA·Session
-> 자동설정을 제외한 상태로 돈다. DB 연결 후 이 제외를 걷어내면 CI 에 DB 준비가 필요해진다.
+> 🔴 **현재 테스트가 0개다.** PR #4 에서 `VitaminSApplicationTests` 와 `src/test/resources/`
+> 설정이 삭제됐다. `빌드 & 테스트` 체크는 통과하지만 **아무것도 검증하지 않는다.**
+> 곧 이 체크를 브랜치 보호의 필수 항목으로 걸 예정인데, 이 상태로는 게이트가 무의미하다.
+> 도메인 구현과 함께 테스트를 되살려야 한다.
 
 ### `migration.yml` — Flyway 마이그레이션 검증
 
