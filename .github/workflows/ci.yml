@@ -67,12 +67,28 @@ jobs:
       #    커버리지 미달로 머지를 막지 않는다. 숫자를 채우려고 의미 없는 테스트를
       #    쓰게 되는 부작용이 더 크기 때문. 테스트가 쌓이면 팀 합의로 임계값을 올린다.
       #
-      # ⚠️ continue-on-error: 현재 측정 대상 클래스가 거의 없어 리포트가 비어 있다.
-      #    빈 리포트에서 액션이 실패해도 CI 전체를 막지 않도록 한다.
-      #    도메인 코드가 쌓이면 이 옵션을 제거할 것.
+      # 현재 측정 대상 클래스가 사실상 없어 리포트가 비어 있다(<counter> 없음).
+      # 빈 리포트를 액션에 넘기면 실패하므로 **그 경우에만** 건너뛴다.
+      #
+      # ⚠️ continue-on-error 는 쓰지 않는다. 그러면 XML 경로 오류·파싱 오류·댓글 실패까지
+      #    전부 삼켜서 CI 가 정상인 것처럼 보인다. 건너뛸 조건을 명시적으로 판단한다.
+      - name: 커버리지 데이터 유무 확인
+        id: cov
+        if: github.event_name == 'pull_request'
+        run: |
+          F=build/reports/jacoco/test/jacocoTestReport.xml
+          if [ -f "$F" ] && grep -q "<counter" "$F"; then
+            echo "has_data=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_data=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::측정 대상 클래스가 없어 커버리지 리포트를 건너뜁니다."
+          fi
+
+      # ⚠️ fork 에서 올라온 PR 은 GITHUB_TOKEN 이 읽기 전용이라 댓글 작성이 실패한다.
+      #    현재는 팀원이 같은 저장소 브랜치로 작업하므로 해당 없음.
+      #    외부 기여를 받게 되면 workflow_run 기반 별도 워크플로우로 분리할 것.
       - name: 커버리지 리포트
-        if: always() && github.event_name == 'pull_request'
-        continue-on-error: true
+        if: github.event_name == 'pull_request' && steps.cov.outputs.has_data == 'true'
         uses: madrapps/jacoco-report@e51ce1f46f7f8b5331593f935e59cbaf44b84920 # v1.8.0
         with:
           paths: ${{ github.workspace }}/build/reports/jacoco/test/jacocoTestReport.xml

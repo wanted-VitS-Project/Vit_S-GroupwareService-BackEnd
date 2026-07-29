@@ -68,7 +68,12 @@ application-*.properties
 application-*.yml
 application-*.yaml
 
-# 단, 아래는 실제 값이 없고 환경변수 자리(${VAR})만 담는 커밋 대상 파일이다.
-# 새 프로필을 추가할 때 커밋이 필요하면 여기에 예외를 추가한다.
+# ⚠️ 아래는 **실제로 존재하고 리뷰를 거친** 커밋 대상 파일만 예외로 푼다.
+#    git 은 파일 내용이 ${VAR} 뿐인지 판별하지 못하므로, 예외를 열어두면
+#    누군가 실제 자격 증명을 넣어 PUBLIC 저장소에 올릴 수 있다.
+#
+#    예외를 추가할 때 지킬 것:
+#      1. 존재하지 않는 프로필을 미리 열어두지 말 것 (필요해질 때 추가)
+#      2. 파일 내용이 환경변수 자리와 비민감 설정만인지 PR 에서 확인할 것
+#      3. 보완 장치: Push Protection · Gitleaks · CodeRabbit 이 3중으로 검사한다
 !application-prod.yml
-!application-dev.yml
