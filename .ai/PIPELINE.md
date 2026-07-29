@@ -1,24 +1,22 @@
 # ⚙️ CI/CD 파이프라인
 
-**최종 업데이트**: 2026-07-28 (골격 생성 — 파이프라인 미구축)
+**최종 업데이트**: 2026-07-28 (CI · Gitleaks · CodeRabbit 도입)
 **관리**: 김동현 (DevOps)
 
 > `.github/workflows/` 를 수정하기 전에 반드시 이 문서를 먼저 읽는다.
 > 워크플로우를 추가·변경하면 이 문서도 **같이** 갱신한다.
 >
-> 📖 관련: [INFRA.md](INFRA.md) · [CONVENTION.md](CONVENTION.md)
+> 📖 관련: [INFRA.md](INFRA.md) · [CONVENTION.md](CONVENTION.md) · [API.md](API.md)
 
 ---
 
 ## 1. 전체 흐름
 
 ```
-{{TODO: 파이프라인 확정 후 작성}}
-
-예)
-PR → develop           :  build + test + lint
-push → develop         :  build + test → 이미지 빌드 → dev 배포
-push → main            :  build + test → 이미지 빌드 → prod 배포
+PR → develop/main       :  CI(빌드+테스트) · Gitleaks · CodeRabbit 리뷰
+push → develop/main     :  CI(빌드+테스트) · Gitleaks
+매주 월 09:00 KST        :  Gitleaks 전체 히스토리 스캔
+배포                     :  ⬜ 미구축
 ```
 
 ---
@@ -27,77 +25,169 @@ push → main            :  build + test → 이미지 빌드 → prod 배포
 
 | 파일 | 트리거 | 하는 일 | 상태 |
 |------|--------|---------|------|
-| `{{TODO}}` | `{{TODO}}` | `{{TODO}}` | ⬜ 미구축 |
+| `ci.yml` | PR·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 | ✅ |
+| `gitleaks.yml` | PR·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
+| `dependabot.yml` | **매월** 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
+| 배포 | — | — | ⬜ 미구축 |
+
+### 🔒 액션 버전 고정 정책
+
+모든 GitHub Actions 는 **태그가 아니라 커밋 SHA 로 고정**한다.
+
+```yaml
+uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+`@v7` 같은 태그는 소유자가 다른 커밋으로 옮길 수 있어 공급망 공격 경로가 된다.
+SHA 는 불변이라 이 위험이 사라진다.
+
+수동 갱신 부담은 `.github/dependabot.yml` 이 **월 1회** PR 로 올려 해결한다.
+부트캠프 기간(약 4주)과 브랜치 보호(모든 PR 에 승인 1명)를 고려해 월간으로 낮췄다.
+운영 기간이 길어지면 `interval: weekly` 로 올린다.
+주석의 `# v7.0.1` 은 Dependabot 이 버전을 인식하는 데 쓰이므로 지우지 말 것.
 
 ---
 
 ## 3. 워크플로우 상세
 
-### `{{TODO: workflow-name.yml}}`
+### `ci.yml` — 빌드 & 테스트
 
 | 항목 | 내용 |
 |------|------|
-| 트리거 | `{{TODO}}` |
-| 러너 | `{{TODO}}` |
-| 잡 | `{{TODO}}` |
-| 캐시 | `{{TODO}}` |
-| 사용 시크릿 | `{{TODO}}` |
-| 예상 소요 시간 | `{{TODO}}` |
+| 트리거 | `pull_request` / `push` → `develop`, `main` |
+| 러너 | `ubuntu-latest` |
+| JDK | Temurin 17 |
+| 캐시 | `gradle/actions/setup-gradle@v6` (Gradle 캐시 자동) |
+| 실행 | `./gradlew build --no-daemon` |
+| 사용 시크릿 | 없음 |
+| 동시성 | 같은 ref 에 새 커밋이 오면 이전 실행 취소 |
+| 산출물 | **실패 시에만** 테스트 리포트 업로드 (7일 보관) |
 
-**단계**
-1. `{{TODO}}`
+> ⚠️ 현재 테스트는 `src/test/resources/application.yaml` 에서 DataSource·JPA·Session
+> 자동설정을 제외한 상태로 돈다. DB 연결 후 이 제외를 걷어내면 CI 에 DB 준비가 필요해진다.
+
+### `gitleaks.yml` — 시크릿 스캔
+
+| 항목 | 내용 |
+|------|------|
+| 트리거 | `pull_request` / `push` → `develop`, `main` + 매주 월 00:00 UTC |
+| 방식 | **gitleaks CLI 바이너리 직접 실행** (v8.30.1) |
+| 무결성 | 다운로드 후 **SHA-256 체크섬 검증**, 통과 시에만 압축 해제 |
+| 설정 | `.gitleaks.toml` (기본 룰셋 확장 + 경로 한정 허용목록) |
+| 범위 | `fetch-depth: 0` — 커밋 히스토리 전체 |
+| 산출물 | 탐지 시 SARIF 리포트 업로드 |
+
+> ⚠️ **버전을 올릴 때 `GITLEAKS_SHA256` 도 반드시 함께 갱신**한다.
+> 릴리스의 `gitleaks_<ver>_checksums.txt` 에서 `linux_x64` 값을 가져온다.
+> 검증 없이 받은 바이너리를 실행하면 변조된 tarball 이 CI 권한으로 실행될 수 있다.
+
+> 💡 **왜 공식 액션을 안 쓰나**: `gitleaks/gitleaks-action` 은 **조직 소유 저장소에
+> 라이선스 키(`GITLEAKS_LICENSE`)를 요구**한다. gitleaks CLI 자체는 MIT 라이선스라
+> 바이너리를 직접 받아 쓰면 키 없이 동일한 스캔이 된다.
 
 ---
 
-## 4. 시크릿 의존성
+## 4. 보안 도구
 
-> ⚠️ 키 이름만. 값은 GitHub Repo Secrets 에만 존재한다.
-> 전체 시크릿 목록은 [INFRA.md §5](INFRA.md) 참고.
+| 도구 | 역할 | 시점 | 상태 |
+|------|------|------|------|
+| **GitHub Secret Scanning** | 알려진 시크릿 패턴 탐지 | 저장소 전체 상시 | ✅ |
+| **Push Protection** | 시크릿이 포함된 push 를 **거부** | push 시점 | ✅ |
+| **Gitleaks** | 커스텀 룰 + 히스토리 스캔 | PR·push·주간 | ✅ |
+| **Dependabot 알림** | 의존성 취약점 **알림** | 상시 | ✅ |
+| **Dependabot 자동 수정 PR** | 취약점 자동 패치 PR | — | ⬜ 미사용 |
+| **Dependabot 버전 업데이트** | 액션·의존성 버전 PR | **매월** 09:00 KST | ✅ |
+| **CodeRabbit** | AI 코드 리뷰 | PR | ✅ |
 
-| 시크릿 키 | 사용 워크플로우 | 용도 |
-|-----------|----------------|------|
-| `{{TODO}}` | `{{TODO}}` | `{{TODO}}` |
+> 📌 상태 근거 (2026-07-28 확인):
+> ```
+> gh api repos/<owner>/<repo> --jq '.security_and_analysis'
+>   → secret_scanning: enabled, secret_scanning_push_protection: enabled
+> gh api repos/<owner>/<repo>/vulnerability-alerts  → HTTP 204 (활성)
+> ```
+> 설정을 바꿨다면 위 명령으로 재확인한 뒤 이 표를 갱신할 것. 확인 없이 ✅ 로 두지 말 것.
+>
+> ⚠️ **Dependabot 은 세 가지가 서로 다르다.** 취약점 *알림*은 켜져 있지만,
+> 취약점 *자동 수정 PR*(`dependabot_security_updates`)은 꺼져 있다.
+> 버전 업데이트는 `.github/dependabot.yml` 로 별도 운영한다.
+
+### 3중 방어선
+
+```
+1차  Push Protection    push 자체를 거부       ← 가장 강력. 저장소에 안 들어감
+2차  Gitleaks (PR)      PR 을 빨간불로         ← 커스텀 룰·과거 히스토리 커버
+3차  CodeRabbit         리뷰에서 지적          ← 맥락 기반 (설정 파일 평문 등)
+```
+
+`Push Protection` 이 1차인 이유는 **저장소에 들어간 뒤에는 이미 늦기 때문**이다.
+공개 저장소에 올라간 시크릿은 커밋을 지워도 이미 크롤링됐다고 가정해야 한다.
+
+> 🚨 시크릿이 커밋된 것을 발견하면 **커밋 삭제보다 키 폐기·재발급이 먼저다.**
+
+---
+
+## 5. CodeRabbit
+
+| 항목 | 내용 |
+|------|------|
+| 설정 | `.coderabbit.yaml` |
+| 언어 | 한국어 |
+| 프로필 | `assertive` (적극적으로 지적) |
+| 자동 리뷰 | 활성 (draft PR 제외, 제목에 WIP/draft 있으면 건너뜀) |
+
+**우선 검사 항목**
+1. API 명세 이탈 — `.ai/api/{도메인}.md` 와 경로·메서드·필드·상태코드 일치
+2. Swagger 어노테이션 누락 (`@Tag` / `@Operation` / `@ApiResponses` / `@Schema`)
+3. PUBLIC 저장소 민감 정보 노출
+4. Boot 3.5 ↔ Boot 4 아티팩트 혼용
+5. 계층 규칙 (헥사고날 전제 — 구조 확정 시 조정)
+
+> 📌 아키텍처가 헥사고날로 확정되면 `presentation/`·`application/`·`domain/`·`infrastructure/`
+> 규칙이 자동으로 동작한다. 다른 구조로 가면 해당 섹션만 교체한다.
+
+---
+
+## 6. 시크릿 의존성
+
+> 현재 CI 워크플로우는 **시크릿을 사용하지 않는다.** 배포 워크플로우 구축 시 추가된다.
 
 **시크릿 추가 절차**
 1. GitHub → Settings → Secrets and variables → Actions 에 등록
-2. [INFRA.md §5](INFRA.md) 시크릿 목록에 **키 이름** 추가
-3. 이 문서의 의존성 표에 추가
+2. [INFRA.md §5](INFRA.md) 시크릿 목록에 **키 이름만** 추가
+3. 이 문서의 표에 추가
 4. 워크플로우 `env:` 블록에서 참조
 
 ---
 
-## 5. 이미지 / 아티팩트
+## 7. 브랜치 보호와의 연계
 
-| 항목 | 내용 |
-|------|------|
-| 레지스트리 | `{{TODO: GHCR / ECR / Docker Hub}}` |
-| 이미지 이름 | `{{TODO}}` |
-| 태그 규칙 | `{{TODO: 예) main-<short-sha>, develop-<short-sha>}}` |
-| 보관 정책 | `{{TODO}}` |
+현재 브랜치 보호에는 **상태 체크 필수화가 걸려 있지 않다.** 보호 규칙을 만들 때
+CI 가 아직 없었기 때문이다.
 
----
+- [ ] CI 가 몇 번 안정적으로 돌아간 것을 확인한 뒤, `develop`/`main` 보호 규칙에
+      **required status checks** 로 `빌드 & 테스트`, `시크릿 스캔` 을 추가한다.
 
-## 6. 배포
-
-| 환경 | 트리거 | 방식 | 무중단 | 상태 |
-|------|--------|------|--------|------|
-| dev | `{{TODO}}` | `{{TODO}}` | `{{TODO}}` | ⬜ |
-| prod | `{{TODO}}` | `{{TODO}}` | `{{TODO}}` | ⬜ |
-
-**롤백 방법**: `{{TODO}}`
+이걸 걸어야 "테스트 깨진 PR 은 머지 불가"가 실제로 강제된다.
 
 ---
 
-## 7. 알려진 이슈 / 주의사항
+## 8. 배포
 
-| 항목 | 내용 |
-|------|------|
-| — | 아직 없음 |
+⬜ 미구축. 배포 환경 확정 후 작성.
+
+| 환경 | 트리거 | 방식 | 상태 |
+|------|--------|------|------|
+| dev | — | — | ⬜ |
+| prod | — | — | ⬜ |
+
+> ⚠️ 운영 배포 시 **`SPRING_PROFILES_ACTIVE=prod` 설정이 필수**다.
+> 빠뜨리면 Swagger UI 가 그대로 열려 API 구조 전체가 노출된다.
 
 ---
 
-## 8. 변경 이력
+## 9. 변경 이력
 
 | 날짜 | 변경 내용 | 담당 |
 |------|----------|------|
+| 2026-07-28 | CI · Gitleaks 워크플로우, CodeRabbit 설정, GitHub 보안 기능 활성화 | 김동현 |
 | 2026-07-28 | 문서 골격 생성 | 김동현 |

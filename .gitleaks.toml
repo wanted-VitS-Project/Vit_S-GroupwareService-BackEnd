@@ -1,0 +1,48 @@
+# gitleaks 설정
+# 기본 룰셋을 그대로 확장해서 쓴다. 룰을 직접 정의하지 않는다.
+# 참고: https://github.com/gitleaks/gitleaks
+
+[extend]
+useDefault = true
+
+# ── 스캔 대상에서 아예 제외할 경로 ──────────────────────────
+# 빌드 산출물과 바이너리는 소스가 아니므로 경로 단위로 제외한다.
+[[allowlists]]
+description = "빌드 산출물 · 래퍼 바이너리"
+paths = [
+  '''^build/''',
+  '''^\.gradle/''',
+  '''^gradle/wrapper/gradle-wrapper\.jar$''',
+]
+
+# ── 문서·설정의 더미 값 ────────────────────────────────────
+# ⚠️ condition = "AND" 가 핵심이다.
+#    이게 없으면 regex 가 저장소 전체에 적용되어, 진짜 설정 파일에 같은 값이
+#    들어가도 스캐너가 통과시킨다. 아래 paths 안에서만 예외를 적용한다.
+[[allowlists]]
+description = "문서의 더미 값 (문서 경로에서만 허용)"
+condition = "AND"
+paths = [
+  '''^\.ai/.*\.md$''',
+  '''^README\.md$''',
+  '''^AGENTS\.md$''',
+  '''^CLAUDE\.md$''',
+]
+regexes = [
+  '''user@example\.com''',        # Swagger @Schema example
+  '''password123!''',             # Swagger @Schema example
+  '''\{\{[A-Z_]+\}\}''',          # INFRA.md 의 {{EC2_HOST}} 형태 마스킹
+]
+
+# ⚠️ src/main/resources, src/test/resources 는 여기 넣지 않는다.
+#    문서가 아니라 **실제 런타임 설정 파일**이므로, 예외를 걸면 그 파일에
+#    진짜 비밀번호가 들어가도 스캐너가 통과시킨다.
+#    `${DB_PASSWORD}` 같은 환경변수 자리는 애초에 시크릿으로 탐지되지 않으므로
+#    예외 자체가 필요 없다.
+#    테스트 fixture 때문에 예외가 꼭 필요하면 파일·라인 단위로 좁혀서 추가할 것.
+
+# ⚠️ 허용 목록에 항목을 추가할 때 지켜야 할 것
+#    1. 정말 더미 값인지 확인한다. 진짜 시크릿을 넣으면 스캔의 의미가 사라진다.
+#    2. 가능한 한 paths 로 범위를 좁히고 condition = "AND" 를 쓴다.
+#       전역 regex 는 저장소 전체에 구멍을 낸다.
+#    3. PR 에서 추가 이유를 설명한다.
