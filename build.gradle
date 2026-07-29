@@ -21,11 +21,9 @@ repositories {
 dependencies {
     // --- Web ---
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    // WebFlux 는 WebClient 용도. web 과 함께 있으면 앱은 서블릿(MVC)으로 기동된다.
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
-    // --- Persistence ---
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // --- Database ---
     runtimeOnly 'com.mysql:mysql-connector-j'
 
     // --- Flyway ---
@@ -36,7 +34,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
     // --- Session ---
-    // ⚠️ Redis / JDBC 두 저장소가 함께 있으면 기동 시 spring.session.store-type 명시 필요.
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.session:spring-session-data-redis'
     implementation 'org.springframework.session:spring-session-jdbc'
@@ -44,9 +41,7 @@ dependencies {
     // --- Mail ---
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
-    // --- API 문서 (Swagger UI) ---
-    // ⚠️ 3.0.x 는 Spring Boot 4 용이다. Boot 3.5.x 에서는 2.8.x 를 쓴다.
-    //    운영 프로필에서는 반드시 비활성화할 것 (application-prod.yaml)
+    // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
 
     // --- Lombok ---
@@ -54,6 +49,9 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // --- Validation ---
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
     // --- Dev ---
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
