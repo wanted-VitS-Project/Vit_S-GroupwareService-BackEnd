@@ -6,18 +6,16 @@ name: Migration
 #   마이그레이션 SQL 오류는 앱을 띄우는 시점에야 드러난다. 배포 중에 발견하면 이미 늦다.
 #   PR 단계에서 실제 DB 에 적용해보면 문법 오류·순서 문제·중복 버전을 미리 잡는다.
 
+# ⚠️ paths 필터를 두지 않는다.
+#    이 잡은 브랜치 보호의 **필수 상태 체크**로 등록되어 있다.
+#    paths 로 걸러 워크플로우가 실행되지 않으면, GitHub 은 "올 예정인 체크가 안 옴" 으로 보고
+#    해당 PR 을 영구히 머지 불가 상태로 만든다. (문서만 고친 PR 도 막힌다)
+#    공개 저장소는 Actions 가 무료이고 이 잡은 약 40초라, 항상 실행하는 편이 안전하다.
 on:
   pull_request:
     branches: [develop, main]
-    paths:
-      - 'src/main/resources/db/migration/**'
-      - 'build.gradle'
-      - 'src/main/resources/application*.yml'
-      - '.github/workflows/migration.yml'
   push:
     branches: [develop, main]
-    paths:
-      - 'src/main/resources/db/migration/**'
 
 concurrency:
   group: migration-${{ github.ref }}
