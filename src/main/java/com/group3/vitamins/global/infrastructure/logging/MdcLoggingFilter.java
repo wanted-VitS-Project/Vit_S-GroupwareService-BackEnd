@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
 @Slf4j
@@ -31,8 +32,8 @@ public class MdcLoggingFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        long startTime = System.currentTimeMillis();
-        String traceId = UUID.randomUUID().toString().substring(0, 8);
+        long startNanos = System.nanoTime();
+        String traceId = UUID.randomUUID().toString();
 
         MDC.put(TRACE_ID, traceId);
 
@@ -44,23 +45,58 @@ public class MdcLoggingFilter extends OncePerRequestFilter {
 
         try {
             filterChain.doFilter(request, response);
+            logRequestCompleted(request, response, traceId, startNanos);
+        } catch (IOException | ServletException | RuntimeException e) {
+            logRequestFailed(request, response, traceId, startNanos, e);
+            throw e;
         } finally {
-            long durationMs = System.currentTimeMillis() - startTime;
-
-            log.info(
-                    "event=request_completed traceId={} method={} uri={} status={} durationMs={} userId={} role={} clientIp={}",
-                    traceId,
-                    request.getMethod(),
-                    request.getRequestURI(),
-                    response.getStatus(),
-                    durationMs,
-                    getUserId(),
-                    getRole(),
-                    clientIpResolver.resolve(request)
-            );
-
             MDC.clear();
         }
+    }
+
+    private void logRequestCompleted(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            String traceId,
+            long startNanos
+    ) {
+        log.info(
+                "event=request_completed traceId={} method={} uri={} status={} durationMs={} userId={} role={} clientIp={}",
+                traceId,
+                request.getMethod(),
+                request.getRequestURI(),
+                response.getStatus(),
+                elapsedMillis(startNanos),
+                getUserId(),
+                getRole(),
+                clientIpResolver.resolve(request)
+        );
+    }
+
+    private void logRequestFailed(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            String traceId,
+            long startNanos,
+            Exception exception
+    ) {
+        log.warn(
+                "event=request_failed traceId={} method={} uri={} status={} durationMs={} userId={} role={} clientIp={} exception={} message={}",
+                traceId,
+                request.getMethod(),
+                request.getRequestURI(),
+                response.getStatus(),
+                elapsedMillis(startNanos),
+                getUserId(),
+                getRole(),
+                clientIpResolver.resolve(request),
+                exception.getClass().getSimpleName(),
+                exception.getMessage()
+        );
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
     }
 
     private String getUserId() {
@@ -86,7 +122,19 @@ public class MdcLoggingFilter extends OncePerRequestFilter {
 
         return authentication.getAuthorities().stream()
                 .findFirst()
-                .map(authority -> authority.getAuthority().replace("ROLE_", ""))
+                .map(authority -> removeRolePrefix(authority.getAuthority()))
                 .orElse("unknown");
+    }
+
+    private String removeRolePrefix(String authority) {
+        if (authority == null) {
+            return "unknown";
+        }
+
+        if (authority.startsWith("ROLE_")) {
+            return authority.substring("ROLE_".length());
+        }
+
+        return authority;
     }
 }

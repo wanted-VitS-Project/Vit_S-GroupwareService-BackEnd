@@ -7,11 +7,18 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
@@ -58,10 +65,42 @@ public class GlobalExceptionHandler {
             ConstraintViolationException e,
             HttpServletRequest request
     ) {
+        String message = e.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .filter(this::hasText)
+                .collect(Collectors.joining(", "));
+
+        if (!hasText(message)) {
+            message = ErrorCode.COMMON_VALIDATION_FAILED.getMessage();
+        }
+
         return ResponseEntity.badRequest().body(ApiErrorResponse.of(
                 400,
                 ErrorCode.COMMON_VALIDATION_FAILED.getCode(),
-                e.getMessage(),
+                message,
+                request.getRequestURI()
+        ));
+    }
+
+    @ExceptionHandler({
+            HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class,
+            MissingPathVariableException.class,
+            ServletRequestBindingException.class
+    })
+    public ResponseEntity<ApiErrorResponse> handleBadRequestException(
+            Exception e,
+            HttpServletRequest request
+    ) {
+        String message = hasText(e.getMessage())
+                ? e.getMessage()
+                : ErrorCode.COMMON_BAD_REQUEST.getMessage();
+
+        return ResponseEntity.badRequest().body(ApiErrorResponse.of(
+                400,
+                ErrorCode.COMMON_BAD_REQUEST.getCode(),
+                message,
                 request.getRequestURI()
         ));
     }
@@ -96,8 +135,12 @@ public class GlobalExceptionHandler {
         log.error("[500] unexpected exception - path: {}", request.getRequestURI(), e);
 
         return ResponseEntity.internalServerError().body(ApiErrorResponse.of(
-                ErrorCode.INTERNAL_ERROR,
-                request.getRequestURI()
+            ErrorCode.INTERNAL_ERROR,
+            request.getRequestURI()
         ));
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
