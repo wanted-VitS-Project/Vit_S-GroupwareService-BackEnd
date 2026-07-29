@@ -74,6 +74,25 @@ SHA 는 불변이라 이 위험이 사라진다.
 > 초기에는 테스트가 거의 없어서 이 옵션 없이는 CI 가 계속 빨간불이 된다.
 > **테스트가 충분히 쌓이면 `fail_on_failure: true` 로 바꿀 것.**
 
+**테스트 커버리지** — JaCoCo + `madrapps/jacoco-report`
+
+`./gradlew build` 시 `jacocoTestReport` 가 자동으로 따라붙어 리포트를 만든다.
+
+| 산출물 | 용도 |
+|---|---|
+| `build/reports/jacoco/test/html/index.html` | 사람이 보는 용도 |
+| `build/reports/jacoco/test/jacocoTestReport.xml` | CI 가 읽어 PR 코멘트 작성 |
+
+측정 제외: `VitaminSApplication`, `config/**`, `dto/**` — 로직이 없어 측정 의미가 없다.
+
+> ⚠️ **커버리지 %는 품질 지표가 아니다.** 100% 여도 assert 없는 껍데기 테스트일 수 있다.
+> 그래서 `min-coverage` 를 0 으로 두어 **정보 제공용**으로만 쓰고, 미달로 머지를 막지 않는다.
+> 임계값을 강제하면 숫자를 채우려고 의미 없는 테스트를 쓰게 되는 부작용이 더 크다.
+> 테스트가 쌓이면 팀 합의로 임계값을 올린다.
+>
+> ⚠️ 현재 측정 대상 클래스가 사실상 0개라 리포트가 비어 있다. 그래서 커버리지 스텝에
+> `continue-on-error: true` 를 두었다. **도메인 코드가 쌓이면 이 옵션을 제거할 것.**
+
 > ⚠️ 현재 테스트는 `src/test/resources/application.yaml` 에서 DataSource·JPA·Session
 > 자동설정을 제외한 상태로 돈다. DB 연결 후 이 제외를 걷어내면 CI 에 DB 준비가 필요해진다.
 
