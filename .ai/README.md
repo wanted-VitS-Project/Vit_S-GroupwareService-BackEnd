@@ -45,10 +45,10 @@ AI 도구마다 가장 먼저 읽는 파일 이름이 달라서 두 파일을 �
 
 | 문서 | 역할 | 언제 읽나 |
 |------|------|----------|
-| [PRODUCT.md](PRODUCT.md) | **제품 정의** — 무엇을 왜 만드나, 무엇을 안 만드나 | 기능 범위를 다툴 때 |
-| [DOMAIN.md](DOMAIN.md) | **도메인 모델** — 스테이지·스텝·블록·이슈가 각각 무엇인가 | 엔티티·테이블·API 설계 전 (필수) |
-| [USECASE.md](USECASE.md) | **유스케이스** — 공고에서 실적까지 전 과정 흐름 | 기능 구현 전, 흐름 확인용 |
-| [ERD.md](ERD.md) | **테이블 지도** — 영역별 ERD (원본은 `db/migration`) | 엔티티·쿼리 작성 전 |
+| [PRODUCT.md](domain/PRODUCT.md) | **제품 정의** — 무엇을 왜 만드나, 무엇을 안 만드나 | 기능 범위를 다툴 때 |
+| [DOMAIN.md](domain/DOMAIN.md) | **도메인 모델** — 스테이지·스텝·블록·이슈가 각각 무엇인가 | 엔티티·테이블·API 설계 전 (필수) |
+| [USECASE.md](domain/USECASE.md) | **유스케이스** — 공고에서 실적까지 전 과정 흐름 | 기능 구현 전, 흐름 확인용 |
+| [ERD.md](domain/ERD.md) | **테이블 지도** — 영역별 ERD (원본은 `db/migration`) | 엔티티·쿼리 작성 전 |
 | [API.md](API.md) | **명세 이탈 방지 규칙** + 공통 컨벤션 | API 코드 작성 전 (필수) |
 | [api/README.md](api/README.md) | 노션 명세의 도메인별 작업용 사본 | API 코드 작성 전 (필수) |
 | [CONVENTION.md](CONVENTION.md) | 브랜치 전략·커밋·PR·이슈 규칙 | 브랜치 만들 때, 커밋·PR 쓸 때 |
