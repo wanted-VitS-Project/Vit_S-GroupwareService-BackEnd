@@ -18,6 +18,9 @@
 | 문서 | 경로 | 역할 |
 |------|------|------|
 | 문서 인덱스 | `.ai/README.md` | 전체 문서 지도 |
+| **제품 정의** | `.ai/PRODUCT.md` | 문제 정의 · 방향성 · 핵심 기능 · **범위 밖** |
+| **도메인 모델** | `.ai/DOMAIN.md` | 스테이지·스텝·블록·이슈 정의 + 확정 결정 |
+| **유스케이스** | `.ai/USECASE.md` | 공고→실적 전 과정 흐름 (UC-01~19) |
 | **API 규칙** | `.ai/API.md` | 명세 이탈 방지 규칙 + 공통 컨벤션 |
 | **API 명세 사본** | `.ai/api/{도메인}.md` | 노션 명세의 작업용 스냅샷 (도메인별) |
 | 협업 규칙 | `.ai/CONVENTION.md` | 브랜치·커밋·PR·이슈 규칙 |
@@ -58,6 +61,7 @@
 
 | 문서 | 읽어야 하는 시점 |
 |------|-----------------|
+| **`.ai/DOMAIN.md`** | Entity · 테이블 · 마이그레이션 작성/수정 · 도메인 설계 판단 · 스테이지/스텝/블록/이슈가 관련된 모든 작업 |
 | **`.ai/API.md`** | Controller · Service · DTO · Repository 작성/수정 · 엔드포인트 추가/변경 · Request/Response 구조 변경 · 에러코드 추가/변경 · 사용자가 "API 만들어줘" 라고 할 때 |
 | **`.ai/CONVENTION.md`** | 브랜치 생성 · 커밋 메시지 작성 · PR/이슈 작성 · 브랜치 전략 판단 |
 | **`.ai/INFRA.md`** | 서버·리소스·배포 대상 관련 작업 · Docker/compose 수정 · 인프라 스크립트 작성 |
@@ -167,11 +171,13 @@ API 를 구현할 때 Swagger 어노테이션을 **함께** 단다. 상세 규�
   > 2026-07-28 에 4.0.7 → 3.5.16 하향. 스타터 명칭이 3.x 계열이므로 Boot 4 문서를 참고하지 말 것.
 - **주요 의존성**: Web(MVC) · WebFlux(WebClient 용) · Data JPA · Security · Mail · Session(Redis, JDBC) · Lombok · MySQL Connector · DevTools
 
-> ⚠️ **알려진 이슈 — DB 미연결 (임시 조치 중)**
-> DB·Redis 가 아직 연결되지 않아, `src/test/resources/application.yaml` 에서 인프라 관련 자동설정
-> (DataSource · JPA · Session)을 제외해 테스트를 통과시키고 있다.
-> **따라서 현재 `contextLoads()` 는 영속성·세션 계층을 검증하지 않는다.**
-> 클라우드 DB 연결 시 이 제외 목록을 걷어내고 실제 테스트 DB 설정으로 대체할 것.
+> 🔴 **알려진 이슈 — 테스트가 0개다**
+> PR #4 에서 `VitaminSApplicationTests` 와 `src/test/resources/` 설정이 삭제되어
+> **현재 테스트가 하나도 없다.** CI 의 `빌드 & 테스트` 는 항상 통과하지만 아무것도 검증하지 않으며,
+> 테스트가 없는 동안 커버리지는 0 이다. 도메인 구현과 함께 테스트를 되살릴 것.
+>
+> ⚠️ **설정 파일 규칙**: 프로필 설정은 **`.yml` 확장자만** 쓴다 (`.yaml` 금지).
+> 단 `.coderabbit.yaml` 은 CodeRabbit 이 `.yaml` 만 인식하므로 예외다.
 > 세션 저장소가 Redis/JDBC 2종이므로 운영 설정에는 `spring.session.store-type` 명시가 필요하다.
 - **내 역할**: DevOps (인프라 · CI/CD · 빌드 표준화 · 문서 체계)
 - **현재 마일스톤**: 파이널 모듈 — 초기 세팅 단계

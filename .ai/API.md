@@ -136,8 +136,8 @@ API 를 건드린 PR 은 이 항목을 반드시 확인한다.
 | 파일 | 내용 |
 |------|------|
 | `build.gradle` | `org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17` |
-| `application.yaml` | UI/JSON 경로, 정렬, `paths-to-match: /api/**` |
-| `application-prod.yaml` | 운영 비활성화 |
+| `application.yml` | UI/JSON 경로, 정렬, `paths-to-match: /api/**` |
+| `application-prod.yml` | 운영 비활성화 |
 | `config/OpenApiConfig.java` | 문서 제목·설명·버전 |
 
 > ⚠️ **버전 주의**: `3.0.x` 는 Spring Boot 4 용이다. 우리는 Boot 3.5.16 이므로 **2.8.x** 를 쓴다.
@@ -147,10 +147,10 @@ API 를 건드린 PR 은 이 항목을 반드시 확인한다.
 
 Swagger UI 는 **API 전체 구조를 그대로 노출한다.** 운영에 열려 있으면 공격자에게 지도를 주는 것과 같다.
 
-`application-prod.yaml` 에서 비활성화했고, **실제로 404 를 반환하는 것까지 검증**했다 (2026-07-28).
+`application-prod.yml` 에서 비활성화했고, **실제로 404 를 반환하는 것까지 검증**했다 (2026-07-28).
 
 ```yaml
-# application-prod.yaml
+# application-prod.yml
 springdoc:
   api-docs:
     enabled: false
