@@ -1,7 +1,6 @@
 package com.group3.vitamins.global.presentation.api.controller;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
-import com.group3.vitamins.global.domain.common.error.ErrorCode;
 import com.group3.vitamins.global.presentation.api.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -24,22 +23,28 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // TODO: 도메인별 ErrorCode가 준비되기 전까지 Spring framework 예외에만 임시로 사용하는 공통 코드입니다.
+    private static final String COMMON_BAD_REQUEST_CODE = "COMMON-BAD-REQUEST";
+    private static final String COMMON_BAD_REQUEST_MESSAGE = "잘못된 요청입니다.";
+    private static final String COMMON_VALIDATION_FAILED_CODE = "COMMON-VALIDATION-FAILED";
+    private static final String COMMON_VALIDATION_FAILED_MESSAGE = "요청 값 검증에 실패했습니다.";
+    private static final String COMMON_UNAUTHORIZED_CODE = "COMMON-UNAUTHORIZED";
+    private static final String COMMON_UNAUTHORIZED_MESSAGE = "인증이 필요합니다.";
+    private static final String COMMON_FORBIDDEN_CODE = "COMMON-FORBIDDEN";
+    private static final String COMMON_FORBIDDEN_MESSAGE = "접근 권한이 없습니다.";
+    private static final String INTERNAL_ERROR_CODE = "INTERNAL-ERROR";
+    private static final String INTERNAL_ERROR_MESSAGE = "서버 내부 오류가 발생했습니다.";
+
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiErrorResponse> handleDomainException(
             DomainException e,
             HttpServletRequest request
     ) {
-        ErrorCode errorCode = e.getErrorCode();
-        log.warn("[{}] {} - path: {}", errorCode.getStatus(), e.getMessage(), request.getRequestURI());
+        log.warn("[{}] {} - path: {}", e.getHttpStatus(), e.getMessage(), request.getRequestURI());
 
         return ResponseEntity
-                .status(errorCode.getStatus())
-                .body(ApiErrorResponse.of(
-                        errorCode.getStatus(),
-                        errorCode.getCode(),
-                        e.getMessage(),
-                        request.getRequestURI()
-                ));
+                .status(e.getHttpStatus())
+                .body(ApiErrorResponse.of(e.getHttpStatus(), e.getErrorCode(), request.getRequestURI()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -50,11 +55,11 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse(ErrorCode.COMMON_VALIDATION_FAILED.getMessage());
+                .orElse(COMMON_VALIDATION_FAILED_MESSAGE);
 
         return ResponseEntity.badRequest().body(ApiErrorResponse.of(
                 400,
-                ErrorCode.COMMON_VALIDATION_FAILED.getCode(),
+                COMMON_VALIDATION_FAILED_CODE,
                 message,
                 request.getRequestURI()
         ));
@@ -71,12 +76,12 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         if (!hasText(message)) {
-            message = ErrorCode.COMMON_VALIDATION_FAILED.getMessage();
+            message = COMMON_VALIDATION_FAILED_MESSAGE;
         }
 
         return ResponseEntity.badRequest().body(ApiErrorResponse.of(
                 400,
-                ErrorCode.COMMON_VALIDATION_FAILED.getCode(),
+                COMMON_VALIDATION_FAILED_CODE,
                 message,
                 request.getRequestURI()
         ));
@@ -95,8 +100,8 @@ public class GlobalExceptionHandler {
     ) {
         return ResponseEntity.badRequest().body(ApiErrorResponse.of(
                 400,
-                ErrorCode.COMMON_BAD_REQUEST.getCode(),
-                ErrorCode.COMMON_BAD_REQUEST.getMessage(),
+                COMMON_BAD_REQUEST_CODE,
+                COMMON_BAD_REQUEST_MESSAGE,
                 request.getRequestURI()
         ));
     }
@@ -107,7 +112,9 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return ResponseEntity.status(401).body(ApiErrorResponse.of(
-                ErrorCode.COMMON_UNAUTHORIZED,
+                401,
+                COMMON_UNAUTHORIZED_CODE,
+                COMMON_UNAUTHORIZED_MESSAGE,
                 request.getRequestURI()
         ));
     }
@@ -118,7 +125,9 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return ResponseEntity.status(403).body(ApiErrorResponse.of(
-                ErrorCode.COMMON_FORBIDDEN,
+                403,
+                COMMON_FORBIDDEN_CODE,
+                COMMON_FORBIDDEN_MESSAGE,
                 request.getRequestURI()
         ));
     }
@@ -131,8 +140,10 @@ public class GlobalExceptionHandler {
         log.error("[500] unexpected exception - path: {}", request.getRequestURI(), e);
 
         return ResponseEntity.internalServerError().body(ApiErrorResponse.of(
-            ErrorCode.INTERNAL_ERROR,
-            request.getRequestURI()
+                500,
+                INTERNAL_ERROR_CODE,
+                INTERNAL_ERROR_MESSAGE,
+                request.getRequestURI()
         ));
     }
 

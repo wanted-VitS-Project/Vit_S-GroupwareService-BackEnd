@@ -4,11 +4,17 @@ import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.domain.common.error.ErrorCode;
 
 public class ConflictException extends DomainException {
-    public ConflictException() {
-        super(ErrorCode.COMMON_CONFLICT);
+
+    public ConflictException(ErrorCode errorCode) {
+        super(errorCode);
     }
 
-    public ConflictException(String message) {
-        super(ErrorCode.COMMON_CONFLICT, message);
+    public ConflictException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode, cause);
+    }
+
+    @Override
+    public int getHttpStatus() {
+        return 409;
     }
 }
