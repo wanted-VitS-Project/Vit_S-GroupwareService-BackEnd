@@ -1,5 +1,6 @@
 ### AI 협업 문서 — 개인 로컬 (커밋 금지) ###
 .ai/local/
+.ai/docs/domain/
 .claude/settings.local.json
 
 ### 시크릿 / 자격 정보 (⚠️ PUBLIC 레포) ###
