@@ -4,11 +4,17 @@ import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.domain.common.error.ErrorCode;
 
 public class ForbiddenException extends DomainException {
-    public ForbiddenException() {
-        super(ErrorCode.COMMON_FORBIDDEN);
+
+    public ForbiddenException(ErrorCode errorCode) {
+        super(errorCode);
     }
 
-    public ForbiddenException(String message) {
-        super(ErrorCode.COMMON_FORBIDDEN, message);
+    public ForbiddenException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode, cause);
+    }
+
+    @Override
+    public int getHttpStatus() {
+        return 403;
     }
 }

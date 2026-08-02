@@ -11,10 +11,10 @@ public record ApiErrorResponse(
         String message,
         String path
 ) {
-    public static ApiErrorResponse of(ErrorCode errorCode, String path) {
+    public static ApiErrorResponse of(int status, ErrorCode errorCode, String path) {
         return new ApiErrorResponse(
                 Instant.now(),
-                errorCode.getStatus(),
+                status,
                 errorCode.getCode(),
                 errorCode.getMessage(),
                 path
