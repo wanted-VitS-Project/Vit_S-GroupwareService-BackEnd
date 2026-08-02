@@ -1,7 +1,5 @@
 package com.group3.vitamins.global.presentation.api.common;
 
-import com.group3.vitamins.global.domain.common.error.ErrorCode;
-
 import java.time.Instant;
 
 public record ApiResponse<T>(
@@ -28,15 +26,5 @@ public record ApiResponse<T>(
 
     public static ApiResponse<Void> success() {
         return success(null);
-    }
-
-    public static <T> ApiResponse<T> of(int status, ErrorCode code, T data) {
-        return new ApiResponse<>(
-                Instant.now(),
-                status,
-                code.getCode(),
-                code.getMessage(),
-                data
-        );
     }
 }
