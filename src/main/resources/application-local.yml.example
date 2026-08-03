@@ -1,0 +1,38 @@
+# 로컬 개발 설정 템플릿
+#
+# 사용법
+#   cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
+#
+# application.yml 이 spring.profiles.active=local 이므로 Spring 이 이 파일을 **자동으로** 읽는다.
+# 환경변수를 export 할 필요가 없다 — IntelliJ 에서 그냥 실행하면 된다.
+#
+# ⚠️ application-local.yml 은 커밋되지 않는다 (.gitignore). 이 레포는 PUBLIC 이다.
+#    실제 운영 값(RDS 엔드포인트·비밀번호·토큰)을 이 파일에도, 복사본에도 쓰지 마라.
+#    운영은 이 파일을 쓰지 않는다 — application.yml 의 ${DB_URL} 등에 환경변수로 주입된다.
+#
+# 📌 인프라는 docker compose 로 띄운다 (docker-compose.yml).
+#    포트를 바꿨다면 아래 url 의 포트도 같이 바꿔야 한다.
+
+spring:
+  datasource:
+    # 컨테이너의 MySQL. docker-compose.yml 의 MYSQL_PORT 와 포트를 맞춘다.
+    url: jdbc:mysql://localhost:3306/vitamins?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    username: vitamins
+    password: local-password
+
+# 아래 항목은 application.yml 에 이미 로컬용 기본값이 있어서 적지 않아도 된다.
+# 바꿔야 할 때만 주석을 풀어라.
+#
+#  data:
+#    redis:
+#      host: localhost
+#      port: 6379
+#
+# server:
+#   servlet:
+#     session:
+#       cookie:
+#         secure: false        # 로컬은 HTTPS 가 아니다. 운영은 application-prod.yml 에서 true 로 고정
+#
+# cors:
+#   allowed-origins: http://localhost:3000    # 프론트 개발 서버. 쉼표로 여러 개 가능
