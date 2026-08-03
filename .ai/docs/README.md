@@ -1,6 +1,8 @@
 # 📂 도메인 문서 인덱스
 
-**최종 업데이트**: 2026-08-01
+**최종 업데이트**
+- 2026-08-03 — 결재·알림 도메인(`APR-V1`, `NOTI-V1`) 신설, 담당자 강욱
+- 2026-08-01 — 최초 작성
 
 > 이 폴더가 **도메인 문서의 집**이다. AI 는 작업 전에 여기서 해당 문서를 찾아 읽는다.
 > 규칙은 `AGENTS.md`, 운영 문서는 `.ai/` 루트, **도메인 지식은 여기.**
@@ -21,7 +23,8 @@
 └── domain/        도메인별 구현 계약 + 유스케이스
     ├── 입찰관리/   BID-V1 · BID-V1-USECASE          (정현)
     ├── 프로젝트/   PRJ-V1 · PRJ-V1-USECASE          (동훈)
-    └── 재무관리/   PAY-V1 · TAX-V1 · STL-V1 (+ 각 USECASE)  (동훈)
+    ├── 재무관리/   PAY-V1 · TAX-V1 · STL-V1 (+ 각 USECASE)  (동훈)
+    └── 결재·알림/  APR-V1 · NOTI-V1 (+ 각 USECASE)  (강욱)
 ```
 
 ---
@@ -68,6 +71,13 @@
 | [PAY-V1.md](domain/재무관리/PAY-V1.md) · [USECASE](domain/재무관리/PAY-V1-USECASE.md) | 입금 직접 등록 · **CSV 수집** · 2단 매칭 · 입금확인 블록(정산 회차) | P-40 · P-41 · P-22A |
 | [TAX-V1.md](domain/재무관리/TAX-V1.md) · [USECASE](domain/재무관리/TAX-V1-USECASE.md) | 세금계산서 **수집·조회** — 발행은 홈택스에서 한다 | P-42 · P-22A |
 | [STL-V1.md](domain/재무관리/STL-V1.md) · [USECASE](domain/재무관리/STL-V1-USECASE.md) | 정산 현황 **조회 전용** — 회차·지연·미연결 추적 | P-44 · P-25(후순위) |
+
+### 결재·알림 — 강욱
+
+| 문서 | 범위 | 화면 |
+|------|------|------|
+| [APR-V1.md](domain/결재·알림/APR-V1.md) · [USECASE](domain/결재·알림/APR-V1-USECASE.md) | 결재 블록 상신 · 재상신 · 승인/반려 · 결재관리 조회 | P-29 · P-30 · P-31 |
+| [NOTI-V1.md](domain/결재·알림/NOTI-V1.md) · [USECASE](domain/결재·알림/NOTI-V1-USECASE.md) | 공용 알림 — 조회 · 삭제 · 이동 대상 · 읽음 처리 (생성은 이벤트 기반) | P-03 |
 
 ---
 
