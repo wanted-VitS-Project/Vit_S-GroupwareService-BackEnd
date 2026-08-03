@@ -1,7 +1,7 @@
 # 비타메이트 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-03 (CodeRabbit 피드백 반영)
+**최종 동기화**: 2026-08-03 (CodeRabbit 피드백 재반영 — documents 반환·내부 범위·attemptId 규칙 보강)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -90,7 +90,9 @@ analysisId
 → 프로젝트 권한 + step_permission 오버라이드
 ```
 
-권한이 없으면 `prompt`, `result`, `documents`, `citations`를 반환하지 않는다.
+권한이 없거나 분석이 요청자의 접근 범위 밖이면 `403` 또는 `404`를 반환하고,
+전체 분석 본문(`prompt`, `result`, `documents`, `citations`)은 반환하지 않는다.
+다른 프로젝트 분석의 존재 여부를 숨겨야 하는 경우에는 `404`를 우선 사용한다.
 
 **Response — `200`**
 
@@ -109,12 +111,22 @@ analysisId
 
 상태별 null 규칙:
 
-| 상태 | `result` | `errorMessage` | `completedAt` | `citations` |
-|------|----------|----------------|---------------|-------------|
-| `PENDING` | `null` | `null` | `null` | `[]` |
-| `PROCESSING` | `null` | `null` | `null` | `[]` |
-| `COMPLETED` | 필수 | `null` | 필수 | `[]` 가능 |
-| `FAILED` | `null` | 필수 | 필수 | `[]` |
+| 상태 | `result` | `errorMessage` | `completedAt` | `documents` | `citations` |
+|------|----------|----------------|---------------|-------------|-------------|
+| `PENDING` | `null` | `null` | `null` | 선택 문서 배열 | `[]` |
+| `PROCESSING` | `null` | `null` | `null` | 선택 문서 배열 | `[]` |
+| `COMPLETED` | 필수 | `null` | 필수 | 선택 문서 배열 | `[]` 가능 |
+| `FAILED` | `null` | 필수 | 필수 | 선택 문서 배열 | `[]` |
+
+`documents` 반환 규칙:
+
+| 상황 | 규칙 |
+|------|------|
+| 권한 있는 `200` 응답 | 모든 상태에서 `documents`를 배열로 반환한다. `null`을 반환하지 않는다 |
+| `PENDING/PROCESSING` | 요청 당시 선택한 문서 목록을 반환한다. 분석 결과가 없어도 문서 목록은 내려간다 |
+| `COMPLETED/FAILED` | 처리 성공/실패와 무관하게 요청 당시 선택한 문서 목록을 반환한다 |
+| 빈 배열 | 정상 요청은 `fileVersionIds`가 1개 이상이므로 비정상 데이터다. 구현에서는 500 또는 운영 점검 대상으로 본다 |
+| 권한 없음 | `403` 또는 `404`와 공통 에러 응답만 반환하고 분석 본문은 반환하지 않는다 |
 
 **documents**
 
@@ -177,9 +189,22 @@ Spring Boot가 Python 서버에 전달한다.
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `analysisId` | Long | Spring Boot에서 생성한 분석 ID |
+| `attemptId` | String | 현재 워커 실행 토큰. 늦은 응답 저장 방지용 UUID |
 | `prompt` | String | 분석 프롬프트 |
 | `searchScope` | Object | 검색 범위 |
 | `documents` | Object[] | 선택 문서와 청크 후보 |
+
+내부 요청 일관성 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 기준 집합 | `searchScope.fileVersionIds`가 분석 요청에서 선택되어 `vitamate_analysis_document`에 저장된 전체 파일 버전 집합이다 |
+| `documents` 범위 | `documents[].fileVersionId` 집합은 `searchScope.fileVersionIds`와 정확히 같아야 한다. 누락/추가가 있으면 내부 요청을 만들지 않는다 |
+| 청크 소속 | 각 `chunks[]`는 부모 `documents[].fileVersionId`에 속한 `document_chunk`만 포함한다 |
+| 빈 청크 | 선택 문서가 검색 가능한 청크를 아직 갖지 못한 경우 `chunks: []`는 허용한다. 단, 문서 항목 자체는 누락하지 않는다 |
+| 분석 소속 | `analysisId → vitamate_analysis → vitamate_block → block` 경로가 `searchScope.blockId`, `searchScope.projectId`와 일치해야 한다 |
+| 신뢰 경계 | Spring Boot가 DB 검증 후 내부 요청을 구성한다. 프론트 입력값을 그대로 Python에 전달하지 않는다 |
+| citation 범위 | Python 응답의 citation도 `searchScope.fileVersionIds`와 전달된 청크 범위 안으로 제한한다. Spring Boot가 저장 전 다시 검증한다 |
 
 **searchScope**
 
@@ -211,6 +236,7 @@ Spring Boot가 Python 서버에 전달한다.
 ```json
 {
   "analysisId": 501,
+  "attemptId": "9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138",
   "prompt": "핵심 기술 요구사항과 위험 요소를 정리해줘.",
   "searchScope": {
     "projectId": 10,
@@ -229,6 +255,11 @@ Spring Boot가 Python 서버에 전달한다.
           "excerpt": "사업 범위는..."
         }
       ]
+    },
+    {
+      "fileVersionId": 102,
+      "fileName": "제안요청서_첨부.pdf",
+      "chunks": []
     }
   ]
 }
@@ -252,6 +283,16 @@ Python 서버가 반환한다.
 | `rankOrder` | Integer | 근거 순서 |
 | `distanceScore` | Decimal | 검색 거리 점수 |
 | `excerpt` | String | 근거 발췌문 |
+
+내부 응답 검증:
+
+| 항목 | 규칙 |
+|------|------|
+| 응답 상태 | `COMPLETED` 또는 `FAILED`만 허용한다 |
+| citation 파일 | `citations[].fileVersionId`는 요청의 `searchScope.fileVersionIds` 안에 있어야 한다 |
+| citation 청크 | `citations[].documentChunkId`는 해당 `fileVersionId`의 `document_chunk`여야 한다 |
+| 저장 방식 | Spring Boot는 현재 `attemptId`와 `PROCESSING` 상태가 일치할 때만 결과와 citation을 저장한다 |
+| 범위 위반 | 범위 밖 citation이 있으면 결과를 부분 저장하지 않고 해당 분석을 `FAILED`로 마감한다 |
 
 내부 응답 null 규칙:
 

@@ -1,6 +1,6 @@
 # 🤖 비타메이트 문서 분석 AI v1 — 요구사항 명세
 
-**최종 업데이트**: 2026-08-03 (CodeRabbit 피드백 반영 — 상태 머신·권한·중복 방지 보강)
+**최종 업데이트**: 2026-08-03 (CodeRabbit 피드백 재반영 — 상태 머신·워커 attemptId·lease 규칙 보강)
 **담당**: 정현
 **근거**: [`BLOCK.md`](../../global/BLOCK.md) §4-9 · 사용자 제공 노션 정리본(2026-08-03)
 
@@ -58,12 +58,12 @@ ChatGPT처럼 대화를 계속 이어가는 채팅형 기능이 아니다.
 → Spring Boot에 분석 요청
 → Spring Boot가 분석 상태 PENDING 저장
 → Spring Boot가 백그라운드 워커에 작업 등록
-→ 워커가 분석 상태 PROCESSING 변경
+→ 워커가 attemptId를 발급하고 분석 상태 PROCESSING 변경
 → 워커가 Python FastAPI 호출
 → Python이 문서 청크 검색
 → 관련 청크 기반 AI 분석
 → Python이 분석 결과와 근거 반환
-→ 워커가 결과 저장
+→ 워커가 attemptId와 상태를 검증한 뒤 결과 저장
 → 프론트가 상태 및 결과 조회
 ```
 
@@ -81,6 +81,7 @@ ChatGPT처럼 대화를 계속 이어가는 채팅형 기능이 아니다.
 | Python 호출 타임아웃 | 분석 상태 `FAILED`, `error_message` 저장 |
 | Python 응답 실패 | 분석 상태 `FAILED`, `error_message` 저장 |
 | 서버 재시작으로 `PENDING` 잔류 | 재처리 대상. 일정 시간 이상 `PENDING`이면 워커가 다시 집는다 |
+| `PROCESSING` 타임아웃 후 늦은 응답 도착 | 현재 `attemptId`와 상태가 맞지 않으면 응답을 무시하고 결과/citation을 저장하지 않는다 |
 
 ---
 
@@ -108,6 +109,9 @@ ChatGPT처럼 대화를 계속 이어가는 채팅형 기능이 아니다.
 | **AIP-005** | 처리 성공 시 상태를 `COMPLETED`로 바꾼다 | `result`, `completed_at`, citation이 저장된다 |
 | **AIP-006** | 처리 실패 시 상태를 `FAILED`로 바꾼다 | `error_message`, `completed_at`이 저장되고 기존 이력은 삭제하지 않는다 |
 | **AIP-007** | Python 호출에는 타임아웃을 둔다 | 타임아웃 시 `FAILED`로 종료하고 무한 대기하지 않는다 |
+| **AIP-008** | 워커 실행마다 `attemptId`를 발급한다 | `PENDING → PROCESSING` 전환 시 현재 실행 토큰과 만료 시각을 함께 저장한다 |
+| **AIP-009** | 만료되었거나 이전 attempt의 응답은 무시한다 | 저장 조건이 맞지 않으면 결과와 citation을 저장하지 않는다 |
+| **AIP-010** | 결과 상태 변경과 citation 저장은 하나의 트랜잭션이다 | 결과만 저장되거나 citation만 저장되는 부분 성공이 없다 |
 
 ### 3-C. 결과 조회 (`QRY`)
 
@@ -138,6 +142,32 @@ PENDING → FAILED
 ```
 
 `PROCESSING`에서 장시간 멈춘 작업은 운영 정책에 따라 `FAILED`로 마감하고 재요청하도록 한다.
+
+워커 동시성 규칙:
+
+| 상황 | 규칙 |
+|------|------|
+| 작업 선점 | 워커는 `PENDING` 행을 `PROCESSING`으로 바꿀 때 `processing_attempt_id`, `processing_started_at`, `lease_expires_at`을 함께 저장한다 |
+| Python 호출 | 내부 요청에 현재 `attemptId`를 포함한다 |
+| 결과 저장 | `analysis_status='PROCESSING'`, `processing_attempt_id=:attemptId`, `lease_expires_at >= NOW()` 조건을 만족할 때만 저장한다 |
+| 타임아웃 마감 | 만료된 `PROCESSING`은 `FAILED`로 바꾸고 `completed_at`, `error_message`를 저장한다 |
+| 늦은 완료 응답 | 이미 `FAILED`이거나 attempt가 다르면 응답을 무시한다. `COMPLETED`로 되돌리지 않는다 |
+| 트랜잭션 | 상태 변경, `result/error_message`, citation 저장은 하나의 트랜잭션으로 처리한다 |
+
+저장 조건 예시:
+
+```sql
+UPDATE vitamate_analysis
+SET analysis_status = 'COMPLETED',
+    result = :result,
+    completed_at = NOW()
+WHERE vitamate_analysis_id = :analysisId
+  AND analysis_status = 'PROCESSING'
+  AND processing_attempt_id = :attemptId
+  AND lease_expires_at >= NOW();
+```
+
+위 업데이트 결과가 0행이면 만료된 워커의 응답으로 보고 citation도 저장하지 않는다.
 
 ---
 
@@ -191,6 +221,9 @@ vitamate_analysis_citation
 | `prompt` | TEXT | |
 | `result` | LONGTEXT | |
 | `analysis_status` | VARCHAR(20) | `PENDING/PROCESSING/COMPLETED/FAILED` |
+| `processing_attempt_id` | VARCHAR(36) | 현재 워커 실행 토큰. `PROCESSING` 중에만 사용 |
+| `processing_started_at` | DATETIME | 현재 attempt 시작 시각 |
+| `lease_expires_at` | DATETIME | 현재 attempt 만료 시각 |
 | `error_message` | TEXT | |
 | `completed_at` | DATETIME | |
 | `created_at` | DATETIME | |
@@ -284,6 +317,7 @@ vitamate_analysis_citation.vitamate_analysis_document_id
 | **INV-05** | 공고 AI 요약과 비타메이트 AI는 별개다 | 공고 요약은 입찰 도메인, 비타메이트는 프로젝트 스텝 안의 AI 블록이다 |
 | **INV-06** | citation은 선택 문서 범위 안의 청크만 가리킨다 | 선택하지 않은 프로젝트 파일이나 다른 프로젝트 파일이 분석 근거로 섞이면 안 된다 |
 | **INV-07** | `analysisId` 조회는 스텝 권한 검증을 통과해야 한다 | 분석 결과와 프롬프트는 프로젝트 내부 정보다 |
+| **INV-08** | 만료되었거나 이전 attempt의 워커 응답은 저장하지 않는다 | 타임아웃 후 늦게 도착한 결과가 FAILED 상태나 새 실행 결과를 덮으면 안 된다 |
 
 ---
 

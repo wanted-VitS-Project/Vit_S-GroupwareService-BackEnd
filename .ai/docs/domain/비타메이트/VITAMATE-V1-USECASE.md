@@ -1,6 +1,6 @@
 # 🤖 비타메이트 문서 분석 AI v1 — 유스케이스 시나리오
 
-**최종 업데이트**: 2026-08-03 (CodeRabbit 피드백 반영 — 비동기 상태 전이 보강)
+**최종 업데이트**: 2026-08-03 (CodeRabbit 피드백 재반영 — attemptId 기반 늦은 응답 차단 보강)
 **담당**: 정현
 
 > 테이블 단위로 시나리오를 나눈다. `시스템`은 사용자 조작 없이 서버가 수행하는 단계다.
@@ -26,11 +26,12 @@
 | USC-VIT-ANA-003 | 분석 요청 | 스텝 접근 권한 보유자 |
 | USC-VIT-ANA-004 | 분석 상태 `PENDING` 저장 | 시스템 |
 | USC-VIT-ANA-005 | `analysisId` 반환 | 시스템 |
-| USC-VIT-ANA-006 | 백그라운드 워커가 `PROCESSING`으로 전환 | 시스템 |
-| USC-VIT-ANA-007 | 분석 완료 결과 저장 | 시스템 |
-| USC-VIT-ANA-008 | 분석 실패 메시지 저장 | 시스템 |
+| USC-VIT-ANA-006 | 백그라운드 워커가 `attemptId`를 발급하고 `PROCESSING`으로 전환 | 시스템 |
+| USC-VIT-ANA-007 | 현재 `attemptId`가 맞을 때만 분석 완료 결과 저장 | 시스템 |
+| USC-VIT-ANA-008 | 현재 `attemptId`가 맞을 때만 분석 실패 메시지 저장 | 시스템 |
 | USC-VIT-ANA-009 | 재분석 시 새 이력 생성 | 시스템 |
 | USC-VIT-ANA-010 | `Idempotency-Key`로 같은 요청 중복 방지 | 시스템 |
+| USC-VIT-ANA-011 | 만료되었거나 이전 attempt의 늦은 응답 무시 | 시스템 |
 
 ---
 
@@ -76,12 +77,14 @@ flowchart TD
     C --> D[Spring Boot: PENDING 저장]
     D --> E[202 + analysisId 반환]
     D --> W[백그라운드 워커]
-    W --> P[PROCESSING 전환]
+    W --> P[PROCESSING 전환 + attemptId 발급]
     P --> F[Python FastAPI 내부 호출]
     F --> G[문서 청크 검색]
     G --> H[AI 분석]
     H --> I[결과와 근거 반환]
-    I --> S[Spring Boot: COMPLETED 또는 FAILED 저장]
+    I --> V{attemptId와 상태 유효?}
+    V -->|예| S[Spring Boot: COMPLETED 또는 FAILED 저장]
+    V -->|아니오| X[늦은 응답 무시]
     S --> J[GET 상태 및 결과 조회]
     S --> K[블록별 분석 이력 조회]
 ```
