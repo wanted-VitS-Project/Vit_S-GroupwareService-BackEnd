@@ -91,6 +91,13 @@ dependencies {
     testRuntimeOnly 'com.h2database:h2'
 }
 
+// 개인 로컬 설정이 배포 jar 에 실려 나가지 않게 막는다.
+// ⚠️ processResources 에서 빼면 안 된다 — bootRun 이 같은 출력물을 클래스패스로 쓰므로
+//    로컬 실행이 통째로 깨진다. **jar 를 만들 때만** 제외한다.
+tasks.named('bootJar') {
+    exclude 'application-local.yml'
+}
+
 tasks.named('test') {
     useJUnitPlatform {
         // 벤치마크는 수 분이 걸리고 하드웨어마다 결과가 달라 CI 게이트로 쓸 수 없다.
