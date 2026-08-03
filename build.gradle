@@ -31,12 +31,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
     // --- Database ---
-<<<<<<< HEAD
-=======
     // JPA = 애그리거트 단위 쓰기 · MyBatis = 권한 판정/목록 조회.
     // 둘은 같은 DataSource 를 쓰므로 트랜잭션이 공유된다. 트랜잭션 매니저를 따로 만들지 말 것.
     // ⚠️ 같은 트랜잭션에서 JPA 로 쓰고 MyBatis 로 읽으면 flush 전이라 안 보인다. entityManager.flush() 필요.
->>>>>>> e0d1b1ec3f21c15de275ab5975c68aa76adebdb9
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.5'
     runtimeOnly 'com.mysql:mysql-connector-j'
