@@ -40,12 +40,26 @@ public class AccountEntity {
     @Column(name = "password", nullable = false, length = 255)
     private String password;
 
-    /** ADMIN > MASTER > MEMBER (서열형 단일값) */
-    @Column(name = "role", nullable = false, length = 20)
+    /**
+     * ADMIN &gt; MASTER &gt; MEMBER (서열형 단일값).
+     *
+     * <p><b>DB 컬럼은 {@code ENUM} 이다.</b> 권한 모델은 값이 늘어나는 성질이 아니라 닫힌 집합이고,
+     * 앱을 거치지 않는 경로(수동 SQL · 파이썬 서버)에서도 쓰레기 값이 못 들어가야 한다.
+     * 선언 순서가 서열(`global/PERMISSION.md`)과 같아 {@code ORDER BY role} 이 곧 권한 순이다.
+     *
+     * <p>⚠️ {@code columnDefinition} 이 없으면 {@code ddl-auto: validate} 가 varchar 를 기대해
+     * <b>기동을 막는다</b> ({@code found [enum (Types#CHAR)], but expecting [varchar(20)]}).
+     *
+     * <p>🚨 DB 의 ENUM 값을 바꾸면 <b>이 문자열도 같이 바꿔야 한다.</b> 안 그러면 기동이 막힌다 —
+     * 바꿔 말하면 DB 와 코드의 허용값이 어긋나는 순간 <b>기동 시점에 잡힌다.</b>
+     */
+    @Column(name = "role", nullable = false,
+            columnDefinition = "enum('ADMIN','MASTER','MEMBER')")
     private String role;
 
-    /** ACTIVE · INACTIVE */
-    @Column(name = "status", nullable = false, length = 20)
+    /** ACTIVE · INACTIVE — {@link #role} 과 같은 이유로 {@code columnDefinition} 을 명시한다 */
+    @Column(name = "status", nullable = false,
+            columnDefinition = "enum('ACTIVE','INACTIVE')")
     private String status;
 
     @Column(name = "must_change_password", nullable = false)
