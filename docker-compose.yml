@@ -1,50 +1,19 @@
-# 로컬 개발용 인프라 — MySQL + Redis
+# 로컬 개발용 인프라 — Redis 전용
 #
-# ⚠️ 이 파일은 **로컬 전용**이다. 운영 배포에 쓰지 않는다.
-#    운영은 RDS · ElastiCache 를 쓴다 (.ai/INFRA.md).
+# ⚠️ MySQL 은 여기 없다. 개발 DB 는 **팀 공용 RDS** 를 쓴다 (2026-08-03).
+#    접속 정보는 커밋되지 않는다 — `application-local.yml` 에 각자 넣는다
+#    (템플릿: src/main/resources/application-local.yml.example).
+#
+# 세션 저장소만 로컬에 띄우는 이유: Redis 는 상태가 세션뿐이라 개발자별로 격리돼야 한다.
+# 공유하면 남의 로그인이 내 세션을 끊는다 (단일 세션 정책).
 #
 # 실행:  docker compose up -d
-# 중지:  docker compose down          (데이터 유지)
-# 초기화: docker compose down -v      (⚠️ 볼륨까지 삭제 — DB 가 비워진다)
-#
-# 값은 .env 에서 읽는다. 없으면 아래 기본값이 쓰인다.
-# .env 는 gitignore 대상이므로 `.env.example` 을 복사해서 만든다.
+# 중지:  docker compose down
 
 services:
-  mysql:
-    # CI(.github/workflows/migration.yml)와 **같은 다이제스트**로 고정한다.
-    # 로컬에서 통과한 마이그레이션이 CI 에서 깨지는 상황을 막는다.
-    image: mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
-    container_name: vitamins-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-root-password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-vitamins}
-      MYSQL_USER: ${MYSQL_USER:-vitamins}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local-password}
-      TZ: Asia/Seoul
-    command:
-      # 🚨 마이그레이션이 DB 기본 charset 을 utf8mb4 로 전제한다
-      #    (V202607311200__core_schema.sql 상단 주석). 빠지면 한글이 깨진다.
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_0900_ai_ci
-      # DATETIME 컬럼에 LocalDateTime 을 그대로 넣는다. 서버 TZ 를 KST 로 맞춰
-      # 로컬·CI·운영이 같은 값을 보게 한다.
-      - --default-time-zone=+09:00
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      # 앱을 띄우기 전에 DB 가 준비됐는지 확인하는 용도. Flyway 가 기동 즉시 붙는다.
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-local-root-password}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-
   redis:
-    image: redis:7.4-alpine
+    # 다이제스트로 고정한다. `7.4-alpine` 은 mutable tag 라 재pull 시 내용이 바뀔 수 있다.
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     container_name: vitamins-redis
     restart: unless-stopped
     command:
@@ -63,12 +32,12 @@ services:
       - --save
       - ""
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # 🚨 반드시 loopback 에 묶는다. 호스트 IP 를 생략하면 0.0.0.0 에 바인딩돼
+      #    같은 네트워크(카페·사무실 와이파이)의 아무나 무인증 Redis 에 접근할 수 있다.
+      #    포트를 바꾸려면: REDIS_PORT=6380 docker compose up -d
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-
-volumes:
-  mysql-data:
