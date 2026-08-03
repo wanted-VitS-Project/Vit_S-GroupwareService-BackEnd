@@ -1,4 +1,4 @@
-package com.group3.vitamins.config;
+package com.group3.vitamins.global.infrastructure.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
