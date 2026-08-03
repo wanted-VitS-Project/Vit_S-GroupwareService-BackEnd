@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-03
+**최종 동기화**: 2026-08-03 (CodeRabbit 피드백 반영)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -101,6 +101,9 @@
 |---------|------|
 | `noticeId` | 공고 ID |
 | `noticeName` | 공고명 |
+| `sourceCode` | 출처 코드 |
+| `sourceName` | 출처명 |
+| `sourceUrl` | 원문 URL |
 | `noticeAgency` | 발주처 |
 | `businessCategoryId` | 사업 카테고리 ID |
 | `businessCategoryName` | 사업 카테고리명 |
@@ -109,6 +112,7 @@
 | `announcedAt` | 공고일 |
 | `bidDeadlineAt` | 마감일 |
 | `dDay` | D-day |
+| `isNew` | 신규 배지 표시 여부 |
 | `noticeStatus` | 공고 상태 |
 | `projectId` | 전환된 프로젝트 ID |
 
@@ -122,6 +126,15 @@
 | `dDay = 0` | `D-Day` |
 | `dDay < 0` | 마감 |
 
+`isNew` 산정 기준:
+
+| 항목 | 규칙 |
+|------|------|
+| 기준 | 마지막 성공 수집 실행에서 신규 INSERT 된 공고 |
+| 유지 기간 | 다음 성공 수집 실행 전까지 |
+| 수동 등록 | 등록 직후 `isNew=true`, 다음 성공 수집 실행 전까지 유지 |
+| 저장 방식 | 프론트가 계산하지 않고 서버가 Boolean으로 내려준다 |
+
 ---
 
 ## 입찰 공고 상세 조회 `GET /api/v1/bidding/notices/{noticeId}`
@@ -131,14 +144,25 @@
 | 영역 | 필드 |
 |------|------|
 | 기본 정보 | `noticeId`, `externalId`, `noticeOrder`, `noticeName`, `noticeAgency`, `demandAgency`, `noticeStatus`, `dismissReason`, `projectId` |
+| 출처 | `sourceCode`, `sourceName`, `sourceUrl`, `hasAttachment` |
 | 일정 | `announcedAt`, `bidStartAt`, `questionDeadlineAt`, `applicationDeadlineAt`, `bidDeadlineAt`, `openingAt`, `dDay` |
 | 금액 | `baseAmount`, `estimatedAmount`, `priceRangeText`, `minimumBidRateText` |
-| 계약 및 제한 | `regionLimitText`, `businessLimitText`, `contractMethod`, `evaluationMethod`, `sourceUrl`, `hasAttachment` |
+| 계약 및 제한 | `participationQualificationText`, `regionLimitText`, `businessLimitText`, `jointContractAllowed`, `jointContractText`, `contractMethod`, `evaluationMethod` |
 | 참여사 | `participantCount`, `participants` |
 
 `dDay`는 DB에 저장하지 않고 서버에서 계산한다.
 
 첨부파일 상세 테이블은 구현 범위에서 제외할 수 있다. 이 경우 파일명과 크기를 보여주지 않고 `hasAttachment`와 원문 링크만 제공한다.
+
+참여 요건 필드는 REQ-02에 따라 원문 문자열을 보존한다.
+
+| 필드 | 규칙 |
+|------|------|
+| `participationQualificationText` | 참가 자격 원문. 파싱하지 못해도 문자열 그대로 보존 |
+| `regionLimitText` | 지역 제한 원문 |
+| `businessLimitText` | 업종 제한 원문 |
+| `jointContractAllowed` | 공동수급 가능 여부. 판별 불가면 `null` |
+| `jointContractText` | 공동수급 관련 원문 |
 
 ---
 
@@ -195,18 +219,41 @@
 | `businessCategoryId` | Long | 사업 카테고리 ID |
 | `startedOn` | Date | 시작일 |
 | `endedOn` | Date | 종료일 |
-| `memberIds` | String[] | 참여자 user ID 목록 |
+| `memberIds` | String[] | 추가 참여자 user ID 목록. 전환 요청자는 서버가 자동 포함 |
 
 서버 처리:
 
 1. 공고 존재 여부 확인
 2. 기존 프로젝트 전환 여부 확인
-3. 프로젝트 생성
-4. `project.bid_notice_id` 저장
-5. 공고 주요 값 스냅샷 저장
-6. `project_member` 등록
-7. 입찰 스테이지·스텝·블록 자동 생성
-8. 생성된 입찰 블록 연결
+3. 요청자가 `BIDDING` 권한을 갖는지 확인
+4. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
+5. 하나의 DB 트랜잭션 시작
+6. 프로젝트 생성
+7. `project.bid_notice_id` 저장
+8. 공고 스냅샷 필드 저장
+9. 인증된 전환 요청자를 `project_member`에 자동 등록
+10. 추가 `memberIds`를 `project_member`에 등록
+11. 입찰 스테이지·스텝·블록 자동 생성
+12. 생성된 입찰 블록 연결
+13. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
+
+권한 정책:
+
+| 항목 | 규칙 |
+|------|------|
+| 전환 요청자 | 요청 바디에 없어도 서버가 반드시 `project_member`에 등록 |
+| 추가 참여자 | `memberIds`로 받은 사용자만 추가 등록 |
+| 권한 검사 | 요청자는 `BIDDING` 권한 필요. 추가 참여자는 존재 여부와 초대 가능 여부 검증 |
+| 중복 참여자 | 요청자와 `memberIds`가 겹치면 한 번만 등록 |
+
+트랜잭션 정책:
+
+| 항목 | 규칙 |
+|------|------|
+| 원자성 | 프로젝트 생성부터 입찰 블록 연결까지 하나의 DB 트랜잭션 |
+| 중간 실패 | 전체 롤백. 불완전한 프로젝트를 남기지 않음 |
+| 이미 전환된 공고 | 새 트랜잭션을 시작하지 않고 409 반환 |
+| 재시도 | 이전 요청이 롤백됐다면 재시도 가능. 이미 커밋됐다면 409 |
 
 정책:
 
@@ -214,8 +261,19 @@
 |------|------|
 | 공고 하나당 프로젝트 | 1개만 생성 |
 | 중복 방지 | `UNIQUE(project.bid_notice_id)` |
-| 스냅샷 | 프로젝트 생성 당시 금액·마감·개찰일 저장 |
+| 스냅샷 | 프로젝트 생성 당시 `noticeName`, `bidNoticeId`, `baseAmount`, `estimatedAmount`, `bidDeadlineAt`, `openingAt` 저장 |
 | 정정공고 | 프로젝트 스냅샷을 자동 덮어쓰지 않음 |
+
+스냅샷 저장 필드:
+
+| 프로젝트 스냅샷 필드 | 원본 공고 필드 |
+|---------------------|---------------|
+| `bidNoticeId` | `noticeId` |
+| `bidNoticeNameSnapshot` | `noticeName` |
+| `baseAmountSnapshot` | `baseAmount` |
+| `estimatedAmountSnapshot` | `estimatedAmount` |
+| `bidDeadlineAtSnapshot` | `bidDeadlineAt` |
+| `openingAtSnapshot` | `openingAt` |
 
 ---
 
@@ -225,6 +283,27 @@
 
 프로젝트 스냅샷과 현재 최신 공고를 비교한다.
 
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `projectId` | Long | 프로젝트 ID |
+| `bidNoticeId` | Long | 원본 공고 ID |
+| `noticeChanged` | Boolean | 현재 공고와 스냅샷의 차이 여부 |
+| `snapshotVersion` | Long | 스냅샷 낙관적 락 버전 |
+| `changedFields` | Object[] | 변경된 필드 목록 |
+
+**changedFields**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fieldName` | String | 반영 가능한 필드명 |
+| `displayName` | String | 화면 표시명 |
+| `snapshotValue` | String | 프로젝트에 저장된 그때 값 |
+| `currentValue` | String | 최신 공고 값 |
+
+반영 가능한 `fieldName`은 `noticeName`, `baseAmount`, `estimatedAmount`, `bidDeadlineAt`, `openingAt` 으로 제한한다.
+
 ---
 
 ## 프로젝트 공고 스냅샷 반영 `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot`
@@ -232,6 +311,41 @@
 **상태**: 📝 초안
 
 사용자가 선택한 최신 값만 프로젝트에 반영한다. 자동으로 프로젝트 스냅샷을 덮어쓰지 않는다.
+
+**Request**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|------|------|
+| `snapshotVersion` | Long | Y | 사용자가 비교 화면에서 본 스냅샷 버전 |
+| `fields` | String[] | Y | 반영할 필드명 목록 |
+
+**Request 예시**
+
+```json
+{
+  "snapshotVersion": 3,
+  "fields": ["baseAmount", "bidDeadlineAt"]
+}
+```
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `projectId` | Long | 프로젝트 ID |
+| `bidNoticeId` | Long | 원본 공고 ID |
+| `snapshotVersion` | Long | 반영 후 새 스냅샷 버전 |
+| `appliedFields` | String[] | 실제 반영된 필드 목록 |
+| `changeApplyHistoryId` | Long | 반영 이력 ID |
+
+충돌 및 오류:
+
+| 상태 | 상황 |
+|------|------|
+| 400 | `fields`가 비어 있거나 허용되지 않은 필드 포함 |
+| 403 | 프로젝트 편집 권한 없음 |
+| 404 | 프로젝트 또는 연결된 공고 없음 |
+| 409 | 요청의 `snapshotVersion`이 현재 버전과 다름 |
 
 ---
 
@@ -253,6 +367,11 @@
 | 발주처 | `noticeAgency` |
 | 기초금액 | `baseAmount` |
 | 계약 방식 | `contractMethod` |
+| 참가 자격 | `participationQualificationText` |
+| 지역 제한 | `regionLimitText` |
+| 업종 제한 | `businessLimitText` |
+| 공동수급 가능 여부 | `jointContractAllowed` |
+| 공동수급 원문 | `jointContractText` |
 | 참여사 수 | `participantCount` |
 | 진행 단계 | 프로젝트 스테이지·스텝 상태 기반 |
 | 원본 공고 변경 여부 | `noticeChanged` |

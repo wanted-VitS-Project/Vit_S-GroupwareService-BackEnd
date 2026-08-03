@@ -1,6 +1,6 @@
 # 🤖 비타메이트 문서 분석 AI v1 — 유스케이스 시나리오
 
-**최종 업데이트**: 2026-08-03 (노션 정리본 반영)
+**최종 업데이트**: 2026-08-03 (CodeRabbit 피드백 반영 — 비동기 상태 전이 보강)
 **담당**: 정현
 
 > 테이블 단위로 시나리오를 나눈다. `시스템`은 사용자 조작 없이 서버가 수행하는 단계다.
@@ -24,11 +24,13 @@
 | USC-VIT-ANA-001 | 문서 버전 선택 | 스텝 접근 권한 보유자 |
 | USC-VIT-ANA-002 | 프롬프트 입력 | 스텝 접근 권한 보유자 |
 | USC-VIT-ANA-003 | 분석 요청 | 스텝 접근 권한 보유자 |
-| USC-VIT-ANA-004 | 분석 상태 `PROCESSING` 저장 | 시스템 |
+| USC-VIT-ANA-004 | 분석 상태 `PENDING` 저장 | 시스템 |
 | USC-VIT-ANA-005 | `analysisId` 반환 | 시스템 |
-| USC-VIT-ANA-006 | 분석 완료 결과 저장 | 시스템 |
-| USC-VIT-ANA-007 | 분석 실패 메시지 저장 | 시스템 |
-| USC-VIT-ANA-008 | 재분석 시 새 이력 생성 | 시스템 |
+| USC-VIT-ANA-006 | 백그라운드 워커가 `PROCESSING`으로 전환 | 시스템 |
+| USC-VIT-ANA-007 | 분석 완료 결과 저장 | 시스템 |
+| USC-VIT-ANA-008 | 분석 실패 메시지 저장 | 시스템 |
+| USC-VIT-ANA-009 | 재분석 시 새 이력 생성 | 시스템 |
+| USC-VIT-ANA-010 | `Idempotency-Key`로 같은 요청 중복 방지 | 시스템 |
 
 ---
 
@@ -61,6 +63,7 @@
 | USC-VIT-CIT-002 | 근거 순서 저장 | 시스템 |
 | USC-VIT-CIT-003 | 분석 결과 조회 시 근거 목록 제공 | 시스템 |
 | USC-VIT-CIT-004 | 같은 분석 안의 근거 순서 중복 차단 | 시스템 |
+| USC-VIT-CIT-005 | 선택 문서 범위 밖 청크 저장 차단 | 시스템 |
 
 ---
 
@@ -70,12 +73,15 @@
 flowchart TD
     A[문서 버전 선택] --> B[프롬프트 입력]
     B --> C[POST 분석 요청]
-    C --> D[Spring Boot: PROCESSING 저장]
-    D --> E[Python FastAPI 내부 호출]
-    E --> F[문서 청크 검색]
-    F --> G[AI 분석]
-    G --> H[결과와 근거 반환]
-    H --> I[Spring Boot: 결과 저장]
-    I --> J[GET 상태 및 결과 조회]
-    I --> K[블록별 분석 이력 조회]
+    C --> D[Spring Boot: PENDING 저장]
+    D --> E[202 + analysisId 반환]
+    D --> W[백그라운드 워커]
+    W --> P[PROCESSING 전환]
+    P --> F[Python FastAPI 내부 호출]
+    F --> G[문서 청크 검색]
+    G --> H[AI 분석]
+    H --> I[결과와 근거 반환]
+    I --> S[Spring Boot: COMPLETED 또는 FAILED 저장]
+    S --> J[GET 상태 및 결과 조회]
+    S --> K[블록별 분석 이력 조회]
 ```
