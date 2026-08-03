@@ -39,6 +39,17 @@ public class ThrottledPasswordEncoder implements PasswordEncoder {
      *                    Tomcat 스레드가 전부 줄에 묶여 다른 API 까지 멈춘다
      */
     public ThrottledPasswordEncoder(PasswordEncoder delegate, int permitCount, Duration waitTimeout) {
+        // 설정 오타 한 줄로 인증 전체가 마비된다. permit 이 0 이면 모든 로그인이 503 이다.
+        // 조용히 뜨는 것보다 기동을 막는 편이 안전하다.
+        if (delegate == null) {
+            throw new IllegalArgumentException("delegate 는 필수다");
+        }
+        if (permitCount < 1) {
+            throw new IllegalArgumentException("permitCount 는 1 이상이어야 한다: " + permitCount);
+        }
+        if (waitTimeout == null || waitTimeout.isNegative() || waitTimeout.isZero()) {
+            throw new IllegalArgumentException("waitTimeout 은 0 보다 커야 한다: " + waitTimeout);
+        }
         this.delegate = delegate;
         // fair = true : 붐빌 때 나중에 온 요청이 새치기해 먼저 온 사용자가 계속 밀리는 것을 막는다
         this.permits = new Semaphore(permitCount, true);

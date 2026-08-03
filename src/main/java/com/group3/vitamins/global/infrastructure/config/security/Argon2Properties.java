@@ -32,23 +32,40 @@ public record Argon2Properties(
         int saltLength,
         int hashLength,
 
-        /** 동시에 해시를 돌릴 수 있는 최대 개수. 메모리 상한 = permits × memoryKb × 2.5 */
+        // 동시에 해시를 돌릴 수 있는 최대 개수. 메모리 상한 = permits × memoryKb × 2.5
         int permits,
 
-        /** 로그인 경로의 세마포어 대기 한도. 초과하면 503 을 준다 */
+        // 로그인 경로의 세마포어 대기 한도. 초과하면 503 을 준다
         Duration loginWait,
 
-        /** 계정 일괄 발급처럼 요청 1건이 해시 N회를 도는 경로의 대기 한도 */
+        // 계정 일괄 발급처럼 요청 1건이 해시 N회를 도는 경로의 대기 한도
         Duration bulkWait
 ) {
 
+    /** OWASP Password Storage Cheat Sheet 의 Argon2id 최소 권장 메모리 (19MiB) */
+    private static final int MIN_MEMORY_KB = 19456;
+
     public Argon2Properties {
-        if (memoryKb < 8192) {
+        // ⚠️ 임계값과 메시지를 따로 두지 마라. 예전엔 조건이 8192 인데 메시지만 19456 이라고 안내해서,
+        //    권장치의 절반도 안 되는 8MiB 설정이 아무 경고 없이 통과했다.
+        if (memoryKb < MIN_MEMORY_KB) {
             throw new IllegalArgumentException(
-                    "security.argon2.memory-kb 가 너무 작다. OWASP 최소 권장은 19456(19MiB) 이다: " + memoryKb);
+                    "security.argon2.memory-kb 가 너무 작다. OWASP 최소 권장은 %d(19MiB) 이다: %d"
+                            .formatted(MIN_MEMORY_KB, memoryKb));
         }
         if (iterations < 1 || parallelism < 1 || permits < 1) {
             throw new IllegalArgumentException("iterations · parallelism · permits 는 1 이상이어야 한다");
+        }
+        // saltLength 가 0 이면 모든 해시가 같은 솔트를 쓴다. 조용히 통과시키면 안 된다.
+        if (saltLength < 16 || hashLength < 16) {
+            throw new IllegalArgumentException("salt-length · hash-length 는 16 이상이어야 한다");
+        }
+        // null 이면 ThrottledPasswordEncoder 의 tryAcquire 에서 NPE 로 터진다. 기동 때 잡는다.
+        if (loginWait == null || loginWait.isNegative() || loginWait.isZero()) {
+            throw new IllegalArgumentException("security.argon2.login-wait 는 0 보다 커야 한다");
+        }
+        if (bulkWait == null || bulkWait.isNegative() || bulkWait.isZero()) {
+            throw new IllegalArgumentException("security.argon2.bulk-wait 는 0 보다 커야 한다");
         }
     }
 

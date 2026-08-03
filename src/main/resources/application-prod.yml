@@ -11,3 +11,19 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+# --- 세션 쿠키 ---
+# 🚨 환경변수로 두지 않는다. 공통 설정의 기본값이 COOKIE_SECURE:false 라, 운영에서 변수 하나만
+#    빠져도 세션 쿠키가 평문 HTTP 로 나간다. 운영에서 secure 를 끌 이유가 없으므로 여기서 못 박는다.
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+
+# --- CORS ---
+# 🚨 기본값을 주지 않는다. 변수가 없으면 기동을 실패시키는 게 맞다.
+#    기본값을 두면 운영이 조용히 http://localhost:3000 만 허용한 채 떠서 연동이 통째로 막힌다.
+#    ⚠️ 실제 도메인을 여기 적지 마라. 이 레포는 PUBLIC 이다.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}

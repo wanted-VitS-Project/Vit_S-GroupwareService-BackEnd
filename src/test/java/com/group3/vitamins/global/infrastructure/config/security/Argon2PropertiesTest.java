@@ -72,6 +72,45 @@ class Argon2PropertiesTest {
                 .hasStackTraceContaining("OWASP"));
     }
 
+    @Test
+    @DisplayName("최소 허용값(19456) 은 통과하고 그보다 1 작으면 막힌다")
+    void enforcesExactMinimumMemory() {
+        runner.withPropertyValues(withMemoryKb(19456))
+                .run(context -> assertThat(context).hasNotFailed());
+
+        // 부등호 실수(<= vs <)를 잡는다. 예전엔 임계값이 8192 라 이 값이 조용히 통과했다
+        runner.withPropertyValues(withMemoryKb(19455))
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    @DisplayName("salt-length 0 은 기동을 막는다 — 모든 해시가 같은 솔트를 쓰게 된다")
+    void rejectsZeroSaltLength() {
+        runner.withPropertyValues(
+                "security.argon2.memory-kb=65536",
+                "security.argon2.iterations=3",
+                "security.argon2.parallelism=1",
+                "security.argon2.salt-length=0",
+                "security.argon2.hash-length=32",
+                "security.argon2.permits=2",
+                "security.argon2.login-wait=8s",
+                "security.argon2.bulk-wait=30s"
+        ).run(context -> assertThat(context).hasFailed());
+    }
+
+    private String[] withMemoryKb(int memoryKb) {
+        return new String[]{
+                "security.argon2.memory-kb=" + memoryKb,
+                "security.argon2.iterations=3",
+                "security.argon2.parallelism=1",
+                "security.argon2.salt-length=16",
+                "security.argon2.hash-length=32",
+                "security.argon2.permits=2",
+                "security.argon2.login-wait=8s",
+                "security.argon2.bulk-wait=30s"
+        };
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties(Argon2Properties.class)
     static class TestConfig {

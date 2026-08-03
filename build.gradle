@@ -19,6 +19,12 @@ repositories {
     mavenCentral()
 }
 
+// ── 취약 전이 의존성 상향 ──────────────────────────────────
+// springdoc → swagger-core 가 commons-lang3 를 끌고 오는데, Boot 3.5.16 BOM 이 3.17.0 으로 내려 고정한다.
+// 3.17.0 은 CVE-2025-48924 영향 범위라 BOM 프로퍼티를 덮어써서 올린다.
+// (swagger-core 가 요구하는 버전도 3.20.0 이라 상향이 곧 원래 요구값이다)
+ext['commons-lang3.version'] = '3.20.0'
+
 dependencies {
     // --- Web ---
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -40,7 +46,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     // Argon2PasswordEncoder 는 BouncyCastle 의 Argon2BytesGenerator 에 위임한다.
     // 없으면 컴파일은 통과하고 로그인 시점에 NoClassDefFoundError 로 터진다.
-    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+    // ⚠️ 버전을 내리지 마라. 1.80 이하는 CVE-2026-0636 영향 범위다 (Mend 스캔에서 검출).
+    //    2026-08-03 기준 최신 릴리스.
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.85'
 
     // --- 세션 ---
     // 인증 방식 = 서버측 세션 + HttpOnly 쿠키 (.ai/api/auth.md).
@@ -73,6 +81,10 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // 트랜잭션 경계(REQUIRES_NEW·롤백)는 목으로 검증할 수 없다. 실제 DB 가 있어야 한다.
+    // ⚠️ MySQL 전용 마이그레이션은 H2 에서 돌지 않는다. 트랜잭션 테스트는 Flyway 를 끄고
+    //    ddl-auto=create-drop 으로 엔티티에서 스키마를 만든다 (LoginFailureTransactionTest).
+    testRuntimeOnly 'com.h2database:h2'
 }
 
 tasks.named('test') {
@@ -100,6 +112,11 @@ tasks.register('benchmark', Test) {
     }
     // 운영 힙(t3.medium · 약 2.1GB)과 맞춘다. 기본값(머신 RAM 의 1/4)으로 재면 수치가 의미 없다.
     maxHeapSize = '2g'
+    // ⚠️ Test 태스크라 기본적으로 JaCoCo 에이전트가 붙는다. 계측 비용이 측정값에 섞이면
+    //    Argon2 파라미터를 실측하는 목적 자체가 무너진다.
+    jacoco {
+        enabled = false
+    }
     testLogging {
         showStandardStreams = true
     }

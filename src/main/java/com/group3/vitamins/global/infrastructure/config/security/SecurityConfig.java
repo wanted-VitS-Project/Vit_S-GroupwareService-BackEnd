@@ -162,6 +162,8 @@ public class SecurityConfig {
         // 세션 쿠키를 주고받으므로 필수. 이게 true 면 allowedOrigins 에 "*" 를 쓸 수 없다.
         // 프론트도 fetch 에 credentials: 'include' 를 켜야 한다.
         config.setAllowCredentials(true);
+        // preflight 캐시. 없으면 브라우저 기본값(약 5초)이라 POST·PATCH 마다 OPTIONS 가 한 번 더 나간다.
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

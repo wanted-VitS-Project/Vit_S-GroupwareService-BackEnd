@@ -6,6 +6,7 @@ import com.group3.vitamins.auth.domain.PasswordPolicy;
 import com.group3.vitamins.auth.domain.exception.AuthErrorCode;
 import com.group3.vitamins.auth.infrastructure.persistence.AuthQueryMapper;
 import com.group3.vitamins.auth.infrastructure.persistence.UserProfileRow;
+import com.group3.vitamins.global.domain.common.error.exception.AccountLockedException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.UnauthorizedException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -36,6 +37,7 @@ public class AuthService {
 
     private final AccountJpaRepository accountRepository;
     private final AuthQueryMapper authQueryMapper;
+    private final LoginFailureRecorder loginFailureRecorder;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
     private final int lockThreshold;
@@ -51,12 +53,14 @@ public class AuthService {
 
     public AuthService(AccountJpaRepository accountRepository,
                        AuthQueryMapper authQueryMapper,
+                       LoginFailureRecorder loginFailureRecorder,
                        PasswordEncoder passwordEncoder,
                        Clock clock,
                        @Value("${security.login.lock-threshold}") int lockThreshold,
                        @Value("${security.login.lock-duration}") Duration lockDuration) {
         this.accountRepository = accountRepository;
         this.authQueryMapper = authQueryMapper;
+        this.loginFailureRecorder = loginFailureRecorder;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
         this.lockThreshold = lockThreshold;
@@ -97,10 +101,15 @@ public class AuthService {
         }
 
         if (!passwordEncoder.matches(rawPassword, account.getPassword())) {
-            account.recordLoginFailure(lockThreshold, now, now.plus(lockDuration));
-            log.info("로그인 실패 — userId={} failCount={}", userId, account.getLoginFailCount());
-            if (account.isLocked(now)) {
-                throw lockedException(account.getLockedUntil());
+            // 🚨 이 트랜잭션에서 기록하면 안 된다. 바로 아래 예외로 전부 롤백돼 잠금이 걸리지 않는다.
+            //    별도 트랜잭션(REQUIRES_NEW)에서 먼저 커밋시킨다.
+            LoginFailureRecorder.Result failure =
+                    loginFailureRecorder.record(userId, lockThreshold, now, now.plus(lockDuration));
+            // ⚠️ 사번은 개인 식별자다. 로그 수집 시스템에 평문으로 쌓이면 안 된다.
+            //    공격 분석에는 내부 키로 충분하다.
+            log.info("로그인 실패 — accountId={} failCount={}", account.getAccountId(), failure.failCount());
+            if (failure.locked()) {
+                throw lockedException(failure.lockedUntil());
             }
             throw new UnauthorizedException(AuthErrorCode.AUTH_LOGIN_FAILED);
         }
@@ -132,7 +141,8 @@ public class AuthService {
         AccountEntity account = accountRepository.findByUserId(userId)
                 .orElseThrow(() -> new UnauthorizedException(AuthErrorCode.AUTH_UNAUTHENTICATED));
 
-        if (!account.isMustChangePassword()) {
+        boolean initialChange = account.isMustChangePassword();
+        if (!initialChange) {
             if (isBlank(currentPassword)) {
                 throw new ValidationException(AuthErrorCode.AUTH_CURRENT_PASSWORD_REQUIRED);
             }
@@ -146,17 +156,28 @@ public class AuthService {
         }
         PasswordPolicy.validate(newPassword);
 
-        if (passwordEncoder.matches(newPassword, account.getPassword())) {
+        // ⚠️ 해시 호출 횟수를 줄인다. permit 이 2뿐이라 요청 1건이 슬롯을 3회 점유하면
+        //    비밀번호 변경이 몰릴 때 로그인까지 503 이 난다.
+        //    일반 변경은 바로 위에서 currentPassword 가 저장 해시와 일치함을 이미 확인했으므로,
+        //    재사용 여부는 문자열 비교로 판정할 수 있다. 최초 변경 경로는 비교 대상이 없어 해시가 필요하다.
+        boolean reusingCurrent = initialChange
+                ? passwordEncoder.matches(newPassword, account.getPassword())
+                : newPassword.equals(currentPassword);
+        if (reusingCurrent) {
             throw new ValidationException(AuthErrorCode.AUTH_PASSWORD_UNCHANGED);
         }
 
         account.changePassword(passwordEncoder.encode(newPassword));
-        log.info("비밀번호 변경 완료 — userId={}", userId);
+        log.info("비밀번호 변경 완료 — accountId={}", account.getAccountId());
     }
 
-    /** 명세: 잠금 응답의 {@code message} 에 해제 시각을 담는다. 코드는 그대로 둔다 */
-    private ForbiddenException lockedException(LocalDateTime lockedUntil) {
-        return new ForbiddenException(
+    /**
+     * 명세: 잠금 응답의 {@code message} 에 해제 시각을 담는다. 코드는 그대로 둔다.
+     *
+     * <p>상태코드는 <b>423</b> 이다 — 비활성(403)과 달리 시간이 지나면 스스로 풀리므로 프론트 분기가 다르다.
+     */
+    private AccountLockedException lockedException(LocalDateTime lockedUntil) {
+        return new AccountLockedException(
                 AuthErrorCode.AUTH_ACCOUNT_LOCKED,
                 "로그인 실패가 누적되어 계정이 잠겼습니다. %s 이후에 다시 시도해 주세요."
                         .formatted(lockedUntil.format(UNLOCK_TIME_FORMAT)));

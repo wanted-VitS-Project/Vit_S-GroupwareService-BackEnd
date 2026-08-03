@@ -6,7 +6,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -91,7 +90,7 @@ public class AccountEntity {
      * <p>잠금과 동시에 카운트를 0으로 되돌린다 — 그래야 잠금이 풀린 뒤 다시 5회의 기회가 생긴다.
      * 되돌리지 않으면 잠금 해제 직후 1회만 틀려도 다시 잠긴다.
      */
-    public void recordLoginFailure(int threshold, LocalDateTime now, LocalDateTime lockUntil) {
+    public void recordLoginFailure(int threshold, LocalDateTime lockUntil) {
         this.loginFailCount++;
         if (this.loginFailCount >= threshold) {
             this.loginFailCount = 0;

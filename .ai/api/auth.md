@@ -1,7 +1,7 @@
 # 🔐 AUTH API
 
 **상태**: `✅ 확정` — 노션 반영 완료 (2026-08-03). 이탈 금지 규칙 전면 적용 (`../API.md` §0)
-**최종 업데이트**: 2026-08-03 · **담당**: 김동현
+**최종 업데이트**: 2026-08-03 (에러코드 3종 확정 · `Retry-After` 제외) · **담당**: 김동현
 **노션**: `VitaSAPI` · Domain `인사` · SUB-Domain `AUTH`
 
 > ✅ **노션 반영 완료 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
@@ -78,15 +78,20 @@
 | 400 | `AUTH_INVALID_REQUEST` | 사번 또는 비밀번호가 비어 있음 |
 | 401 | `AUTH_LOGIN_FAILED` | 사번 또는 비밀번호 불일치. **사번 존재 여부를 구분하지 않는다** (`AUTH-003`) |
 | 403 | `AUTH_ACCOUNT_INACTIVE` | 계정이 비활성 |
-| 403 | `AUTH_ACCOUNT_LOCKED` | 실패 누적 잠금. `message` 에 해제 시각을 담는다 |
-| 429 | `AUTH_TOO_MANY_REQUESTS` | ⭐ 같은 IP 에서 요청 과다. `Retry-After` 헤더 포함 |
-| 503 | `AUTH_HASHING_BUSY` | ⭐ 서버 과부하로 처리 못 함. 요청 자체는 정상 — 잠시 후 재시도 |
+| 423 | `AUTH_ACCOUNT_LOCKED` | 실패 누적 잠금. `message` 에 해제 시각을 담는다 |
+| 429 | `AUTH_TOO_MANY_REQUESTS` | 같은 IP 에서 요청 과다. 잠시 후 재시도 |
+| 503 | `AUTH_HASHING_BUSY` | 서버 과부하로 처리 못 함. 요청 자체는 정상 — 잠시 후 재시도 |
 
-> `423 Locked` 가 의미상 맞지만 팀 노션이 401·403·404 만 쓰므로 **`403` 으로 통일**했다.
+> **`423` 과 `403` 을 합치지 마라** (2026-08-03 노션 확정). 프론트 처리가 다르다 —
+> `403 AUTH_ACCOUNT_INACTIVE` 는 관리자만 풀 수 있고, `423 AUTH_ACCOUNT_LOCKED` 는 시간이 지나면 자동 해제된다.
+> 같은 코드로 내리면 화면이 두 상황을 구분하지 못한다.
 
-⭐ **`429` · `503` 은 2026-08-03 에 추가한 코드다** — 노션 반영 시 팀 합의 필요.
+**`429` · `503` 은 2026-08-03 에 추가·확정한 코드다.**
 비밀번호 해시(Argon2id)가 요청당 64MB 를 쓰기 때문에 **동시 실행을 제한하지 않으면 서버가 죽는다.**
 막힌 요청을 되돌려보내는 경로가 필요하다. 근거는 §5.
+
+> ⚠️ **`Retry-After` 헤더는 내려주지 않는다.** 재시도 시점을 클라이언트가 헤더로 읽는 시나리오가 없어
+> 명세에서 뺐다 (2026-08-03). 프론트는 고정 지연 후 재시도하거나 사용자에게 안내만 한다.
 
 ---
 
@@ -231,7 +236,7 @@ Request Body 없음 · `data` 는 `null`
 
 | 층 | 한도 | 초과 시 |
 |---|---|---|
-| 계정 단위 실패 | **5회 / 10분** → 10분 잠금 | `403 AUTH_ACCOUNT_LOCKED` |
+| 계정 단위 실패 | **5회 / 10분** → 10분 잠금 | `423 AUTH_ACCOUNT_LOCKED` |
 | IP 단위 요청 | **60회 / 분** | `429 AUTH_TOO_MANY_REQUESTS` |
 
 > ⚠️ IP 한도를 인원(30명)의 2배로 잡은 이유 — **사무실이 NAT 하나를 공유**한다.
@@ -250,13 +255,13 @@ Request Body 없음 · `data` 는 `null`
 
 | 항목 | 값 |
 |---|---|
-| 응답 | `403` · ⭐ **`AUTH_PASSWORD_RESET_REQUIRED`** (명세에 없어 추가 — 팀 합의 필요) |
+| 응답 | `403` · **`AUTH_PASSWORD_RESET_REQUIRED`** (2026-08-03 추가·확정) |
 | 예외 경로 | `PATCH /api/v1/auth/password` · `POST /api/v1/auth/logout` · `GET /api/v1/auth/me` |
 | 판정 | 세션 속성. 매 요청 DB 를 치지 않는다 |
 | 해제 | 비밀번호 변경 성공 시. **세션은 유지**한다 (재로그인시키지 않는다) |
 
 ## 미확정
 
-- [ ] ⭐ 내가 추가한 코드 3개 팀 합의 — `429 AUTH_TOO_MANY_REQUESTS` · `503 AUTH_HASHING_BUSY` · `403 AUTH_PASSWORD_RESET_REQUIRED`
+- [x] `2026-08-03` 추가 코드 3개 확정 — `429 AUTH_TOO_MANY_REQUESTS` · `503 AUTH_HASHING_BUSY` · `403 AUTH_PASSWORD_RESET_REQUIRED`. `Retry-After` 는 명세에서 제외
 - [ ] 비밀번호 변경 성공 시 세션을 끊을지 유지할지 (보안 관례는 재로그인 강제 / 현재 구현은 유지)
 - [ ] 🔴 **스키마 요청** — `department.parent_id` 가 있어야 `departmentPath` 를 만들 수 있다 (마이그레이션 담당자에게 전달)

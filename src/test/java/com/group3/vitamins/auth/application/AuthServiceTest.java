@@ -15,7 +15,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
@@ -52,9 +51,13 @@ class AuthServiceTest {
         passwordEncoder = Mockito.mock(PasswordEncoder.class);
         when(passwordEncoder.encode(anyString())).thenReturn("$argon2id$dummy");
 
+        // 실제 구현을 쓴다 — 목으로 대체하면 "실패를 기록한다" 는 계약이 검증되지 않는다.
+        // 단 여기엔 프록시가 없어 REQUIRES_NEW 는 걸리지 않는다. 그건 LoginFailureTransactionTest 가 본다.
+        LoginFailureRecorder loginFailureRecorder = new LoginFailureRecorder(accountRepository);
+
         Clock fixed = Clock.fixed(NOW.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
-        authService = new AuthService(accountRepository, authQueryMapper, passwordEncoder,
-                fixed, LOCK_THRESHOLD, LOCK_DURATION);
+        authService = new AuthService(accountRepository, authQueryMapper, loginFailureRecorder,
+                passwordEncoder, fixed, LOCK_THRESHOLD, LOCK_DURATION);
         authService.prepareDummyHash();
     }
 
@@ -79,6 +82,8 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
                 .satisfies(hasCode(AuthErrorCode.AUTH_ACCOUNT_LOCKED))
+                // 423 이다. 비활성(403)과 합치면 프론트가 "관리자 문의" 와 "잠시 후 재시도" 를 구분 못 한다
+                .satisfies(hasStatus(423))
                 .satisfies(e -> assertThat(e.getMessage()).contains("09:03"));   // 해제 시각을 메시지에 담는다
 
         verify(passwordEncoder, never()).matches(any(), anyString());
@@ -92,7 +97,8 @@ class AuthServiceTest {
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
 
         assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
-                .satisfies(hasCode(AuthErrorCode.AUTH_ACCOUNT_INACTIVE));
+                .satisfies(hasCode(AuthErrorCode.AUTH_ACCOUNT_INACTIVE))
+                .satisfies(hasStatus(403));
     }
 
     @Test
@@ -100,6 +106,7 @@ class AuthServiceTest {
     void increasesFailCountOnWrongPassword() {
         AccountEntity account = account();
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
+        when(accountRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches(RAW_PASSWORD, ENCODED)).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
@@ -107,6 +114,8 @@ class AuthServiceTest {
 
         assertThat(account.getLoginFailCount()).isEqualTo(1);
         assertThat(account.getLockedUntil()).isNull();
+        // 실패 기록은 잠금 조회(FOR UPDATE)를 거쳐야 한다. 락 없는 경로로 돌아가면 여기서 잡힌다
+        verify(accountRepository).findByUserIdForUpdate(USER_ID);
     }
 
     @Test
@@ -115,6 +124,7 @@ class AuthServiceTest {
         AccountEntity account = account();
         ReflectionTestUtils.setField(account, "loginFailCount", LOCK_THRESHOLD - 1);
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
+        when(accountRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches(RAW_PASSWORD, ENCODED)).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
@@ -155,5 +165,10 @@ class AuthServiceTest {
 
     private Consumer<Throwable> hasCode(AuthErrorCode expected) {
         return throwable -> assertThat(((DomainException) throwable).getErrorCode()).isEqualTo(expected);
+    }
+
+    /** 상태코드는 프론트 분기의 기준이라 에러코드와 함께 고정한다 */
+    private Consumer<Throwable> hasStatus(int expected) {
+        return throwable -> assertThat(((DomainException) throwable).getHttpStatus()).isEqualTo(expected);
     }
 }
