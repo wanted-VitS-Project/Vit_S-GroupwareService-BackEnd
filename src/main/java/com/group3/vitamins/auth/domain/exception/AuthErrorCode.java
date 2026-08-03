@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
  * 임의로 추가·변경하지 마라. 필요하면 노션을 먼저 고친다 (`.ai/API.md` §0).
  *
  * <p>{@code AUTH_HASHING_BUSY}(503) 는 여기 없다 — 도메인 로직이 아니라 해시 인프라가 던지므로
- * {@code global.infrastructure.config.security.PasswordHashingBusyException} 이 갖고 있다.
+ * {@code global.domain.common.error.exception.PasswordHashingBusyException} 이 갖고 있다.
  */
 @Getter
 @RequiredArgsConstructor

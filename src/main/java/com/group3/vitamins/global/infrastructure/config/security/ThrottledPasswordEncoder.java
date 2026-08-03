@@ -1,5 +1,6 @@
 package com.group3.vitamins.global.infrastructure.config.security;
 
+import com.group3.vitamins.global.domain.common.error.exception.PasswordHashingBusyException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 

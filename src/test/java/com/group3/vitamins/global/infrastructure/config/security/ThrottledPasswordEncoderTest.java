@@ -1,5 +1,6 @@
 package com.group3.vitamins.global.infrastructure.config.security;
 
+import com.group3.vitamins.global.domain.common.error.exception.PasswordHashingBusyException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;

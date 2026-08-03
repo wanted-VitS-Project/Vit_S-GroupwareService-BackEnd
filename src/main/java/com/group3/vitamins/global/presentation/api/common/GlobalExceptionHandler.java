@@ -1,7 +1,6 @@
-package com.group3.vitamins.global.presentation.api.controller;
+package com.group3.vitamins.global.presentation.api.common;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
-import com.group3.vitamins.global.presentation.api.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;

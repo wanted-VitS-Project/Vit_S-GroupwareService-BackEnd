@@ -1,4 +1,4 @@
-package com.group3.vitamins.global.infrastructure.config.security;
+package com.group3.vitamins.global.domain.common.error.exception;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.domain.common.error.ErrorCode;
@@ -27,8 +27,8 @@ public class PasswordHashingBusyException extends DomainException {
     /**
      * 코드 표기는 {@code .ai/api/auth.md} 의 공통 규칙을 따른다 — {@code AUTH_{의미}} (언더스코어, 번호식 아님).
      *
-     * <p>⚠️ 이 코드는 명세 초안에 <b>내가 추가한 것</b>이라 노션 반영 시 팀 합의가 필요하다.
-     * 다른 코드들과 달리 요청 내용과 무관한 서버 과부하이므로 프론트는 "잠시 후 재시도" 로 처리한다.
+     * <p>2026-08-03 노션 확정. 다른 코드들과 달리 <b>요청 내용과 무관한 서버 과부하</b>이므로
+     * 프론트는 로그인 실패가 아니라 "잠시 후 재시도" 로 처리한다.
      */
     enum Code implements ErrorCode {
 
