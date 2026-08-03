@@ -43,6 +43,68 @@
 
 ---
 
+## 📂 현재 파일 (2026-08-03)
+
+**김동현 담당 — 46개 엔드포인트 · 전부 `✅ 확정`** (2026-08-03 노션 반영 완료 → **구현 가능**)
+
+| 파일 | 노션 SUB-Domain | 개수 | 내용 |
+|------|----------------|:----:|------|
+| [auth.md](auth.md) | `AUTH` | 4 | 로그인 · 로그아웃 · 내 정보 · 비밀번호 변경 |
+| [account.md](account.md) | `Account` | 3 | 전역 권한 · 계정 상태 · 비밀번호 재설정 |
+| [employee.md](employee.md) | `Employee` | 8 | 목록 · 상세 · 등록 · 수정 · 퇴사 · 엑셀 3종 |
+| [department.md](department.md) | `Department` | 4 | 목록(트리) · 생성 · 수정 · 삭제 |
+| [job-position.md](job-position.md) | `JobPosition` | 4 | 목록 · 생성 · 수정 · 삭제 |
+| [employee-group.md](employee-group.md) | `EmployeeGroup` | 7 | 그룹 4종 + 구성원 3종 |
+| [page-permission.md](page-permission.md) | `PagePermission` | 5 | 내 페이지 · 페이지 목록 · 접근자 · 부여 · 회수 |
+| [file.md](file.md) | `File` · `FileVersion` | 10 | 업로드 2종 · 목록 · 수정 · 삭제 3종 · 버전 3종 |
+
+Domain 은 `인사`(35개) · `프로젝트`(파일 11개) — **총 46개** (`file.md` 에 버전 단건 조회가 추가됐다).
+`department.md` · `job-position.md` 에는 요구사항·유스케이스 명세도 함께 들어 있다 (다른 문서에 없어서).
+
+## 🔴 `.ai/docs/global/` 과의 충돌 (2026-08-03 정리)
+
+`global/PERMISSION.md` · `PAGE.md` · `BLOCK.md` 를 대조해 **6곳 충돌**을 찾았다. 결론은 아래와 같고, **팀 문서 쪽을 고쳐야 하는 3건은 동훈에게 요청 중**이다.
+
+| # | 항목 | 채택 | 조치 |
+|---|------|------|------|
+| 1 | `page_code` 개수 | **5개** (와이어프레임) | 🔴 `global/` 문서 수정 요청 |
+| 2 | `ADMIN` 이 프로젝트·페이지를 뚫나 | **뚫는다** (팀 문서) | ✅ 이 폴더 수정 완료 |
+| 3 | 전역 role 서열 | **`ADMIN` > `MASTER` > `MEMBER`** (팀 문서) | ✅ 수정 완료 |
+| 4 | `ADMIN` 겸직 | **불가 · 시스템 계정** | 🔴 `global/` 문서 수정 요청 |
+| 5 | 그룹 · 직급 | **우리 설계 유지** | 🔴 `global/` 문서에 **추가** 요청 |
+| 6 | 파일 권한 판정 | **`step_permission` 없으면 `project_member` 상속** (팀 문서) | ✅ 수정 완료 |
+
+**팀 문서에서 새로 발견해 반영한 것**
+
+| 항목 | 반영 위치 |
+|------|----------|
+| 결재 대상 파일 **삭제 잠금** (`FILE_APPROVAL_IN_PROGRESS`) | `file.md` §5 |
+| 결재 참조 파일 **영구 삭제 차단** (`FILE_APPROVAL_REFERENCED`) | `file.md` §7 |
+| **버전 단건 조회 API** — 결재가 고정한 `file_version_id` 조회 인터페이스 제공 의무 | `file.md` §11 |
+| **블록을 지워도 파일은 산다** → `FILE_BLOCK_DELETED` 폐기 | `file.md` §6 |
+| `privileged_override = 1` 로그 | `file.md` 권한 판정 순서 |
+| 자기 role 행 수정 차단 (`ACC_SELF_MODIFICATION_NOT_ALLOWED`) | `account.md` §1 |
+| `is_system` 정의 통합 (ADMIN · 배치 · 크롤러) | `employee.md` §1 |
+
+> ⚠️ **읽는 순서** — `global/PERMISSION.md` 를 먼저 읽되, 위 표의 1·4·5번은 **이 폴더가 최신**이다.
+
+## 📐 공통 규칙 (노션 실제 형식)
+
+> ⚠️ **`../API.md` §3 과 다르다.** §3 은 미확정 초안이고 아래가 노션 실제 형식이다. §3 갱신이 필요하다.
+
+| 항목 | 값 |
+|------|-----|
+| 성공 응답 | `{ httpStatus, message, data }` — **`status` 가 아니다** |
+| 실패 응답 | `{ httpStatus, message, code }` |
+| 에러 코드 | **`{도메인}_{의미}`** — `AUTH_LOGIN_FAILED` · `FILE_SIZE_EXCEEDED`. 번호식(`AUTH_001`)이 아니다 |
+| 페이징 | `data.content[]` · `data.page` · `data.size` · `data.totalElements` · `data.totalPages` |
+
+**에러 코드 접두어 (김동현 선점)** — 요구사항 ID 접두어와 동일하게 맞춰 `FILE_003` 에러에서 `FILE-003` 요구사항으로 바로 찾아갈 수 있게 했다.
+
+`AUTH_` · `ACC_` · `EMP_` · `DEPT_` · `POS_` · `GRP_` · `PAGE_` · `FILE_`
+
+---
+
 ## 규칙
 
 - 파일명은 `{도메인}.md` — 예: `auth.md`, `user.md`, `approval.md`
@@ -50,6 +112,15 @@
   - 이전 모듈에서 노션과 1:1 미러한 명세가 2,025줄 / 72KB 까지 커져 "작업 전 반드시 읽어라" 규칙이 지켜질 수 없게 됐다.
 - 사본과 노션이 다르고 상태가 `✅` 이상이면 → **노션이 맞다**
 - API 를 건드린 PR 은 **"명세를 노션에 반영했다"** 체크 항목을 확인한다
+
+---
+
+## 현재 파일
+
+| 파일 | 도메인 | 상태 |
+|------|--------|------|
+| [bid.md](bid.md) | 입찰관리 | 📝 초안 |
+| [vitamate.md](vitamate.md) | 비타메이트 AI | 📝 초안 |
 
 ---
 
