@@ -4,7 +4,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
  * 부서 쓰기·단건 조회 (JPA). 트리·인원 집계처럼 {@code employee} 를 가로지르는 조회는
- * {@link DepartmentQueryMapper}(MyBatis)가 맡는다. 역할을 섞지 마라.
+ * {@link com.group3.vitamins.department.infrastructure.persistence.mapper.DepartmentMapper}(MyBatis)가 맡는다.
+ * 역할을 섞지 마라.
  */
 public interface DepartmentJpaRepository extends JpaRepository<DepartmentEntity, Long> {
 
