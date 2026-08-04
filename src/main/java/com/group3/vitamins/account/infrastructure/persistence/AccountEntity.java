@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
@@ -23,6 +24,9 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "account")
+// 변경된 컬럼만 UPDATE 한다 — 두 관리자가 같은 계정을 동시에 건드릴 때(예: role 변경 vs 비번 재설정)
+// 행 전체 갱신이 서로의 다른 컬럼을 덮어쓰는 lost-update 를 막는다. 같은 컬럼 동시 변경은 여전히 last-wins.
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AccountEntity {
@@ -36,8 +40,8 @@ public class AccountEntity {
     @Column(name = "user_id", nullable = false, length = 20, updatable = false)
     private String userId;
 
-    /** Argon2id 해시 */
-    @Column(name = "password", nullable = false, length = 255)
+    /** Argon2id 해시 (컬럼 길이는 JPA 기본 255) */
+    @Column(name = "password", nullable = false)
     private String password;
 
     /**
@@ -92,13 +96,7 @@ public class AccountEntity {
         return !"ACTIVE".equals(status);
     }
 
-    public String getRole() {
-        return role;
-    }
-
-    public String getStatus() {
-        return status;
-    }
+    // getRole() · getStatus() 는 클래스 @Getter 가 생성한다 (수동 정의 제거)
 
     public boolean isLocked(LocalDateTime now) {
         return lockedUntil != null && lockedUntil.isAfter(now);
@@ -130,5 +128,36 @@ public class AccountEntity {
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
         this.mustChangePassword = false;
+    }
+
+    // ===== 관리자(ADMIN) 조작 — `.ai/api/account.md` =====
+
+    /**
+     * 전역 권한 변경. 허용값은 {@code MASTER} · {@code MEMBER} 뿐이다 —
+     * {@code ADMIN} 부여 차단은 서비스단에서 코드({@code ACC_ADMIN_ROLE_NOT_ALLOWED})와 함께 막는다.
+     */
+    public void changeRole(String role) {
+        this.role = role;
+    }
+
+    /** 계정 활성/비활성 토글 ({@code ACTIVE} · {@code INACTIVE}) */
+    public void changeStatus(String status) {
+        this.status = status;
+    }
+
+    /**
+     * 관리자에 의한 비밀번호 재설정.
+     *
+     * <p>초기 비밀번호로 돌아가므로 {@code mustChangePassword} 를 다시 세운다 —
+     * 사용자는 이 임시 비밀번호로 로그인한 뒤 반드시 새 비밀번호를 정해야 한다.
+     *
+     * <p>🔓 <b>잠금·실패 카운트도 함께 푼다.</b> 잠긴 사용자를 돕기 위한 재설정인데
+     * 잠금이 남아 있으면 새 비밀번호로도 로그인하지 못해 재설정이 무의미해진다.
+     */
+    public void resetPassword(String encodedPassword) {
+        this.password = encodedPassword;
+        this.mustChangePassword = true;
+        this.loginFailCount = 0;
+        this.lockedUntil = null;
     }
 }
