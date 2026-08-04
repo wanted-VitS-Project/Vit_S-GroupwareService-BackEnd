@@ -20,6 +20,7 @@
     ├── USECASE.md        유스케이스 (공고→실적 전 과정 흐름)
     ├── ERD.md            테이블 지도 (실제 DDL 은 db/migration)
     ├── API.md            API 규칙 (프론트와의 계약 보호)
+    ├── ARCHITECTURE.md   아키텍처 컨벤션 (헥사고날 계층·네이밍)
     ├── api/              노션 명세 도메인별 사본
     ├── CONVENTION.md     브랜치·커밋·PR 규칙
     ├── INFRA.md          인프라 인벤토리
@@ -50,6 +51,7 @@ AI 도구마다 가장 먼저 읽는 파일 이름이 달라서 두 파일을 �
 | [USECASE.md](domain/USECASE.md) | **유스케이스** — 공고에서 실적까지 전 과정 흐름 | 기능 구현 전, 흐름 확인용 |
 | [ERD.md](domain/ERD.md) | **테이블 지도** — 영역별 ERD (원본은 `db/migration`) | 엔티티·쿼리 작성 전 |
 | [API.md](API.md) | **명세 이탈 방지 규칙** + 공통 컨벤션 | API 코드 작성 전 (필수) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | **아키텍처 컨벤션** — 헥사고날 계층 구조·네이밍 규칙 | 새 도메인·패키지 만들 때 (필수) |
 | [api/README.md](api/README.md) | 노션 명세의 도메인별 작업용 사본 | API 코드 작성 전 (필수) |
 | [CONVENTION.md](CONVENTION.md) | 브랜치 전략·커밋·PR·이슈 규칙 | 브랜치 만들 때, 커밋·PR 쓸 때 |
 | [INFRA.md](INFRA.md) | 서버·리소스 구조, 포트, 시크릿 키 목록 | 배포·인프라 관련 작업 전 |
