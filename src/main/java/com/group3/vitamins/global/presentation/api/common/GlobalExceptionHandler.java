@@ -15,6 +15,7 @@ import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -37,12 +38,14 @@ public class GlobalExceptionHandler {
     private static final String AUTH_UNAUTHENTICATED = "AUTH_UNAUTHENTICATED";
     private static final String AUTH_UNAUTHENTICATED_MESSAGE = "로그인이 필요합니다.";
 
-    // 아래 3개는 명세에 대응 코드가 없는 프레임워크 레벨 오류의 폴백이다.
+    // 아래 4개는 명세에 대응 코드가 없는 프레임워크 레벨 오류의 폴백이다.
     // 도메인 에러는 반드시 명세의 코드(ACC_NOT_FOUND · EMP_INVALID_REQUEST …)를 쓴다.
     private static final String COMMON_FORBIDDEN = "COMMON_FORBIDDEN";
     private static final String COMMON_FORBIDDEN_MESSAGE = "접근 권한이 없습니다.";
     private static final String COMMON_INVALID_REQUEST = "COMMON_INVALID_REQUEST";
     private static final String COMMON_INVALID_REQUEST_MESSAGE = "잘못된 요청입니다.";
+    private static final String COMMON_NOT_FOUND = "COMMON_NOT_FOUND";
+    private static final String COMMON_NOT_FOUND_MESSAGE = "요청한 경로를 찾을 수 없습니다.";
     private static final String COMMON_INTERNAL_ERROR = "COMMON_INTERNAL_ERROR";
     private static final String COMMON_INTERNAL_ERROR_MESSAGE = "서버 내부 오류가 발생했습니다.";
 
@@ -123,6 +126,25 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(403).body(ApiErrorResponse.of(
                 403, COMMON_FORBIDDEN, COMMON_FORBIDDEN_MESSAGE));
+    }
+
+    /**
+     * 존재하지 않는 경로 — {@code 404}.
+     *
+     * <p>🚨 <b>이 핸들러가 없으면 아래 {@code Exception} 폴백이 삼켜 500 이 나간다.</b>
+     * 프론트가 "URL 오타" 와 "서버 장애" 를 구분하지 못하고, 정상 상황인데 {@code ERROR} 로그가 쌓인다.
+     *
+     * <p>Spring Boot 3 은 매핑 없는 요청을 정적 리소스로 넘겨 {@link NoResourceFoundException} 을 던진다.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNoResourceFound(
+            NoResourceFoundException e,
+            HttpServletRequest request
+    ) {
+        log.warn("[404] {} {}", request.getMethod(), request.getRequestURI());
+
+        return ResponseEntity.status(404).body(ApiErrorResponse.of(
+                404, COMMON_NOT_FOUND, COMMON_NOT_FOUND_MESSAGE));
     }
 
     @ExceptionHandler(Exception.class)
