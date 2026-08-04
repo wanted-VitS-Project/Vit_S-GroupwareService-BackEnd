@@ -55,6 +55,27 @@ spring:
     locations: classpath:db/migration
     out-of-order: false
 
+  # ── 메일 (SMTP) ─────────────────────────────────────────
+  # 관리자 비밀번호 재설정 시 임시 비밀번호를 사원 이메일로 발송한다 (.ai/api/account.md §3).
+  # smtp 구조는 공통 고정값(공개 안전), 계정/비번만 환경 종속 — 코드봄바 방식과 동일.
+  # 🚨 PUBLIC 레포다. 계정·앱 비밀번호는 여기 쓰지 않는다 — env 또는 application-local.yml(gitignore)로만.
+  #    Gmail 은 MAIL_PASSWORD 가 계정 비밀번호가 아니라 "앱 비밀번호" 여야 한다.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    # ⚠️ spring.mail.properties 는 Map<String,String> 이라, 점이 포함된 JavaMail 키는
+    #    "[...]" 로 감싸 통째로 키가 되게 한다. 안 감싸면 mail.smtp.* 가 아닌 다른 키로 평탄화될 수 있다.
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
+      # 발송 지연이 요청을 오래 붙잡지 않게 타임아웃을 건다. 초과하면 MAIL_SEND_FAILED 로 집계된다.
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
+
 server:
   servlet:
     session:
@@ -115,3 +136,9 @@ cloud:
     region: ${AWS_REGION:ap-northeast-2}
     s3:
       bucket: ${S3_BUCKET_NAME}
+
+# ── 계정 관리 ────────────────────────────────────────────
+# 비밀번호 재설정 메일 링크. 발신 주소(from)는 SMTP 로그인 계정을 그대로 쓴다 (Gmail 이 발신자를 계정으로 강제).
+account:
+  mail:
+    login-url: ${APP_LOGIN_URL:http://localhost:3000/login}

@@ -1,5 +1,6 @@
 package com.group3.vitamins.auth.application;
 
+import com.group3.vitamins.global.infrastructure.session.SessionTerminator;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -11,12 +12,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
-import org.springframework.session.FindByIndexNameSessionRepository;
-import org.springframework.session.Session;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 세션 수립 · 종료.
@@ -33,7 +31,7 @@ public class AuthSessionManager {
     public static final String PASSWORD_RESET_REQUIRED = "PASSWORD_RESET_REQUIRED";
 
     private final SecurityContextRepository securityContextRepository;
-    private final FindByIndexNameSessionRepository<? extends Session> sessionRepository;
+    private final SessionTerminator sessionTerminator;
 
     /**
      * 로그인 성공 → 세션 수립.
@@ -87,17 +85,10 @@ public class AuthSessionManager {
     /**
      * 해당 사용자의 모든 세션 종료.
      *
-     * <p>단일 세션 정책 외에 <b>계정 잠금 · 비활성화 · role 변경 시 즉시 반영</b>에도 쓴다.
-     * JWT 였다면 만료를 기다려야 했을 자리다.
+     * <p>단일 세션 정책(로그인 시 기존 세션 정리)에 쓴다. 계정 관리 쪽의 즉시 무효화와 같은 연산이라
+     * 공용 {@link SessionTerminator} 에 위임한다.
      */
     public void closeAllSessions(String userId) {
-        try {
-            Map<String, ? extends Session> sessions =
-                    sessionRepository.findByPrincipalName(userId);
-            sessions.keySet().forEach(sessionRepository::deleteById);
-        } catch (RuntimeException e) {
-            // 여기서 실패해도 로그인은 진행시킨다. 이전 세션이 남는 것은 4시간 뒤 만료로 정리된다.
-            log.warn("기존 세션 정리 실패 — userId={}", userId, e);
-        }
+        sessionTerminator.terminateAll(userId);
     }
 }
