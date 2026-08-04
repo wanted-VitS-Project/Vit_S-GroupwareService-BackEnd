@@ -68,6 +68,9 @@ public class PasswordResetGateFilter extends OncePerRequestFilter {
         if (HttpMethod.OPTIONS.matches(request.getMethod())) {
             return false;
         }
-        return !ALLOWED_PATHS.contains(request.getRequestURI());
+        // getRequestURI() 는 컨텍스트 경로를 포함한다. 컨텍스트 경로를 떼고 비교해야
+        // server.servlet.context-path 설정·프록시 배포 시에도 예외 경로가 어긋나지 않는다 (미설정이면 "" 라 무해).
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return !ALLOWED_PATHS.contains(path);
     }
 }
