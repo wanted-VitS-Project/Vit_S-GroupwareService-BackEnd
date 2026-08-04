@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-03 (CodeRabbit 피드백 반영)
+**최종 동기화**: 2026-08-04 (입찰 블록 조회 전용 정책 반영)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -31,6 +31,41 @@
 | 📝 초안 | 프로젝트 공고 변경 비교 | GET | `/api/v1/projects/{projectId}/bid-notice/changes` | 프로젝트 접근 권한 |
 | 📝 초안 | 프로젝트 공고 스냅샷 반영 | PATCH | `/api/v1/projects/{projectId}/bid-notice-snapshot` | 프로젝트 편집 권한 |
 | 📝 초안 | 프로젝트 입찰 블록 조회 | GET | `/api/v1/blocks/{blockId}/bid-notice` | 스텝 접근 권한 |
+
+---
+
+## 입찰 블록 API 정책
+
+입찰 블록은 입찰 공고에서 프로젝트를 만들 때 자동 생성되는 조회 전용 블록이다.
+
+```text
+bid_notice = 입찰 공고 원본
+project = 전환 시점의 공고 스냅샷 보유
+block(type='BID_NOTICE') = 프로젝트 스텝 안에서 project.bid_notice_id의 공고를 보여주는 진입점
+```
+
+정책:
+
+| 항목 | 규칙 |
+|------|------|
+| 생성 | 공고 프로젝트 전환 API에서 자동 생성한다 |
+| 수동 생성 | v1에서는 별도 입찰 블록 생성 API를 두지 않는다 |
+| 연결 경로 | `block → step → project → project.bid_notice_id → bid_notice` |
+| 조회 | `GET /api/v1/blocks/{blockId}/bid-notice`에서 처리한다 |
+| 공고 원본 수정 | 입찰 블록 API로 `bid_notice`를 수정하지 않는다 |
+| 프로젝트 스냅샷 수정 | `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot`을 사용한다 |
+| 블록 제목·위치 수정 | 공통 블록 API 정책을 따른다 |
+| 블록 삭제 | 공통 블록 삭제 API 정책을 따른다. 단, `bid_notice`와 `project.bid_notice_id`는 삭제하지 않는다 |
+
+입찰 블록 전용 수정/삭제 API는 만들지 않는다.
+
+금지 API:
+
+```text
+PUT /api/v1/blocks/{blockId}/bid-notice
+PATCH /api/v1/blocks/{blockId}/bid-notice
+DELETE /api/v1/blocks/{blockId}/bid-notice
+```
 
 ---
 
@@ -234,8 +269,9 @@
 9. 인증된 전환 요청자를 `project_member`에 자동 등록
 10. 추가 `memberIds`를 `project_member`에 등록
 11. 입찰 스테이지·스텝·블록 자동 생성
-12. 생성된 입찰 블록 연결
-13. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
+12. 입찰 스텝 안에 `block.type='BID_NOTICE'` 입찰 블록 생성
+13. 생성된 입찰 블록은 `block → step → project → project.bid_notice_id` 경로로 해당 공고를 조회한다
+14. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
 
 권한 정책:
 
@@ -263,6 +299,17 @@
 | 중복 방지 | `UNIQUE(project.bid_notice_id)` |
 | 스냅샷 | 프로젝트 생성 당시 `noticeName`, `bidNoticeId`, `baseAmount`, `estimatedAmount`, `bidDeadlineAt`, `openingAt` 저장 |
 | 정정공고 | 프로젝트 스냅샷을 자동 덮어쓰지 않음 |
+
+입찰 블록 생성 정책:
+
+| 항목 | 규칙 |
+|------|------|
+| 블록 타입 | `BID_NOTICE` |
+| 생성 위치 | 전환 시 자동 생성된 입찰 스텝 |
+| 블록 제목 | 기본값은 공고명 또는 `입찰 공고 정보` |
+| 연결 대상 | 별도 연결 테이블 없이 `project.bid_notice_id`로 전환한 `bid_notice`를 조회 |
+| 원본 보호 | 블록 생성·삭제가 `bid_notice` 원본을 삭제하거나 수정하지 않음 |
+| 중복 방지 | 같은 프로젝트 전환은 `UNIQUE(project.bid_notice_id)`로 1회만 허용 |
 
 스냅샷 저장 필드:
 
@@ -353,7 +400,29 @@
 
 **상태**: 📝 초안
 
-입찰 블록은 프로젝트 생성 시 자동으로 만들어지는 조회 블록이다.
+입찰 블록은 프로젝트 생성 시 자동으로 만들어지는 조회 전용 블록이다.
+
+조회 처리:
+
+1. `blockId` 존재 여부를 확인한다.
+2. `block.type = 'BID_NOTICE'`인지 확인한다.
+3. 요청자가 해당 블록이 속한 스텝에 접근 가능한지 확인한다.
+4. `block → step → project → project.bid_notice_id` 경로로 입찰 공고를 조회한다.
+5. 프로젝트 스냅샷과 현재 공고값의 변경 여부를 계산한다.
+
+**Response — `200` 주요값**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `blockId` | Long | 블록 ID |
+| `projectId` | Long | 프로젝트 ID |
+| `stepId` | Long | 스텝 ID |
+| `bidNoticeId` | Long | 연결된 입찰 공고 ID |
+| `blockTitle` | String | 블록 제목 |
+| `notice` | Object | 현재 입찰 공고 정보 |
+| `snapshot` | Object | 프로젝트 전환 당시 저장된 스냅샷 |
+| `noticeChanged` | Boolean | 현재 공고와 스냅샷의 차이 여부 |
+| `changedFields` | Object[] | 변경된 필드 목록. 변경이 없으면 `[]` |
 
 표시값:
 
@@ -376,11 +445,53 @@
 | 진행 단계 | 프로젝트 스테이지·스텝 상태 기반 |
 | 원본 공고 변경 여부 | `noticeChanged` |
 
-금지 API:
+**notice**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `noticeName` | String | 입찰 공고명 |
+| `announcedAt` | LocalDateTime | 공고일 |
+| `questionDeadlineAt` | LocalDateTime | 질의응답 마감 |
+| `bidDeadlineAt` | LocalDateTime | 제출 마감 |
+| `openingAt` | LocalDateTime | 개찰일 |
+| `noticeAgency` | String | 발주처 |
+| `baseAmount` | Decimal | 기초금액 |
+| `estimatedAmount` | Decimal | 추정가격 |
+| `contractMethod` | String | 계약 방식 |
+| `participationQualificationText` | String | 참가 자격 원문 |
+| `regionLimitText` | String | 지역 제한 원문 |
+| `businessLimitText` | String | 업종 제한 원문 |
+| `jointContractAllowed` | Boolean | 공동수급 가능 여부. 판별 불가면 `null` |
+| `jointContractText` | String | 공동수급 원문 |
+| `participantCount` | Integer | 참여사 수 |
+| `sourceUrl` | String | 원문 URL |
+
+**snapshot**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `noticeName` | String | 전환 당시 공고명 |
+| `baseAmount` | Decimal | 전환 당시 기초금액 |
+| `estimatedAmount` | Decimal | 전환 당시 추정가격 |
+| `bidDeadlineAt` | LocalDateTime | 전환 당시 제출 마감 |
+| `openingAt` | LocalDateTime | 전환 당시 개찰일 |
+| `snapshotVersion` | Long | 스냅샷 낙관적 락 버전 |
+
+오류:
+
+| 상태 | 상황 |
+|------|------|
+| 400 | `blockId`가 입찰 블록이 아님 |
+| 403 | 해당 스텝 접근 권한 없음 |
+| 404 | 블록, 프로젝트, 연결된 입찰 공고 없음 |
+
+전용 금지 API:
 
 ```text
 PUT /api/v1/blocks/{blockId}/bid-notice
+PATCH /api/v1/blocks/{blockId}/bid-notice
 DELETE /api/v1/blocks/{blockId}/bid-notice
 ```
 
 프로젝트 안에서 공고를 다시 선택하거나 연결 해제하지 않는다.
+블록 삭제가 필요하면 공통 블록 삭제 API를 사용하고, 이 경우에도 `bid_notice` 원본과 프로젝트 스냅샷은 유지한다.
