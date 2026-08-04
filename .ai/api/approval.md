@@ -57,7 +57,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 201 | Created | – | 결재 상세 생성 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 토큰 없음/만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 로그인이 필요합니다 |
 | 404 | Not Found | `BLOCK_NOT_FOUND` | 블록을 찾을 수 없음 |
 | 400 | Bad Request | `BLOCK_TYPE_MISMATCH` | 블록의 `type != APPROVAL` |
 | 403 | Forbidden | `APPROVAL_NOT_PROJECT_MEMBER` | 프로젝트 member 아님 |
@@ -98,7 +98,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 200 | OK | – | 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | 결재 없음 |
 | 404 | Not Found | `APPROVAL_REVISION_NOT_FOUND` | 회차 없음 |
 | 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 차례 안 온 결재자(`WAITING`)의 조회 |
@@ -127,7 +127,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 200 | OK | – | 수정 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` / `APPROVAL_REVISION_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | 기안자 아님 |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | `DRAFT` 아닌 회차 수정 시도 |
@@ -156,7 +156,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 201 | Created | – | 추가 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` / `APPROVAL_REVISION_NOT_FOUND` | |
 | 404 | Not Found | `FILE_VERSION_NOT_FOUND` | 존재하지 않는 파일 버전 |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
@@ -179,7 +179,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 204 | No Content | – | 제거 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_DOCUMENT_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | |
@@ -219,7 +219,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 200 | OK | – | 등록·수정 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` / `APPROVAL_REVISION_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | |
@@ -246,7 +246,7 @@
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 200 | OK | – | 상신 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` / `APPROVAL_REVISION_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | 이미 상신됐거나 `DRAFT` 아님(중복 상신 포함) |
@@ -285,7 +285,7 @@
 |---|---|---|---|
 | 201 | Created | – | 새 회차 생성 |
 | 200 | OK | – | 이미 있는 DRAFT 회차 그대로 반환(멱등) |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_NOT_REJECTED` | `approval.status != REJECTED` |

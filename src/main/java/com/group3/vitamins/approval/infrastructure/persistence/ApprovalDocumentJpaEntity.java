@@ -6,9 +6,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -19,10 +19,10 @@ import java.time.LocalDateTime;
  * 여기서 {@code file_version} 과 JPA 연관관계를 맺지 않는다.
  */
 @Entity
-@Table(name = "approval_document")
+@NoArgsConstructor
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ApprovalDocumentEntity {
+@Table(name = "approval_document")
+public class ApprovalDocumentJpaEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,21 +35,18 @@ public class ApprovalDocumentEntity {
     @Column(name = "file_version_id", nullable = false)
     private Long fileVersionId;
 
-    @Column(name = "created_at", insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    /** 문서 추가 (APR-005) — 호출 전 {@code file_version.upload_status == COMPLETED} 검증은 서비스 책임 */
-    public static ApprovalDocumentEntity create(Long approvalRevisionId, Long fileVersionId) {
-        ApprovalDocumentEntity document = new ApprovalDocumentEntity();
-        document.approvalRevisionId = approvalRevisionId;
-        document.fileVersionId = fileVersionId;
-        return document;
-    }
-
-    public void delete(LocalDateTime deletedAt) {
-        this.deletedAt = deletedAt;
+    /** 문서 추가(APR-005) · 재상신 복사(SUB-006) 공용 생성 */
+    public static ApprovalDocumentJpaEntity create(Long approvalRevisionId, Long fileVersionId) {
+        ApprovalDocumentJpaEntity entity = new ApprovalDocumentJpaEntity();
+        entity.approvalRevisionId = approvalRevisionId;
+        entity.fileVersionId = fileVersionId;
+        return entity;
     }
 }

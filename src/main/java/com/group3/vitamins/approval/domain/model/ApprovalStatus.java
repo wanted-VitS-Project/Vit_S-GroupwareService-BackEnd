@@ -1,4 +1,4 @@
-package com.group3.vitamins.approval.domain;
+package com.group3.vitamins.approval.domain.model;
 
 /**
  * {@code approval}·{@code approval_revision} 공용 상태 (`APR-V1.md` §2-A·§2-B).
