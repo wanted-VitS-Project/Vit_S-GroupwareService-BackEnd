@@ -16,7 +16,11 @@ public interface TextRepository {
 
     Text updateContent(Long txtId, String content);
 
-    void markDeleted(Long txtId, LocalDateTime deletedAt);
+    /**
+     * @return 실제로 이번 호출이 삭제 처리했으면 true, 이미 삭제돼 있어 아무것도 안 했으면 false
+     *         (중복 삭제 이벤트 판별용)
+     */
+    boolean markDeleted(Long txtId, LocalDateTime deletedAt);
 
     Optional<Text> findActiveByTxtId(Long txtId);
 }

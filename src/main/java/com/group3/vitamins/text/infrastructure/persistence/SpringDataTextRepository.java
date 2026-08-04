@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+
 public interface SpringDataTextRepository extends JpaRepository<TextJpaEntity, Long> {
 
     /**
@@ -16,4 +18,14 @@ public interface SpringDataTextRepository extends JpaRepository<TextJpaEntity, L
     @Query("UPDATE TextJpaEntity t SET t.content = :content, t.updatedAt = CURRENT_TIMESTAMP "
             + "WHERE t.txtId = :txtId AND t.deletedAt IS NULL")
     int updateContentIfActive(@Param("txtId") Long txtId, @Param("content") String content);
+
+    /**
+     * 같은 이유로 삭제도 조건부 UPDATE — 이미 삭제된 행이면 0을 반환한다.
+     * 이걸로 중복 삭제 이벤트를 구분하고(0=이미 삭제됨), 동시 삭제 시 최초 삭제 시각이
+     * 나중 이벤트로 덮어써지는 것도 막는다(조건에 안 맞으면 애초에 안 씀).
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE TextJpaEntity t SET t.deletedAt = :deletedAt "
+            + "WHERE t.txtId = :txtId AND t.deletedAt IS NULL")
+    int markDeletedIfActive(@Param("txtId") Long txtId, @Param("deletedAt") LocalDateTime deletedAt);
 }

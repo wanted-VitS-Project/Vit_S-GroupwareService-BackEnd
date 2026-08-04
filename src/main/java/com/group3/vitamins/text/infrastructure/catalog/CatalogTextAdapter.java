@@ -46,12 +46,12 @@ public class CatalogTextAdapter implements TextRepository {
 
     @Override
     @Transactional
-    public void markDeleted(Long txtId, LocalDateTime deletedAt) {
-        TextJpaEntity entity = springDataTextRepository.findById(txtId)
-                .orElseThrow(() -> new IllegalStateException("text not found: " + txtId));
-        entity.applyDeletedAt(deletedAt);
-
-        springDataTextRepository.save(entity);
+    public boolean markDeleted(Long txtId, LocalDateTime deletedAt) {
+        // 조건부 UPDATE: 이미 삭제된 행이면 0건 갱신 → 중복 이벤트로 간주하고 false 반환.
+        // 이걸로 "확인 후 쓰기" 틈도 없애고, 동시 삭제 시 최초 삭제 시각이 나중 이벤트로
+        // 덮어써지는 것도 막는다 (조건에 안 맞으면 애초에 UPDATE 자체가 안 나간다).
+        int updated = springDataTextRepository.markDeletedIfActive(txtId, deletedAt);
+        return updated > 0;
     }
 
     @Override
