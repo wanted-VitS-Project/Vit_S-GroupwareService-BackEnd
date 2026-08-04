@@ -1,5 +1,6 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 흐름 · FE/BE 책임 분담
 
+**최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
 **최종 업데이트**: 2026-08-03 (ERD 확정본 반영 — `clientName`·계약금액 해소 · `block.owner` 신설 · 잠금 4종)
 **최종 업데이트**: 2026-08-01 (신설)
 **담당**: 동훈
@@ -8,8 +9,9 @@
 > 엔드포인트 **38개** 전부에 대해 프론트가 하는 일과 백엔드가 하는 일을 갈랐다.
 > ⛔ 전 엔드포인트 `📝 초안`. 노션 반영 전까지 구현 금지 (`AGENTS.md` §3).
 > ✅ **ERD 확정본 정합** — 사번 `String` · `SETTLEMENT`/`COMPLETED` · `startedOn`/`endedOn` · `permission` · `project.client_name` · `project.contract_amount` · `block.owner`.
-> ⛔ **`stepType`·`block.type_id` 폐기 (2026-08-03)** — 송부 스텝을 만들지 않고 `typeId` 를 내리지 않는다 (`PRJ-V1.md` STP-007 · [`ERD.md`](ERD.md) §0-9).
-> ⚠️ **ERD Cloud 미반영분이 있다** → [`ERD.md`](ERD.md) §8
+> ⛔ **`stepType` 폐기 (2026-08-03)** — 송부 스텝을 만들지 않는다 (`PRJ-V1.md` STP-007).
+> ⭐ **`block.type_id` 는 살아 있다** (다형성 양방향 ID · [`ERD.md`](ERD.md) §0-12). 다만 **응답에는 내리지 않는다** — FE 는 `detail` 객체를 받으므로 상세 PK 가 필요 없다. 서버 내부 매핑용 컬럼이다.
+> ⚠️ **ERD Cloud 미반영분이 있다** → [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md)
 > 🚨 사람 식별자 타입이 노션 이슈 명세와 충돌한다 → [`PRJ-V1-API.md`](PRJ-V1-API.md) §4-A
 
 ---
@@ -31,14 +33,14 @@
 ### 0-2. 전 API 공통 분기
 
 ```
-401 AUTH_TOKEN_EXPIRED   → 세션 정리 후 로그인 페이지로 이동 (현재 URL 을 redirect 파라미터로)
-403 *_DENIED             → 토스트 + 해당 버튼 영구 비활성화 (권한은 새로고침해도 안 바뀐다)
-404 *_NOT_FOUND          → 토스트 + 목록에서 제거 / 상위 화면으로 이동
-409 *                    → 토스트로 **원인과 다음 행동**을 함께 안내
-5xx                      → "잠시 후 다시 시도해주세요" + 재시도 버튼
+401 AUTH_UNAUTHENTICATED  → 세션 정리 후 로그인 페이지로 이동 (현재 URL 을 redirect 파라미터로)
+403 *_DENIED              → 토스트 + 해당 버튼 영구 비활성화 (권한은 새로고침해도 안 바뀐다)
+404 *_NOT_FOUND           → 토스트 + 목록에서 제거 / 상위 화면으로 이동
+409 *                     → 토스트로 **원인과 다음 행동**을 함께 안내
+5xx                       → "잠시 후 다시 시도해주세요" + 재시도 버튼
 ```
 
-🚧 **확인 필요**: 인증 방식이 세션 쿠키인지 토큰 쿠키인지 문서에 없다. `AGENTS.md` §5 는 Spring Session(Redis/JDBC), 노션 에러코드는 `AUTH_TOKEN_EXPIRED` — **팀 확인 필요**.
+✅ **인증 방식 확정 (2026-08-04)**: **HttpOnly 세션 쿠키**다 (Spring Session · 구현 완료 #95). FE 는 요청에 `credentials: 'include'` 만 켜면 된다. 토큰 재발급 API 는 없다. 공통 401 코드는 `AUTH_UNAUTHENTICATED` — `AUTH_TOKEN_EXPIRED` 는 폐기했다.
 
 ---
 
@@ -836,7 +838,7 @@ FE (P-22A · 블록 탭)                            BE
                 · 카드 우하단에 `완료/전체` 배지 (BLK-011)
                 · `owner` 가 있으면 담당자 아바타 표시 (BLK-012 · 없으면 비운다)
                 · detail 은 타입별 컴포넌트로 분기
-                · ⛔ `typeId` 는 응답에 없다 (ERD §0-9 폐기)
+                · ⛔ `typeId` 는 응답에 없다 — 서버 내부 매핑용이다 (ERD §0-12)
 ```
 
 ### 6-2. 블록 생성 — `POST /api/v1/steps/{stepId}/blocks`
@@ -846,7 +848,7 @@ FE (P-22A · [+ 블록])                           BE
 ──────────────────────────────────────────────────────────────
 블록 타입 선택 → [추가]
     │
-    ├─ ① 타입 선택지는 **ERD enum 고정 목록 9종** (BLK-001)
+    ├─ ① 타입 선택지는 **ERD enum 고정 목록 10종** (BLK-001)
     │     ⛔ MEMO 는 **폐기됐다** — 목록에 넣지 마라. 자유 서술은 TEXT 다 (2026-08-03)
     │     ⛔ "커스텀 블록" · JSON 스키마 입력 UI 를 만들지 마라
     │
@@ -859,9 +861,10 @@ FE (P-22A · [+ 블록])                           BE
     │                                          · PAYMENT_CONFIRM  → 409 PAYMENT_CONFIRM_BLOCK_DUPLICATED (PCB-001B)
     │                                          · TAX_INVOICE_VIEW → 409 TAX_INVOICE_VIEW_BLOCK_DUPLICATED (TXL-001B)
     │                                       ⑤ owner 사번 존재 검증 → 404 USER_NOT_FOUND (BLK-012 · 선택 입력)
-    │                                       ⑥ block INSERT
-    │                                          step_id NOT NULL + **project_id 비정규화 채움**
-    │                                       ⑦ 타입별 상세 행 INSERT · 로그 기록
+    │                                       ⑥ block INSERT (step_id NOT NULL · type_id = NULL)
+    │                                       ⑦ 타입별 상세 행 INSERT (block_id = ⑥)
+    │                                       ⑧ block UPDATE SET type_id = ⑦의 PK · 로그 기록
+    │                                          ⚠️ ⑥⑦⑧ 은 한 트랜잭션 (FK 가 없다)
     │                                  ←── 201 {blockId, ...}
     │
     └─ ③ 응답 분기

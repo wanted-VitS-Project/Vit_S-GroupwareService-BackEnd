@@ -1,8 +1,8 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 목록
 
-**최종 업데이트**: 2026-08-03 (✅ 사번 `VARCHAR(20)` 확정 · ✅ **`MEMO` 폐기 → 블록 9종** · 잠금 4종 · TXL-001B 반영)
-**최종 업데이트**: 2026-08-03 (`step_type` 폐기 · 발주처·계약금액 해소 · `block.owner` 신설 · [`ERD.md`](ERD.md) 확정)
-**최종 업데이트**: 2026-08-01 (신규 ERD 정합 반영 — 사번 `VARCHAR(20)` · status enum · 블록 타입 enum)
+**최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
+**최종 업데이트**: 2026-08-04 (⭐ 응답 봉투 정정 — `timestamp`·`status`·`code`(COMMON-SUCCESS) 제거, 실제 구현(`ApiResponse`/`ApiErrorResponse`) 기준으로 통일)
+**최종 업데이트**: 2026-08-03 (✅ 사번 `VARCHAR(20)` 확정 · ✅ **블록 10종** (`MEMO` 폐기 · `BID_NOTICE` 신설) · 잠금 4종 · TXL-001B 반영)
 **담당**: 동훈
 **근거**: [`PRJ-V1.md`](PRJ-V1.md) · [`PRJ-V1-USECASE.md`](PRJ-V1-USECASE.md) · **[`ERD.md`](ERD.md) (확정본)**
 **상세 명세**: [`PRJ-V1-API-DETAIL.md`](PRJ-V1-API-DETAIL.md) · **흐름도**: [`PRJ-V1-API-FLOW.md`](PRJ-V1-API-FLOW.md)
@@ -37,7 +37,7 @@
 | | `stage_id` | BIGINT NULL | `stageId` | Long |
 | | `owner_user_id` | **VARCHAR(20)** | `ownerUserId` | **String (사번)** |
 | | `started_on` / `ended_on` | DATE | `startedOn` / `endedOn` | LocalDate |
-| `block` | `type` | ENUM **9값** | `type` | String |
+| `block` | `type` | ENUM **10값** | `type` | String |
 | | `owner` | **VARCHAR(20)** | `owner` | **String (사번)** |
 | | `row_index`/`col_span`/`sort_order` | INT | `rowIndex`/`colSpan`/`sortOrder` | int |
 | `activity_log` | `act` | ENUM 5값 | `act` | String |
@@ -46,8 +46,9 @@
 | | `privileged_override` | TINYINT(1) | `privilegedOverride` | boolean |
 
 > ⛔ **`step.step_type` 은 폐기됐다 (2026-08-03).** 송부 스텝 개념을 만들지 않는다 → `PRJ-V1.md` STP-007
-> ⛔ **`block.type_id` 도 폐기됐다 (2026-08-03).** 블록 응답에 `typeId` 를 내리지 않는다 → [`ERD.md`](ERD.md) §0-9
-> ✅ **`activity_log` 는 스키마 확정** → [`ERD.md`](ERD.md) §5-4. `project_id` 는 **NULL 허용**이다 (미매칭 입금 로그). ⚠️ ERD Cloud 미반영
+> ⭐ **`block.type_id` 는 부활했다 (2026-08-03 재확정 · 다형성 양방향 ID).** 단 **내부 식별자라 블록 응답에 `typeId` 를 내리지 않는다** → [`ERD.md`](ERD.md) §0-12 · §5-2
+> ⛔ **`block.project_id` 는 폐기됐다 (2026-08-03).** 응답에 `projectId` 를 내리지 않고, 프로젝트는 `step` 조인으로 얻는다 → [`ERD.md`](ERD.md) §0-13
+> ✅ **`activity_log` 는 스키마 확정** → [`ERD.md`](ERD.md) §5-4. `project_id` 는 **NULL 허용**이다 (미매칭 입금 로그). ✅ ERD 최종본에도 반영 완료 ([`../ERD.md`](../ERD.md) §3)
 
 > ✅ **사람 식별자는 사번 `String` 으로 확정됐다 (2026-08-03)** — `user_id VARCHAR(20)`.
 > ⚠️ 노션 이슈 명세(`assigneeIds: List<Long>`)가 아직 숫자다 — **이슈 쪽 정정 요청 필요** → §4-A
@@ -60,7 +61,7 @@
 | `project.close_reason_code` | `NOT_PARTICIPATED` · `FAILED_BID` · `NOT_SELECTED` · `CANCELED` |
 | `project_member.permission` · `step_permission.permission` | `VIEWER` · `EDITOR` · `NONE` |
 | `step.status` | `NOT_STARTED` · `IN_PROGRESS` · `DONE` |
-| `block.type` (**9종**) | `TEXT` · `IMAGE` · `FILE` · `CHECKLIST` · `PAYMENT_CONFIRM` · `TAX_INVOICE_VIEW` · `PERFORMANCE_VIEW` · `APPROVAL` · `AI` — ⛔ `MEMO` 폐기 |
+| `block.type` (**10종**) | `TEXT` · `IMAGE` · `FILE` · `CHECKLIST` · `PAYMENT_CONFIRM` · `TAX_INVOICE_VIEW` · `PERFORMANCE_VIEW` · `APPROVAL` · `AI` · **`BID_NOTICE`** — ⛔ `MEMO` 폐기 |
 | `activity_log.act` | `CREATE` · `UPDATE` · `DELETE` · `COMPLETE` · `MOVE` |
 
 ⚠️ **프로젝트 `COMPLETED` 와 스텝 `DONE` 은 다른 단어다.** 섞어 쓰면 FE 분기가 깨진다.
@@ -77,17 +78,21 @@
 
 ### 응답 공통 봉투
 
+**성공**만 이 3필드다. `timestamp`·`status`·`code`(`COMMON-SUCCESS`) 는 실제 구현(`ApiResponse`)에 없다.
+
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
+
+⚠️ **실패는 봉투가 다르다** — `httpStatus`·`message`·`code` 뿐이고 **`data` 가 없다** (`ApiErrorResponse`). 확장 필드(건수 등)를 따로 못 내리므로 필요하면 `message` 문구에 담는다.
 
 ### 공통 에러
 
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `PROJECT_ACCESS_DENIED` | 프로젝트 접근 권한 없음 |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | 프로젝트가 존재하지 않음 |
 
@@ -137,7 +142,7 @@
 | 개발 전 | 📝 초안 | StepPermission | 스텝 권한 부여·변경 | PUT | `/api/v1/steps/{stepId}/permissions/{userId}` | 프로젝트 EDITOR | 스텝별 `VIEWER`/`EDITOR`/`NONE` 을 지정한다. |
 | 개발 전 | 📝 초안 | StepPermission | 스텝 권한 회수 | DELETE | `/api/v1/steps/{stepId}/permissions/{userId}` | 프로젝트 EDITOR | 오버라이드 행을 지워 프로젝트 권한 상속으로 되돌린다. |
 | 개발 전 | 📝 초안 | Block | 스텝 블록 일괄 조회 | GET | `/api/v1/steps/{stepId}/blocks` | 스텝 접근 권한 | 블록과 타입별 상세를 한 번에 조회한다. |
-| 개발 전 | 📝 초안 | Block | 블록 생성 | POST | `/api/v1/steps/{stepId}/blocks` | 스텝 EDITOR | **9종** 타입 안에서 블록을 생성한다. `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **스텝당 1개** 검사 (PCB-001B · TXL-001B). |
+| 개발 전 | 📝 초안 | Block | 블록 생성 | POST | `/api/v1/steps/{stepId}/blocks` | 스텝 EDITOR | **10종** 타입 안에서 블록을 생성한다. `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **스텝당 1개** 검사 (PCB-001B · TXL-001B). |
 | 개발 전 | 📝 초안 | Block | 블록 배치 변경 | PATCH | `/api/v1/steps/{stepId}/blocks/layout` | 스텝 EDITOR | 드래그 결과를 일괄 반영한다. |
 | 개발 전 | 📝 초안 | Block | 블록 삭제 | DELETE | `/api/v1/blocks/{blockId}` | 스텝 EDITOR | 잠금 4종을 검사한 뒤 논리 삭제한다. |
 | 개발 전 | 📝 초안 | IssueBlock | 이슈-블록 연결 | POST | `/api/v1/blocks/{blockId}/issues` | 스텝 EDITOR | 같은 스텝의 이슈를 블록에 연결한다. |
@@ -203,17 +208,17 @@
 ⚠️ **노션 이슈 명세는 아직 `Long` 이다.** 프론트와의 계약이므로 **이슈 담당자에게 정정 요청**이 필요하다
 (`AGENTS.md` §3 — 명세 변경은 팀 합의 사항). 내 도메인 문서 전체는 이미 `String` 사번으로 통일돼 있다.
 
-### 4-B. 블록 타입 → ✅ **9종 확정 · `MEMO` 폐기 (2026-08-03)**
+### 4-B. 블록 타입 → ✅ **10종 확정** (`MEMO` 폐기 · `BID_NOTICE` 신설 · 2026-08-03)
 
 > **`MEMO` 를 `block.type` enum 에서 뺀다.** 상세 테이블·담당이 없고 담을 내용도 없다 —
 > 자유 서술은 `TEXT` 가 이미 담당한다 ([`BLOCK.md`](../../global/BLOCK.md) §4-1 *"본문·목차·회의 메모"*).
 
 | 출처 | 값 | 판정 |
 | --- | --- | --- |
-| [`BLOCK.md`](../../global/BLOCK.md) (제목·§3·§4 카탈로그·§5 요약표) | **9종** | ✅ **이제 양쪽이 일치한다** |
-| [`ERD.md`](ERD.md) `block.type` | **9종** (`MEMO` 제거) | ✅ |
+| [`BLOCK.md`](../../global/BLOCK.md) (제목·§3·§4 카탈로그·§5 요약표) | **10종** | ✅ **이제 양쪽이 일치한다** |
+| [`ERD.md`](ERD.md) `block.type` | **10종** (`MEMO` 제거) | ✅ |
 
-⚠️ **ERD Cloud 의 `block.type` enum 에서 `MEMO` 를 빼야 한다** → [`ERD.md`](ERD.md) §8-5
+⚠️ **ERD Cloud 의 `block.type` enum 에서 `MEMO` 를 빼야 한다** → [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md) §3-2
 ⛔ FE 블록 타입 선택 목록에서도 `MEMO` 를 **빼라.**
 
 ### 4-C. ~~`project` 에 발주처 컬럼이 없다~~ → ✅ **해소 (2026-08-03)**
@@ -244,6 +249,6 @@
 | 3 | `business_category` 마스터 | ✅ 테이블 존재 확인. `categoryId` 조회 API 필요 여부만 미정 |
 | 4 | ~~`stage` 테이블 컬럼 미제시~~ | ✅ **해소.** `stage_id`·`project_id`·`name`·`sort_order`·`created_at`·`deleted_at` → [`ERD.md`](ERD.md) §4-1 |
 | 5 | `project_member` 에 `deleted_at` 없음 | 참여자 제거가 **하드 DELETE** 다. `activity_log` 가 참조하면 INV-05(하드삭제 금지)와 충돌 |
-| 6 | ~~`block.type_id` 운용 방식~~ | ✅ **폐기 확정 (2026-08-03).** 상세는 `{상세테이블}.block_id` 단방향. 블록 응답에서 `typeId` 를 내리지 않는다 |
+| 6 | ~~`block.type_id` 운용 방식~~ | ⭐ **재확정 (2026-08-03).** 폐기안을 **철회**하고 **다형성 양방향 ID**(`block.type_id` ↔ `{상세}.block_id` · 양쪽 FK 없음)로 간다. 블록 응답에서 `typeId` 는 여전히 **안 내린다** (내부 식별자) → [`ERD.md`](ERD.md) §5-2 |
 | 7 | 인증 방식 (세션 쿠키 / 토큰) | 전 API 401 처리 |
 | 8 | ~~`block.owner` 운용 규칙~~ | ✅ **확정 (2026-08-03).** 블록 응답에 `owner`(사번) 를 내린다. 정산현황 담당자 = **다음 예정일 회차 블록의 owner** |

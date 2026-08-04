@@ -1,8 +1,8 @@
 # 💰 재무관리 v1 (입금 · 세금계산서 · 정산현황) — API 목록
 
+**최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
+**최종 업데이트**: 2026-08-04 (⭐ 응답 봉투 정정 — `timestamp`·`status`·`code`(COMMON-SUCCESS) 제거, 실제 구현(`ApiResponse`/`ApiErrorResponse`) 기준으로 통일)
 **최종 업데이트**: 2026-08-03 (ERD↔API 필드 매핑표 신설 · P-44 해소 · 미결 번호 정리)
-**최종 업데이트**: 2026-08-03 (ERD 확정본 반영 — 미결 12건 → 9건)
-**최종 업데이트**: 2026-08-01 (신설)
 **담당**: 동훈
 **근거**: [`PAY-V1.md`](PAY-V1.md) · [`TAX-V1.md`](TAX-V1.md) · [`STL-V1.md`](STL-V1.md) + 각 USECASE 문서 · **[`ERD.md`](ERD.md)**
 **상세 명세**: [`FIN-V1-API-DETAIL.md`](FIN-V1-API-DETAIL.md)
@@ -16,11 +16,15 @@
 
 ### 응답 공통 봉투
 
+**성공**만 이 3필드다. `timestamp`·`status`·`code`(`COMMON-SUCCESS`) 는 실제 구현(`ApiResponse`)에 없다.
+
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
+
+⚠️ **실패는 봉투가 다르다** — `httpStatus`·`message`·`code` 뿐이고 **`data` 가 없다** (`ApiErrorResponse`). 확장 필드(건수 등)를 따로 못 내리므로 필요하면 `message` 문구에 담는다.
 
 ### 0-0. ⭐ ERD ↔ API 필드 매핑 (확정본 기준)
 
@@ -62,7 +66,7 @@
 ### ⭐ ERD 정합 — ✅ 확정본 반영 (2026-08-03)
 
 스키마는 [`ERD.md`](ERD.md) 로 확정됐다. **필드 타입은 그 문서를 따른다.**
-⚠️ 단 **ERD Cloud 에 아직 안 들어간 항목이 있다** → [`ERD.md`](ERD.md) §8
+⚠️ 단 **ERD Cloud 에 아직 안 들어간 항목이 있다** → [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md)
 
 | 항목 | 반영 |
 | --- | --- |
@@ -94,7 +98,7 @@
 
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 (`FINANCE`+`EDITOR` 아님) |
 
@@ -208,9 +212,9 @@
 | 2 | 🚨 홈택스 API 접근 방식 미정 | `POST .../import/hometax` 의 파라미터·인증 방식 | `TAX-V1.md` §5-6 |
 | 3 | 🚨 우리 사업자번호 보관 위치 미정 (설정값 / 하드코딩) | 매출/매입 구분(TAX-002B · INV-09) | `TAX-V1.md` §5-7B |
 | 4 | 🚨 CSV 에 고유번호·승인번호 열이 실제로 있는지 미확인 | 없으면 IMP-006 · TAX-006B 가 전 행을 실패시킨다 | `PAY-V1.md` §5-6 · `TAX-V1.md` §5-7 |
-| 5 | 🚨 **ERD Cloud 미반영분** | `payment.block_id` · `tax_invoice.project_id` 가 아직 안 들어가 있다 | [`ERD.md`](ERD.md) §8 |
+| 5 | 🚨 **ERD Cloud 미반영분** | `payment.block_id` · `tax_invoice.project_id` 가 아직 안 들어가 있다 | [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md) §2-3 |
 | 6 | MTC-005 유사도 계산식 미정 | 매칭 후보 정렬 기준 | `PAY-V1.md` §5-3 |
 | 7 | P-25 (프로젝트 정산) 후순위 | 이 문서에 엔드포인트를 만들지 않았다 | `STL-V1.md` §2-B |
-| 8 | 인증 방식 (세션 쿠키 / 토큰) 미확정 | 전 API 401 처리 · `AUTH_TOKEN_EXPIRED` 문구와 Spring Session 이 안 맞는다 | [`FIN-V1-API-FLOW.md`](FIN-V1-API-FLOW.md) §0-3 · `.ai/API.md` §2 |
+| ~~8~~ | ~~인증 방식 (세션 쿠키 / 토큰) 미확정~~ | ✅ **해소 (2026-08-04)** — HttpOnly 세션 쿠키(Spring Session) 확정·구현 완료(#95). 공통 401 은 `AUTH_UNAUTHENTICATED` 이며 전역 핸들러가 내린다 | `.ai/api/auth.md` · `GlobalExceptionHandler` |
 
 > ✅ **`P-44` 미승인은 해소됐다** — [`PAGE.md`](../../global/PAGE.md) §2-5 에 등재돼 있다 (`STL-V1.md` §5-1).

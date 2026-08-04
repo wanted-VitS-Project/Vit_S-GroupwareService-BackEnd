@@ -1,16 +1,16 @@
 # 💰 재무관리 v1 — API 상세 명세
 
+**최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
 **최종 업데이트**: 2026-08-03 (발주처 미확정 표기 제거 · `tax_invoice_confirm` 제약 정정)
 **최종 업데이트**: 2026-08-03 (ERD 확정본 반영 — 미확정 표기 제거 · `managerUserId` 타입 정정)
-**최종 업데이트**: 2026-08-01 (신설)
 **담당**: 동훈
 **목록 문서**: [`FIN-V1-API.md`](FIN-V1-API.md) (**§0-0 ERD↔API 필드 매핑표**) · **스키마**: [`ERD.md`](ERD.md) · **흐름도**: [`FIN-V1-API-FLOW.md`](FIN-V1-API-FLOW.md)
 **요구사항**: [`PAY-V1.md`](PAY-V1.md) · [`TAX-V1.md`](TAX-V1.md) · [`STL-V1.md`](STL-V1.md)
 
 > ⛔ **전 엔드포인트 `📝 초안`. 노션 반영 전까지 구현 금지** (`AGENTS.md` §3).
-> 모든 응답은 `httpStatus` · `message` · `data` 봉투를 쓴다. Response Parameter 의 들여쓴 항목은 `data` 하위다.
+> ⭐ **성공 응답은 `httpStatus`·`message`·`data` 봉투를 쓴다** (2026-08-04 정정 — `timestamp`·`status`·`code`(`COMMON-SUCCESS`) 는 실제 구현에 없다). **실패 응답은 `data` 없이 `httpStatus`·`message`·`code`** 다 (`ApiErrorResponse`). Response Parameter 의 들여쓴 항목은 `data` 하위다.
 > ✅ 사람 식별자는 신규 ERD 기준 **사번 `String`(`VARCHAR(20)`)** 이다. ⛔ `Long` 아님.
-> ✅ 스키마는 [`ERD.md`](ERD.md) 로 확정됐다 (2026-08-03). ⚠️ 단 **ERD Cloud 미반영분**이 있다 → [`ERD.md`](ERD.md) §8
+> ✅ 스키마는 [`ERD.md`](ERD.md) 로 확정됐다 (2026-08-03). ⚠️ 단 **ERD Cloud 미반영분**이 있다 → [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md)
 
 ---
 
@@ -53,8 +53,8 @@ GET /api/v1/payments?matched=false&paidFrom=2026-07-01&page=0&size=20
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `content` | List\<Object\> | 입금 목록 |
 | `content[].paymentId` | Long | 입금 ID |
@@ -74,7 +74,7 @@ GET /api/v1/payments?matched=false&paidFrom=2026-07-01&page=0&size=20
 ```
 {
   "httpStatus":200,
-  "message":"입금 목록 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "content": [
       {
@@ -103,7 +103,7 @@ GET /api/v1/payments?matched=false&paidFrom=2026-07-01&page=0&size=20
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 입금 목록 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 
 ---
@@ -139,8 +139,8 @@ GET /api/v1/payments/301
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `paidAt` | LocalDate | 입금일 |
@@ -160,7 +160,7 @@ GET /api/v1/payments/301
 ```
 {
   "httpStatus":200,
-  "message":"입금 상세 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "paymentId":301,
     "paidAt":"2026-07-31",
@@ -183,7 +183,7 @@ GET /api/v1/payments/301
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 입금 상세 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 
@@ -233,8 +233,8 @@ GET /api/v1/payments/301
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 생성된 입금 ID |
 | `paidAt` | LocalDate | 입금일 |
@@ -247,8 +247,8 @@ GET /api/v1/payments/301
 ## Success Example
 ```
 {
-  "httpStatus":201,
-  "message":"입금 등록 성공",
+  "httpStatus":200,
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "paymentId":301,
     "paidAt":"2026-07-31",
@@ -268,7 +268,7 @@ GET /api/v1/payments/301
 | 400 | Bad Request | `PAYMENT_PAID_AT_REQUIRED` | 입금일이 입력되지 않음 |
 | 400 | Bad Request | `PAYMENT_AMOUNT_REQUIRED` | 금액이 입력되지 않음 |
 | 400 | Bad Request | `PAYMENT_AMOUNT_INVALID` | 금액이 0 이하 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 | 409 | Conflict | `PAYMENT_BANK_TXN_DUPLICATED` | 같은 은행 거래 고유번호가 이미 존재함 |
 
@@ -312,8 +312,8 @@ GET /api/v1/payments/301
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `paidAt` | LocalDate | 입금일 |
@@ -325,7 +325,7 @@ GET /api/v1/payments/301
 ```
 {
   "httpStatus":200,
-  "message":"입금 수정 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "paymentId":301,
     "paidAt":"2026-07-31",
@@ -341,7 +341,7 @@ GET /api/v1/payments/301
 | --- | --- | --- | --- |
 | 200 | OK | - | 입금 수정 성공 |
 | 400 | Bad Request | `PAYMENT_AMOUNT_INVALID` | 금액이 0 이하 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 
@@ -380,20 +380,20 @@ DELETE /api/v1/payments/301
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | `null` |
 
 ## Success Example
 ```
-{ "httpStatus":200, "message":"입금 삭제 성공", "data":null }
+{ "httpStatus":200, "message":"요청이 성공적으로 처리되었습니다.", "data":null }
 ```
 
 ## Status Code
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 입금 삭제 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 | 409 | Conflict | `PAYMENT_BLOCK_LINKED` | 블록에 연결된 입금은 삭제할 수 없음 |
@@ -434,8 +434,8 @@ POST /api/v1/payments/301/confirm
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `confirmedBy` | Object | 확정자 (`userId`·`name`) |
@@ -445,7 +445,7 @@ POST /api/v1/payments/301/confirm
 ```
 {
   "httpStatus":200,
-  "message":"입금 확정 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "paymentId":301,
     "confirmedBy": { "userId":"E2023011", "name":"박재무" },
@@ -458,7 +458,7 @@ POST /api/v1/payments/301/confirm
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 입금 확정 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 확정할 수 있음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 | 409 | Conflict | `PAYMENT_ALREADY_CONFIRMED` | 이미 확정된 입금 |
@@ -514,8 +514,8 @@ mapping.bankTxnId: 거래고유번호
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `totalRowCount` | int | CSV 전체 행 수 |
 | `successCount` | int | 저장된 행 수 |
@@ -529,7 +529,7 @@ mapping.bankTxnId: 거래고유번호
 ```
 {
   "httpStatus":200,
-  "message":"CSV 수집 완료",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "totalRowCount":120,
     "successCount":95,
@@ -556,7 +556,7 @@ mapping.bankTxnId: 거래고유번호
 | 400 | Bad Request | `CSV_COLUMN_MAPPING_REQUIRED` | 필수 컬럼 매핑이 지정되지 않음 |
 | 400 | Bad Request | `CSV_COLUMN_NOT_FOUND` | 매핑한 헤더가 CSV 에 없음 |
 | 400 | Bad Request | `CSV_PARSE_FAILED` | 파일 전체를 읽을 수 없음 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 
 ---
@@ -599,8 +599,8 @@ GET /api/v1/payments/301/match-candidates?size=10
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `candidates` | List\<Object\> | 후보 목록 (추천 순) |
 | `candidates[].projectId` | Long | 프로젝트 ID |
@@ -614,7 +614,7 @@ GET /api/v1/payments/301/match-candidates?size=10
 ```
 {
   "httpStatus":200,
-  "message":"매칭 후보 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "candidates": [
       {
@@ -634,7 +634,7 @@ GET /api/v1/payments/301/match-candidates?size=10
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 매칭 후보 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 
@@ -676,8 +676,8 @@ GET /api/v1/payments/301/match-candidates?size=10
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `projectId` | Long | 매칭된 프로젝트 ID |
@@ -689,7 +689,7 @@ GET /api/v1/payments/301/match-candidates?size=10
 ```
 {
   "httpStatus":200,
-  "message":"프로젝트 매칭 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "paymentId":301,
     "projectId":12,
@@ -704,7 +704,7 @@ GET /api/v1/payments/301/match-candidates?size=10
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 프로젝트 매칭 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 매칭할 수 있음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | 프로젝트가 존재하지 않음 |
@@ -746,8 +746,8 @@ DELETE /api/v1/payments/301/project
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `projectId` | Long | `null` |
@@ -756,7 +756,7 @@ DELETE /api/v1/payments/301/project
 ```
 {
   "httpStatus":200,
-  "message":"프로젝트 매칭 해제 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "paymentId":301, "projectId":null }
 }
 ```
@@ -765,7 +765,7 @@ DELETE /api/v1/payments/301/project
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 프로젝트 매칭 해제 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 해제할 수 있음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 | 409 | Conflict | `PAYMENT_BLOCK_LINKED` | 블록에 연결된 입금은 매칭을 해제할 수 없음 |
@@ -816,8 +816,8 @@ DELETE /api/v1/payments/301/project
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `blockId` | Long | 연결된 블록 ID |
@@ -830,7 +830,7 @@ DELETE /api/v1/payments/301/project
 ```
 {
   "httpStatus":200,
-  "message":"입금확인 블록 연결 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "paymentId":301,
     "blockId":40,
@@ -849,7 +849,7 @@ DELETE /api/v1/payments/301/project
 | 400 | Bad Request | `PAYMENT_NOT_MATCHED` | 프로젝트 매칭이 안 된 입금 |
 | 400 | Bad Request | `PAYMENT_BLOCK_PROJECT_MISMATCH` | 블록이 매칭된 프로젝트에 속하지 않음 |
 | 400 | Bad Request | `BLOCK_TYPE_NOT_PAYMENT_CONFIRM` | 입금확인 블록이 아님 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 연결할 수 있음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 | 404 | Not Found | `BLOCK_NOT_FOUND` | 블록이 존재하지 않음 |
@@ -891,8 +891,8 @@ DELETE /api/v1/payments/301/block
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `paymentId` | Long | 입금 ID |
 | `blockId` | Long | `null` |
@@ -902,7 +902,7 @@ DELETE /api/v1/payments/301/block
 ```
 {
   "httpStatus":200,
-  "message":"블록 연결 해제 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "paymentId":301, "blockId":null, "remainingLinkedCount":2 }
 }
 ```
@@ -911,7 +911,7 @@ DELETE /api/v1/payments/301/block
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 블록 연결 해제 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 해제할 수 있음 |
 | 404 | Not Found | `PAYMENT_NOT_FOUND` | 입금이 존재하지 않음 |
 | 409 | Conflict | `PAYMENT_NOT_LINKED` | 블록에 연결되지 않은 입금 |
@@ -963,8 +963,8 @@ DELETE /api/v1/payments/301/block
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `blockId` | Long | 생성된 블록 ID |
 | `stepId` | Long | 소속 스텝 ID |
@@ -979,8 +979,8 @@ DELETE /api/v1/payments/301/block
 ## Success Example
 ```
 {
-  "httpStatus":201,
-  "message":"정산 회차 생성 성공",
+  "httpStatus":200,
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "blockId":40,
     "stepId":10,
@@ -1001,7 +1001,7 @@ DELETE /api/v1/payments/301/block
 | 201 | Created | - | 정산 회차 생성 성공 |
 | 400 | Bad Request | `ROUND_TITLE_REQUIRED` | 회차명이 입력되지 않음 |
 | 400 | Bad Request | `PLANNED_AMOUNT_EXCEEDS_CONTRACT` | 회차 예정금액 합이 계약금액을 초과 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `STEP_EDIT_DENIED` | 스텝 편집 권한 없음 |
 | 404 | Not Found | `STEP_NOT_FOUND` | 스텝이 존재하지 않음 |
 | 409 | Conflict | `PAYMENT_CONFIRM_BLOCK_DUPLICATED` | 스텝에 이미 입금확인 블록이 있음 |
@@ -1049,8 +1049,8 @@ DELETE /api/v1/payments/301/block
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `blockId` | Long | 블록 ID |
 | `title` | String | 회차명 |
@@ -1063,7 +1063,7 @@ DELETE /api/v1/payments/301/block
 ```
 {
   "httpStatus":200,
-  "message":"회차 정보 수정 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "blockId":40,
     "title":"1차 정산(선급 60%)",
@@ -1080,7 +1080,7 @@ DELETE /api/v1/payments/301/block
 | --- | --- | --- | --- |
 | 200 | OK | - | 회차 정보 수정 성공 |
 | 400 | Bad Request | `PLANNED_AMOUNT_EXCEEDS_CONTRACT` | 회차 예정금액 합이 계약금액을 초과 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `STEP_EDIT_DENIED` | 스텝 편집 권한 없음 |
 | 404 | Not Found | `BLOCK_NOT_FOUND` | 블록이 존재하지 않음 |
 | 409 | Conflict | `ROUND_NO_DUPLICATED` | 프로젝트 안에 같은 회차 번호가 존재 |
@@ -1121,8 +1121,8 @@ GET /api/v1/blocks/40/payment-confirm
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `blockId` | Long | 블록 ID |
 | `title` | String | 회차명 |
@@ -1141,7 +1141,7 @@ GET /api/v1/blocks/40/payment-confirm
 ```
 {
   "httpStatus":200,
-  "message":"회차 상세 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "blockId":40,
     "title":"1차 정산(선급 60%)",
@@ -1162,7 +1162,7 @@ GET /api/v1/blocks/40/payment-confirm
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 회차 상세 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `STEP_ACCESS_DENIED` | 스텝 접근 권한 없음 |
 | 404 | Not Found | `BLOCK_NOT_FOUND` | 블록이 존재하지 않음 |
 
@@ -1207,8 +1207,8 @@ GET /api/v1/tax-invoices?matched=false&issuedFrom=2026-07-01&page=0&size=20
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `content` | List\<Object\> | 계산서 목록 |
 | `content[].taxInvoiceId` | Long | 계산서 ID |
@@ -1228,7 +1228,7 @@ GET /api/v1/tax-invoices?matched=false&issuedFrom=2026-07-01&page=0&size=20
 ```
 {
   "httpStatus":200,
-  "message":"세금계산서 목록 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "content": [
       {
@@ -1257,7 +1257,7 @@ GET /api/v1/tax-invoices?matched=false&issuedFrom=2026-07-01&page=0&size=20
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 세금계산서 목록 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 
 ---
@@ -1295,8 +1295,8 @@ GET /api/v1/tax-invoices/201
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `taxInvoiceId` | Long | 계산서 ID |
 | `approvalNo` | String | 승인번호 |
@@ -1316,7 +1316,7 @@ GET /api/v1/tax-invoices/201
 ```
 {
   "httpStatus":200,
-  "message":"세금계산서 상세 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "taxInvoiceId":201,
     "approvalNo":"20260731-41000000-11112222",
@@ -1339,7 +1339,7 @@ GET /api/v1/tax-invoices/201
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 세금계산서 상세 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 
@@ -1400,8 +1400,8 @@ mapping.supplierBizNo: 공급자 사업자등록번호
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `totalRowCount` | int | CSV 전체 행 수 |
 | `successCount` | int | 저장된 행 수 |
@@ -1415,7 +1415,7 @@ mapping.supplierBizNo: 공급자 사업자등록번호
 ```
 {
   "httpStatus":200,
-  "message":"세금계산서 CSV 수집 완료",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "totalRowCount":80,
     "successCount":61,
@@ -1441,7 +1441,7 @@ mapping.supplierBizNo: 공급자 사업자등록번호
 | 400 | Bad Request | `CSV_COLUMN_MAPPING_REQUIRED` | 필수 컬럼 매핑이 지정되지 않음 |
 | 400 | Bad Request | `CSV_COLUMN_NOT_FOUND` | 매핑한 헤더가 CSV 에 없음 |
 | 400 | Bad Request | `CSV_PARSE_FAILED` | 파일 전체를 읽을 수 없음 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 
 ---
@@ -1483,8 +1483,8 @@ mapping.supplierBizNo: 공급자 사업자등록번호
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `fetchedCount` | int | 홈택스에서 받아온 건수 |
 | `successCount` | int | 저장된 건수 |
@@ -1496,7 +1496,7 @@ mapping.supplierBizNo: 공급자 사업자등록번호
 ```
 {
   "httpStatus":200,
-  "message":"홈택스 수집 완료",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "fetchedCount":40,
     "successCount":31,
@@ -1513,7 +1513,7 @@ mapping.supplierBizNo: 공급자 사업자등록번호
 | 200 | OK | - | 홈택스 수집 완료 |
 | 400 | Bad Request | `DATE_RANGE_REQUIRED` | 조회 기간이 입력되지 않음 |
 | 400 | Bad Request | `DATE_RANGE_INVALID` | 시작일이 종료일보다 늦음 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 | 502 | Bad Gateway | `HOMETAX_API_FAILED` | 홈택스 연동 실패 — CSV 경로는 계속 사용 가능 |
 
@@ -1553,20 +1553,20 @@ soft delete 다. **블록에 연결돼 있으면 409** — 먼저 블록 연결�
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | `null` |
 
 ## Success Example
 ```
-{ "httpStatus":200, "message":"세금계산서 제거 성공", "data":null }
+{ "httpStatus":200, "message":"요청이 성공적으로 처리되었습니다.", "data":null }
 ```
 
 ## Status Code
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 세금계산서 제거 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무 편집 권한 없음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 | 409 | Conflict | `TAX_INVOICE_BLOCK_LINKED` | 블록에 연결된 계산서는 제거할 수 없음 |
@@ -1611,8 +1611,8 @@ GET /api/v1/tax-invoices/201/match-candidates?size=10
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `candidates` | List\<Object\> | 후보 목록 (추천 순) |
 | `candidates[].projectId` | Long | 프로젝트 ID |
@@ -1625,7 +1625,7 @@ GET /api/v1/tax-invoices/201/match-candidates?size=10
 ```
 {
   "httpStatus":200,
-  "message":"매칭 후보 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "candidates": [
       {
@@ -1644,7 +1644,7 @@ GET /api/v1/tax-invoices/201/match-candidates?size=10
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 매칭 후보 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 
@@ -1685,8 +1685,8 @@ GET /api/v1/tax-invoices/201/match-candidates?size=10
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `taxInvoiceId` | Long | 계산서 ID |
 | `projectId` | Long | 매칭된 프로젝트 ID |
@@ -1698,7 +1698,7 @@ GET /api/v1/tax-invoices/201/match-candidates?size=10
 ```
 {
   "httpStatus":200,
-  "message":"프로젝트 매칭 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "taxInvoiceId":201,
     "projectId":12,
@@ -1713,7 +1713,7 @@ GET /api/v1/tax-invoices/201/match-candidates?size=10
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 프로젝트 매칭 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 매칭할 수 있음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | 프로젝트가 존재하지 않음 |
@@ -1754,8 +1754,8 @@ DELETE /api/v1/tax-invoices/201/project
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `taxInvoiceId` | Long | 계산서 ID |
 | `projectId` | Long | `null` |
@@ -1764,7 +1764,7 @@ DELETE /api/v1/tax-invoices/201/project
 ```
 {
   "httpStatus":200,
-  "message":"프로젝트 매칭 해제 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "taxInvoiceId":201, "projectId":null }
 }
 ```
@@ -1773,7 +1773,7 @@ DELETE /api/v1/tax-invoices/201/project
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 프로젝트 매칭 해제 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 해제할 수 있음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 | 409 | Conflict | `TAX_INVOICE_BLOCK_LINKED` | 블록에 연결된 계산서는 매칭을 해제할 수 없음 |
@@ -1824,8 +1824,8 @@ DELETE /api/v1/tax-invoices/201/project
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `taxInvoiceId` | Long | 계산서 ID |
 | `blockId` | Long | 연결된 블록 ID |
@@ -1837,7 +1837,7 @@ DELETE /api/v1/tax-invoices/201/project
 ```
 {
   "httpStatus":200,
-  "message":"조회 블록 연결 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "taxInvoiceId":201,
     "blockId":41,
@@ -1855,7 +1855,7 @@ DELETE /api/v1/tax-invoices/201/project
 | 400 | Bad Request | `TAX_INVOICE_NOT_MATCHED` | 프로젝트 매칭이 안 된 계산서 |
 | 400 | Bad Request | `TAX_INVOICE_BLOCK_PROJECT_MISMATCH` | 블록이 매칭된 프로젝트에 속하지 않음 |
 | 400 | Bad Request | `BLOCK_TYPE_NOT_TAX_INVOICE_VIEW` | 세금계산서 조회 블록이 아님 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 연결할 수 있음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 | 404 | Not Found | `BLOCK_NOT_FOUND` | 블록이 존재하지 않음 |
@@ -1898,8 +1898,8 @@ DELETE /api/v1/tax-invoices/201/block
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `taxInvoiceId` | Long | 계산서 ID |
 | `blockId` | Long | `null` |
@@ -1908,7 +1908,7 @@ DELETE /api/v1/tax-invoices/201/block
 ```
 {
   "httpStatus":200,
-  "message":"조회 블록 연결 해제 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "taxInvoiceId":201, "blockId":null }
 }
 ```
@@ -1917,7 +1917,7 @@ DELETE /api/v1/tax-invoices/201/block
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 조회 블록 연결 해제 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_EDIT_DENIED` | 재무만 해제할 수 있음 |
 | 404 | Not Found | `TAX_INVOICE_NOT_FOUND` | 계산서가 존재하지 않음 |
 | 409 | Conflict | `TAX_INVOICE_NOT_LINKED` | 블록에 연결되지 않은 계산서 |
@@ -1958,8 +1958,8 @@ GET /api/v1/blocks/41/tax-invoice
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `blockId` | Long | 블록 ID |
 | `title` | String | 블록 제목 |
@@ -1975,7 +1975,7 @@ GET /api/v1/blocks/41/tax-invoice
 ```
 {
   "httpStatus":200,
-  "message":"조회 블록 상세 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "blockId":41,
     "title":"1차 계산서",
@@ -1995,7 +1995,7 @@ GET /api/v1/blocks/41/tax-invoice
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 조회 블록 상세 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `STEP_ACCESS_DENIED` | 스텝 접근 권한 없음 |
 | 404 | Not Found | `BLOCK_NOT_FOUND` | 블록이 존재하지 않음 |
 
@@ -2043,8 +2043,8 @@ GET /api/v1/settlements?clientName=OO시청&includeClosed=false&page=0&size=20
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `content` | List\<Object\> | **프로젝트 1건 = 1행** (STL-003) |
 | `content[].projectId` | Long | 프로젝트 ID |
@@ -2069,7 +2069,7 @@ GET /api/v1/settlements?clientName=OO시청&includeClosed=false&page=0&size=20
 ```
 {
   "httpStatus":200,
-  "message":"정산 현황 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "content": [
       {
@@ -2101,7 +2101,7 @@ GET /api/v1/settlements?clientName=OO시청&includeClosed=false&page=0&size=20
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 정산 현황 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 — 실무자는 들어올 수 없음 |
 
 ---
@@ -2140,8 +2140,8 @@ GET /api/v1/settlements/12
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 |
-| `message` | String | 응답 메시지 |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `projectId` | Long | 프로젝트 ID |
 | `rounds` | List\<Object\> | 회차 목록 (`roundNo` 오름차순) |
@@ -2168,7 +2168,7 @@ GET /api/v1/settlements/12
 ```
 {
   "httpStatus":200,
-  "message":"프로젝트 회차 상세 조회 성공",
+  "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "projectId":12,
     "rounds": [
@@ -2209,6 +2209,6 @@ GET /api/v1/settlements/12
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 프로젝트 회차 상세 조회 성공 |
-| 401 | Unauthorized | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | 재무 탭 접근 권한 없음 |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | 프로젝트가 존재하지 않음 |

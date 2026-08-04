@@ -1,5 +1,6 @@
 # 💰 재무관리 v1 — API 흐름 · FE/BE 책임 분담
 
+**최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
 **최종 업데이트**: 2026-08-03 (ERD 확정본 반영 — `payment.block_id`·회차 컬럼·발주처 미확정 표기 제거)
 **최종 업데이트**: 2026-08-01 (신설)
 **담당**: 동훈
@@ -8,7 +9,7 @@
 
 > 엔드포인트 **28개** 전부에 대해 프론트/백엔드 책임을 갈랐다.
 > ✅ **재무 스키마는 [`ERD.md`](ERD.md) 로 확정됐다 (2026-08-03).** 사람 식별자는 **사번 `String`**.
-> ⚠️ 단 **ERD Cloud 미반영분이 있다** → [`ERD.md`](ERD.md) §8. 코드는 [`ERD.md`](ERD.md) DDL 을 따른다.
+> ⚠️ 단 **ERD Cloud 미반영분이 있다** → [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md). 코드는 [`../ERD.md`](../ERD.md) §3 정본을 따른다.
 > ⛔ 전 엔드포인트 `📝 초안`. 노션 반영 전까지 구현 금지 (`AGENTS.md` §3).
 
 ---
@@ -38,7 +39,7 @@
 ### 0-3. 전 API 공통 분기
 
 ```
-401 AUTH_TOKEN_EXPIRED     → 로그인 페이지
+401 AUTH_UNAUTHENTICATED   → 로그인 페이지
 403 FINANCE_ACCESS_DENIED  → 재무 탭 진입 차단 (메뉴에서도 감춘다)
 403 FINANCE_EDIT_DENIED    → 토스트 + 쓰기 버튼 영구 비활성
 403 STEP_ACCESS_DENIED     → 스텝 화면으로 되돌림
@@ -47,7 +48,7 @@
 502 HOMETAX_API_FAILED     → "CSV 로 올려주세요" 대안 제시
 ```
 
-🚧 인증 방식(세션 쿠키 / 토큰 쿠키) 미확정 — [`PRJ-V1-API-FLOW.md`](../프로젝트/PRJ-V1-API-FLOW.md) §0-2 와 동일.
+✅ 인증 방식 확정 (2026-08-04) — **HttpOnly 세션 쿠키**. [`PRJ-V1-API-FLOW.md`](../프로젝트/PRJ-V1-API-FLOW.md) §0-2 와 동일.
 
 ---
 
@@ -341,7 +342,7 @@ FE (P-41 · [회차에 연결])                       BE
     ├─ PATCH .../payments/301/block ──────→ ① 인증 검증 → 401 · FINANCE+EDITOR → 403
     │   {blockId:40}                        ② 입금/블록 조회 → 404
     │                                       ③ project_id NULL → 400 PAYMENT_NOT_MATCHED
-    │                                       ④ block.project_id ≠ payment.project_id
+    │                                       ④ block_payment_confirm.project_id ≠ payment.project_id
     │                                          → 400 PAYMENT_BLOCK_PROJECT_MISMATCH
     │                                       ⑤ 블록 타입 검사 → 400
     │                                       ⑥ **이미 다른 블록에 연결** → 409 (MTC-010 · INV-07B)
