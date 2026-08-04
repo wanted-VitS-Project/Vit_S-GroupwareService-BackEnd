@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.stereotype.Service;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.jpa.hibernate.ddl-auto=none",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -46,6 +47,23 @@ import static org.assertj.core.api.Assertions.assertThat;
         ActivityLogEventListenerTest.TestBeans.class
 })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
+@Sql(
+        statements = {
+                "DROP TABLE IF EXISTS activity_log",
+                "CREATE TABLE activity_log ("
+                        + "activity_log_id BIGINT AUTO_INCREMENT PRIMARY KEY, "
+                        + "act VARCHAR(20) NOT NULL, "
+                        + "resource_id BIGINT, "
+                        + "field VARCHAR(100), "
+                        + "before_value TEXT, "
+                        + "after_value TEXT, "
+                        + "block_id BIGINT NOT NULL, "
+                        + "user_id VARCHAR(20) NOT NULL, "
+                        + "created_at TIMESTAMP NOT NULL"
+                        + ")"
+        },
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD
+)
 @DisplayName("Activity Log 이벤트 수집")
 class ActivityLogEventListenerTest {
 
