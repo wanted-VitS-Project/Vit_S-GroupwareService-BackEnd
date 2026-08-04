@@ -2,6 +2,10 @@
 .ai/local/
 .claude/settings.local.json
 
+# 우리(김동현)가 작성한 도메인 초안 문서 — 커밋하지 않는다 (타 담당 문서는 그대로 둔다)
+.ai/docs/domain/인사/
+.ai/docs/domain/파일/
+
 ### 시크릿 / 자격 정보 (⚠️ PUBLIC 레포) ###
 .env
 .env.*
