@@ -14,6 +14,8 @@ public record UserProfileRow(
         String name,
         String role,
         boolean mustChangePassword,
+        /** 약관 동의 시각. {@code null} 이면 미동의 (`auth.md` §5) */
+        LocalDateTime termsAgreedAt,
         String email,
         String phone,
         String departmentName,
@@ -37,5 +39,18 @@ public record UserProfileRow(
     /** 명세의 {@code passwordStatus} */
     public String passwordStatus() {
         return mustChangePassword ? "RESET_REQUIRED" : "NORMAL";
+    }
+
+    /**
+     * 약관 동의가 필요한가 — 최초 로그인이고 ADMIN 이 아닐 때만 (`auth.md` §5 · §6-7).
+     * ADMIN 은 공용 계정이라 약관 대상이 아니다.
+     */
+    public boolean termsAgreementRequired() {
+        return termsAgreedAt == null && !"ADMIN".equals(role);
+    }
+
+    /** 명세의 {@code termsStatus} — ADMIN·동의 완료는 {@code AGREED}, 그 외 미동의는 {@code REQUIRED} */
+    public String termsStatus() {
+        return termsAgreementRequired() ? "REQUIRED" : "AGREED";
     }
 }

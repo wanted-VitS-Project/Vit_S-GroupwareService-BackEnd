@@ -152,6 +152,42 @@ class AuthServiceTest {
         assertThat(account.getLastLoginAt()).isEqualTo(NOW);
     }
 
+    // ===== 약관 동의 (auth.md §5) =====
+
+    @Test
+    @DisplayName("약관 동의 — 동의 시각이 기록되고 게이트가 풀린다")
+    void agreeTermsRecordsTimestamp() {
+        AccountEntity account = account();   // issue() 는 termsAgreedAt = null (미동의)
+        when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
+
+        authService.agreeTerms(USER_ID);
+
+        assertThat(account.hasAgreedTerms()).isTrue();
+        assertThat(account.getTermsAgreedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("약관 동의 — 계정이 없으면 AUTH_UNAUTHENTICATED")
+    void agreeTermsRejectsMissingAccount() {
+        when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.agreeTerms(USER_ID))
+                .satisfies(hasCode(AuthErrorCode.AUTH_UNAUTHENTICATED));
+    }
+
+    @Test
+    @DisplayName("termsStatus — 미동의 MEMBER 는 REQUIRED, 동의했으면 AGREED, ADMIN 은 항상 AGREED(스킵)")
+    void termsStatusRules() {
+        assertThat(profile("MEMBER", null).termsStatus()).isEqualTo("REQUIRED");
+        assertThat(profile("MEMBER", NOW).termsStatus()).isEqualTo("AGREED");
+        assertThat(profile("ADMIN", null).termsStatus()).isEqualTo("AGREED");   // 공용 계정 스킵
+    }
+
+    private UserProfileRow profile(String role, LocalDateTime termsAgreedAt) {
+        return new UserProfileRow(USER_ID, "김민준", role, true,
+                termsAgreedAt, null, null, "개발팀", "기술본부", "대리", null, null);
+    }
+
     // ===== 도구 =====
 
     private AccountEntity account() {
@@ -160,7 +196,7 @@ class AuthServiceTest {
 
     private UserProfileRow profileRow() {
         return new UserProfileRow(USER_ID, "김민준", "MEMBER", true,
-                null, null, "개발팀", "기술본부", "대리", null, null);
+                null, null, null, "개발팀", "기술본부", "대리", null, null);
     }
 
     private Consumer<Throwable> hasCode(AuthErrorCode expected) {

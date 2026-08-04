@@ -69,6 +69,15 @@ public class AccountEntity {
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword;
 
+    /**
+     * 약관 동의 시각. {@code null} 이면 미동의 → 최초 로그인 시 약관 게이트가 열린다 (`auth.md` §5).
+     *
+     * <p>{@code must_change_password} 는 재설정 때도 {@code true} 라 "최초 vs 재설정" 을 못 가른다.
+     * 이 컬럼이 그 구분을 담당한다 — 재설정({@link #resetPassword})은 이 값을 건드리지 않으므로 약관을 다시 받지 않는다.
+     */
+    @Column(name = "terms_agreed_at")
+    private LocalDateTime termsAgreedAt;
+
     @Column(name = "login_fail_count", nullable = false)
     private int loginFailCount;
 
@@ -128,6 +137,20 @@ public class AccountEntity {
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
         this.mustChangePassword = false;
+    }
+
+    /**
+     * 약관 동의 — 최초 로그인 시 1회. 동의 시각을 기록해 게이트를 해제한다 (`auth.md` §5).
+     *
+     * <p>재설정({@link #resetPassword})은 이 값을 건드리지 않으므로 재로그인 시 약관을 다시 받지 않는다.
+     * 이미 동의한 계정이 다시 호출해도 시각만 갱신될 뿐 무해하다(멱등).
+     */
+    public void agreeTerms(LocalDateTime agreedAt) {
+        this.termsAgreedAt = agreedAt;
+    }
+
+    public boolean hasAgreedTerms() {
+        return termsAgreedAt != null;
     }
 
     // ===== 관리자(ADMIN) 조작 — `.ai/api/account.md` =====

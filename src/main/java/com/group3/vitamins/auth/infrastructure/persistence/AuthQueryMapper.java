@@ -26,6 +26,7 @@ public interface AuthQueryMapper {
                    e.name                 AS name,
                    a.role                 AS role,
                    a.must_change_password AS mustChangePassword,
+                   a.terms_agreed_at      AS termsAgreedAt,
                    e.email                AS email,
                    e.phone                AS phone,
                    d.name                 AS departmentName,

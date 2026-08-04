@@ -30,6 +30,9 @@ public class AuthSessionManager {
     /** 세션 속성 키 — 초기 비밀번호를 아직 안 바꿨는가 */
     public static final String PASSWORD_RESET_REQUIRED = "PASSWORD_RESET_REQUIRED";
 
+    /** 세션 속성 키 — 약관에 아직 동의하지 않았는가 (최초 로그인 전용, `auth.md` §6-7) */
+    public static final String TERMS_AGREEMENT_REQUIRED = "TERMS_AGREEMENT_REQUIRED";
+
     private final SecurityContextRepository securityContextRepository;
     private final SessionTerminator sessionTerminator;
 
@@ -43,7 +46,8 @@ public class AuthSessionManager {
      *   <li>새 세션에 SecurityContext 저장 — 이때 Spring Session 이 사용자명 인덱스도 함께 기록한다</li>
      * </ol>
      */
-    public void openSession(String userId, String role, boolean passwordResetRequired,
+    public void openSession(String userId, String role,
+                            boolean termsAgreementRequired, boolean passwordResetRequired,
                             HttpServletRequest request, HttpServletResponse response) {
         HttpSession existing = request.getSession(false);
         if (existing != null) {
@@ -61,8 +65,19 @@ public class AuthSessionManager {
         // 세션이 여기서 생성된다 (HttpSessionSecurityContextRepository)
         securityContextRepository.saveContext(context, request, response);
 
-        // 초기 비밀번호 상태를 세션에 실어둔다 — 게이트 필터가 매 요청 DB 를 치지 않게 하려는 것이다
-        request.getSession().setAttribute(PASSWORD_RESET_REQUIRED, passwordResetRequired);
+        // 최초 로그인 상태(약관·초기 비밀번호)를 세션에 실어둔다 — 게이트 필터가 매 요청 DB 를 치지 않게 한다.
+        // 순서: 약관 게이트가 비번 게이트보다 앞이다 (auth.md §6-7).
+        HttpSession session = request.getSession();
+        session.setAttribute(TERMS_AGREEMENT_REQUIRED, termsAgreementRequired);
+        session.setAttribute(PASSWORD_RESET_REQUIRED, passwordResetRequired);
+    }
+
+    /** 약관 동의 성공 → 약관 게이트 해제. 세션은 유지한다 */
+    public void clearTermsAgreementFlag(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.setAttribute(TERMS_AGREEMENT_REQUIRED, false);
+        }
     }
 
     /** 비밀번호 변경 성공 → 게이트 해제. 세션은 유지한다 (재로그인시키지 않는다) */
