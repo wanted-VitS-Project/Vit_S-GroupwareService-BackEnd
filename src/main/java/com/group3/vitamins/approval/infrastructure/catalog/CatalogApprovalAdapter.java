@@ -3,6 +3,7 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalDocument;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
+import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalRevision;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
@@ -80,9 +81,34 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
 
     @Override
     public List<ApprovalDocument> findDocumentsByRevisionId(Long revisionId) {
-        return springDataApprovalDocumentRepository.findByApprovalRevisionIdAndDeletedAtIsNull(revisionId).stream()
+        return springDataApprovalDocumentRepository.findByApprovalRevisionId(revisionId).stream()
                 .map(this::toDocument)
                 .toList();
+    }
+
+    @Override
+    public Optional<ApprovalDocument> findDocumentById(Long documentId) {
+        return springDataApprovalDocumentRepository.findById(documentId).map(this::toDocument);
+    }
+
+    @Override
+    public boolean existsDocument(Long revisionId, Long fileVersionId) {
+        return springDataApprovalDocumentRepository
+                .existsByApprovalRevisionIdAndFileVersionId(revisionId, fileVersionId);
+    }
+
+    @Override
+    @Transactional
+    public ApprovalDocument addDocument(Long revisionId, Long fileVersionId) {
+        ApprovalDocumentJpaEntity saved = springDataApprovalDocumentRepository.save(
+                ApprovalDocumentJpaEntity.create(revisionId, fileVersionId));
+        return toDocument(saved);
+    }
+
+    @Override
+    @Transactional
+    public void deleteDocument(Long documentId) {
+        springDataApprovalDocumentRepository.deleteById(documentId);
     }
 
     @Override
@@ -130,6 +156,29 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
                 .toList();
     }
 
+    @Override
+    @Transactional
+    public ApprovalRevision markRevisionSubmitted(Long revisionId) {
+        springDataApprovalRevisionRepository.markSubmitted(revisionId, ApprovalStatus.IN_PROGRESS);
+        return springDataApprovalRevisionRepository.findById(revisionId)
+                .map(this::toRevision)
+                .orElseThrow(() -> new IllegalStateException("revision not found after submit: " + revisionId));
+    }
+
+    @Override
+    @Transactional
+    public void markApprovalInProgress(Long approvalId, int revisionNo) {
+        springDataApprovalRepository.markInProgress(approvalId, revisionNo, ApprovalStatus.IN_PROGRESS);
+    }
+
+    @Override
+    @Transactional
+    public List<ApprovalLine> activateLines(Long revisionId) {
+        springDataApprovalLineRepository.activateFirstAndWaitRest(
+                revisionId, ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
+        return findLinesByRevisionId(revisionId);
+    }
+
     private Approval toApproval(ApprovalJpaEntity entity) {
         return Approval.reconstruct(
                 entity.getApprovalId(), entity.getBlockId(), entity.getDrafterId(), entity.getStatus(),
@@ -155,6 +204,6 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
     private ApprovalDocument toDocument(ApprovalDocumentJpaEntity entity) {
         return ApprovalDocument.reconstruct(
                 entity.getApprovalDocumentId(), entity.getApprovalRevisionId(), entity.getFileVersionId(),
-                entity.getCreatedAt(), entity.getDeletedAt());
+                entity.getCreatedAt());
     }
 }

@@ -30,6 +30,17 @@ public interface ApprovalRepository {
 
     List<ApprovalDocument> findDocumentsByRevisionId(Long revisionId);
 
+    Optional<ApprovalDocument> findDocumentById(Long documentId);
+
+    /** APR-006 — 동일 회차에 동일 file_version_id 가 이미 연결돼 있는지(DB UNIQUE 대신 애플리케이션 검증) */
+    boolean existsDocument(Long revisionId, Long fileVersionId);
+
+    /** APR-005 — 문서 1건 연결 */
+    ApprovalDocument addDocument(Long revisionId, Long fileVersionId);
+
+    /** APR-007 — 하드 삭제(이력 보존 대상 아님) */
+    void deleteDocument(Long documentId);
+
     /** APR-002 — DRAFT 상태일 때만 제목·내용을 갱신한다. DRAFT 가 아니면 409 를 던진다 */
     ApprovalRevision updateDraftContent(Long revisionId, String title, String content);
 
@@ -41,4 +52,16 @@ public interface ApprovalRepository {
 
     /** SUB-006 — 이전 회차 문서를 새 회차로 복사한다 */
     List<ApprovalDocument> copyDocuments(Long newRevisionId, List<Long> fileVersionIds);
+
+    /**
+     * SUB-002 — 검증 통과 후 상태 전이. 호출 전에 {@code findRevisionByIdForUpdate} 로 이미 잠금·DRAFT
+     * 확인이 끝난 상태라고 가정한다(INV-07) — 여기서 별도 조건부 UPDATE 를 다시 걸지 않는다.
+     */
+    ApprovalRevision markRevisionSubmitted(Long revisionId);
+
+    /** SUB-002 — approval 을 IN_PROGRESS 로 전환하고 {@code current_revision_no} 를 이 회차로 갱신한다 */
+    void markApprovalInProgress(Long approvalId, int revisionNo);
+
+    /** SUB-002 — 1번 결재선은 ACTIVE, 나머지는 WAITING 으로 전환한 뒤 순서대로 다시 읽어 반환한다 */
+    List<ApprovalLine> activateLines(Long revisionId);
 }

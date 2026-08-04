@@ -1,17 +1,24 @@
 package com.group3.vitamins.approval.application.service;
 
+import com.group3.vitamins.approval.application.command.AddApprovalDocumentCommand;
 import com.group3.vitamins.approval.application.command.CreateApprovalCommand;
+import com.group3.vitamins.approval.application.command.RemoveApprovalDocumentCommand;
 import com.group3.vitamins.approval.application.command.ResubmitApprovalCommand;
+import com.group3.vitamins.approval.application.command.SubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalLinesCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalRevisionCommand;
 import com.group3.vitamins.approval.application.policy.ApprovalBlockEligibilityPolicy;
+import com.group3.vitamins.approval.application.policy.ApprovalDocumentEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalLineEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalRevisionEligibilityPolicy;
 import com.group3.vitamins.approval.application.port.BlockSummary;
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
+import com.group3.vitamins.approval.application.port.FileVersionSummary;
+import com.group3.vitamins.approval.application.result.ApprovalDocumentView;
 import com.group3.vitamins.approval.application.result.ApprovalLineView;
 import com.group3.vitamins.approval.application.result.ApprovalResubmissionResult;
+import com.group3.vitamins.approval.application.result.ApprovalSubmissionResult;
 import com.group3.vitamins.approval.application.usecase.ApprovalCommandUseCase;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
@@ -24,6 +31,7 @@ import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.model.NewApprovalLine;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,8 +43,9 @@ import java.util.List;
 
 /**
  * 결재 블록 생성(APR-001) · 제목·내용 수정(APR-002) · 결재선 등록·수정(APR-009~014) ·
- * 재상신 회차 생성(SUB-005~009). {@code block} 행 자체는 만들지 않는다 — 이미 존재하는 blockId 에
- * {@code approval}+1회차 {@code approval_revision} 만 붙인다(INV-08).
+ * 재상신 회차 생성(SUB-005~009) · 문서 추가·제거(APR-005~007) · 상신(SUB-001~004).
+ * {@code block} 행 자체는 만들지 않는다 — 이미 존재하는 blockId 에 {@code approval}+1회차
+ * {@code approval_revision} 만 붙인다(INV-08).
  */
 @Service
 @RequiredArgsConstructor
@@ -47,6 +56,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     private final ApprovalBlockEligibilityPolicy blockEligibilityPolicy;
     private final ApprovalRevisionEligibilityPolicy revisionEligibilityPolicy;
     private final ApprovalLineEligibilityPolicy lineEligibilityPolicy;
+    private final ApprovalDocumentEligibilityPolicy documentEligibilityPolicy;
     private final EmployeeCatalogPort employeeCatalogPort;
     private final ApprovalRepository approvalRepository;
 
@@ -187,6 +197,92 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         return new ApprovalResubmissionResult(draftRevision, documents,
                 zipLinesWithEmployees(lines, employees), copiedFromRevisionNo, created);
+    }
+
+    @Override
+    public ApprovalDocumentView addDocument(AddApprovalDocumentCommand command) {
+        log.info("결재 문서 추가 요청 - approvalId={}, revisionId={}, fileVersionId={}",
+                command.approvalId(), command.revisionId(), command.fileVersionId());
+
+        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
+        // 잠금 조회 — 상신과의 레이스 방지(#91과 동일한 이유)
+        revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
+
+        FileVersionSummary file = documentEligibilityPolicy.getReadyFileVersionOrThrow(command.fileVersionId());
+        documentEligibilityPolicy.assertNotAlreadyLinked(command.revisionId(), command.fileVersionId());
+
+        ApprovalDocument saved = approvalRepository.addDocument(command.revisionId(), command.fileVersionId());
+
+        log.info("결재 문서 추가 완료 - documentId={}", saved.getDocumentId());
+        return new ApprovalDocumentView(
+                saved.getDocumentId(), file.fileVersionId(), file.fileName(), file.fileSize(), file.uploadedAt());
+    }
+
+    @Override
+    public void removeDocument(RemoveApprovalDocumentCommand command) {
+        log.info("결재 문서 제거 요청 - approvalId={}, revisionId={}, documentId={}",
+                command.approvalId(), command.revisionId(), command.documentId());
+
+        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
+        revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
+
+        documentEligibilityPolicy.getDocumentOrThrow(command.revisionId(), command.documentId());
+        approvalRepository.deleteDocument(command.documentId());
+
+        log.info("결재 문서 제거 완료 - documentId={}", command.documentId());
+    }
+
+    @Override
+    public ApprovalSubmissionResult submit(SubmitApprovalCommand command) {
+        log.info("결재 상신 요청 - approvalId={}, revisionId={}, requesterId={}",
+                command.approvalId(), command.revisionId(), command.requesterId());
+
+        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
+        // 잠금 조회 — 이 락이 트랜잭션 커밋까지 유지되므로 아래 전이 쿼리들은 별도 조건 없이 안전하다(INV-07)
+        ApprovalRevision revision =
+                revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
+
+        // SUB-001 — 상신 시 제목·내용·문서·결재선 유효성을 전부 재검증한다(저장 시점 검증과 별개)
+        if (isBlank(revision.getTitle()) || isBlank(revision.getContent())) {
+            throw new ValidationException(ApprovalErrorCode.APPROVAL_CONTENT_REQUIRED);
+        }
+
+        List<ApprovalDocument> documents = approvalRepository.findDocumentsByRevisionId(command.revisionId());
+        if (documents.isEmpty()) {
+            throw new ValidationException(ApprovalErrorCode.APPROVAL_DOCUMENT_REQUIRED);
+        }
+
+        List<ApprovalLine> lines = approvalRepository.findLinesByRevisionId(command.revisionId());
+        lineEligibilityPolicy.assertNotEmpty(lines);
+        lineEligibilityPolicy.assertOrderValid(lines.stream().map(ApprovalLine::getSequenceNo).toList());
+        lineEligibilityPolicy.assertApproversEligible(
+                approval.getBlockId(), lines.stream().map(ApprovalLine::getApproverId).toList());
+
+        // SUB-002 — 상태 전이: revision IN_PROGRESS, approval IN_PROGRESS(+current_revision_no), 결재선 ACTIVE/WAITING
+        ApprovalRevision submittedRevision = approvalRepository.markRevisionSubmitted(command.revisionId());
+        approvalRepository.markApprovalInProgress(command.approvalId(), submittedRevision.getRevisionNo());
+        List<ApprovalLine> activatedLines = approvalRepository.activateLines(command.revisionId());
+        Long firstActiveLineId = activatedLines.get(0).getLineId();
+
+        // TODO: SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행.
+        //       알림 도메인(NotificationRequestedEvent)이 아직 없어 주석으로만 남긴다
+        //       (text.application.service.TextCommandService 의 활동 로그 TODO와 동일한 처리).
+        // eventPublisher.publish(NotificationRequestedEvent.approvalRequested(
+        //         activatedLines.get(0).getApproverId(), command.approvalId(), submittedRevision.getRevisionId()));
+
+        log.info("결재 상신 완료 - approvalId={}, revisionId={}, firstActiveLineId={}",
+                command.approvalId(), command.revisionId(), firstActiveLineId);
+
+        return new ApprovalSubmissionResult(command.approvalId(), command.revisionId(),
+                submittedRevision.getRevisionNo(), submittedRevision.getStatus(),
+                submittedRevision.getSubmittedAt(), firstActiveLineId);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private List<ApprovalLineView> zipLinesWithEmployees(List<ApprovalLine> lines, List<EmployeeSummary> employees) {

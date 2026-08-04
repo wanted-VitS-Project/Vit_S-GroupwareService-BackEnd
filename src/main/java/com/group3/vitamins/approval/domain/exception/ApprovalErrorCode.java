@@ -50,7 +50,30 @@ public enum ApprovalErrorCode implements ErrorCode {
     // --- 8. 재상신 회차 생성 (API 명세 요구사항: SUB-005~009) ---
 
     /** SUB-005 — {@code approval.status != REJECTED} 면 409 */
-    APPROVAL_NOT_REJECTED("APPROVAL_NOT_REJECTED", "반려된 결재만 재상신 회차를 만들 수 있습니다.");
+    APPROVAL_NOT_REJECTED("APPROVAL_NOT_REJECTED", "반려된 결재만 재상신 회차를 만들 수 있습니다."),
+
+    // --- 4·5. 결재 문서 추가·제거 (API 명세 요구사항: APR-005~007) ---
+
+    /** APR-005 — 연결하려는 file_version 이 없으면 404 */
+    FILE_VERSION_NOT_FOUND("FILE_VERSION_NOT_FOUND", "존재하지 않는 파일 버전입니다."),
+    /** APR-005 — {@code file_version.upload_status != COMPLETED} 면 409 */
+    FILE_VERSION_NOT_READY("FILE_VERSION_NOT_READY", "업로드가 완료되지 않은 파일입니다."),
+    /** APR-006 — 동일 회차에 동일 file_version_id 중복 연결 시 409(DB UNIQUE 대신 애플리케이션 검증) */
+    DOCUMENT_ALREADY_LINKED("DOCUMENT_ALREADY_LINKED", "이미 연결된 파일입니다."),
+    /** API 명세 5번 상태코드 표 — {@code APR-V1.md} 개별 항목 없음(문서가 없거나 다른 회차 소속인 경우) */
+    APPROVAL_DOCUMENT_NOT_FOUND("APPROVAL_DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
+
+    // --- 7. 결재 상신 (API 명세 요구사항: SUB-001~004) ---
+
+    /** SUB-001 — 제목·내용 중 하나라도 비어 있으면 400 */
+    APPROVAL_CONTENT_REQUIRED("APPROVAL_CONTENT_REQUIRED", "제목과 내용을 모두 입력해야 합니다."),
+    /** SUB-001 — 문서 0건이면 400 */
+    APPROVAL_DOCUMENT_REQUIRED("APPROVAL_DOCUMENT_REQUIRED", "결재 문서를 최소 1건 첨부해야 합니다."),
+
+    // --- 2. 결재 회차 상세조회 (API 명세 요구사항: MGT-005) ---
+
+    /** MGT-005 — 차례 안 온 결재자(WAITING)이거나 관련 없는 사용자의 조회 시 403 */
+    APPROVAL_LINE_NOT_VIEWABLE("APPROVAL_LINE_NOT_VIEWABLE", "조회 권한이 없습니다.");
 
     private final String code;
     private final String message;

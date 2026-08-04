@@ -6,5 +6,8 @@ import java.util.List;
 
 public interface SpringDataApprovalDocumentRepository extends JpaRepository<ApprovalDocumentJpaEntity, Long> {
 
-    List<ApprovalDocumentJpaEntity> findByApprovalRevisionIdAndDeletedAtIsNull(Long approvalRevisionId);
+    List<ApprovalDocumentJpaEntity> findByApprovalRevisionId(Long approvalRevisionId);
+
+    /** APR-006 중복 연결 확인 */
+    boolean existsByApprovalRevisionIdAndFileVersionId(Long approvalRevisionId, Long fileVersionId);
 }

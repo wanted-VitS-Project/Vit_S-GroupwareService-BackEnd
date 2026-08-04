@@ -41,4 +41,13 @@ public interface SpringDataApprovalRevisionRepository extends JpaRepository<Appr
                                    @Param("title") String title,
                                    @Param("content") String content,
                                    @Param("draftStatus") ApprovalStatus draftStatus);
+
+    /**
+     * SUB-002 — 상신. 호출 전에 {@code findByIdForUpdate} 로 이미 잠금·DRAFT 확인이 끝났다고 가정하고
+     * 조건 없이 전환한다(INV-07 — 락으로 이미 레이스를 막았으니 여기서 또 걸 필요 없음).
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalRevisionJpaEntity r SET r.status = :inProgress, r.submittedAt = CURRENT_TIMESTAMP, "
+            + "r.updatedAt = CURRENT_TIMESTAMP WHERE r.approvalRevisionId = :revisionId")
+    void markSubmitted(@Param("revisionId") Long revisionId, @Param("inProgress") ApprovalStatus inProgress);
 }

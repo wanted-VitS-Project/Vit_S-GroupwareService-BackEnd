@@ -180,6 +180,7 @@
 |---|---|---|---|
 | 204 | No Content | – | 제거 성공 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
+| 404 | Not Found | `APPROVAL_NOT_FOUND` / `APPROVAL_REVISION_NOT_FOUND` | |
 | 404 | Not Found | `APPROVAL_DOCUMENT_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | |
