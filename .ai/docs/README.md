@@ -19,7 +19,7 @@
 │   ├── PRODUCT.md      제품 정의 (무엇을 왜 만드나 · 범위 밖)
 │   ├── PAGE.md         페이지 체계 (탭 8개 · 화면 P-00~P-70 역할·담당)
 │   ├── PERMISSION.md   권한 체계 (3층 판정 · ADMIN/MASTER/MEMBER 차이)
-│   ├── BLOCK.md        블록 정보 (공통 규칙 · 배치 · 9종 카탈로그)
+│   ├── BLOCK.md        블록 정보 (공통 규칙 · 배치 · 10종 카탈로그)
 │   ├── FLYWAY.md       DB 마이그레이션 컨벤션
 │   └── USECASE.md      전 과정 흐름 (공고 → 실적)
 └── domain/        도메인별 구현 계약 + 유스케이스
@@ -38,7 +38,7 @@
 | [PRODUCT.md](global/PRODUCT.md) | 제품 정의 · **범위 밖** | 기능 범위를 다툴 때 |
 | [PERMISSION.md](global/PERMISSION.md) | 3층 판정 · role 차이표 | 권한 검사 코드 · 관리자 화면 ⚠️ **`MASTER` 는 최상위가 아니다** |
 | [PAGE.md](global/PAGE.md) | 화면 P-00~P-70 역할 · 백엔드/프론트 담당 | 화면·라우팅 설계 · "이 페이지가 무슨 역할인가" |
-| [BLOCK.md](global/BLOCK.md) | 공통 규칙 · 배치 · 9종 카탈로그 · 삭제 잠금 | 블록이 걸린 **모든** 작업 |
+| [BLOCK.md](global/BLOCK.md) | 공통 규칙 · 배치 · 10종 카탈로그 · 삭제 잠금 | 블록이 걸린 **모든** 작업 |
 | [FLYWAY.md](global/FLYWAY.md) | DB 마이그레이션 컨벤션 · RDS 반영 규칙 | 테이블·컬럼·인덱스·FK·seed 변경 전 |
 | [USECASE.md](global/USECASE.md) | 공고 → 실적 전 과정 흐름 | 기능 구현 전 흐름 확인 |
 
