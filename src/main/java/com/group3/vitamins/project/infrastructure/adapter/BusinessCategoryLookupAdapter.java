@@ -15,7 +15,7 @@ public class BusinessCategoryLookupAdapter implements BusinessCategoryLookupPort
     @Override
     public List<BusinessCategoryView> findByIds(List<Long> categoryIds) {
         return businessCategoryLookupQueryMapper.findByIds(categoryIds).stream()
-                .map(row -> new BusinessCategoryView(row.categoryId(), row.name()))
+                .map(row -> new BusinessCategoryView(row.categoryId(), row.name(), row.code()))
                 .toList();
     }
 }

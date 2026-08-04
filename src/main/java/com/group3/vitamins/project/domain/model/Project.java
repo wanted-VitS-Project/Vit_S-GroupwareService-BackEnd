@@ -15,12 +15,15 @@ public class Project {
     private BigDecimal contractAmount;
     private LocalDate startedOn;
     private LocalDate endedOn;
+    private final CloseReasonCode closeReasonCode;
+    private final String closeReasonNote;
     private final String createdBy;
     private final LocalDateTime createdAt;
     private LocalDateTime deletedAt;
 
     private Project(Long projectId, Long bidNoticeId, String name, String description, ProjectStatus status,
                     String clientName, BigDecimal contractAmount, LocalDate startedOn, LocalDate endedOn,
+                    CloseReasonCode closeReasonCode, String closeReasonNote,
                     String createdBy, LocalDateTime createdAt, LocalDateTime deletedAt) {
         this.projectId = projectId;
         this.bidNoticeId = bidNoticeId;
@@ -31,6 +34,8 @@ public class Project {
         this.contractAmount = contractAmount;
         this.startedOn = startedOn;
         this.endedOn = endedOn;
+        this.closeReasonCode = closeReasonCode;
+        this.closeReasonNote = closeReasonNote;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
         this.deletedAt = deletedAt;
@@ -41,16 +46,17 @@ public class Project {
                                  LocalDate startedOn, LocalDate endedOn, BigDecimal contractAmount,
                                  String createdBy, LocalDateTime now) {
         return new Project(null, bidNoticeId, name, description, ProjectStatus.NOT_STARTED,
-                clientName, contractAmount, startedOn, endedOn, createdBy, now, null);
+                clientName, contractAmount, startedOn, endedOn, null, null, createdBy, now, null);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
     public static Project restore(Long projectId, Long bidNoticeId, String name, String description,
                                   ProjectStatus status, String clientName, BigDecimal contractAmount,
-                                  LocalDate startedOn, LocalDate endedOn, String createdBy,
-                                  LocalDateTime createdAt, LocalDateTime deletedAt) {
+                                  LocalDate startedOn, LocalDate endedOn,
+                                  CloseReasonCode closeReasonCode, String closeReasonNote,
+                                  String createdBy, LocalDateTime createdAt, LocalDateTime deletedAt) {
         return new Project(projectId, bidNoticeId, name, description, status, clientName, contractAmount,
-                startedOn, endedOn, createdBy, createdAt, deletedAt);
+                startedOn, endedOn, closeReasonCode, closeReasonNote, createdBy, createdAt, deletedAt);
     }
 
     public Long getProjectId() { return projectId; }
@@ -62,6 +68,8 @@ public class Project {
     public BigDecimal getContractAmount() { return contractAmount; }
     public LocalDate getStartedOn() { return startedOn; }
     public LocalDate getEndedOn() { return endedOn; }
+    public CloseReasonCode getCloseReasonCode() { return closeReasonCode; }
+    public String getCloseReasonNote() { return closeReasonNote; }
     public String getCreatedBy() { return createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getDeletedAt() { return deletedAt; }

@@ -7,6 +7,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ValidationExcept
 import com.group3.vitamins.project.application.command.CreateProjectCommand;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectResult;
 import com.group3.vitamins.project.application.usecase.ProjectCommandUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
@@ -47,7 +48,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
 
         List<Long> categoryIds = command.businessCategoryIds() == null
                 ? List.of() : command.businessCategoryIds().stream().distinct().toList();
-        List<ProjectResult.BusinessCategorySummary> categories = resolveCategories(categoryIds);
+        List<BusinessCategorySummary> categories = resolveCategories(categoryIds);
 
         LocalDateTime now = LocalDateTime.now();
         Project saved = projectRepository.save(Project.create(
@@ -97,7 +98,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     }
 
     /** 요청된 카테고리 id 가 전부 존재하는지 확인하고 응답용 요약으로 바꾼다. */
-    private List<ProjectResult.BusinessCategorySummary> resolveCategories(List<Long> categoryIds) {
+    private List<BusinessCategorySummary> resolveCategories(List<Long> categoryIds) {
         if (categoryIds.isEmpty()) {
             return List.of();
         }
@@ -107,7 +108,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
             throw new NotFoundException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NOT_FOUND);
         }
         return found.stream()
-                .map(view -> new ProjectResult.BusinessCategorySummary(view.categoryId(), view.name()))
+                .map(view -> new BusinessCategorySummary(view.categoryId(), view.name(), view.code()))
                 .toList();
     }
 }

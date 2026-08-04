@@ -5,4 +5,7 @@ import java.util.List;
 /** {@code project_business_category} 조인 테이블 — 프로젝트 도메인 소관 (BCT 쪽 포트 javadoc 참고). */
 public interface ProjectBusinessCategoryRepository {
     void linkAll(Long projectId, List<Long> businessCategoryIds);
+
+    /** 프로젝트에 연결된 카테고리 ID 를 조회한다. */
+    List<Long> findCategoryIds(Long projectId);
 }

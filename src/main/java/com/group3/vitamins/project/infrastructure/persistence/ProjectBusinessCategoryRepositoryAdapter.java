@@ -19,4 +19,12 @@ public class ProjectBusinessCategoryRepositoryAdapter implements ProjectBusiness
                 .toList();
         springDataRepository.saveAll(links);
     }
+
+    @Override
+    public List<Long> findCategoryIds(Long projectId) {
+        return springDataRepository.findByProjectId(projectId).stream()
+                .map(ProjectBusinessCategoryJpaEntity::getBusinessCategoryId)
+                .toList();
+    }
+
 }

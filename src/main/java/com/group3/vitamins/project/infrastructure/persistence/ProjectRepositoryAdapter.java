@@ -24,4 +24,12 @@ public class ProjectRepositoryAdapter implements ProjectRepository {
         return springDataRepository.findByBidNoticeId(bidNoticeId)
                 .map(ProjectMapper::toDomain);
     }
+
+    @Override
+    public Optional<Project> findById(Long projectId) {
+        return springDataRepository.findByProjectIdAndDeletedAtIsNull(projectId)
+                .map(ProjectMapper::toDomain);
+    }
+
+
 }

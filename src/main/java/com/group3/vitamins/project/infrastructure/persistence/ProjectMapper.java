@@ -19,6 +19,8 @@ public class ProjectMapper {
                 entity.getContractAmount(),
                 entity.getStartedOn(),
                 entity.getEndedOn(),
+                entity.getCloseReasonCode(),
+                entity.getCloseReasonNote(),
                 entity.getCreatedBy(),
                 entity.getCreatedAt(),
                 entity.getDeletedAt()
@@ -37,6 +39,8 @@ public class ProjectMapper {
                 domain.getContractAmount(),
                 domain.getStartedOn(),
                 domain.getEndedOn(),
+                domain.getCloseReasonCode(),
+                domain.getCloseReasonNote(),
                 domain.getCreatedBy(),
                 domain.getCreatedAt(),
                 domain.getDeletedAt()

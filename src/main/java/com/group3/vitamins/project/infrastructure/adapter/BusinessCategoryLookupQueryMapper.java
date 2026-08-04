@@ -15,7 +15,7 @@ public interface BusinessCategoryLookupQueryMapper {
 
     @Select("""
             <script>
-            SELECT business_category_id AS categoryId, name AS name
+            SELECT business_category_id AS categoryId, name AS name, code AS code, code AS code            
               FROM business_category
              WHERE deleted_at IS NULL
                AND business_category_id IN

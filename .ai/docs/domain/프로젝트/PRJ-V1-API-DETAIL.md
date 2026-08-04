@@ -1,8 +1,8 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 상세 명세
 
+**최종 업데이트**: 2026-08-04 (⭐ FE 프로젝트 상세 화면 반영 — 상세 조회 응답에 `description` 추가 · `businessCategories[].code`(업무코드) 전 엔드포인트 추가)
 **최종 업데이트**: 2026-08-04 (⭐ 전 엔드포인트 로컬 기준 `✅ 확정` — `AGENTS.md` §3 완화, 노션 동기화는 게이트 아님)
 **최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
-**최종 업데이트**: 2026-08-03 (ERD 확정본 반영 — `clientName` 해소 · `block.owner` 신설 · 잠금 4종 · `resourceType` 8종)
 **담당**: 동훈
 **목록 문서**: [`PRJ-V1-API.md`](PRJ-V1-API.md) · **요구사항**: [`PRJ-V1.md`](PRJ-V1.md) · **흐름도**: [`PRJ-V1-API-FLOW.md`](PRJ-V1-API-FLOW.md)
 
@@ -26,6 +26,7 @@
 | ⛔ `block.project_id` | **폐기 (2026-08-03).** 프로젝트는 `step` 조인으로 얻는다 → [`ERD.md`](ERD.md) §0-13 |
 | ⛔ `step.step_type` | **폐기 (2026-08-03).** 송부 스텝 개념이 없다 (`PRJ-V1.md` STP-007) |
 | 블록 삭제 잠금 | **4종** — 입금 연결 입금확인 · 계산서 연결 조회 · 진행 중 결재 · 결재 대상 파일 (`BLOCK.md` §8) |
+| ⭐ `businessCategories[]` | **`categoryId` · `name` · `code` 3필드 고정 (2026-08-04 추가).** `code` = `business_category.code VARCHAR(30)` (업무코드 · **NULL 허용**) — FE 프로젝트 상세 화면이 `건축공모 [ACT]` 로 노출한다. 카테고리를 내리는 **4개 엔드포인트 전부** 같은 모양이다 (생성 · 목록 · 상세 · 카테고리 연결) |
 
 ⚠️ **ERD Cloud 미반영분이 있다** → [`ERD-CLOUD-DIFF.md`](../ERD-CLOUD-DIFF.md). 코드는 [`../ERD.md`](../ERD.md) §3 정본을 따른다.
 
@@ -91,7 +92,7 @@
 | `startedOn` | LocalDate | 시작일 |
 | `endedOn` | LocalDate | 종료일 |
 | `contractAmount` | BigDecimal | 계약금액 |
-| `businessCategories` | List\<Object\> | 연결된 사업 카테고리 |
+| `businessCategories` | List\<Object\> | 연결된 사업 카테고리 (`categoryId`·`name`·`code`) |
 | `bidNoticeId` | Long | 연결된 공고 ID (직접 생성이면 `null`) |
 | `createdBy` | Object | 생성자 |
 | `createdAt` | LocalDateTime | 생성 일시 |
@@ -110,8 +111,8 @@
     "endedOn":"2026-12-31",
     "contractAmount":120000000,
     "businessCategories": [
-      { "categoryId":1, "name":"환경" },
-      { "categoryId":4, "name":"상하수도" }
+      { "categoryId":1, "name":"환경", "code":"ENV" },
+      { "categoryId":4, "name":"상하수도", "code":null }
     ],
     "bidNoticeId":null,
     "createdBy": { "userId":"E2024001", "name":"김용준" },
@@ -184,7 +185,7 @@ GET /api/v1/projects?status=IN_PROGRESS&businessCategoryId=1&page=0&size=20
 | `content[].endedOn` | LocalDate | 종료일 |
 | `content[].contractAmount` | BigDecimal | 계약금액 |
 | `content[].progressRate` | Integer | 진척률(%) — **스텝 0개면 응답에 담지 않는다** |
-| `content[].businessCategories` | List\<Object\> | 사업 카테고리 |
+| `content[].businessCategories` | List\<Object\> | 사업 카테고리 (`categoryId`·`name`·`code`) |
 | `page` | int | 현재 페이지 |
 | `size` | int | 페이지 크기 |
 | `totalElements` | long | 전체 건수 |
@@ -206,7 +207,7 @@ GET /api/v1/projects?status=IN_PROGRESS&businessCategoryId=1&page=0&size=20
         "endedOn":"2026-12-31",
         "contractAmount":120000000,
         "progressRate":40,
-        "businessCategories": [ { "categoryId":1, "name":"환경" } ]
+        "businessCategories": [ { "categoryId":1, "name":"환경", "code":"ENV" } ]
       }
     ],
     "page":0,
@@ -262,15 +263,16 @@ GET /api/v1/projects/12
 | `data` | Object | 응답 데이터 |
 | `projectId` | Long | 프로젝트 ID |
 | `name` | String | 과업명 |
+| `description` | String | 설명 (`project.description` TEXT · `null` 허용) — 2026-08-04 추가 |
 | `clientName` | String | 발주처 (`project.client_name`) |
 | `status` | String | 프로젝트 상태 |
 | `startedOn` | LocalDate | 시작일 |
 | `endedOn` | LocalDate | 종료일 |
 | `contractAmount` | BigDecimal | 계약금액 |
-| `progressRate` | Integer | 진척률(%) — 스텝 0개면 미포함 |
+| `progressRate` | Integer | 진척률(%) — **`doneStepCount / stepCount`**. 스텝 0개면 미포함 |
 | `stepCount` | int | 전체 스텝 수 |
 | `doneStepCount` | int | 완료 스텝 수 |
-| `businessCategories` | List\<Object\> | 사업 카테고리 |
+| `businessCategories` | List\<Object\> | 사업 카테고리 (`categoryId`·`name`·`code`) |
 | `bidNoticeId` | Long | 연결된 공고 ID |
 | `closeReasonCode` | String | 종결 사유 코드 (종결 건만) |
 | `closeReasonNote` | String | 종결 사유 상세 |
@@ -285,6 +287,7 @@ GET /api/v1/projects/12
   "data": {
     "projectId":12,
     "name":"OO시 상수도 관리 용역",
+    "description":"상수도 관리 시스템 고도화 용역",
     "clientName":"OO시청",
     "status":"IN_PROGRESS",
     "startedOn":"2026-08-01",
@@ -293,7 +296,7 @@ GET /api/v1/projects/12
     "progressRate":40,
     "stepCount":5,
     "doneStepCount":2,
-    "businessCategories": [ { "categoryId":1, "name":"환경" } ],
+    "businessCategories": [ { "categoryId":1, "name":"환경", "code":"ENV" } ],
     "bidNoticeId":null,
     "closeReasonCode":null,
     "closeReasonNote":null,
@@ -692,6 +695,7 @@ GET /api/v1/projects/12/progress
 | `businessCategories` | List\<Object\> | 연결 후 전체 카테고리 |
 | `businessCategories[].categoryId` | Long | 카테고리 ID |
 | `businessCategories[].name` | String | 카테고리명 |
+| `businessCategories[].code` | String | 업무코드 (`business_category.code` · `null` 허용) |
 
 ## Success Example
 ```
@@ -701,8 +705,8 @@ GET /api/v1/projects/12/progress
   "data": {
     "projectId":12,
     "businessCategories": [
-      { "categoryId":1, "name":"환경" },
-      { "categoryId":4, "name":"상하수도" }
+      { "categoryId":1, "name":"환경", "code":"ENV" },
+      { "categoryId":4, "name":"상하수도", "code":null }
     ]
   }
 }

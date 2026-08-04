@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.infrastructure.persistence;
 
+import com.group3.vitamins.project.domain.model.CloseReasonCode;
 import com.group3.vitamins.project.domain.model.ProjectStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -54,6 +55,13 @@ public class ProjectJpaEntity {
 
     @Column(name = "ended_on")
     private LocalDate endedOn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "close_reason_code")
+    private CloseReasonCode closeReasonCode;
+
+    @Column(name = "close_reason_note", length = 500)
+    private String closeReasonNote;
 
     @Column(name = "created_by", nullable = false, length = 20)
     private String createdBy;

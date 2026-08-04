@@ -15,7 +15,11 @@ public enum ProjectErrorCode implements ErrorCode {
     PROJECT_DATE_RANGE_INVALID("PROJECT_DATE_RANGE_INVALID",
             "시작일은 종료일보다 늦을 수 없습니다."),
     PROJECT_BID_NOTICE_ALREADY_LINKED("PROJECT_BID_NOTICE_ALREADY_LINKED",
-            "이미 다른 프로젝트가 연결된 공고입니다.");
+            "이미 다른 프로젝트가 연결된 공고입니다."),
+    PROJECT_NOT_FOUND("PROJECT_NOT_FOUND",
+            "프로젝트를 찾을 수 없습니다."),
+    PROJECT_ACCESS_DENIED("PROJECT_ACCESS_DENIED",
+            "프로젝트에 접근할 권한이 없습니다.");
 
     private final String code;
     private final String message;

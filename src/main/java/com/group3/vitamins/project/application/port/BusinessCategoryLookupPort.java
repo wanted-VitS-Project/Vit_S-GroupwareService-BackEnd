@@ -11,5 +11,5 @@ public interface BusinessCategoryLookupPort {
     /** id 로 조회되는 카테고리만 반환한다 (없는 id 는 결과에서 빠진다 — 호출부가 개수로 판단). */
     List<BusinessCategoryView> findByIds(List<Long> categoryIds);
 
-    record BusinessCategoryView(Long categoryId, String name) {}
+    record BusinessCategoryView(Long categoryId, String name, String code) {}
 }

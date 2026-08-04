@@ -1,5 +1,6 @@
 # 🏗️ 아키텍처 컨벤션
 
+**최종 업데이트**: 2026-08-04 (§2-1 신설 — 애그리게이트가 여러 개인 도메인의 서브패키지 규칙, `project` 계층 38개 엔드포인트 대응)
 **최종 업데이트**: 2026-08-04 (신설 — 헥사고날 구조 확정, `businesscategory` 기준)
 **담당**: 김동현 (DevOps)
 **근거**: `businesscategory` 도메인 구현 (#96~#99) — 4계층 + `command/query/result/usecase/service/policy/port` 전체를 갖춘 첫 완성 사례
@@ -67,6 +68,56 @@ businesscategory/
 
 ---
 
+## 2-1. 애그리게이트가 여러 개인 도메인 — 서브패키지
+
+`businesscategory` 는 애그리게이트가 하나라 §2 의 평면 구조로 충분하다.
+**애그리게이트가 여러 개고 파일이 수십 개로 불어나는 도메인은 애그리게이트별 서브패키지로 나눈다.**
+현재 해당하는 건 `project` 뿐이다 (프로젝트~블록 계층 · 엔드포인트 38개).
+
+### 용어 — "바운디드 컨텍스트" 가 아니다
+
+`project`·`stage`·`step`·`block` 은 **하나의 컨텍스트 안의 4개 애그리게이트**다. 컨텍스트로 부르지 않는다:
+유비쿼터스 언어가 하나고(요구사항·API 명세가 한 문서), 담당자가 하나고, 트랜잭션이 서로 걸린다
+(스텝 완료 → 프로젝트 진척률 · 스텝 삭제 → 이슈 처리). 컨텍스트라고 부르면 "직접 조인 금지" 같은
+과한 제약을 스스로 짊어지게 된다.
+
+### 트리
+
+**루트 애그리게이트는 도메인 루트에 그대로 두고, 나머지만 서브패키지로 뺀다.**
+`project/project/domain/model/Project` 처럼 이름이 겹치는 걸 피하고 기존 파일 이동도 없다.
+
+```
+project/
+├── domain/ application/ infrastructure/ presentation/   ← Project 애그리게이트 (루트)
+├── stage/  └ domain/ application/ infrastructure/ presentation/
+├── step/   └ domain/ application/ infrastructure/ presentation/
+└── block/  └ domain/ application/ infrastructure/ presentation/
+```
+
+서브패키지 **내부는 §2 의 4계층·네이밍을 그대로** 따른다. 계층을 서브패키지 밖으로 끌어올리지 않는다
+(⛔ `project/domain/model/Step` 처럼 애그리게이트를 섞지 않는다).
+
+### 애그리게이트 간 참조
+
+§2 의 규칙이 도메인 간뿐 아니라 **애그리게이트 간에도 그대로 적용된다.**
+
+| 대상 | 처리 |
+| --- | --- |
+| 내 애그리게이트 테이블 | JPA 엔티티 + `domain/repository` 포트 + `infrastructure/persistence` 의 `RepositoryAdapter` |
+| **다른 애그리게이트 테이블** (같은 도메인이라도) | `application/port` 인터페이스 + `infrastructure/adapter` 구현 (MyBatis) |
+
+포트는 **소비자가 소유한다.** 조회당하는 쪽이 아니라 조회하는 쪽 패키지에 포트와 어댑터를 둔다
+(선례: `businesscategory` 의 `ProjectCategoryLinkPort` · `project` 의 `BusinessCategoryLookupPort`).
+이렇게 두면 상대 애그리게이트가 나중에 서브패키지로 분리돼도 포트·어댑터는 움직이지 않는다.
+
+### URL 과 패키지는 일치하지 않아도 된다
+
+URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없다.
+`GET /api/v1/projects/{projectId}/progress` 처럼 **`/projects` 경로를 다른 애그리게이트 모듈이 매핑하는 것을 허용한다.**
+엔드포인트를 어느 모듈이 구현할지는 **API 명세의 `도메인` 열**을 따른다.
+
+---
+
 ## 3. 계층 간 의존 방향
 
 `.coderabbit.yaml` 의 계층별 리뷰 규칙이 강제하는 원칙과 동일하다 (내용 재작성 없이 그대로 옮김):
@@ -121,3 +172,4 @@ businesscategory/
 | 날짜 | 변경 내용 | 담당 |
 |---|---|---|
 | 2026-08-04 | 신설 — `businesscategory` 구현을 기준으로 헥사고날 계층·네이밍 컨벤션 확정, `auth`/`account` 레거시 명시 | 김동현 |
+| 2026-08-04 | §2-1 신설 — 애그리게이트별 서브패키지 규칙(`project` 계층). 애그리게이트 간 참조도 `port`+`adapter`, URL↔패키지 불일치 허용 | 동훈 |
