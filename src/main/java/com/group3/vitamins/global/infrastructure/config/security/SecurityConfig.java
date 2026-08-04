@@ -69,10 +69,13 @@ public class SecurityConfig {
      * <p>⚠️ {@link Argon2PasswordEncoder} 를 직접 빈으로 노출하지 않는다.
      * {@link ThrottledPasswordEncoder} 로 감싼 것만 주입되게 해야 동시 실행 제한을 우회할 수 없다.
      *
+     * <p>반환 타입을 {@link ThrottledPasswordEncoder} 로 노출한다 — 일괄 재설정이 {@code encodeBulk}
+     * (같은 세마포어 · bulkWait)를 호출해야 하기 때문이다. {@link PasswordEncoder} 주입도 그대로 만족한다.
+     *
      * <p>생성자 인자 순서 주의: (saltLength, hashLength, parallelism, memory, iterations)
      */
     @Bean
-    public PasswordEncoder passwordEncoder() {
+    public ThrottledPasswordEncoder passwordEncoder() {
         Argon2PasswordEncoder argon2Encoder = new Argon2PasswordEncoder(
                 argon2.saltLength(),
                 argon2.hashLength(),
@@ -80,7 +83,8 @@ public class SecurityConfig {
                 argon2.memoryKb(),
                 argon2.iterations()
         );
-        return new ThrottledPasswordEncoder(argon2Encoder, argon2.permits(), argon2.loginWait());
+        return new ThrottledPasswordEncoder(
+                argon2Encoder, argon2.permits(), argon2.loginWait(), argon2.bulkWait());
     }
 
     /**

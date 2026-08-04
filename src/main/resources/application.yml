@@ -55,6 +55,26 @@ spring:
     locations: classpath:db/migration
     out-of-order: false
 
+  # ── 메일 (SMTP) ─────────────────────────────────────────
+  # 관리자 비밀번호 재설정 시 임시 비밀번호를 사원 이메일로 발송한다 (.ai/api/account.md §3).
+  # 🚨 PUBLIC 레포다. 계정·앱 비밀번호 같은 실제 값은 절대 여기 쓰지 말고 환경변수로 주입한다.
+  #    Gmail 을 쓴다면 MAIL_PASSWORD 는 계정 비밀번호가 아니라 "앱 비밀번호" 여야 한다.
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+        # 발송 지연이 요청을 오래 붙잡지 않게 타임아웃을 건다. 초과하면 MAIL_SEND_FAILED 로 집계된다.
+        connectiontimeout: 5000
+        timeout: 5000
+        writetimeout: 5000
+
 server:
   servlet:
     session:
@@ -115,3 +135,10 @@ cloud:
     region: ${AWS_REGION:ap-northeast-2}
     s3:
       bucket: ${S3_BUCKET_NAME}
+
+# ── 계정 관리 ────────────────────────────────────────────
+# 비밀번호 재설정 메일에 쓰는 값. from 기본값은 spring.mail.username 을 따라간다.
+account:
+  mail:
+    from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@vitamins.app}}
+    login-url: ${APP_LOGIN_URL:http://localhost:3000/login}

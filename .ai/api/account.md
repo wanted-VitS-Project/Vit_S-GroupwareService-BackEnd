@@ -15,7 +15,7 @@
 | 계정 상태 변경 | PATCH | `/api/v1/accounts/{userId}/status` | ADMIN |
 | 비밀번호 재설정 | POST | `/api/v1/accounts/password-resets` | ADMIN |
 
-> ⭐ **"재발송" API 를 만들지 않았다.** BCrypt 해시만 저장하므로 이전 임시 비밀번호의 원문이 없다.
+> ⭐ **"재발송" API 를 만들지 않았다.** Argon2id 해시만 저장하므로 이전 임시 비밀번호의 원문이 없다.
 > 재발송은 필연적으로 새 난수 발급 = 재설정이다. 화면의 `재발송` 버튼도 **재설정 API 를 다시 호출**한다 (`ACC-019`).
 
 ## 🔑 전역 role — 서열형 3종 (`global/PERMISSION.md` §2)
