@@ -71,6 +71,7 @@ public class BlockRepositoryAdapter implements BlockRepository {
 
     @Override
     public Optional<Block> findByTypeAndTypeId(BlockType type, Long typeId) {
-        return springDataRepository.findByTypeAndTypeIdAndDeletedAtIsNull(type, typeId);
+        return springDataRepository.findByTypeAndTypeIdAndDeletedAtIsNull(type, typeId)
+                .map(BlockMapper::toDomain);
     }
 }

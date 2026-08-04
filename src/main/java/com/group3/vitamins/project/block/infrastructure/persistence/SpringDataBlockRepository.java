@@ -19,7 +19,7 @@ public interface SpringDataBlockRepository extends JpaRepository<BlockJpaEntity,
 
     boolean existsByStepIdAndTypeAndDeletedAtIsNull(Long stepId, BlockType type);
 
-    Optional<BlockJpaEntity> wwwwwfindByTypeAndTypeIdAndDeletedAtIsNull(BlockType type, Long typeId);
+    Optional<BlockJpaEntity> findByTypeAndTypeIdAndDeletedAtIsNull(BlockType type, Long typeId);
 
     /** 블록이 없으면 null 을 돌려준다 (JPQL MAX 의 동작). */
     @Query("select max(b.rowIndex) from BlockJpaEntity b "
