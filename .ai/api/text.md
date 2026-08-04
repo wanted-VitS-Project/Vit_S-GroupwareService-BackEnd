@@ -78,10 +78,12 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | — | "텍스트 본문 수정 성공" |
+| 400 | Bad Request | `TXT-003` | "내용을 입력해 주세요." |
 | 403 | Forbidden | `TXT-001` | "편집 권한이 없습니다." |
+| 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `TXT-002` | "존재하지 않는 블록입니다." |
-| 401 | Unauthorized | `TXT-003` | "다시 로그인해주세요." |
-| 500 | Internal Server Error | `TXT-004` | "서버 내부 오류입니다." |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
 ---
 
