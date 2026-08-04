@@ -40,8 +40,8 @@ public class AccountEntity {
     @Column(name = "user_id", nullable = false, length = 20, updatable = false)
     private String userId;
 
-    /** Argon2id 해시 */
-    @Column(name = "password", nullable = false, length = 255)
+    /** Argon2id 해시 (컬럼 길이는 JPA 기본 255) */
+    @Column(name = "password", nullable = false)
     private String password;
 
     /**
@@ -96,13 +96,7 @@ public class AccountEntity {
         return !"ACTIVE".equals(status);
     }
 
-    public String getRole() {
-        return role;
-    }
-
-    public String getStatus() {
-        return status;
-    }
+    // getRole() · getStatus() 는 클래스 @Getter 가 생성한다 (수동 정의 제거)
 
     public boolean isLocked(LocalDateTime now) {
         return lockedUntil != null && lockedUntil.isAfter(now);
