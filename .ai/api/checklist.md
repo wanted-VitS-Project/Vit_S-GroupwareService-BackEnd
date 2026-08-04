@@ -83,12 +83,12 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 201 | Created | — | "체크리스트 항목 생성 성공" |
-| 400 | Bad Request | `CHK-005` | "내용을 입력해 주세요." |
+| 400 | Bad Request | `CHK-004` | "내용을 입력해 주세요." |
 | 403 | Forbidden | `CHK-001` | "편집 권한이 없습니다." |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `CHK-002` | "존재하지 않는 블록입니다." |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
-| 500 | Internal Server Error | `CHK-004` | "서버 내부 오류입니다." |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
 ---
 
@@ -154,13 +154,13 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | — | "체크리스트 항목 수정 성공" |
-| 400 | Bad Request | `CHK-005` | "내용을 입력해 주세요." (content가 공백뿐일 때) |
-| 400 | Bad Request | `CHK-006` | "수정할 내용을 하나 이상 입력해 주세요." (content/changeStatusTo 둘 다 없을 때) |
+| 400 | Bad Request | `CHK-004` | "내용을 입력해 주세요." (content가 공백뿐일 때) |
+| 400 | Bad Request | `CHK-005` | "수정할 내용을 하나 이상 입력해 주세요." (content/changeStatusTo 둘 다 없을 때) |
 | 403 | Forbidden | `CHK-001` | "편집 권한이 없습니다." |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `CHK-003` | "존재하지 않는 항목입니다." |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
-| 500 | Internal Server Error | `CHK-004` | "서버 내부 오류입니다." |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
 > 한 요청에서 `content`, `changeStatusTo` 가 동시에 바뀌어도 **필드 단위로 활동 로그를 남긴다** (§5.2 체크리스트, 활동 로그 인프라 도입 전까지는 주석 처리).
 
@@ -210,7 +210,7 @@
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `CHK-003` | "존재하지 않는 항목입니다." |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
-| 500 | Internal Server Error | `CHK-004` | "서버 내부 오류입니다." |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
 ---
 

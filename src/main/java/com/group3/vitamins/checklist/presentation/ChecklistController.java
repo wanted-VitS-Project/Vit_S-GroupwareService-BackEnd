@@ -46,12 +46,12 @@ public class ChecklistController {
     @Operation(summary = "체크리스트 항목 생성", description = "체크리스트 블록에 새 항목을 추가한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "체크리스트 항목 생성 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "내용을 입력해 주세요. (CHK-005)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "내용을 입력해 주세요. (CHK-004)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (CHK-001) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (CHK-002)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류입니다. (CHK-004)")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "COMMON_INTERNAL_ERROR — 서버 내부 오류입니다.")
     })
     @PostMapping("/{chkBlockId}/items")
     public ResponseEntity<ApiResponse<CreateChecklistItemResponse>> createItem(
@@ -79,12 +79,12 @@ public class ChecklistController {
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "체크리스트 항목 수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "내용을 입력해 주세요. (CHK-005) / 수정할 내용을 하나 이상 입력해 주세요. (CHK-006)"),
+                    description = "내용을 입력해 주세요. (CHK-004) / 수정할 내용을 하나 이상 입력해 주세요. (CHK-005)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (CHK-001) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 항목입니다. (CHK-003)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류입니다. (CHK-004)")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "COMMON_INTERNAL_ERROR — 서버 내부 오류입니다.")
     })
     @PatchMapping("/items/{chkId}")
     public ResponseEntity<ApiResponse<UpdateChecklistItemResponse>> updateItem(
@@ -115,7 +115,7 @@ public class ChecklistController {
                     description = "편집 권한이 없습니다. (CHK-001) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 항목입니다. (CHK-003)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류입니다. (CHK-004)")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "COMMON_INTERNAL_ERROR — 서버 내부 오류입니다.")
     })
     @DeleteMapping("/items/{chkId}")
     public ResponseEntity<ApiResponse<DeleteChecklistItemResponse>> deleteItem(

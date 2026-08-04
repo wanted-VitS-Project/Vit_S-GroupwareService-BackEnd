@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +28,10 @@ public class ChecklistHandlerService {
      */
     public void deleteByBlock(Long chkBlockId, String userId, String blockTitle, LocalDateTime deletedAt) {
         log.info("체크리스트 블록 삭제(이벤트 수신) - chkBlockId={}, userId={}", chkBlockId, userId);
+
+        // deletedAt 이 null 이면 "WHERE deleted_at IS NULL" 조건에 걸려 SET deleted_at = NULL 로
+        // 아무 값도 안 바뀌었는데 영향받은 행이 있다는 이유로 삭제 성공(true)으로 오판할 수 있다.
+        Objects.requireNonNull(deletedAt, "deletedAt은 null일 수 없습니다.");
 
         boolean blockDeleted = checklistBlockRepository.markDeleted(chkBlockId, deletedAt);
         if (!blockDeleted) {
