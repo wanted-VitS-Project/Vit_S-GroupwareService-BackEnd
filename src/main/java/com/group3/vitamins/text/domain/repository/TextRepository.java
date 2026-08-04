@@ -2,14 +2,21 @@ package com.group3.vitamins.text.domain.repository;
 
 import com.group3.vitamins.text.domain.model.Text;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
  * 텍스트 도메인이 바라보는 영속성 포트. 구현체는 infrastructure/persistence 에 있다.
+ *
+ * <p>수정과 삭제를 하나의 범용 save() 로 묶지 않고 상태별로 분리한다 — 그렇지 않으면
+ * 읽은 시점의 오래된 deletedAt 값을 수정 흐름이 그대로 다시 써서, 동시에 삭제된 행을
+ * 되살릴 수 있다.
  */
 public interface TextRepository {
 
-    Text save(Text text);
+    Text updateContent(Long txtId, String content);
+
+    void markDeleted(Long txtId, LocalDateTime deletedAt);
 
     Optional<Text> findActiveByTxtId(Long txtId);
 }

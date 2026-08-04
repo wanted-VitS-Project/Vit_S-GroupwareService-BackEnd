@@ -9,13 +9,19 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * {@code @DynamicUpdate} — 바뀐 컬럼만 UPDATE 문에 넣는다. 기본값(전체 컬럼 UPDATE)이면
+ * 본문 수정이 오래된 deletedAt 값까지 SQL 에 실어 보내서, 그 사이 삭제된 행을 되살릴 수 있다.
+ */
 @Entity
 @NoArgsConstructor
 @Getter
+@DynamicUpdate
 @Table(name = "text")
 public class TextJpaEntity {
     @Id

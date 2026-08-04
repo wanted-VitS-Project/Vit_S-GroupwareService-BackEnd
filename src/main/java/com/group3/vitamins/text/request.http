@@ -4,7 +4,7 @@ Content-Type: application/json
 
 {
     "userId": "EMP001",
-    "password": "Test1234!"
+    "password": "실제 비밀번호로 교체"
 }
 
 ### 텍스트 블록 수정

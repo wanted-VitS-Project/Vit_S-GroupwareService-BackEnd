@@ -1,6 +1,5 @@
 package com.group3.vitamins.text.application.service;
 
-import com.group3.vitamins.text.application.command.DeleteTextBlockCommand;
 import com.group3.vitamins.text.application.policy.TextEligibilityPolicy;
 import com.group3.vitamins.text.domain.model.Text;
 import com.group3.vitamins.text.domain.repository.TextRepository;
@@ -25,8 +24,7 @@ public class TextHandlerService {
 
         Text text = eligibilityPolicy.getActiveTextOrThrow(txtId);
 
-        text.markDeleted(deletedAt);
-        textRepository.save(text);
+        textRepository.markDeleted(txtId, deletedAt);
 
         log.info("텍스트 블록 삭제 완료 - txtId={}", txtId);
 

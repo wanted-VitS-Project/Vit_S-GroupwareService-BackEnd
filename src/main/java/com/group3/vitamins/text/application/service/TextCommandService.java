@@ -27,11 +27,10 @@ public class TextCommandService implements TextCommandUseCase {
     public Text updateContent(UpdateTextContentCommand command) {
         log.info("텍스트 본문 수정 요청 - txtId={}, userId={}", command.txtId(), command.userId());
 
-        Text text = eligibilityPolicy.getActiveTextOrThrow(command.txtId());
+        eligibilityPolicy.getActiveTextOrThrow(command.txtId());
         eligibilityPolicy.assertEditPermission(command.txtId(), command.userId());
 
-        text.updateContent(command.content());
-        Text saved = textRepository.save(text);
+        Text saved = textRepository.updateContent(command.txtId(), command.content());
 
         log.info("텍스트 본문 수정 완료 - txtId={}", saved.getTxtId());
 
