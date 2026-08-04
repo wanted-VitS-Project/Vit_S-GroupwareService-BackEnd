@@ -14,4 +14,7 @@ public interface StageRepository {
 
     /** sortOrder 오름차순으로 조회한다. 논리 삭제분은 제외한다. */
     List<Stage> findAllByProjectId(Long projectId);
+
+    /** 스테이지가 해당 프로젝트에 존재하는지 확인한다. 논리 삭제분은 제외한다. */
+    boolean existsInProject(Long stageId, Long projectId);
 }

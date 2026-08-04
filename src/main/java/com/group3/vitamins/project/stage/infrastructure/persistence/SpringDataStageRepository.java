@@ -14,4 +14,6 @@ public interface SpringDataStageRepository extends JpaRepository<StageJpaEntity,
     Integer findMaxSortOrder(@Param("projectId") Long projectId);
 
     List<StageJpaEntity> findByProjectIdAndDeletedAtIsNullOrderBySortOrderAsc(Long projectId);
+
+    boolean existsByStageIdAndProjectIdAndDeletedAtIsNull(Long stageId, Long projectId);
 }

@@ -1,8 +1,8 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 상세 명세
 
+**최종 업데이트**: 2026-08-05 (⭐ **`inProgressIssueCount` 신설** — 스텝 목록·상세. FE 스텝 진행바 3색(완료/진행 중/진행 전)을 그리려면 필요하다. 🚨 프론트 계약 추가 — 통보 필요)
+**최종 업데이트**: 2026-08-05 (⭐ `STEP_NAME_TOO_LONG` 신설(생성·수정) — `step.name VARCHAR(200)` 초과가 500 으로 샜다)
 **최종 업데이트**: 2026-08-04 (⭐ 생성 계열 7건 `httpStatus` `200`→`201` 정정(상태코드 표와 모순) · `STAGE_NAME_TOO_LONG` 신설)
-**최종 업데이트**: 2026-08-04 (⭐ FE 프로젝트 상세 화면 반영 — 상세 조회 응답에 `description` 추가 · `businessCategories[].code`(업무코드) 전 엔드포인트 추가)
-**최종 업데이트**: 2026-08-04 (⭐ 전 엔드포인트 로컬 기준 `✅ 확정` — `AGENTS.md` §3 완화, 노션 동기화는 게이트 아님)
 **담당**: 동훈
 **목록 문서**: [`PRJ-V1-API.md`](PRJ-V1-API.md) · **요구사항**: [`PRJ-V1.md`](PRJ-V1.md) · **흐름도**: [`PRJ-V1-API-FLOW.md`](PRJ-V1-API-FLOW.md)
 
@@ -1461,8 +1461,9 @@ GET /api/v1/projects/12/steps?stageId=7
 | `steps[].endedOn` | LocalDate | 종료일 |
 | `steps[].owner` | Object | 책임자 (`userId`·`name`) |
 | `steps[].totalIssueCount` | int | 전체 이슈 수 |
-| `steps[].doneIssueCount` | int | 완료 이슈 수 |
-| `steps[].progressRate` | Integer | 스텝 진척률(%) — **이슈 0개면 미포함** |
+| `steps[].doneIssueCount` | int | 완료 이슈 수 (`issue.status = DONE`) |
+| ⭐ `steps[].inProgressIssueCount` | int | 진행 중 이슈 수 (`issue.status = IN_PROGRESS`) — **2026-08-05 신설.** FE 스텝 진행바가 완료 🟡 / 진행 중 🔵 / 진행 전 ⬜ **3색**인데 기존 2필드로는 3분할을 못 그렸다. 진행 전 = `total - done - inProgress` |
+| `steps[].progressRate` | Integer | 스텝 진척률(%) — **이슈 0개면 미포함**. 분자는 `doneIssueCount` 만 쓴다 (진행 중은 세지 않는다) |
 | `steps[].myPermission` | String | 요청자의 스텝 권한 |
 
 ## Success Example
@@ -1483,6 +1484,7 @@ GET /api/v1/projects/12/steps?stageId=7
         "owner": { "userId":"E2024001", "name":"김용준" },
         "totalIssueCount":5,
         "doneIssueCount":2,
+        "inProgressIssueCount":2,
         "progressRate":40,
         "myPermission":"EDITOR"
       }
@@ -1544,8 +1546,9 @@ GET /api/v1/steps/10
 | `endedOn` | LocalDate | 종료일 |
 | `owner` | Object | 책임자 — `employee_id` 기준. **작업자가 아니다** |
 | `totalIssueCount` | int | 전체 이슈 수 |
-| `doneIssueCount` | int | 완료 이슈 수 |
-| `progressRate` | Integer | 스텝 진척률(%) — **이슈 0개면 응답에 담지 않는다** (INV-04) |
+| `doneIssueCount` | int | 완료 이슈 수 (`issue.status = DONE`) |
+| ⭐ `inProgressIssueCount` | int | 진행 중 이슈 수 (`issue.status = IN_PROGRESS`) — **2026-08-05 신설** (목록 조회와 동일) |
+| `progressRate` | Integer | 스텝 진척률(%) — **이슈 0개면 응답에 담지 않는다** (INV-04). 분자는 `doneIssueCount` 만 쓴다 |
 | `completedBy` | Object | 완료자 |
 | `completedAt` | LocalDateTime | 완료 시각 |
 | `myPermission` | String | 요청자의 스텝 권한 |
@@ -1566,6 +1569,7 @@ GET /api/v1/steps/10
     "owner": { "userId":"E2024001", "name":"김용준" },
     "totalIssueCount":5,
     "doneIssueCount":2,
+    "inProgressIssueCount":2,
     "progressRate":40,
     "completedBy":null,
     "completedAt":null,
@@ -1670,6 +1674,7 @@ GET /api/v1/steps/10
 | --- | --- | --- | --- |
 | 201 | Created | - | 스텝 생성 성공 |
 | 400 | Bad Request | `STEP_NAME_REQUIRED` | 스텝명이 입력되지 않음 |
+| 400 | Bad Request | `STEP_NAME_TOO_LONG` | 스텝명이 200자를 초과함 (2026-08-05 신설 — `step.name VARCHAR(200)` 제약에 대한 에러코드가 빠져 있어 초과 입력이 500 으로 샜다, `STAGE_NAME_TOO_LONG` 선례) |
 | 400 | Bad Request | `STEP_DATE_RANGE_INVALID` | 시작일이 종료일보다 늦음 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `PROJECT_EDIT_DENIED` | 프로젝트 편집 권한 없음 |
@@ -1748,6 +1753,7 @@ GET /api/v1/steps/10
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | - | 스텝 수정 성공 |
+| 400 | Bad Request | `STEP_NAME_TOO_LONG` | 스텝명이 200자를 초과함 (2026-08-05 신설) |
 | 400 | Bad Request | `STEP_DATE_RANGE_INVALID` | 시작일이 종료일보다 늦음 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `STEP_EDIT_DENIED` | 스텝 편집 권한 없음 |

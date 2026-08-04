@@ -39,4 +39,15 @@ public class ProjectAccessPolicy {
             throw new ForbiddenException(ProjectErrorCode.PROJECT_EDIT_DENIED);
         }
     }
+
+    /**
+     * 예외 없이 유효 권한만 판정한다. 참여자가 아니면 NONE 을 돌려준다.
+     * 하위 애그리게이트가 자기 에러코드로 거부해야 할 때 쓴다 (스텝 상세는 403 을 STEP_ACCESS_DENIED 로 낸다).
+     */
+    public MemberPermission resolvePermissionOrNone(String role, MemberPermission memberPermission) {
+        if (GLOBAL_ADMIN_ROLES.contains(role)) {
+            return MemberPermission.EDITOR;
+        }
+        return memberPermission == null ? MemberPermission.NONE : memberPermission;
+    }
 }

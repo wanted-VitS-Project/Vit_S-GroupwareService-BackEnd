@@ -1,11 +1,8 @@
 package com.group3.vitamins.project.stage.application.service;
 
-import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
-import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.stage.application.command.CreateStageCommand;
-import com.group3.vitamins.project.stage.application.port.ProjectAccessPort;
 import com.group3.vitamins.project.stage.application.result.StageResult;
 import com.group3.vitamins.project.stage.application.usecase.StageCommandUseCase;
 import com.group3.vitamins.project.stage.domain.exception.StageErrorCode;
@@ -26,13 +23,13 @@ public class StageCommandService implements StageCommandUseCase {
     private static final int FIRST_SORT_ORDER = 1;
 
     private final StageRepository stageRepository;
-    private final ProjectAccessPort projectAccessPort;
-    private final ProjectAccessPolicy projectAccessPolicy;
+    private final ProjectAccessUseCase projectAccessUseCase;
 
     @Override
     public StageResult createStage(CreateStageCommand command) {
         validateName(command.name());
-        requireEditableProject(command.projectId(), command.requesterUserId(), command.role());
+        projectAccessUseCase.requireEditable(
+                command.projectId(), command.requesterUserId(), command.role());
 
         int sortOrder = command.sortOrder() != null
                 ? command.sortOrder()
@@ -53,15 +50,6 @@ public class StageCommandService implements StageCommandUseCase {
         if (name.length() > NAME_MAX_LENGTH) {
             throw new ValidationException(StageErrorCode.STAGE_NAME_TOO_LONG);
         }
-    }
-
-    /** 프로젝트 존재를 먼저 확인하고 편집 권한을 요구한다. */
-    private void requireEditableProject(Long projectId, String requesterUserId, String role) {
-        if (!projectAccessPort.existsProject(projectId)) {
-            throw new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND);
-        }
-        projectAccessPolicy.requireEditor(role,
-                projectAccessPort.findPermission(projectId, requesterUserId).orElse(null));
     }
 
     /** sortOrder 미지정 시 max+1 을 쓴다. 스테이지가 없으면 1 부터 시작한다. */

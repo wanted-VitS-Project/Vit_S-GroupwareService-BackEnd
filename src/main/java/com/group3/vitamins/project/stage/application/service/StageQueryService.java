@@ -1,9 +1,6 @@
 package com.group3.vitamins.project.stage.application.service;
 
-import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
-import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
-import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
-import com.group3.vitamins.project.stage.application.port.ProjectAccessPort;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.stage.application.port.StepCountLookupPort;
 import com.group3.vitamins.project.stage.application.query.StageListQuery;
 import com.group3.vitamins.project.stage.application.result.StageSummary;
@@ -22,18 +19,13 @@ import java.util.Map;
 public class StageQueryService implements StageQueryUseCase {
 
     private final StageRepository stageRepository;
-    private final ProjectAccessPort projectAccessPort;
-    private final ProjectAccessPolicy projectAccessPolicy;
+    private final ProjectAccessUseCase projectAccessUseCase;
     private final StepCountLookupPort stepCountLookupPort;
 
     @Override
     public List<StageSummary> getStages(StageListQuery query) {
-        if (!projectAccessPort.existsProject(query.projectId())) {
-            throw new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND);
-        }
-        projectAccessPolicy.resolvePermission(query.role(),
-                projectAccessPort.findPermission(query.projectId(), query.requesterUserId())
-                        .orElse(null));
+        projectAccessUseCase.requireAccess(
+                query.projectId(), query.requesterUserId(), query.role());
 
         Map<Long, Integer> stepCounts =
                 stepCountLookupPort.countByStage(query.projectId(), query.requesterUserId());

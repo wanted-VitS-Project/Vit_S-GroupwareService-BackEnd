@@ -33,4 +33,9 @@ public class StageRepositoryAdapter implements StageRepository {
                 .map(StageMapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public boolean existsInProject(Long stageId, Long projectId) {
+        return springDataRepository.existsByStageIdAndProjectIdAndDeletedAtIsNull(stageId, projectId);
+    }
 }
