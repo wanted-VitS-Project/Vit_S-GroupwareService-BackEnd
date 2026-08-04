@@ -11,6 +11,10 @@ import java.time.LocalDateTime;
  */
 public interface ChecklistBlockRepository {
 
+    /**
+     * 존재 확인 + 이번 트랜잭션이 끝날 때까지 이 행을 잠근다(PESSIMISTIC_WRITE).
+     * 항목 생성 직전에 호출해서, "확인 → 생성" 사이에 블록이 동시에 삭제되는 것을 막는다.
+     */
     boolean existsActive(Long chkBlockId);
 
     /**

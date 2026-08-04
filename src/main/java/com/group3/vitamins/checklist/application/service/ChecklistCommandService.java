@@ -9,6 +9,7 @@ import com.group3.vitamins.checklist.domain.exception.ChecklistErrorCode;
 import com.group3.vitamins.checklist.domain.model.ChecklistItem;
 import com.group3.vitamins.checklist.domain.repository.ChecklistRepository;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,10 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
     @Override
     public CreateChecklistItemView create(CreateChecklistItemCommand command) {
         log.info("체크리스트 항목 생성 요청 - chkBlockId={}, userId={}", command.chkBlockId(), command.userId());
+
+        if (command.content() == null || command.content().isBlank()) {
+            throw new ValidationException(ChecklistErrorCode.INVALID_CONTENT);
+        }
 
         eligibilityPolicy.assertBlockActiveOrThrow(command.chkBlockId());
         eligibilityPolicy.assertEditPermission(command.chkBlockId(), command.userId());
@@ -63,6 +68,13 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
     @Override
     public UpdateChecklistItemView update(UpdateChecklistItemCommand command) {
         log.info("체크리스트 항목 수정 요청 - chkId={}, userId={}", command.chkId(), command.userId());
+
+        if (command.content() == null && command.changeStatusTo() == null) {
+            throw new ValidationException(ChecklistErrorCode.NO_FIELD_TO_UPDATE);
+        }
+        if (command.content() != null && command.content().isBlank()) {
+            throw new ValidationException(ChecklistErrorCode.INVALID_CONTENT);
+        }
 
         ChecklistItem before = eligibilityPolicy.getActiveItemOrThrow(command.chkId());
         eligibilityPolicy.assertEditPermission(before.getChkBlockId(), command.userId());

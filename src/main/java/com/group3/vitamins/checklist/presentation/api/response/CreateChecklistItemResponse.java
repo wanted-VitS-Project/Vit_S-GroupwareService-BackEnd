@@ -20,7 +20,7 @@ public record CreateChecklistItemResponse(
         @Schema(description = "전체 항목 개수", example = "5")
         int totalCount,
 
-        @Schema(description = "체크리스트 항목 생성일")
+        @Schema(description = "체크리스트 항목 생성일", example = "2026-08-03T09:12:44")
         LocalDateTime createdAt
 ) {
 }
