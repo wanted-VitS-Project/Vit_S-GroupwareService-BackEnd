@@ -40,6 +40,7 @@ spring:
   # 🚨 그래서 실제 안전장치는 build.gradle 이다 — `spring-session-jdbc` 를 넣지 않는 것.
   #    2종이 동시에 있으면 어느 쪽이 잡힐지 설정으로 못 정한다.
   session:
+    store-type: redis
     timeout: ${SESSION_TIMEOUT:4h}     # 유휴 기준 슬라이딩. 요청이 있으면 갱신된다
     redis:
       # ⚠️ indexed 여야 사용자별 세션 조회가 된다. 여기에 두 기능이 달려 있다:
