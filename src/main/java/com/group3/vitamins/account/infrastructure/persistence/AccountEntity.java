@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
@@ -23,6 +24,9 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "account")
+// 변경된 컬럼만 UPDATE 한다 — 두 관리자가 같은 계정을 동시에 건드릴 때(예: role 변경 vs 비번 재설정)
+// 행 전체 갱신이 서로의 다른 컬럼을 덮어쓰는 lost-update 를 막는다. 같은 컬럼 동시 변경은 여전히 last-wins.
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AccountEntity {
