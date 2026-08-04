@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,11 +31,11 @@ public class AccountPasswordUpdater {
      */
     @Transactional
     public void applyResets(Map<String, String> encodedByUserId) {
-        encodedByUserId.forEach((userId, encodedPassword) -> {
-            AccountEntity account = accountRepository.findByUserId(userId)
-                    // 검증과 반영 사이에 계정이 사라진 경우. 전체를 롤백한다.
-                    .orElseThrow(() -> new NotFoundException(AccountErrorCode.ACC_NOT_FOUND));
-            account.resetPassword(encodedPassword);
-        });
+        List<AccountEntity> accounts = accountRepository.findAllByUserIdIn(encodedByUserId.keySet());
+        if (accounts.size() != encodedByUserId.size()) {
+            // 검증과 반영 사이에 계정이 사라진 경우. 전체를 롤백한다.
+            throw new NotFoundException(AccountErrorCode.ACC_NOT_FOUND);
+        }
+        accounts.forEach(account -> account.resetPassword(encodedByUserId.get(account.getUserId())));
     }
 }

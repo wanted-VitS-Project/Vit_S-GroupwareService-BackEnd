@@ -86,11 +86,13 @@ public class AccountPasswordResetService {
                 successCount++;
             } catch (MailDeliveryException e) {
                 // 비밀번호는 이미 바뀌었다 → passwordChanged=true. 반드시 재시도해야 한다.
-                failures.add(PasswordResetFailure.of(target, PasswordResetFailureReason.MAIL_SEND_FAILED));
+                failures.add(PasswordResetFailure.of(
+                        target.userId(), target.name(), PasswordResetFailureReason.MAIL_SEND_FAILED));
             }
         }
         for (AccountTargetRow target : withoutEmail) {
-            failures.add(PasswordResetFailure.of(target, PasswordResetFailureReason.EMAIL_NOT_REGISTERED));
+            failures.add(PasswordResetFailure.of(
+                    target.userId(), target.name(), PasswordResetFailureReason.EMAIL_NOT_REGISTERED));
         }
 
         log.info("비밀번호 재설정 — 요청={} 성공={} 실패={}",

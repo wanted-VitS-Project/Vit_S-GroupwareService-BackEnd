@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Set;
 
@@ -57,7 +59,7 @@ public class AccountService {
 
         AccountEntity account = loadModifiableTarget(targetUserId);
         account.changeRole(role);
-        sessionTerminator.terminateAll(targetUserId);
+        terminateSessionsAfterCommit(targetUserId);
         log.info("전역 권한 변경 — targetUserId={} role={}", targetUserId, role);
     }
 
@@ -79,7 +81,7 @@ public class AccountService {
 
         account.changeStatus(status);
         if (INACTIVE.equals(status)) {
-            sessionTerminator.terminateAll(targetUserId);
+            terminateSessionsAfterCommit(targetUserId);
         }
         log.info("계정 상태 변경 — targetUserId={} status={}", targetUserId, status);
     }
@@ -89,6 +91,27 @@ public class AccountService {
     private void requireAdmin(String currentUserRole) {
         if (!ADMIN.equals(currentUserRole)) {
             throw new ForbiddenException(AccountErrorCode.ACC_ADMIN_REQUIRED);
+        }
+    }
+
+    /**
+     * 세션 종료를 <b>트랜잭션 커밋 이후</b>로 미룬다.
+     *
+     * <p>커밋 전에 종료하면, 종료와 커밋 사이에 대상이 로그인할 경우 <b>옛 role·status 로 만든 세션이
+     * 커밋 뒤에도 살아남는다</b>(종료 대상 조회를 이미 지나갔으므로). afterCommit 에 걸어 이 틈을 없앤다.
+     *
+     * <p>트랜잭션 동기화가 없는 경우(순수 단위 테스트 등)에는 즉시 종료한다.
+     */
+    private void terminateSessionsAfterCommit(String userId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sessionTerminator.terminateAll(userId);
+                }
+            });
+        } else {
+            sessionTerminator.terminateAll(userId);
         }
     }
 

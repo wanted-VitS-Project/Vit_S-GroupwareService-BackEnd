@@ -107,7 +107,9 @@ public class AccountController {
                     description = "ACC_ADMIN_REQUIRED — ADMIN 아님 · "
                             + "ACC_ADMIN_ACCOUNT_NOT_ALLOWED — 대상에 ADMIN 계정 포함"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "ACC_NOT_FOUND — 존재하지 않는 사번 포함 (전체 거부)")
+                    description = "ACC_NOT_FOUND — 존재하지 않는 사번 포함 (전체 거부)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+                    description = "AUTH_HASHING_BUSY — 해시 동시 실행 한도 초과 (서버 과부하). 잠시 후 재시도")
     })
     @PostMapping("/password-resets")
     public ApiResponse<PasswordResetResponse> resetPasswords(Authentication authentication,

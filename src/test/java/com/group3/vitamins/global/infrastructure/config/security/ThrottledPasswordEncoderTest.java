@@ -103,6 +103,14 @@ class ThrottledPasswordEncoderTest {
         holder.join(1_000);
     }
 
+    @Test
+    @DisplayName("bulkWait 이 0 이하면 기동 시점에 막는다 — 설정 오타를 조용히 통과시키지 않는다")
+    void rejectsNonPositiveBulkWait() {
+        assertThatThrownBy(() -> new ThrottledPasswordEncoder(
+                throwingEncoder(), 1, Duration.ofMillis(50), Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // ===== 테스트 더블 =====
 
     private PasswordEncoder blockingEncoder(CountDownLatch entered, CountDownLatch release) {

@@ -2,6 +2,7 @@ package com.group3.vitamins.account.infrastructure.mail;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
@@ -25,7 +26,8 @@ public class PasswordResetMailSender {
 
     public PasswordResetMailSender(
             JavaMailSender mailSender,
-            @Value("${account.mail.from:${spring.mail.username:no-reply@vitamins.app}}") String from,
+            // 발신 주소는 SMTP 로그인 계정을 그대로 쓴다 (Gmail 은 발신자를 계정으로 강제). 별도 도메인 기본값을 두지 않는다.
+            @Value("${account.mail.from:${spring.mail.username}}") String from,
             @Value("${account.mail.login-url:http://localhost:3000/login}") String loginUrl) {
         this.mailSender = mailSender;
         this.from = from;
@@ -47,8 +49,9 @@ public class PasswordResetMailSender {
         try {
             mailSender.send(message);
             log.info("임시 비밀번호 메일 발송 완료 — to={}", maskEmail(toEmail));
-        } catch (RuntimeException e) {
-            // 원인은 로그로 남기고, 상위에는 원문 비밀번호가 딸려가지 않는 전용 예외로 던진다.
+        } catch (MailException e) {
+            // Spring 의 메일 실패는 전부 MailException 하위다. NPE 같은 프로그래밍 오류까지
+            // MAIL_SEND_FAILED 로 집계하지 않도록 범위를 좁힌다 (그런 오류는 500 으로 드러나야 한다).
             log.warn("임시 비밀번호 메일 발송 실패 — to={}", maskEmail(toEmail), e);
             throw new MailDeliveryException(e);
         }

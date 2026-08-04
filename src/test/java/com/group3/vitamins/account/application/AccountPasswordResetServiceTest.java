@@ -34,8 +34,6 @@ class AccountPasswordResetServiceTest {
 
     private AccountQueryMapper accountQueryMapper;
     private AccountPasswordUpdater accountPasswordUpdater;
-    private ThrottledPasswordEncoder passwordEncoder;
-    private TempPasswordGenerator tempPasswordGenerator;
     private PasswordResetMailSender mailSender;
     private AccountPasswordResetService service;
 
@@ -43,9 +41,10 @@ class AccountPasswordResetServiceTest {
     void setUp() {
         accountQueryMapper = Mockito.mock(AccountQueryMapper.class);
         accountPasswordUpdater = Mockito.mock(AccountPasswordUpdater.class);
-        passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
-        tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         mailSender = Mockito.mock(PasswordResetMailSender.class);
+        // 아래 둘은 setUp 에서 스텁만 하고 테스트 본문에서 참조하지 않으므로 지역 변수로 둔다.
+        ThrottledPasswordEncoder passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
+        TempPasswordGenerator tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         service = new AccountPasswordResetService(
                 accountQueryMapper, accountPasswordUpdater, passwordEncoder, tempPasswordGenerator, mailSender);
 
@@ -69,6 +68,13 @@ class AccountPasswordResetServiceTest {
     @DisplayName("userIds 가 비어 있으면 ACC_INVALID_REQUEST")
     void rejectsEmptyUserIds() {
         assertThatThrownBy(() -> service.resetPasswords("ADMIN", List.of()))
+                .satisfies(hasCode(AccountErrorCode.ACC_INVALID_REQUEST));
+    }
+
+    @Test
+    @DisplayName("userIds 가 null 이어도 ACC_INVALID_REQUEST")
+    void rejectsNullUserIds() {
+        assertThatThrownBy(() -> service.resetPasswords("ADMIN", null))
                 .satisfies(hasCode(AccountErrorCode.ACC_INVALID_REQUEST));
     }
 
