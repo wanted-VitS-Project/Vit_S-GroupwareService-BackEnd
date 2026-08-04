@@ -1,5 +1,6 @@
 ### AI 협업 문서 — 개인 로컬 (커밋 금지) ###
 .ai/local/
+.ai/docs/domain/
 .claude/settings.local.json
 
 # 우리(김동현)가 작성한 도메인 초안 문서 — 커밋하지 않는다 (타 담당 문서는 그대로 둔다)
