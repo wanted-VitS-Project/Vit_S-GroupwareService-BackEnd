@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 public record UpdateApprovalLinesResponse(
+        @Schema(description = "치환된 결재선 전체 목록")
         List<LineItem> lines
 ) {
 

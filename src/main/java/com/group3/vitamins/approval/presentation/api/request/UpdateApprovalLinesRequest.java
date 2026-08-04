@@ -15,6 +15,11 @@ public record UpdateApprovalLinesRequest(
         @Schema(description = "결재선 전체 목록(치환)")
         List<LineInput> lines
 ) {
+    /** {@code lines} 가 null 이면(요청에 필드 누락) 빈 목록으로 정규화 — 그래야 도메인 검증이 500 대신 APPROVAL_LINE_EMPTY(400)를 낸다 */
+    public UpdateApprovalLinesRequest {
+        lines = lines != null ? lines : List.of();
+    }
+
     public record LineInput(
             @Schema(description = "결재자 구분 번호(사번)", example = "EMP2024001")
             String approverId,

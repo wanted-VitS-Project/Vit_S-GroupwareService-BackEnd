@@ -59,6 +59,13 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
     }
 
     @Override
+    @Transactional
+    public Optional<ApprovalRevision> findRevisionByIdForUpdate(Long revisionId) {
+        return springDataApprovalRevisionRepository.findByIdForUpdate(revisionId).map(this::toRevision);
+    }
+
+    @Override
+    @Transactional
     public Optional<ApprovalRevision> findLatestRevision(Long approvalId) {
         return springDataApprovalRevisionRepository.findTopByApprovalIdOrderByRevisionNoDesc(approvalId)
                 .map(this::toRevision);

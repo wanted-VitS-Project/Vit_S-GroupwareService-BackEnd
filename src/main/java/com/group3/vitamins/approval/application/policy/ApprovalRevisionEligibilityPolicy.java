@@ -12,6 +12,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+import java.util.function.Function;
+
 /** 회차(revision)를 편집하는 여러 엔드포인트(APR-002 등)가 공용으로 쓰는 존재·기안자·DRAFT 검증 */
 @Component
 @RequiredArgsConstructor
@@ -37,7 +40,20 @@ public class ApprovalRevisionEligibilityPolicy {
 
     /** 회차가 이 결재({@code approvalId}) 소속인지까지 확인한다 — 아니면 못 찾은 것과 동일하게 404 */
     public ApprovalRevision getDraftRevisionOrThrow(Long approvalId, Long revisionId) {
-        ApprovalRevision revision = approvalRepository.findRevisionById(revisionId)
+        return getDraftRevisionOrThrow(approvalId, revisionId, approvalRepository::findRevisionById);
+    }
+
+    /**
+     * {@link #getDraftRevisionOrThrow(Long, Long)} 과 동일하지만 잠금 조회를 쓴다 — 결재선 전체
+     * 치환(APR-009)처럼 "확인 후 쓰기" 사이에 상신이 끼어들면 안 되는 경우에 쓴다.
+     */
+    public ApprovalRevision getDraftRevisionForUpdateOrThrow(Long approvalId, Long revisionId) {
+        return getDraftRevisionOrThrow(approvalId, revisionId, approvalRepository::findRevisionByIdForUpdate);
+    }
+
+    private ApprovalRevision getDraftRevisionOrThrow(Long approvalId, Long revisionId,
+                                                       Function<Long, Optional<ApprovalRevision>> lookup) {
+        ApprovalRevision revision = lookup.apply(revisionId)
                 .filter(r -> r.getApprovalId().equals(approvalId))
                 .orElseThrow(() -> {
                     log.warn("회차 없음 - approvalId={}, revisionId={}", approvalId, revisionId);

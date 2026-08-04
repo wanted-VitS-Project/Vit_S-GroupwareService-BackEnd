@@ -24,7 +24,10 @@ public record ResubmitApprovalRevisionResponse(
         @Schema(description = "이전 회차에서 복사된 내용", example = "8월 정산 내역입니다.")
         String content,
 
+        @Schema(description = "이전 회차에서 복사된 문서 목록")
         List<DocumentItem> documents,
+
+        @Schema(description = "반려자부터 재구성된 결재선 목록")
         List<LineItem> lines
 ) {
 

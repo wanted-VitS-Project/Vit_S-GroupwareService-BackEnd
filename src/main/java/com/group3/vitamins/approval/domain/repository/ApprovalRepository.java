@@ -20,6 +20,9 @@ public interface ApprovalRepository {
 
     Optional<ApprovalRevision> findRevisionById(Long revisionId);
 
+    /** 결재선 전체 치환(APR-009) 직전 상태 재확인용 잠금 조회 — 상신(동시 상태 변경)과의 레이스 방지 */
+    Optional<ApprovalRevision> findRevisionByIdForUpdate(Long revisionId);
+
     /** SUB-005~008 — 이 결재의 가장 최신 회차(재상신 대상 판단·멱등 확인용) */
     Optional<ApprovalRevision> findLatestRevision(Long approvalId);
 

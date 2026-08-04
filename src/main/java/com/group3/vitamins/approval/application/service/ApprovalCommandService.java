@@ -90,7 +90,8 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
-        revisionEligibilityPolicy.getDraftRevisionOrThrow(command.approvalId(), command.revisionId());
+        // 잠금 조회 — 상신(#7)이 이 트랜잭션 커밋 전까지 같은 회차의 상태를 못 바꾸게 막는다(CodeRabbit 지적 반영)
+        revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
 
         lineEligibilityPolicy.assertNotEmpty(command.lines());
         lineEligibilityPolicy.assertOrderValid(

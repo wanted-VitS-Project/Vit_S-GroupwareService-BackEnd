@@ -1,7 +1,9 @@
 package com.group3.vitamins.approval.infrastructure.persistence;
 
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,8 +12,21 @@ import java.util.Optional;
 
 public interface SpringDataApprovalRevisionRepository extends JpaRepository<ApprovalRevisionJpaEntity, Long> {
 
-    /** SUB-005~008 — 재상신 대상(REJECTED) 인지, 이미 준비된 DRAFT 회차가 있는지 판단하는 데 쓰는 최신 회차 */
+    /**
+     * SUB-005~008 — 재상신 대상(REJECTED)인지, 이미 준비된 DRAFT 회차가 있는지 판단하는 데 쓰는 최신 회차.
+     *
+     * <p>{@code @Lock(PESSIMISTIC_WRITE)} — 동시에 재상신 호출 2건이 들어오면 둘 다 "아직 REJECTED"로
+     * 읽고 각자 새 회차를 insert 시도해 {@code UNIQUE(approval_id, revision_no)} 충돌로 하나가 500 에러가
+     * 난다(`AccountJpaRepository.findByUserIdForUpdate`와 동일한 이유의 락). 뒤에 대기한 트랜잭션은 락이
+     * 풀린 뒤 방금 만들어진 DRAFT 회차를 다시 읽어 SUB-008 멱등 경로로 빠진다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ApprovalRevisionJpaEntity> findTopByApprovalIdOrderByRevisionNoDesc(Long approvalId);
+
+    /** {@code updateLines}(APR-009)가 결재선 치환 직전 회차 상태를 잠금 조회로 재확인할 때 쓴다 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM ApprovalRevisionJpaEntity r WHERE r.approvalRevisionId = :revisionId")
+    Optional<ApprovalRevisionJpaEntity> findByIdForUpdate(@Param("revisionId") Long revisionId);
 
     /**
      * DRAFT 조건을 UPDATE 문 자체에 걸어 "확인 후 쓰기" 사이의 틈을 없앤다(`text.SpringDataTextRepository`와 동일 이유).
