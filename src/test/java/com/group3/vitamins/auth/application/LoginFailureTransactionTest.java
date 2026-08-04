@@ -45,6 +45,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
+        // ⚠️ application.yml 의 `SET time_zone = '+09:00'` 은 MySQL 문법이라 H2 가 못 받는다.
+        //    여기서 비운다 — 이 테스트가 보는 건 트랜잭션 경계지 타임존이 아니다.
+        "spring.datasource.hikari.connection-init-sql=",
         "spring.flyway.enabled=false",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "security.login.lock-threshold=5",
