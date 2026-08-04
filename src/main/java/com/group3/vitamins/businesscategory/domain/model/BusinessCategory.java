@@ -34,6 +34,21 @@ public class BusinessCategory {
         return new BusinessCategory(businessCategoryId, name, code, description, createdAt, deletedAt);
     }
 
+    /** 이름을 바꾼다. */
+    public void rename(String name) {
+        this.name = name;
+    }
+
+    /** 업무코드를 바꾼다. null 을 넘기면 업무코드를 지운다. */
+    public void changeCode(String code) {
+        this.code = code;
+    }
+
+    /** 설명을 바꾼다. */
+    public void changeDescription(String description) {
+        this.description = description;
+    }
+
     /** 논리 삭제 여부. */
     public boolean isDeleted() {
         return deletedAt != null;

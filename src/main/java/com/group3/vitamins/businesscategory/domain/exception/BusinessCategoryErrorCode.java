@@ -12,6 +12,8 @@ public enum BusinessCategoryErrorCode implements ErrorCode {
             "카테고리 이름을 입력해 주세요."),
     BUSINESS_CATEGORY_FIELD_TOO_LONG("BUSINESS_CATEGORY_FIELD_TOO_LONG",
             "이름은 100자, 업무코드는 30자를 넘을 수 없습니다."),
+    BUSINESS_CATEGORY_CODE_INVALID("BUSINESS_CATEGORY_CODE_INVALID",
+            "업무코드를 빈 문자열로 보낼 수 없습니다. 값을 입력하거나 필드를 생략하세요."),
     BUSINESS_CATEGORY_NO_FIELD_TO_UPDATE("BUSINESS_CATEGORY_NO_FIELD_TO_UPDATE",
             "수정할 항목이 없습니다."),
 
