@@ -215,15 +215,20 @@ public record SignupRequest(
 > `.ai/api/` 의 md 명세들을 대조해 실제로 통일돼 있는지 먼저 확인할 것. 통일돼 있다면 그 형태를 아래에 옮겨 적고,
 > 제각각이라면 지금 통일해야 한다. (나중에 고치면 프론트 코드까지 전부 바뀐다)
 
-### 3-1. 응답 포맷 🔴
+### 3-1. 응답 포맷 ✅ (실제 코드 = 계약)
+
+> 실제 구현(`ApiResponse` · `ApiErrorResponse` · `GlobalExceptionHandler`)이 이 형태다. 필드명·구조를 바꾸지 마라.
 
 ```jsonc
 // 성공
-{ "status": 200, "message": "...", "data": { } }
+{ "httpStatus": 200, "message": "...", "data": { } }
 
 // 실패
-{ "status": 400, "message": "...", "code": "AUTH_001" }
+{ "httpStatus": 400, "message": "...", "code": "AUTH_LOGIN_FAILED" }
 ```
+
+> ⛔ 필드는 `httpStatus`(`status` 아님) · `message` · `data`(성공) / `code`(실패)다.
+> `timestamp` 는 두지 않는다 — 명세에 없다(디버깅 정보는 서버 로그).
 
 ### 3-2. URL 규칙 🔴
 
@@ -232,13 +237,11 @@ public record SignupRequest(
 - 행위는 URL 이 아니라 HTTP 메서드로 표현
 - 케이스: kebab-case (`/api/v1/user-agreements`)
 
-### 3-3. 에러 코드 체계 🔴
+### 3-3. 에러 코드 체계 ✅ 의미식으로 확정 (2026-08-04)
 
-- ~~형식: `{도메인}_{일련번호}` — 예) `AUTH_001`, `USER_014`~~
-  🔴 **이 규칙은 실제 명세와 다르다** (2026-08-04 확인). `.ai/api/` 확정 명세들은 **의미식**을 쓴다 —
-  `AUTH_LOGIN_FAILED` · `AUTH_ACCOUNT_LOCKED` · `FILE_APPROVAL_IN_PROGRESS` 등.
-  번호식으로 쓰인 도메인은 하나도 없다. **의미식으로 확정하는 것을 제안한다** (팀 합의 필요).
-- 도메인 접두어는 담당자별로 선점해 충돌을 막는다
+- 형식: **`{도메인접두어}_{의미}`** — 예) `AUTH_LOGIN_FAILED` · `AUTH_ACCOUNT_LOCKED` · `ACC_NOT_FOUND` · `DEPT_NAME_DUPLICATED` · `FILE_APPROVAL_IN_PROGRESS`.
+  ⛔ **번호식(`AUTH_001`)은 쓰지 않는다** — `.ai/api/` 명세와 실제 코드 전부 의미식이다.
+- 도메인 접두어는 담당자별로 선점해 충돌을 막는다 (`AUTH_`·`ACC_`·`DEPT_`·`EMP_`·`FILE_` 등)
 
 #### ⭐ 공통 에러 코드 — `COMMON_*` (2026-08-04 추가)
 
@@ -267,12 +270,11 @@ public record SignupRequest(
 
 ### 확정해야 할 것
 
-- [ ] `.ai/api/` md 명세들의 응답 포맷이 실제로 통일돼 있는지 대조
+- [x] `2026-08-04` **응답 포맷 확정** — `{httpStatus, message, data}` / `{httpStatus, message, code}` (실제 코드 = 계약, §3-1)
 - [x] `2026-08-03` ~~공통 응답 래퍼 클래스를 만들 것인가~~ → **`ApiResponse<T>` 로 구현됨.**
       ⚠️ Swagger 의 `io.swagger.v3.oas.annotations.responses.ApiResponse` 와 **이름이 충돌**한다
-      (컨트롤러에서 완전정규명을 써야 한다). `ApiResult` 등으로 개명 검토 필요
-- [ ] 🔴 **에러 코드 표기 방식 확정 — 번호식(`AUTH_001`) vs 의미식(`AUTH_LOGIN_FAILED`)**
-      실제 md 확정 명세들은 전부 **의미식**이다. §3-3 의 번호식 규칙이 사문화돼 있다
+      (컨트롤러에서 완전정규명을 써야 한다). `ApiResult` 등으로 개명 검토 필요 (팀 결정 대기)
+- [x] `2026-08-04` **에러 코드 표기 = 의미식 확정** (§3-3) — 번호식 폐기
 - [ ] 에러 코드 도메인 접두어 배분
 - [ ] 🔴 **`COMMON_*` 4종을 공통 명세에 반영** (§3-3) — 코드에는 이미 나가고 있는데 명세에 없다.
       프론트가 폴백 분기를 못 짠다

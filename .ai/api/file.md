@@ -20,7 +20,7 @@
 | 휴지통에서 복구 | POST | `/api/v1/files/{fileId}/restore` | 스텝 EDITOR |
 | 영구 삭제 | POST | `/api/v1/files/{fileId}/permanent-deletion` | 스텝 EDITOR |
 
-### FileVersion (3)
+### FileVersion (5)
 
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
