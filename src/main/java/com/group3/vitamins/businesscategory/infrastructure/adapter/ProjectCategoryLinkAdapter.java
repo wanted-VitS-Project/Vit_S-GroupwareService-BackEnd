@@ -17,4 +17,9 @@ public class ProjectCategoryLinkAdapter implements ProjectCategoryLinkPort {
     public Set<Long> findLinkedCategoryIds() {
         return new HashSet<>(projectCategoryLinkQueryMapper.findLinkedCategoryIds());
     }
+
+    @Override
+    public long countLinkedProjects(Long categoryId) {
+        return projectCategoryLinkQueryMapper.countLinkedProjects(categoryId);
+    }
 }

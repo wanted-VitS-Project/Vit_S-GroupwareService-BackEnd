@@ -1,7 +1,6 @@
 package com.group3.vitamins.businesscategory.presentation.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.group3.vitamins.businesscategory.application.command.CreateBusinessCategoryCommand;
 import com.group3.vitamins.businesscategory.application.command.UpdateBusinessCategoryCommand;
 import com.group3.vitamins.businesscategory.application.query.BusinessCategoryListQuery;
 import com.group3.vitamins.businesscategory.application.result.BusinessCategoryResult;
@@ -30,6 +29,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.group3.vitamins.businesscategory.application.command.DeleteBusinessCategoryCommand;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 @Tag(name = "BusinessCategory - 사업 카테고리",
         description = "사업 카테고리 조회 / 생성 / 수정 / 삭제 (담당: 동훈)")
@@ -130,6 +131,33 @@ public class BusinessCategoryController {
         return ResponseEntity.ok(
                 ApiResponse.success(BusinessCategoryResponseMessage.SUCCESS,
                         BusinessCategoryDetailResponse.from(result)));
+    }
+
+    @Operation(summary = "사업 카테고리 삭제",
+            description = "사용 중(연결된 프로젝트가 있음)이 아니면 논리 삭제한다. 하드 삭제는 하지 않는다. "
+                    + "이미 걸린 연결은 끊지 않는다 — 연결 해제는 프로젝트 쪽 API 소관이다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "BUSINESS_CATEGORY_ADMIN_ONLY — ADMIN 이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "BUSINESS_CATEGORY_NOT_FOUND — 카테고리가 없거나 이미 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "BUSINESS_CATEGORY_IN_USE — 연결된 프로젝트가 있음 (건수는 message 문구에 포함)")
+    })
+    @DeleteMapping("/{categoryId}")
+    public ResponseEntity<ApiResponse<Void>> deleteCategory(
+            @Parameter(description = "삭제할 카테고리 ID")
+            @PathVariable Long categoryId,
+            Authentication authentication
+    ) {
+        businessCategoryCommandUseCase.deleteCategory(
+                new DeleteBusinessCategoryCommand(categoryId, currentRole(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success(BusinessCategoryResponseMessage.SUCCESS));
     }
 
     /** 세션 권한(ROLE_ADMIN 형태)에서 전역 role 문자열을 꺼낸다. */

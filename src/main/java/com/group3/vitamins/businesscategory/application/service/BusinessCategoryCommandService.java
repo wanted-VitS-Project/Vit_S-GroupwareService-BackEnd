@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import com.group3.vitamins.businesscategory.application.command.DeleteBusinessCategoryCommand;
 
 @Service
 @RequiredArgsConstructor
@@ -78,6 +79,23 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
         boolean deletable = !projectCategoryLinkPort.findLinkedCategoryIds().contains(saved.getBusinessCategoryId());
 
         return BusinessCategoryResult.of(saved, deletable);
+    }
+
+    @Override
+    public void deleteCategory(DeleteBusinessCategoryCommand command) {
+        businessCategoryAdminPolicy.assertAdmin(command.role());
+
+        BusinessCategory category = businessCategoryRepository.findActiveById(command.categoryId())
+                .orElseThrow(() -> new NotFoundException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NOT_FOUND));
+
+        long linkedCount = projectCategoryLinkPort.countLinkedProjects(category.getBusinessCategoryId());
+        if (linkedCount > 0) {
+            throw new ConflictException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_IN_USE,
+                    "사용 중인 카테고리는 삭제할 수 없습니다. (프로젝트 " + linkedCount + "건)");
+        }
+
+        category.delete(LocalDateTime.now());
+        businessCategoryRepository.save(category);
     }
 
     /** 이름 형식을 검증한다. null·공백·100자 초과를 막는다. */

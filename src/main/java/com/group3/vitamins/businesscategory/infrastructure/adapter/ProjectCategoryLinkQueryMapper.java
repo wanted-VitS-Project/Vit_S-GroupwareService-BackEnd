@@ -1,6 +1,7 @@
 package com.group3.vitamins.businesscategory.infrastructure.adapter;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public interface ProjectCategoryLinkQueryMapper {
     @Select("SELECT DISTINCT business_category_id FROM project_business_category")
     List<Long> findLinkedCategoryIds();
 
-//    @Select("SELECT COUNT(*) FROM project_business_category WHERE business_category_id = #{categoryId}")
-//    long countLinkedProjects(@Param("categoryId") Long categoryId);
+    /** 특정 카테고리에 연결된 프로젝트 수. */
+    @Select("SELECT COUNT(*) FROM project_business_category WHERE business_category_id = #{categoryId}")
+    long countLinkedProjects(@Param("categoryId") Long categoryId);
 }

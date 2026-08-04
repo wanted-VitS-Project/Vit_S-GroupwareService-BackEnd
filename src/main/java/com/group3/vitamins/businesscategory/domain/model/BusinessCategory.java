@@ -54,6 +54,11 @@ public class BusinessCategory {
         return deletedAt != null;
     }
 
+    /** 논리 삭제한다. */
+    public void delete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
     public Long getBusinessCategoryId() { return businessCategoryId; }
     public String getName() { return name; }
     public String getCode() { return code; }
