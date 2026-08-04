@@ -171,7 +171,9 @@ API 를 구현할 때 Swagger 어노테이션을 **함께** 단다. 상세 규�
 - **Java**: 17 (toolchain) · **빌드**: Gradle (`gradlew`)
 - **Spring Boot**: **3.5.16** (dependency-management 1.1.7) · Gradle 9.5.1
   > 2026-07-28 에 4.0.7 → 3.5.16 하향. 스타터 명칭이 3.x 계열이므로 Boot 4 문서를 참고하지 말 것.
-- **주요 의존성**: Web(MVC) · WebFlux(WebClient 용) · Data JPA · Security · Mail · Session(Redis, JDBC) · Lombok · MySQL Connector · DevTools
+- **주요 의존성**: Web(MVC) · WebFlux(WebClient 용) · Data JPA · MyBatis · Flyway · Security · Mail · **Session(Redis)** · Lombok · MySQL Connector · DevTools
+  > ⚠️ **세션은 Redis 단일이다.** `spring-session-jdbc` 는 **의도적으로 넣지 않는다** — 2종이 동시에 있으면
+  > 어느 저장소가 잡힐지 설정으로 정할 수 없다 (아래 §5 주의사항 참고). 추가하지 마라.
 
 > 🔴 **알려진 이슈 — 테스트가 0개다**
 > PR #4 에서 `VitaminSApplicationTests` 와 `src/test/resources/` 설정이 삭제되어
@@ -180,7 +182,8 @@ API 를 구현할 때 Swagger 어노테이션을 **함께** 단다. 상세 규�
 >
 > ⚠️ **설정 파일 규칙**: 프로필 설정은 **`.yml` 확장자만** 쓴다 (`.yaml` 금지).
 > 단 `.coderabbit.yaml` 은 CodeRabbit 이 `.yaml` 만 인식하므로 예외다.
-> 세션 저장소가 Redis/JDBC 2종이므로 운영 설정에는 `spring.session.store-type` 명시가 필요하다.
+> 세션 저장소는 **클래스패스로 자동 판별**된다. `spring.session.store-type` 은 Boot 3 에서 **삭제된 프로퍼티**라
+> 적어도 무시된다 (2026-08-04 확인). 저장소를 하나로 못 박는 유일한 수단은 **`spring-session-jdbc` 를 넣지 않는 것**이다.
 - **내 역할**: DevOps (인프라 · CI/CD · 빌드 표준화 · 문서 체계)
 - **현재 마일스톤**: 파이널 모듈 — 초기 세팅 단계
 

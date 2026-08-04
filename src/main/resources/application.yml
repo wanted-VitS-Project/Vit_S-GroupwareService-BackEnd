@@ -8,6 +8,15 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 🚨 DB 세션 타임존을 앱과 맞춘다. 안 맞추면 **같은 행에 시간대가 두 개 섞인다.**
+      #    · created_at·updated_at → DB 가 CURRENT_TIMESTAMP 로 채운다 (서버 타임존)
+      #    · last_login_at·locked_until → 앱이 LocalDateTime(KST) 으로 채운다
+      #    RDS 파라미터가 UTC 라 실제로 9시간 어긋난 값이 한 행에 들어갔다 (2026-08-03 확인).
+      #    DATETIME 은 타임존을 저장하지 않으므로 나중에 어느 쪽이 KST 인지 구분할 수 없다.
+      #    ⚠️ 앱 밖(DataGrip·수동 SQL)에서 넣는 행은 여전히 서버 타임존을 따른다.
+      #       근본 해결은 RDS 파라미터그룹의 time_zone 을 Asia/Seoul 로 바꾸는 것이다 (INFRA 작업).
+      connection-init-sql: "SET time_zone = '+09:00'"
 
   jpa:
     # 스키마의 주인은 Flyway 다. Hibernate 가 손대지 않게 못 박는다.
@@ -24,8 +33,13 @@ spring:
 
   # ── 세션 (Spring Session · Redis) ──────────────────────
   # 인증 방식이 서버측 세션이므로 세션 저장소가 곧 인증 저장소다.
+  #
+  # ⚠️ `store-type` 을 쓰지 마라. Boot 3 에서 **삭제된 프로퍼티**라 적어도 조용히 무시된다
+  #    (2026-08-04 확인 — spring-boot-autoconfigure 3.5.16 메타데이터에 없음).
+  #    저장소는 **클래스패스로 자동 판별**된다.
+  # 🚨 그래서 실제 안전장치는 build.gradle 이다 — `spring-session-jdbc` 를 넣지 않는 것.
+  #    2종이 동시에 있으면 어느 쪽이 잡힐지 설정으로 못 정한다.
   session:
-    store-type: redis
     timeout: ${SESSION_TIMEOUT:4h}     # 유휴 기준 슬라이딩. 요청이 있으면 갱신된다
     redis:
       # ⚠️ indexed 여야 사용자별 세션 조회가 된다. 여기에 두 기능이 달려 있다:
@@ -40,6 +54,27 @@ spring:
     enabled: true
     locations: classpath:db/migration
     out-of-order: false
+
+  # ── 메일 (SMTP) ─────────────────────────────────────────
+  # 관리자 비밀번호 재설정 시 임시 비밀번호를 사원 이메일로 발송한다 (.ai/api/account.md §3).
+  # smtp 구조는 공통 고정값(공개 안전), 계정/비번만 환경 종속 — 코드봄바 방식과 동일.
+  # 🚨 PUBLIC 레포다. 계정·앱 비밀번호는 여기 쓰지 않는다 — env 또는 application-local.yml(gitignore)로만.
+  #    Gmail 은 MAIL_PASSWORD 가 계정 비밀번호가 아니라 "앱 비밀번호" 여야 한다.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    # ⚠️ spring.mail.properties 는 Map<String,String> 이라, 점이 포함된 JavaMail 키는
+    #    "[...]" 로 감싸 통째로 키가 되게 한다. 안 감싸면 mail.smtp.* 가 아닌 다른 키로 평탄화될 수 있다.
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
+      # 발송 지연이 요청을 오래 붙잡지 않게 타임아웃을 건다. 초과하면 MAIL_SEND_FAILED 로 집계된다.
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
 
 server:
   servlet:
@@ -101,3 +136,9 @@ cloud:
     region: ${AWS_REGION:ap-northeast-2}
     s3:
       bucket: ${S3_BUCKET_NAME}
+
+# ── 계정 관리 ────────────────────────────────────────────
+# 비밀번호 재설정 메일 링크. 발신 주소(from)는 SMTP 로그인 계정을 그대로 쓴다 (Gmail 이 발신자를 계정으로 강제).
+account:
+  mail:
+    login-url: ${APP_LOGIN_URL:http://localhost:3000/login}

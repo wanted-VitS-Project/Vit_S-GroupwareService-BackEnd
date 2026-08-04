@@ -6,11 +6,16 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface AccountJpaRepository extends JpaRepository<AccountEntity, Long> {
 
     Optional<AccountEntity> findByUserId(String userId);
+
+    /** 비밀번호 일괄 재설정용 — 대상 계정을 한 번의 {@code IN} 조회로 가져온다 (계정마다 SELECT 하지 않는다) */
+    List<AccountEntity> findAllByUserIdIn(Collection<String> userIds);
 
     /**
      * 실패 카운트를 올리기 <b>직전</b>에만 쓰는 잠금 조회 (`SELECT ... FOR UPDATE`).
