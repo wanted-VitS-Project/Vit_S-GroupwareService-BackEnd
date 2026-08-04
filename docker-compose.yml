@@ -1,0 +1,43 @@
+# 로컬 개발용 인프라 — Redis 전용
+#
+# ⚠️ MySQL 은 여기 없다. 개발 DB 는 **팀 공용 RDS** 를 쓴다 (2026-08-03).
+#    접속 정보는 커밋되지 않는다 — `application-local.yml` 에 각자 넣는다
+#    (템플릿: src/main/resources/application-local.yml.example).
+#
+# 세션 저장소만 로컬에 띄우는 이유: Redis 는 상태가 세션뿐이라 개발자별로 격리돼야 한다.
+# 공유하면 남의 로그인이 내 세션을 끊는다 (단일 세션 정책).
+#
+# 실행:  docker compose up -d
+# 중지:  docker compose down
+
+services:
+  redis:
+    # 다이제스트로 고정한다. `7.4-alpine` 은 mutable tag 라 재pull 시 내용이 바뀔 수 있다.
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    container_name: vitamins-redis
+    restart: unless-stopped
+    command:
+      # 🚨 이 옵션이 이 파일에서 가장 중요하다.
+      #    application.yml 의 spring.session.redis.repository-type=indexed 가 요구한다.
+      #    빠뜨리면 **에러 없이 조용히** 아래 두 기능이 죽는다:
+      #      ① 단일 세션 — 새 로그인이 기존 세션을 끊지 못한다
+      #      ② 계정 잠금·권한 변경 시 즉시 무효화
+      #    E=keyevent · g=generic(DEL 등) · x=expired
+      - redis-server
+      - --notify-keyspace-events
+      - Egx
+      # 세션 저장소다. 재시작으로 날아가도 재로그인하면 그만이라 영속화를 끈다.
+      - --appendonly
+      - "no"
+      - --save
+      - ""
+    ports:
+      # 🚨 반드시 loopback 에 묶는다. 호스트 IP 를 생략하면 0.0.0.0 에 바인딩돼
+      #    같은 네트워크(카페·사무실 와이파이)의 아무나 무인증 Redis 에 접근할 수 있다.
+      #    포트를 바꾸려면: REDIS_PORT=6380 docker compose up -d
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

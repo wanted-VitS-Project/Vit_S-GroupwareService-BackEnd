@@ -24,37 +24,69 @@
 | 생성 | **개발자가 코드로 제공한다.** 고객사(ADMIN 포함)는 생성·삭제할 수 없다 |
 | 저장 | 페이지 자체는 DB 테이블이 없다. **`page_permission`(사람 × 페이지 × 등급)만 저장한다** |
 | 하위 단위 | 없음. 페이지 권한 하나가 그 페이지의 모든 메뉴를 연다 |
+| 노출 vs 접근 | **분리한다.** 메뉴가 보인다고 들어갈 수 있는 것은 아니다 (`permission: NONE`) |
 
-⭐ **페이지 5개 확정** (2026-08-03 · 페이지 권한 화면 기준)
+⭐ **카탈로그 6개 확정** (2026-08-03 재확정 · **실제 사이드바 기준** · 노션 반영 완료)
 
-| pageCode | 페이지명 | 설명 |
-|---|---|---|
-| `PROJECT_MANAGEMENT` | 프로젝트 관리 | 진행 중인 프로젝트 현황 및 업무 배정 |
-| `BUDGET_STATUS` | 예산 현황 | 부서별 예산 집행 내역 및 잔액 조회 |
-| `DISCLOSURE_STATUS` | 공시 현황 | 기업 공시 및 입찰 현황 조회 |
-| `HR_APPOINTMENT` | 인사 발령 | 인사 발령 내역 및 조직도 조회 |
-| `PAYROLL` | 임금 명세서 | 월별 임금 명세서 및 연봉 계약서 |
+| pageCode | 메뉴 | 노출 | 접근 |
+|---|---|---|---|
+| `BIDDING` | **공고 조회 · 입찰 관리** | **전원** | `ADMIN`·`MASTER` 무조건 · `MEMBER` 는 **부여받아야** |
+| `FINANCE` | 재무 관리 | **전원** | 〃 |
+| `PROJECT_CREATE` | 프로젝트 생성 | `ADMIN` 제외 | 노출되면 항상 가능 |
+| `MY_PROJECT` | 내 프로젝트 | `ADMIN` 제외 | 〃 |
+| `TEMPLATE` | 템플릿 관리 | `ADMIN` 만 | 〃 |
+| `SETTINGS` | 설정 | **전원** | 〃 — 단 **하위 항목이 role 별로 다르다** |
 
-> `pageCode` 값 자체는 제가 정한 것이다. 화면에는 한글 페이지명만 있어 **코드값 확정이 필요하다.**
+🚨 **노출과 접근은 다르다** (2026-08-03 확정). `MEMBER` 에게 `BIDDING`·`FINANCE` 는 **메뉴가 보이되
+클릭하면 "권한 없음"** 이다. 기능의 존재를 알리고 관리자에게 요청할 경로를 만들기 위함이다.
+→ `permission: NONE` 으로 내려간다. 아래 §"ADMIN·MASTER…" 참고.
 
-🔴 **`global/PERMISSION.md` §3-1 · `global/PAGE.md` §1 과 충돌한다.** 그 문서들은 `page_code` 를 **`BIDDING` · `FINANCE` 2개**로 확정하고 *"늘리지 마라"* 고 적어뒀다.
->
-> **2026-08-03 결정 — 위 5개(와이어프레임 기준)로 간다.** 팀 문서 쪽을 수정해야 하며 동훈에게 요청한 상태다.
-> 확정 전까지 이 파일과 `global/` 문서가 어긋나 있음을 인지할 것.
+⭐ **`SETTINGS` 는 전원에게 열린다.** 내 정보·비밀번호 변경은 누구나 필요하다.
+하위 항목만 role 로 갈린다 — `ADMIN` 은 사원·부서·직급·권한 부여까지, 나머지는 내 정보뿐이다.
+`page_code` 를 쪼개는 게 아니라 **role 로 가르므로** "하위 단위 없음" 규칙과 부딪히지 않는다.
+
+⭐ **`ADMIN` 이 제외되는 기준은 "내 것이 생기는 화면"** 이다.
+`프로젝트 생성`·`내 프로젝트` 는 `project_member` 에 **사람으로 등록**돼야 하는데 `ADMIN` 은 시스템 계정이라 그럴 수 없다.
+조회·관리 화면(공고·입찰·재무·템플릿·설정)은 **본다.**
+
+⚠️ **`BIDDING` 하나가 메뉴 2개를 연다.** 공고 조회와 입찰 관리를 따로 부여하지 않는다
+(위 "하위 단위 없음 — 페이지 권한 하나가 그 페이지의 모든 메뉴를 연다" 규칙 그대로).
+
+🚨 **DB `page_code` 컬럼에 들어가는 값은 `BIDDING` · `FINANCE` 2개뿐이다.**
+나머지 4개는 role 로 열리므로 `page_permission` 행이 아예 생기지 않는다. 카탈로그(6) ≠ 부여 대상(2).
+
+⛔ **폐기된 5개안** — `PROJECT_MANAGEMENT` · `BUDGET_STATUS` · `DISCLOSURE_STATUS` · `HR_APPOINTMENT` · `PAYROLL`.
+와이어프레임 기준으로 지었으나 **대응 화면이 존재하지 않는다**(실제 사이드바와 하나도 일치하지 않음).
 
 ## 🚨 ADMIN · MASTER 는 부여 기록 없이도 열람된다
 
-⭐ **전역 role 은 서열형이다** — `ADMIN` > `MASTER` > `MEMBER` (`global/PERMISSION.md` §2). **`ADMIN` 이 `MASTER` 의 열람·수정을 포함한다.**
+⭐ **전역 role 은 기본적으로 서열형이다** — `ADMIN` > `MASTER` > `MEMBER` (`global/PERMISSION.md` §2).
+**단 실무 화면은 예외다** — 아래 참고.
 
 | source | 의미 | 회수 |
 |---|---|---|
-| `GRANTED` | ADMIN 이 명시적으로 부여 | 가능 |
+| `GRANTED` | ADMIN 이 명시적으로 부여 (`MEMBER` 한정) | 가능 |
 | `GLOBAL_ROLE` | **`ADMIN` 또는 `MASTER` 라서** 열람됨. 부여 기록이 없다 (`PAGE-004`) | **불가** |
+| `ADMIN_ONLY` | `ADMIN` 전용 페이지 — `TEMPLATE` (`PAGE-003`) | **불가** |
+| `DEFAULT` | 기본 노출 — `PROJECT_CREATE` · `MY_PROJECT` · `SETTINGS`, 그리고 **미부여 상태의** `BIDDING`·`FINANCE` | **불가** |
+
+⭐ **`permission` 은 3값이다** — `NONE` · `VIEWER` · `EDITOR` (2026-08-03 `NONE` 추가).
+`NONE` 은 **메뉴는 보이지만 들어갈 수 없는 상태**다. 권한 부여 화면의 3지선다(`X`/뷰어/편집)와 그대로 대응된다.
+
+> ⛔ **이전 규칙 폐기** — *"행이 없으면 그 탭이 아예 안 열린다"* 는 **노출** 기준이었으나,
+> 이제 행이 없어도 **보이고 접근만 막힌다.** 행 없음 = `permission: NONE`.
 
 > **부여 기록만 조회하면 틀린다.** 이걸 빼면 ADMIN 이 "3명에게 줬는데 왜 5명이 보나" 로 혼란을 겪는다 (`PAGE-006`). 화면의 `🔒 전역 권한 (중간관리자)` 표기가 이것이다.
 
-> ⛔ **`ADMIN_ONLY` source 는 폐기했다** (2026-08-03). 페이지 5개가 전부 권한 부여 대상이고, 관리자 화면(`P-60`·`P-61`)은 `page_code` 없이 **role 로 연다** (`PAGE.md` §1).
->
+> ⭐ **`ADMIN_ONLY` 는 되살렸다** (2026-08-03 재확정). 폐기했던 근거가 *"페이지 5개가 전부 부여 대상"* 이었는데
+> **그 5개안 자체가 폐기**됐다. 다만 해당하는 건 **`템플릿 관리` 하나뿐**이다 —
+> `설정` 은 전원에게 열리므로 `DEFAULT` 다.
+
+> 🚨 **`ADMIN` 은 `PROJECT_CREATE`·`MY_PROJECT` 만 반환되지 않는다.** 공고·입찰·재무·템플릿·설정은 본다.
+> 제외 기준은 "실무 화면" 이 아니라 **"내 것이 생기는 화면"** 이다 — 두 화면은 `project_member` 에
+> **사람으로 등록**돼야 하는데 `ADMIN` 은 시스템 계정이라 그럴 수 없다 (`global/PERMISSION.md` §2-4).
+> 즉 판정은 "서열 이상" 이 아니라 **허용 role 집합**이다.
+
 > ⛔ **`ADMIN` 계정은 목록에 나타나지 않는다.** 시스템 계정이라 사람을 고르는 조회에서 제외된다 (`EMP-003`).
 
 ---
@@ -67,18 +99,37 @@
 | 인증 필요 | Y · 전체 사용자 |
 | 요구사항 | PAGE-001~004 · USC-PAGE-001~003 |
 
-⛔ **사이드바 버튼 노출의 근거가 되는 API 다.** 여기 없는 페이지는 버튼이 뜨지 않는다.
+⛔ **사이드바 버튼 노출의 유일한 근거가 되는 API 다.** 여기 없는 페이지는 버튼이 뜨지 않는다.
+**프론트는 메뉴 표시 규칙을 갖지 않는다** — 이 응답에 있으면 그리고, 없으면 안 그린다 (2026-08-03 변경).
+판정 규칙이 서버 한 곳에만 있어야 게이트를 바꿔도 프론트가 어긋나지 않는다.
 
-⭐ **role 별 반환 범위** (2026-08-03 수정)
+⛔ **응답에 있다고 들어갈 수 있는 것은 아니다.** `permission: NONE` 은 **버튼은 그리되 접근은 막으라**는 뜻이다.
+`MEMBER` 가 부여받기 전의 `BIDDING`·`FINANCE` 가 이 상태다.
 
-| role | 반환 | permission |
+⭐ **role 별 반환 범위** (2026-08-03 재확정 · 노션 반영 완료)
+
+| pageCode | 메뉴 | `ADMIN` | `MASTER` | `MEMBER` |
+|---|---|---|---|---|
+| `BIDDING` | 공고 조회 · 입찰 관리 | `EDITOR`·`GLOBAL_ROLE` | `EDITOR`·`GLOBAL_ROLE` | **부여 시** 그 등급·`GRANTED` / **미부여 시 `NONE`·`DEFAULT`** |
+| `FINANCE` | 재무 관리 | `EDITOR`·`GLOBAL_ROLE` | `EDITOR`·`GLOBAL_ROLE` | 〃 |
+| `PROJECT_CREATE` | 프로젝트 생성 | ❌ 미반환 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
+| `MY_PROJECT` | 내 프로젝트 | ❌ 미반환 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
+| `TEMPLATE` | 템플릿 관리 | `EDITOR`·`ADMIN_ONLY` | ❌ 미반환 | ❌ 미반환 |
+| `SETTINGS` | 설정 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
+
+**`MEMBER` · 아무 부여 없음 — 5개가 내려간다**
+
+| pageCode | permission | source |
 |---|---|---|
-| `ADMIN` | **전체 페이지** | `EDITOR` · `source: GLOBAL_ROLE` |
-| `MASTER` | **전체 페이지** | 부여받았으면 그 등급, 아니면 `EDITOR` · `source: GLOBAL_ROLE` |
-| `MEMBER` | 부여받은 것만 | 부여된 등급 · `source: GRANTED` |
+| `BIDDING` | **`NONE`** | `DEFAULT` |
+| `FINANCE` | **`NONE`** | `DEFAULT` |
+| `PROJECT_CREATE` · `MY_PROJECT` · `SETTINGS` | `EDITOR` | `DEFAULT` |
+
+프론트는 `NONE` 을 회색 처리하거나 클릭 시 "권한이 없습니다" 를 띄운다.
 
 > `MASTER` 는 *"모든 프로젝트·페이지에 들어가 **보고 고칠 수 있다**"* (`PERMISSION.md` §2). 열람만이 아니라 편집까지다.
 > 이전 명세의 "열람 하한선(`VIEWER`)" 은 **폐기**했다.
+> ⚠️ role 게이트로 열리는 페이지는 `VIEWER`/`EDITOR` 구분이 없어 **항상 `EDITOR`** 로 내려간다.
 
 **Response**
 
@@ -86,8 +137,8 @@
 |---|---|---|
 | `data.content[].pageCode` | String | 페이지 코드 (`NOT NULL`) |
 | `data.content[].name` | String | 페이지 표시명 (`NOT NULL`) |
-| `data.content[].permission` | String | `VIEWER` · `EDITOR` |
-| `data.content[].source` | String | `GRANTED` · `GLOBAL_ROLE` |
+| `data.content[].permission` | String | **`NONE`** · `VIEWER` · `EDITOR` — `NONE` 은 노출되나 접근 불가 |
+| `data.content[].source` | String | `GRANTED` · `GLOBAL_ROLE` · `ADMIN_ONLY` · `DEFAULT` |
 
 | 코드 | code | 설명 |
 |---|---|---|
@@ -105,6 +156,10 @@
 | 요구사항 | PAGE-005 · USC-PAGE-004 |
 
 ⛔ **페이지 권한 화면의 목록이다.** 고정 카탈로그이므로 페이지 자체를 추가·삭제하는 API 는 없다.
+
+⛔ **`my/pages` 와 반환 집합이 다르다.** 여기는 **부여 가능한 페이지만** 나온다 — `BIDDING` · `FINANCE` **2개**.
+role 로 여는 페이지(`SETTINGS`·`TEMPLATE`·`PROJECT_CREATE`·`MY_PROJECT`)는 **부여 대상이 아니므로 목록에 없다.**
+부여할 수 없는 것을 부여 화면에 띄우면 안 된다.
 
 **Response**
 
@@ -145,7 +200,7 @@
 | `data.content[].departmentPath` | String | `기술본부 / 개발팀` (`null` 허용) |
 | `data.content[].jobPositionName` | String | 직급명 (`null` 허용) |
 | `data.content[].role` | String | 전역 권한. `전역 권한 (중간관리자)` 문구에 쓴다 |
-| `data.content[].permission` | String | `VIEWER` · `EDITOR` |
+| `data.content[].permission` | String | `VIEWER` · `EDITOR` — 접근 가능자 목록이므로 `NONE` 은 나오지 않는다 |
 | `data.content[].source` | String | `GRANTED` · `GLOBAL_ROLE` |
 | `data.content[].revocable` | boolean | `GLOBAL_ROLE` 은 `false` |
 | `data.grantedCount` · `data.globalRoleCount` | int | 집계 |
@@ -220,7 +275,7 @@
 
 ```json
 { "httpStatus": 200, "message": "페이지 권한을 회수했습니다. 전역 권한으로 열람은 계속 가능합니다",
-  "data": { "pageCode": "PROJECT_MANAGEMENT", "userId": "EMP002",
+  "data": { "pageCode": "FINANCE", "userId": "EMP002",
     "stillAccessible": true, "accessSource": "GLOBAL_ROLE" } }
 ```
 
@@ -233,18 +288,21 @@
 
 ## 미확정
 
-- [ ] 🔴 **`global/PERMISSION.md` · `global/PAGE.md` 의 `page_code` 를 2개 → 5개로 수정** (동훈 요청 중)
-- [ ] `pageCode` 코드값 확정 — 위 5개는 제가 지은 값이다. 화면에는 한글 페이지명만 있다
-- [ ] `PAGE-003`(인사관리 ADMIN 전용) 요구사항 폐기 처리 — `ADMIN_ONLY` 가 없어졌으므로 요구사항도 정리 필요
+- [x] `2026-08-03` ~~`global/` 문서의 `page_code` 를 5개로 수정~~ → **5개안 폐기.** 실제 사이드바 기준 카탈로그 6개로 재확정하고 `global/PERMISSION.md`·`PAGE.md` 도 함께 갱신 완료
+- [x] `2026-08-03` `pageCode` 코드값 확정 — 실제 메뉴에 대응하는 6개
+- [x] `2026-08-03` ~~`PAGE-003` 폐기 처리~~ → **유지.** `ADMIN_ONLY` 가 되살아났다 (`SETTINGS`·`TEMPLATE`)
+- [ ] 🔴 **`홈` · `알림` · `결재관리` · `전사현황` 이 사이드바에 없다** — `PAGE.md` 는 최상위 탭 8개라고 적혀 있다.
+      특히 **`전사현황` 이 없으면 `MASTER` 서열이 여는 전용 화면이 하나도 없다.** 상단바 별도 여부 확인 필요
+- [ ] `내 프로젝트` 도 `ADMIN` 제외가 맞는지 최종 확인 (현재 제외로 기재)
 
 ## 팀 문서와의 관계
 
 | 항목 | `global/PERMISSION.md` | 이 파일 | 결론 |
 |---|---|---|---|
-| `page_code` 개수 | 2개 (`BIDDING`·`FINANCE`) | **5개** | 우리 것 → 팀 문서 수정 |
-| role 서열 | `ADMIN` > `MASTER` > `MEMBER` | **동일** | ✅ 팀 문서 수용 |
-| ADMIN 이 페이지를 뚫나 | 뚫는다 | **동일** | ✅ 팀 문서 수용 |
+| `page_code` 개수 | `BIDDING`·`FINANCE` | **동일** (부여 대상 기준) | ✅ **합의 완료** — 카탈로그는 6, 부여 대상은 2 |
+| role 서열 | `ADMIN` > `MASTER` > `MEMBER` | **기본은 동일, 실무 화면은 예외** | ⚠️ **팀 문서 수정 완료** (`ADMIN` 제외 규칙) |
+| ADMIN 이 페이지를 뚫나 | 뚫는다 | **실무 화면은 안 뚫는다 — 반환 자체가 안 된다** | 우리 것 → 팀 문서 수정 완료 |
 | ADMIN 겸직 | 겸직 가능 (사원에게 부여) | **불가 · 시스템 계정** | 우리 것 → 팀 문서 수정 |
 | 부여 주체 | ADMIN | **동일** | ✅ |
-| `NONE` 값 | 두지 않는다 (행 없음이 차단) | **동일** | ✅ |
+| `NONE` 값 | 두지 않았다 (행 없음이 차단) | **`NONE` 도입** — 노출/접근 분리 | 우리 것 → 팀 문서 수정 완료 |
 | 3지선다 `X`/뷰어/편집 | `X` 는 행 삭제 | **동일** (회수 API) | ✅ |
