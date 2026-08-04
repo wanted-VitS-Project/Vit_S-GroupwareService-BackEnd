@@ -170,7 +170,9 @@ API 를 구현할 때 Swagger 어노테이션을 **함께** 단다. 상세 규�
 - **Java**: 17 (toolchain) · **빌드**: Gradle (`gradlew`)
 - **Spring Boot**: **3.5.16** (dependency-management 1.1.7) · Gradle 9.5.1
   > 2026-07-28 에 4.0.7 → 3.5.16 하향. 스타터 명칭이 3.x 계열이므로 Boot 4 문서를 참고하지 말 것.
-- **주요 의존성**: Web(MVC) · WebFlux(WebClient 용) · Data JPA · Security · Mail · Session(Redis, JDBC) · Lombok · MySQL Connector · DevTools
+- **주요 의존성**: Web(MVC) · WebFlux(WebClient 용) · Data JPA · MyBatis · Flyway · Security · Mail · **Session(Redis)** · Lombok · MySQL Connector · DevTools
+  > ⚠️ **세션은 Redis 단일이다.** `spring-session-jdbc` 는 **의도적으로 넣지 않는다** — 2종이 동시에 있으면
+  > 어느 저장소가 잡힐지 설정으로 정할 수 없다 (아래 §5 주의사항 참고). 추가하지 마라.
 
 > 🔴 **알려진 이슈 — 테스트가 0개다**
 > PR #4 에서 `VitaminSApplicationTests` 와 `src/test/resources/` 설정이 삭제되어
