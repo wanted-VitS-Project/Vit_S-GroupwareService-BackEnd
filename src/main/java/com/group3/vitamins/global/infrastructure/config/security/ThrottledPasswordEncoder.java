@@ -32,14 +32,18 @@ public class ThrottledPasswordEncoder implements PasswordEncoder {
 
     private final PasswordEncoder delegate;
     private final Semaphore permits;
-    private final Duration waitTimeout;
+    private final Duration loginWait;
+    private final Duration bulkWait;
 
     /**
      * @param permitCount 동시 해시 허용 개수 (= 메모리 상한을 정하는 값)
-     * @param waitTimeout permit 을 못 잡았을 때 기다릴 시간. <b>무한 대기는 금지</b> —
+     * @param loginWait   로그인·단건 경로에서 permit 을 못 잡았을 때 기다릴 시간. <b>무한 대기는 금지</b> —
      *                    Tomcat 스레드가 전부 줄에 묶여 다른 API 까지 멈춘다
+     * @param bulkWait    요청 1건이 해시 N 회를 도는 경로(비밀번호 일괄 재설정)의 대기 한도.
+     *                    로그인보다 길게 잡아 몰릴 때 성급히 503 을 내지 않게 한다
      */
-    public ThrottledPasswordEncoder(PasswordEncoder delegate, int permitCount, Duration waitTimeout) {
+    public ThrottledPasswordEncoder(PasswordEncoder delegate, int permitCount,
+                                    Duration loginWait, Duration bulkWait) {
         // 설정 오타 한 줄로 인증 전체가 마비된다. permit 이 0 이면 모든 로그인이 503 이다.
         // 조용히 뜨는 것보다 기동을 막는 편이 안전하다.
         if (delegate == null) {
@@ -48,23 +52,35 @@ public class ThrottledPasswordEncoder implements PasswordEncoder {
         if (permitCount < 1) {
             throw new IllegalArgumentException("permitCount 는 1 이상이어야 한다: " + permitCount);
         }
-        if (waitTimeout == null || waitTimeout.isNegative() || waitTimeout.isZero()) {
-            throw new IllegalArgumentException("waitTimeout 은 0 보다 커야 한다: " + waitTimeout);
+        if (isNonPositive(loginWait) || isNonPositive(bulkWait)) {
+            throw new IllegalArgumentException(
+                    "loginWait · bulkWait 은 0 보다 커야 한다: loginWait=" + loginWait + " bulkWait=" + bulkWait);
         }
         this.delegate = delegate;
         // fair = true : 붐빌 때 나중에 온 요청이 새치기해 먼저 온 사용자가 계속 밀리는 것을 막는다
         this.permits = new Semaphore(permitCount, true);
-        this.waitTimeout = waitTimeout;
+        this.loginWait = loginWait;
+        this.bulkWait = bulkWait;
     }
 
     @Override
     public String encode(CharSequence rawPassword) {
-        return withPermit(() -> delegate.encode(rawPassword));
+        return withPermit(loginWait, () -> delegate.encode(rawPassword));
     }
 
     @Override
     public boolean matches(CharSequence rawPassword, String encodedPassword) {
-        return withPermit(() -> delegate.matches(rawPassword, encodedPassword));
+        return withPermit(loginWait, () -> delegate.matches(rawPassword, encodedPassword));
+    }
+
+    /**
+     * 일괄 재설정용 해시. {@link #encode} 와 <b>같은 세마포어</b>를 쓰되 대기 한도만 {@code bulkWait} 다.
+     *
+     * <p>🚨 별도 인코더 빈으로 분리하면 세마포어가 2개가 되어 동시 해시 상한이 {@code 2 × permit} 으로
+     * 뚫린다 — 힙 안전밸브가 무너진다. 그래서 메서드로만 노출하고 permit 은 공유한다.
+     */
+    public String encodeBulk(CharSequence rawPassword) {
+        return withPermit(bulkWait, () -> delegate.encode(rawPassword));
     }
 
     /**
@@ -79,7 +95,7 @@ public class ThrottledPasswordEncoder implements PasswordEncoder {
         return delegate.upgradeEncoding(encodedPassword);
     }
 
-    private <T> T withPermit(Supplier<T> task) {
+    private <T> T withPermit(Duration waitTimeout, Supplier<T> task) {
         boolean acquired = false;
         try {
             acquired = permits.tryAcquire(waitTimeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -97,5 +113,9 @@ public class ThrottledPasswordEncoder implements PasswordEncoder {
                 permits.release();
             }
         }
+    }
+
+    private static boolean isNonPositive(Duration duration) {
+        return duration == null || duration.isNegative() || duration.isZero();
     }
 }
