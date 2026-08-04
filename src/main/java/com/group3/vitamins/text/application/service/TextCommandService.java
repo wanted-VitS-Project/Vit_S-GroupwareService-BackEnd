@@ -43,7 +43,7 @@ public class TextCommandService implements TextCommandUseCase {
         //             new ActivityFieldChange("content", beforeContent, saved.getContent())
         //     );
         //     activityEventPublisher.publish(
-        //             ActivityOccurredEvent.modified(blockId, saved.getTxtId(), command.userId(), changes)
+        //             ActivityOccurredEvent.modified(saved.getBlockId(), saved.getTxtId(), command.userId(), changes)
         //     );
         // }
 

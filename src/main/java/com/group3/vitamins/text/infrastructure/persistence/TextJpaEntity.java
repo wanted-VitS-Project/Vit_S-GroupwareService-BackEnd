@@ -23,6 +23,10 @@ public class TextJpaEntity {
     @Column(name = "txt_id")
     private Long txtId;
 
+    // FK 아님. 공용 block 테이블 참조용 값만 저장 (동훈님 쪽에서 채워줌) — 통합 스키마 기준 NOT NULL
+    @Column(name = "block_id", nullable = false)
+    private Long blockId;
+
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 

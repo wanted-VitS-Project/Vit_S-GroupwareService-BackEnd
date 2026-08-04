@@ -36,11 +36,11 @@ public class TextController {
 
     @Operation(summary = "텍스트 본문 수정", description = "텍스트 블록의 본문 전체를 사용자가 수정한 내용으로 교체한다.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "텍스트 본문 수정 성공 (TXT-002)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "편집 권한이 없습니다. (TXT-004)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (TXT-006)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "다시 로그인해주세요. (TXT-007)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류입니다. (TXT-008)")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "텍스트 본문 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "편집 권한이 없습니다. (TXT-001)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (TXT-002)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "다시 로그인해주세요. (TXT-003)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류입니다. (TXT-004)")
     })
     @PatchMapping("/{txtId}")
     public ResponseEntity<ApiResponse<UpdateTextContentResponse>> updateTextContent(

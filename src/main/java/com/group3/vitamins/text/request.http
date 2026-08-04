@@ -4,13 +4,13 @@ Content-Type: application/json
 
 {
     "userId": "EMP001",
-    "password": "실제 비밀번호로 교체"
+    "password": "Test1234!"
 }
 
 ### 텍스트 블록 수정
-PATCH localhost:8080/api/v1/blocks/texts/3
+PATCH localhost:8080/api/v1/blocks/texts/1
 Content-Type: application/json
 
 {
-    "content" : "**텍스트 블록** 테스트"
+    "content" : "**텍스트 블록** 테스트2"
 }

@@ -30,7 +30,11 @@ public class CatalogTextAdapter implements TextRepository {
         entity.applyContent(text.getContent());
         entity.applyDeletedAt(text.getDeletedAt());
 
-        return toDomain(entity);
+        // saveAndFlush 로 즉시 flush 해야 @UpdateTimestamp(updated_at)가 flush 시점에 채워진 값을
+        // 엔티티에서 바로 읽을 수 있다. flush 안 하면 트랜잭션 커밋 때까지 null 로 남는다.
+        TextJpaEntity flushed = springDataTextRepository.saveAndFlush(entity);
+
+        return toDomain(flushed);
     }
 
     @Override
@@ -43,6 +47,7 @@ public class CatalogTextAdapter implements TextRepository {
     private Text toDomain(TextJpaEntity entity) {
         return Text.reconstruct(
                 entity.getTxtId(),
+                entity.getBlockId(),
                 entity.getContent(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),

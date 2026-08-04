@@ -32,9 +32,9 @@ public class TextHandlerService {
 
         // TODO: 활동 로그(블록 삭제) 이벤트 발행 — 활동 로그 인프라(ActivityOccurredEvent 등)가 아직
         //       실제로 만들어지지 않아 주석으로만 남긴다. resourceId=null, 기록 정보=삭제 전 Block명 (§5.1 Block 공통).
-        //       blockId 는 이 핸들러 시그니처에 없어서 이벤트에 같이 실어줘야 할지 확인 필요.
+        //       blockId 는 text.getBlockId() 로 바로 읽으면 된다 (컬럼으로 저장돼 있음).
         // activityEventPublisher.publish(
-        //         ActivityOccurredEvent.deleted(blockId, null, userId, blockTitle)
+        //         ActivityOccurredEvent.deleted(text.getBlockId(), null, userId, blockTitle)
         // );
     }
 }
