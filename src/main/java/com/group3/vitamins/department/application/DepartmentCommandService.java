@@ -1,0 +1,168 @@
+package com.group3.vitamins.department.application;
+
+import com.group3.vitamins.account.domain.exception.AccountErrorCode;
+import com.group3.vitamins.department.domain.exception.DepartmentErrorCode;
+import com.group3.vitamins.department.infrastructure.persistence.DepartmentEntity;
+import com.group3.vitamins.department.infrastructure.persistence.DepartmentJpaRepository;
+import com.group3.vitamins.department.infrastructure.persistence.mapper.DepartmentMapper;
+import com.group3.vitamins.department.presentation.api.dto.response.DepartmentCreateResponse;
+import com.group3.vitamins.department.presentation.api.dto.response.DepartmentUpdateResponse;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 부서 생성·수정·삭제 유스케이스 (`.ai/api/department.md` §2·§3·§4).
+ *
+ * <p>세 API 모두 <b>ADMIN 전용</b>이다. Security 필터는 인증(세션 유무)만 보므로
+ * ADMIN 판정은 여기서 코드({@code ACC_ADMIN_REQUIRED})와 함께 명시적으로 한다 —
+ * 명세가 일반 403 이 아니라 도메인 코드를 요구하기 때문이다 (account 도메인과 같은 방식).
+ *
+ * <p>쓰기는 JPA, 사원 집계처럼 {@code employee} 를 가로지르는 조회는 MyBatis({@link DepartmentMapper}) 다.
+ * 조회(트리 조립)는 {@link DepartmentQueryService} 가 맡는다.
+ */
+@Slf4j
+@Service
+@Transactional
+@RequiredArgsConstructor
+public class DepartmentCommandService {
+
+    /** 부서명 최대 길이 (`.ai/api/department.md` §2·§3) */
+    private static final int MAX_NAME_LENGTH = 50;
+    private static final String ADMIN = "ADMIN";
+
+    private final DepartmentJpaRepository departmentRepository;
+    private final DepartmentMapper departmentMapper;
+
+    /**
+     * 부서 생성 (`.ai/api/department.md` §2).
+     *
+     * <p>{@code parentId} 유무로 최상위/하위가 갈린다. 하위 부서를 상위로 지정하면 계층이 3단이 되므로
+     * {@code DEPT_MAX_DEPTH_EXCEEDED}(409) 로 막는다. 부서명은 <b>전체에서</b> 유니크해야 한다 —
+     * MySQL 은 {@code parent_id} 가 {@code NULL} 인 행끼리 중복을 허용해 최상위 부서명 중복이 막히지 않기 때문.
+     */
+    public DepartmentCreateResponse create(String currentUserRole, String name, Long parentId) {
+        requireAdmin(currentUserRole);
+        validateName(name);
+
+        String parentName = null;
+        if (parentId != null) {
+            // 부모 행을 배타 잠금으로 읽는다 — 삭제(findByIdForUpdate)와 잠금 순서를 맞춰,
+            // "부모가 동시에 삭제돼 저장 시 FK 위반(→ 이름중복으로 오분류)" 레이스를 원천 차단한다.
+            // 잠금을 쥐고 있는 동안 부모는 삭제되지 못하므로, 커밋 시점까지 parentId 참조가 유효하다.
+            DepartmentEntity parent = departmentRepository.findByIdForUpdate(parentId)
+                    .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_PARENT_NOT_FOUND));
+            if (!parent.isRoot()) {
+                throw new ConflictException(DepartmentErrorCode.DEPT_MAX_DEPTH_EXCEEDED);
+            }
+            parentName = parent.getName();
+        }
+        if (departmentRepository.existsByName(name)) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
+        }
+
+        // existsByName 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_name 이
+        // 최종 방어선이므로, 그 위반은 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
+        // 부모 행을 위에서 잠갔으므로 이 시점의 제약 위반은 부서명 유니크뿐이다(FK 위반 불가) → 매핑이 결정적.
+        // 즉시 감지하려 flush 한다.
+        DepartmentEntity saved;
+        try {
+            saved = departmentRepository.saveAndFlush(DepartmentEntity.create(name, parentId));
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED, e);
+        }
+        log.info("부서 생성 — departmentId={} name={} parentId={}", saved.getDepartmentId(), name, parentId);
+        return new DepartmentCreateResponse(
+                saved.getDepartmentId(), saved.getName(), parentId, parentName, 0, 0);
+    }
+
+    /**
+     * 부서명 수정 (`.ai/api/department.md` §3).
+     *
+     * <p>⛔ 상위 부서는 바꾸지 않는다 — 부서 이동 기능이 없다. 이름만 바꾼다.
+     * 유니크 검증은 자기 자신을 제외해, 이름을 그대로 다시 저장해도 중복으로 튕기지 않게 한다.
+     */
+    public DepartmentUpdateResponse rename(String currentUserRole, Long departmentId, String name) {
+        requireAdmin(currentUserRole);
+        validateName(name);
+
+        DepartmentEntity department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_NOT_FOUND));
+        if (departmentRepository.existsByNameAndDepartmentIdNot(name, departmentId)) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
+        }
+
+        department.rename(name);
+        // 검사~커밋 틈의 동시 중복은 uk_department_name 이 잡는다 → 500 대신 409 로 변환 (즉시 감지하려 flush).
+        try {
+            departmentRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED, e);
+        }
+        log.info("부서명 수정 — departmentId={} name={}", departmentId, name);
+        return new DepartmentUpdateResponse(
+                department.getDepartmentId(), department.getName(),
+                department.getParentId(), resolveParentName(department.getParentId()));
+    }
+
+    /**
+     * 부서 삭제 (`.ai/api/department.md` §4).
+     *
+     * <p>차단 조건이 둘이다 — 직속 사원이 있거나 하위 부서가 있으면 지우지 않는다. 하위 부서를
+     * CASCADE 로 함께 지우면 팀 하나 지우려다 본부 전체가 사라진다. 소프트 삭제가 아니라 행을 제거한다.
+     * 프론트가 "왜 막혔는지" 를 보여줄 수 있게 {@code message} 에 개수를 담는다.
+     */
+    public void delete(String currentUserRole, Long departmentId) {
+        requireAdmin(currentUserRole);
+
+        // 부서 행을 배타 잠금으로 읽는다 — 아래 차단 검사와 삭제 사이에 다른 트랜잭션이 이 부서로
+        // 사원 배정·하위 부서 생성을 끼워 넣어 FK 위반(500)이 나는 레이스를 막는다 (`findByIdForUpdate` javadoc).
+        DepartmentEntity department = departmentRepository.findByIdForUpdate(departmentId)
+                .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_NOT_FOUND));
+
+        long directEmployees = departmentMapper.countDirectEmployees(departmentId);
+        if (directEmployees > 0) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_HAS_EMPLOYEES,
+                    "소속 사원 " + directEmployees + "명이 있어 삭제할 수 없습니다.");
+        }
+        long children = departmentRepository.countByParentId(departmentId);
+        if (children > 0) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_HAS_CHILDREN,
+                    "하위 부서 " + children + "개가 있어 삭제할 수 없습니다.");
+        }
+
+        departmentRepository.delete(department);
+        log.info("부서 삭제 — departmentId={}", departmentId);
+    }
+
+    // ===== 공통 =====
+
+    private void requireAdmin(String currentUserRole) {
+        if (!ADMIN.equals(currentUserRole)) {
+            throw new ForbiddenException(AccountErrorCode.ACC_ADMIN_REQUIRED);
+        }
+    }
+
+    /** 부서명은 비어 있거나 50자를 넘을 수 없다 (`.ai/api/department.md` §2·§3). */
+    private void validateName(String name) {
+        if (name == null || name.isBlank() || name.length() > MAX_NAME_LENGTH) {
+            throw new ValidationException(DepartmentErrorCode.DEPT_INVALID_REQUEST);
+        }
+    }
+
+    /** 상위 부서명을 조회한다. 최상위 부서면 {@code null}. FK 로 부모 존재가 보장되지만 방어적으로 둔다. */
+    private String resolveParentName(Long parentId) {
+        if (parentId == null) {
+            return null;
+        }
+        return departmentRepository.findById(parentId)
+                .map(DepartmentEntity::getName)
+                .orElse(null);
+    }
+}
