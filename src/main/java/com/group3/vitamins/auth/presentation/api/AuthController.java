@@ -69,7 +69,9 @@ public class AuthController {
 
         UserProfileRow profile = authService.login(request.userId(), request.password());
         authSessionManager.openSession(
-                profile.userId(), profile.role(), profile.mustChangePassword(), httpRequest, httpResponse);
+                profile.userId(), profile.role(),
+                profile.termsAgreementRequired(), profile.mustChangePassword(),
+                httpRequest, httpResponse);
 
         return ApiResponse.success("로그인 성공", LoginResponse.from(profile));
     }
@@ -95,6 +97,23 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<MyInfoResponse> myInfo(@AuthenticationPrincipal String userId) {
         return ApiResponse.success("조회 성공", MyInfoResponse.from(authService.loadProfile(userId)));
+    }
+
+    @Operation(summary = "약관 동의",
+            description = "최초 로그인 시 이용약관·개인정보처리방침에 동의한다(1회성). 동의 후 비밀번호 변경으로 넘어간다. "
+                    + "재설정 후 로그인은 약관을 다시 받지 않으며, ADMIN 은 대상이 아니다. 요청 본문 없음.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "동의 완료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료")
+    })
+    @PostMapping("/terms-agreements")
+    public ApiResponse<Void> agreeTerms(@AuthenticationPrincipal String userId,
+                                        HttpServletRequest httpRequest) {
+        authService.agreeTerms(userId);
+        // 약관 게이트 해제. 세션은 유지한다 — 이후 비밀번호 변경 게이트가 이어받는다
+        authSessionManager.clearTermsAgreementFlag(httpRequest);
+        return ApiResponse.success("약관에 동의했습니다.");
     }
 
     @Operation(summary = "비밀번호 변경",

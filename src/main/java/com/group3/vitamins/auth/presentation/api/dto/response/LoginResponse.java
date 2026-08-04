@@ -20,6 +20,10 @@ public record LoginResponse(
         @Schema(description = "전역 권한. 서열형 ADMIN > MASTER > MEMBER", example = "MEMBER")
         String role,
 
+        @Schema(description = "AGREED · REQUIRED. REQUIRED 면 약관 동의 전까지 다른 기능 사용 불가(비번 변경보다 먼저)",
+                example = "REQUIRED")
+        String termsStatus,
+
         @Schema(description = "NORMAL · RESET_REQUIRED. RESET_REQUIRED 면 변경 전까지 다른 기능 사용 불가",
                 example = "RESET_REQUIRED")
         String passwordStatus,
@@ -39,6 +43,7 @@ public record LoginResponse(
                 row.userId(),
                 row.name(),
                 row.role(),
+                row.termsStatus(),
                 row.passwordStatus(),
                 row.departmentName(),
                 row.departmentPath(),

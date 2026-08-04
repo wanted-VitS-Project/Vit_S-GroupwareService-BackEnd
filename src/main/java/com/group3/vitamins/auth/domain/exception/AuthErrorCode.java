@@ -33,6 +33,8 @@ public enum AuthErrorCode implements ErrorCode {
      * 위반 시 응답을 정하지 않았다. 프론트가 "비밀번호 변경 화면으로 보내기"로 분기하려면 코드가 필요하다.
      */
     AUTH_PASSWORD_RESET_REQUIRED("AUTH_PASSWORD_RESET_REQUIRED", "초기 비밀번호를 먼저 변경해 주세요."),
+    /** 최초 로그인 약관 게이트 — 동의 전까지 다른 기능 사용 불가 (`auth.md` §5 · §6-7). 비밀번호 변경보다 먼저다 */
+    AUTH_TERMS_AGREEMENT_REQUIRED("AUTH_TERMS_AGREEMENT_REQUIRED", "약관에 먼저 동의해 주세요."),
 
     // --- 비밀번호 변경 ---
     AUTH_CURRENT_PASSWORD_REQUIRED("AUTH_CURRENT_PASSWORD_REQUIRED", "현재 비밀번호를 입력해 주세요."),
