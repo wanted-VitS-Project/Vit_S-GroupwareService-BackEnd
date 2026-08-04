@@ -92,6 +92,14 @@ public class AccountEntity {
         return !"ACTIVE".equals(status);
     }
 
+    public String getRole() {
+        return role;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
     public boolean isLocked(LocalDateTime now) {
         return lockedUntil != null && lockedUntil.isAfter(now);
     }
