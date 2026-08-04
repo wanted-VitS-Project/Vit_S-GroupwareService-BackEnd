@@ -5,16 +5,19 @@ import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.activitylog.infrastructure.persistence.ActivityLogEntity;
 import com.group3.vitamins.activitylog.infrastructure.persistence.ActivityLogJpaRepository;
+import com.group3.vitamins.activitylog.infrastructure.persistence.JpaActivityLogRecorder;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.infrastructure.event.SpringDomainEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,9 +36,12 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@EntityScan(basePackageClasses = ActivityLogEntity.class)
+@EnableJpaRepositories(basePackageClasses = ActivityLogJpaRepository.class)
 @Import({
         ActivityLogEventListener.class,
         ActivityLogWriter.class,
+        JpaActivityLogRecorder.class,
         SpringDomainEventPublisher.class,
         ActivityLogEventListenerTest.TestBeans.class
 })
