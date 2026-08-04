@@ -18,12 +18,14 @@ public class MyBatisVitamateReader implements VitamateBlockReader, VitamateFileR
 
     private final VitamateAnalysisMapper mapper;
 
+    // 요청자가 접근할 수 있는 AI 블록인지 확인하고 프로젝트 컨텍스트를 조회한다.
     @Override
     public Optional<VitamateBlockContext> findAccessibleVitamateBlock(Long blockId, String userId) {
         return Optional.ofNullable(mapper.findAccessibleVitamateBlock(blockId, userId))
                 .map(this::toContext);
     }
 
+    // 요청한 파일 버전 ID가 모두 같은 프로젝트의 완료된 파일 버전인지 확인한다.
     @Override
     public boolean existsAllCompletedFileVersionsInProject(Long projectId, List<Long> fileVersionIds) {
         if (fileVersionIds == null || fileVersionIds.isEmpty()) {
@@ -35,6 +37,7 @@ public class MyBatisVitamateReader implements VitamateBlockReader, VitamateFileR
         return matchedCount == distinctRequestCount;
     }
 
+    // MyBatis Row 객체를 application 포트의 컨텍스트 값으로 변환한다.
     private VitamateBlockContext toContext(VitamateBlockContextRow row) {
         return new VitamateBlockContext(
                 row.getBlockId(),

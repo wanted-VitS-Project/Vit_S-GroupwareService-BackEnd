@@ -20,6 +20,7 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStore {
     private final VitamateAnalysisJpaRepository analysisRepository;
     private final VitamateAnalysisDocumentJpaRepository documentRepository;
 
+    // 같은 멱등성 키로 이미 생성된 분석 요청이 있는지 조회한다.
     @Override
     public Optional<ExistingAnalysis> findExistingAnalysis(Long vitamateBlockId, String requestedBy, String idempotencyKey) {
         return analysisRepository.findByVitamateBlockIdAndRequestedByAndIdempotencyKey(
@@ -30,9 +31,10 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStore {
                 .map(this::toExistingAnalysis);
     }
 
+    // 새 분석 요청을 PENDING 상태로 저장하고 unique 충돌을 즉시 감지할 수 있게 flush한다.
     @Override
     public CreateVitamateAnalysisResult savePendingAnalysis(NewAnalysis analysis) {
-        VitamateAnalysisEntity savedAnalysis = analysisRepository.save(VitamateAnalysisEntity.pending(
+        VitamateAnalysisEntity savedAnalysis = analysisRepository.saveAndFlush(VitamateAnalysisEntity.pending(
                 analysis.vitamateBlockId(),
                 analysis.requestedBy(),
                 analysis.idempotencyKey(),
@@ -48,6 +50,7 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStore {
         );
     }
 
+    // 분석 요청에 선택된 파일 버전 목록을 연결 테이블에 저장한다.
     @Override
     public void saveAnalysisDocuments(Long analysisId, List<Long> fileVersionIds) {
         if (fileVersionIds == null || fileVersionIds.isEmpty()) {
@@ -61,6 +64,7 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStore {
         documentRepository.saveAll(documents);
     }
 
+    // JPA 엔티티를 application 계층에서 쓰는 기존 분석 요청 값으로 변환한다.
     private ExistingAnalysis toExistingAnalysis(VitamateAnalysisEntity analysis) {
         return new ExistingAnalysis(
                 analysis.getId(),

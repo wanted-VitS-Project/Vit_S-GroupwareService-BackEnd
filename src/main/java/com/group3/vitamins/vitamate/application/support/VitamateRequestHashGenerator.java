@@ -16,12 +16,13 @@ public class VitamateRequestHashGenerator {
 
     private final Sha256HashGenerator sha256HashGenerator;
 
-
+    // 분석 요청의 비교 기준 문자열을 만든 뒤 SHA-256 해시로 변환한다.
     public String generate(Long blockId, List<Long> fileVersionIds, String prompt) {
         String rawValue = createCanonicalValue(blockId, fileVersionIds, prompt);
         return sha256HashGenerator.generate(rawValue);
     }
 
+    // 파일 버전 순서를 정렬해 같은 요청이면 항상 같은 원문 문자열이 나오게 만든다.
     private String createCanonicalValue(Long blockId, List<Long> fileVersionIds, String prompt) {
         String sortedFileVersionIds = fileVersionIds.stream()
                 .sorted()

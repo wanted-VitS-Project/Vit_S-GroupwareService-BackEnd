@@ -42,6 +42,10 @@ public class VitamateAnalysisDocumentEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    // 분석 요청 ID와 파일 버전 ID로 분석 대상 문서 엔티티를 만든다.
     public static VitamateAnalysisDocumentEntity of(Long analysisId, Long fileVersionId) {
         VitamateAnalysisDocumentEntity entity = new VitamateAnalysisDocumentEntity();
         entity.analysisId = analysisId;

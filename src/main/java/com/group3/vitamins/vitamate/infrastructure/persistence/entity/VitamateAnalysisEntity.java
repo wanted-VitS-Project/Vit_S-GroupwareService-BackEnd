@@ -86,6 +86,7 @@ public class VitamateAnalysisEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // 새 분석 요청을 최초 PENDING 상태 엔티티로 생성한다.
     public static VitamateAnalysisEntity pending(
             Long vitamateBlockId,
             String requestedBy,

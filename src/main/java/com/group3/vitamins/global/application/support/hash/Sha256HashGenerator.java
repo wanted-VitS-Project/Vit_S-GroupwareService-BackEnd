@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 @Component
 public class Sha256HashGenerator {
 
+    // 원문 문자열을 SHA-256으로 해싱한 뒤 16진수 문자열로 반환한다.
     public String generate(String rawValue) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -20,6 +21,7 @@ public class Sha256HashGenerator {
         }
     }
 
+    // 해시 바이트 배열을 저장 가능한 16진수 문자열로 바꾼다.
     private String toHex(byte[] bytes) {
         StringBuilder builder = new StringBuilder(bytes.length * 2);
 

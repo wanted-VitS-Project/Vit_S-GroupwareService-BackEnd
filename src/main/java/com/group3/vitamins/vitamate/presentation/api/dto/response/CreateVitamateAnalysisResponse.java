@@ -19,6 +19,7 @@ public record CreateVitamateAnalysisResponse(
         LocalDateTime requestedAt
 ) {
 
+    // application 결과 객체를 HTTP 응답 DTO로 변환한다.
     public static CreateVitamateAnalysisResponse from(CreateVitamateAnalysisResult result) {
         return new CreateVitamateAnalysisResponse(
                 result.analysisId(),

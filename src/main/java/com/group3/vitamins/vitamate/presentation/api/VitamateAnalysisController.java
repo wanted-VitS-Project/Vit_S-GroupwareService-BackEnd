@@ -34,6 +34,7 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "VITAMATE_IDEMPOTENCY_CONFLICT — 같은 키로 다른 요청")
     })
     @PostMapping("/blocks/{blockId}/vitamate/analyses")
+    // HTTP 요청값을 command로 변환하고 분석 요청 생성 서비스를 호출한다.
     public ResponseEntity<ApiResponse<CreateVitamateAnalysisResponse>> createAnalysis(
             @AuthenticationPrincipal String userId,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
