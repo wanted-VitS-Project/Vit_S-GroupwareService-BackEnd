@@ -1,11 +1,9 @@
 # 📎 File · FileVersion API
 
-**상태**: `✅ 확정` — 노션 반영 완료 (2026-08-03). 이탈 금지 규칙 전면 적용 (`../API.md` §0)
-**최종 업데이트**: 2026-08-03 · **담당**: 김동현
-**노션**: `VitaSAPI` · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
+**최종 업데이트**: 2026-08-04 · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
 
-> ✅ **노션 반영 완료 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
-> 변경이 필요하면 코드를 고치지 말고 **노션을 먼저 고친 뒤** 이 사본을 맞춘다.
+> 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
+> 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 > 파일을 `프로젝트` Domain 에 둔 이유 — 파일은 블록에 붙고 권한도 스텝을 따른다. `Block`·`IssueBlock` 과 같은 계열이다.
 
 ## 엔드포인트
@@ -30,6 +28,7 @@
 | **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
 | 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
 | 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
+| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/blocks/{blockId}/file-versions` | 스텝 접근 권한 |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
 
@@ -494,3 +493,56 @@
 ## 화면 미확보
 
 휴지통 화면과 업로드 진행 화면 목업을 아직 못 받았다. 받은 것은 파일 블록 목록 · 뷰어 · 버전 이력 3개뿐이다.
+
+---
+
+## 11. 파일 버전 목록 조회 (비타메이트 분석 선택용)
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/blocks/{blockId}/file-versions` |
+| 인증 필요 | Y · 스텝 접근 권한 (열람 이상) |
+| 요구사항 | VER-013 · USC-VER (비타메이트 결합) |
+| 요청 출처 | AI/비타메이트 — 분석 요청 화면에서 **분석 대상 파일 버전을 선택**. 분석은 `fileVersionId` 목록 기준으로 저장·수행 |
+
+> 버전 이력 조회(§9)와 필드가 겹치지만, **AI 선택용 별도 read model**이다 — `previewable`·`indexStatus` 가 추가된다.
+
+**Request Parameter**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `blockId` (path) | Long | Y | 분석 선택 대상 블록 |
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data[].fileId` | Long | 논리 파일 ID |
+| `data[].name` | String | 문서 표시명 (`fileName`) |
+| `data[].fileVersionId` | Long | **분석 저장 기준 키** |
+| `data[].versionNo` | int | 버전 차수 |
+| `data[].latest` | boolean | 최신 버전 여부 (과거 버전도 목록에 포함) |
+| `data[].originalFileName` | String | 원본 파일명 |
+| `data[].extension` | String | 확장자 |
+| `data[].sizeBytes` | long | 바이트 크기 |
+| `data[].pageCount` | int | 페이지 수 (`null` 허용) |
+| `data[].previewable` | boolean | 미리보기 가능 여부 |
+| `data[].completedAt` | String | 업로드 완료 시각 |
+| `data[].indexStatus` | String | 인덱싱 상태 (`embeddingStatus`) — `file_index` 출처 |
+
+**정책**
+- ⛔ **업로드 완료된 버전만**(`upload_status = COMPLETED`) 반환한다.
+- ⛔ **휴지통 파일은 기본 제외**(`deleted_at IS NULL`).
+- ✅ **과거 버전도 목록에 포함**한다 (같은 파일의 이전 버전도 선택 가능).
+- 인덱싱 상태가 `COMPLETED` 인 버전만 프론트에서 **선택 가능**하게 처리한다 (목록에는 다 내려주되 프론트가 비활성화).
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 스텝 접근 권한 없음 |
+| 404 | `FILE_BLOCK_NOT_FOUND` | 블록 없음/삭제됨 |
+
+> 🔴 **AI 팀 합의 필요** — `indexStatus`(`embeddingStatus`)는 `file_index`·`document_chunk`(**AI 담당 테이블**)에서 온다.
+> 내 file 도메인이 조인해 내려줄지, AI 서버가 별도로 붙일지 **경계·enum 값 확정 필요**.
+> 🟠 경로 스코프(블록 단위)와 `previewable` 판정 기준(PDF 여부 등)은 잠정값 — 분석 선택 UI 확정 시 조정.
