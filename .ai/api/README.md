@@ -84,7 +84,7 @@ Domain 은 `인사`(35개) · `프로젝트`(파일 12개) — **총 47개** (`f
 | 에러 코드 | **`{도메인}_{의미}`** — `AUTH_LOGIN_FAILED` · `FILE_SIZE_EXCEEDED`. 번호식(`AUTH_001`)이 아니다 |
 | 페이징 | `data.content[]` · `data.page` · `data.size` · `data.totalElements` · `data.totalPages` |
 
-**에러 코드 접두어 (김동현 선점)** — 요구사항 ID 접두어와 동일하게 맞춰 `FILE_003` 에러에서 `FILE-003` 요구사항으로 바로 찾아갈 수 있게 했다.
+**에러 코드 접두어 (김동현 선점)** — 에러 코드 접두어(`FILE_`)를 요구사항 ID 접두어(`FILE-`)와 맞춰, `FILE_SIZE_EXCEEDED` 에러가 어느 도메인(`FILE-*` 요구사항) 소속인지 바로 알 수 있게 했다. ⛔ 에러 코드는 의미식이다 — 번호식(`FILE_003`)이 아니다.
 
 `AUTH_` · `ACC_` · `EMP_` · `DEPT_` · `POS_` · `GRP_` · `PAGE_` · `FILE_`
 
