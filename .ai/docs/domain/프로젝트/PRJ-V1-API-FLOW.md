@@ -1,8 +1,8 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 흐름 · FE/BE 책임 분담
 
+**최종 업데이트**: 2026-08-05 (⭐ §6-1 블록 조회 — *"LEFT JOIN 한 방"* → **타입별 배치 쿼리**로 정정. `checklist`·`image` 가 1:N 이라 한 방이 물리적으로 불가능했다)
 **최종 업데이트**: 2026-08-04 (⭐ 전 엔드포인트 로컬 기준 `✅ 확정` — `AGENTS.md` §3 완화, 노션 동기화는 게이트 아님)
 **최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
-**최종 업데이트**: 2026-08-03 (ERD 확정본 반영 — `clientName`·계약금액 해소 · `block.owner` 신설 · 잠금 4종)
 **담당**: 동훈
 **목록**: [`PRJ-V1-API.md`](PRJ-V1-API.md) · **상세**: [`PRJ-V1-API-DETAIL.md`](PRJ-V1-API-DETAIL.md) · **요구사항**: [`PRJ-V1.md`](PRJ-V1.md) · **스키마**: [`ERD.md`](ERD.md)
 
@@ -825,8 +825,12 @@ FE (P-22A · 블록 탭)                            BE
 스텝 상세 진입 (상세 조회와 병렬 호출)
     │
     ├─ GET /api/v1/steps/10/blocks ───────→ ① 인증 검증 → 401 · 스텝 접근 → 403 · 404
-    │                                       ② block + 타입별 상세 **LEFT JOIN 한 방** (BLK-006)
-    │                                          ⛔ 타입 수만큼 쿼리를 늘리지 않는다
+    │                                       ② ⭐ 배치 조회 (BLK-006 · 2026-08-05 정정)
+    │                                          쿼리1 block ⋈ employee (담당자명)
+    │                                          쿼리2 issue_block ⋈ issue 집계 WHERE block_id IN (…)
+    │                                          쿼리3+ 스텝에 존재하는 타입별 상세 IN (…)
+    │                                          ⛔ 블록 개수에 비례하는 쿼리 금지 (N+1)
+    │                                          ⚠️ 어댑터 없는 타입은 detail: null (부분 실패 격리)
     │                                       ③ deleted_at IS NULL 만
     │                                       ④ 연결 이슈 완료/전체 집계
     │                                          └ 삭제된 블록은 집계에서 제외 (BLK-011)

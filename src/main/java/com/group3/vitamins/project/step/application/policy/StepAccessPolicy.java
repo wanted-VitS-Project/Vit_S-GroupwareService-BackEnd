@@ -43,4 +43,16 @@ public class StepAccessPolicy {
         }
         return permission;
     }
+
+    /** 편집용. EDITOR 가 아니면 STEP_EDIT_DENIED 로 거부한다. */
+    public MemberPermission requireEditable(String role, MemberPermission projectPermission,
+                                            MemberPermission override) {
+        MemberPermission permission = requireAccess(role, projectPermission, override);
+        if (permission != MemberPermission.EDITOR) {
+            log.warn("스텝 편집 권한 없음 - role={}, project={}, override={}",
+                    role, projectPermission, override);
+            throw new ForbiddenException(StepErrorCode.STEP_EDIT_DENIED);
+        }
+        return permission;
+    }
 }

@@ -17,7 +17,9 @@ public enum StepErrorCode implements ErrorCode {
     STEP_NOT_FOUND("STEP_NOT_FOUND",
             "스텝을 찾을 수 없습니다."),
     STEP_ACCESS_DENIED("STEP_ACCESS_DENIED",
-            "스텝에 접근할 권한이 없습니다.");
+            "스텝에 접근할 권한이 없습니다."),
+    STEP_EDIT_DENIED("STEP_EDIT_DENIED",
+            "스텝을 편집할 권한이 없습니다.");
 
     private final String code;
     private final String message;

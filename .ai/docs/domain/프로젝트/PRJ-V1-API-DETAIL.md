@@ -1,8 +1,8 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 상세 명세
 
+**최종 업데이트**: 2026-08-05 (⭐ **블록 계열 확정 8건** — `detail` shape(TEXT·CHECKLIST) 정의 · **`PATCH /api/v1/blocks/{blockId}` 신설**(제목·담당자 수정 경로가 아예 없었다) · `BLOCK_TITLE_TOO_LONG`·`BLOCK_UPDATE_FIELD_REQUIRED` 신설 · `title`·`content` nullable 명시. 🚨 프론트 계약 추가 — 통보 필요)
 **최종 업데이트**: 2026-08-05 (⭐ **`inProgressIssueCount` 신설** — 스텝 목록·상세. FE 스텝 진행바 3색(완료/진행 중/진행 전)을 그리려면 필요하다. 🚨 프론트 계약 추가 — 통보 필요)
 **최종 업데이트**: 2026-08-05 (⭐ `STEP_NAME_TOO_LONG` 신설(생성·수정) — `step.name VARCHAR(200)` 초과가 500 으로 샜다)
-**최종 업데이트**: 2026-08-04 (⭐ 생성 계열 7건 `httpStatus` `200`→`201` 정정(상태코드 표와 모순) · `STAGE_NAME_TOO_LONG` 신설)
 **담당**: 동훈
 **목록 문서**: [`PRJ-V1-API.md`](PRJ-V1-API.md) · **요구사항**: [`PRJ-V1.md`](PRJ-V1.md) · **흐름도**: [`PRJ-V1-API-FLOW.md`](PRJ-V1-API-FLOW.md)
 
@@ -2265,7 +2265,21 @@ DELETE /api/v1/steps/10/permissions/E2024007
 GET /api/v1/steps/10/blocks
 ```
 
-블록과 타입별 상세가 **한 번에** 내려온다. `LEFT JOIN` 한 방으로 처리하고 타입 수만큼 쿼리를 늘리지 않는다 (BLK-006).
+블록과 타입별 상세가 **한 응답에** 내려온다 (BLK-006).
+
+⭐ **2026-08-05 정정** — 기존 문구는 *"`LEFT JOIN` 한 방으로 처리하고 타입 수만큼 쿼리를 늘리지 않는다"* 였는데
+**물리적으로 불가능하다.** `checklist`(1:N) · `image`(1:N) 를 조인하면 행이 곱해지고, `GROUP BY` 로 접으려면
+`text.content`(TEXT 컬럼)를 `GROUP BY` 에 넣어야 해서 MySQL 8 `ONLY_FULL_GROUP_BY` 에 걸린다.
+
+**실제 규칙 — 블록 개수에 비례하는 쿼리를 만들지 않는다 (N+1 금지).** 쿼리 수는 타입 수에만 비례한다:
+
+| 쿼리 | 내용 |
+| --- | --- |
+| 1 | `block` ⋈ `employee`(담당자명) `WHERE step_id = ? AND deleted_at IS NULL ORDER BY row_index, sort_order` |
+| 2 | `issue_block` ⋈ `issue` 집계 `WHERE block_id IN (…)` |
+| 3+ | **스텝에 실제로 존재하는 타입별** 상세 배치 조회 `WHERE {상세PK} IN (…)` |
+
+TEXT·CHECKLIST 만 있는 스텝이면 4쿼리다. 10종이 다 붙어도 최대 12쿼리 고정이며 **블록 개수와 무관하다.**
 
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
@@ -2276,18 +2290,48 @@ GET /api/v1/steps/10/blocks
 | `blocks` | List\<Object\> | 블록 목록 (`rowIndex`·`sortOrder` 순) |
 | `blocks[].blockId` | Long | 블록 ID |
 | `blocks[].type` | String | 블록 타입 (ERD enum **10값** · ⛔ `MEMO` 폐기) |
-| `blocks[].title` | String | 블록 제목 |
+| `blocks[].title` | String | 블록 제목. ⭐ **`null` 일 수 있다 (2026-08-05 명시)** — 블록 추가 직후는 제목이 비어 있고 `PATCH /api/v1/blocks/{blockId}` 로 나중에 채운다. FE 가 타입별 placeholder 를 그린다 (서버가 기본 제목을 넣지 않는다 — 넣으면 사용자가 지울 수 없다) |
 | `blocks[].owner` | Object | 블록 담당자 (`userId` **사번**·`name`). 미지정이면 `null` (BLK-012) |
 | `blocks[].rowIndex` | int | 행 인덱스 |
 | `blocks[].sortOrder` | int | 행 내 순서 |
 | `blocks[].colSpan` | int | 열 병합 수 (1~3) |
-| `blocks[].detail` | Object | 타입별 상세 (타입마다 구조가 다르다) |
+| `blocks[].detail` | Object | 타입별 상세. **타입마다 구조가 다르다** — 아래 §타입별 `detail` 참조. ⚠️ **상세 어댑터가 아직 없는 타입은 `null`** (한 타입이 미구현이어도 나머지 블록은 정상 응답한다) |
 | `blocks[].linkedIssueTotal` | int | 연결된 이슈 수 |
 | `blocks[].linkedIssueDone` | int | 연결된 이슈 중 완료 수 |
 
 ⚠️ **`status` 필드가 없다.** 블록은 자체 진행 상태를 갖지 않는다 (BLK-005).
-⛔ **`typeId` 를 내리지 않는다.** `block.type_id` 는 존재하지만 **다형성 내부 식별자**라 프론트에 노출하지 않는다 ([`ERD.md`](ERD.md) §5-2).
+⛔ **`typeId` 를 최상위에 내리지 않는다.** `block.type_id` 는 존재하지만 **다형성 내부 식별자**라 프론트에 노출하지 않는다 ([`ERD.md`](ERD.md) §5-2).
+⭐ **단 상세 PK 는 `detail` 안에 내린다 (2026-08-05).** 타입별 수정 API 가 상세 PK 로 키를 잡기 때문이다 —
+`PATCH /api/v1/blocks/texts/{txtId}` · `POST /api/v1/blocks/checklists/{chkBlockId}/items`.
+**FE 가 그 키를 얻을 다른 경로가 없다** (타입별 조회 API 가 존재하지 않는다).
 ⛔ **`projectId` 도 내리지 않는다.** `block.project_id` 는 폐기됐다 ([`ERD.md`](ERD.md) §0-13).
+
+### ⭐ 타입별 `detail` (2026-08-05 신설)
+
+10종 중 **2종만 확정**이다. 나머지 8종은 타입 담당자가 같은 형태로 추가한다 (`BLOCK.md` §5 담당 표).
+
+**`TEXT`**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `detail.txtId` | Long | `text.txt_id` (= `block.type_id`). `PATCH /api/v1/blocks/texts/{txtId}` 의 키 |
+| `detail.content` | String | 본문. **⭐ 마크다운 문자열** (HTML 아님 — sanitize 인프라가 없다). **블록 추가 직후는 `null`** 이며, `null` 은 *"한 번도 저장하지 않음"* 을 뜻한다 (수정 API 가 `null` 을 400 으로 막으므로 되돌아올 수 없는 상태다) |
+
+**`CHECKLIST`**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `detail.chkBlockId` | Long | `checklist_block.chk_block_id` (= `block.type_id`). `POST /api/v1/blocks/checklists/{chkBlockId}/items` 의 키 |
+| `detail.totalCount` | int | 전체 항목 수 (`deleted_at IS NULL` 만) |
+| `detail.completedCount` | int | 완료 항목 수 |
+| `detail.items` | List\<Object\> | 항목 목록. ⭐ **`chk_id` 오름차순(생성순)** — `checklist` 에 `sort_order` 컬럼이 없어 이것이 유일한 정렬이다. **드래그 재정렬은 컬럼 추가 전까지 불가** (`BLOCK.md` §4-3 · 담당 정림) |
+| `detail.items[].chkId` | Long | 항목 ID. `PATCH`·`DELETE /api/v1/blocks/checklists/items/{chkId}` 의 키 |
+| `detail.items[].content` | String | 항목 내용 |
+| `detail.items[].isCompleted` | boolean | 완료 여부 |
+
+> ⭐ **필드명은 타입별 수정 API 응답과 동일하게 맞췄다** — `chkBlockId`·`chkId`·`content`·`completedCount`·`totalCount`·`isCompleted`.
+> FE 가 **조회 응답과 수정 응답을 한 렌더러로** 처리할 수 있다.
+> 블록 추가 직후 `CHECKLIST` 는 `{ chkBlockId, totalCount: 0, completedCount: 0, items: [] }` 다.
 
 ## Success Example
 ```
@@ -2298,15 +2342,51 @@ GET /api/v1/steps/10/blocks
     "blocks": [
       {
         "blockId":15,
-        "type":"FILE",
-        "title":"제안서 문서",
-        "owner": { "userId":"E2024001", "name":"김용준" },
+        "type":"CHECKLIST",
+        "title":"제안서 작성 체크리스트",
+        "owner": { "userId":"E2024001", "name":"김민수" },
         "rowIndex":0,
         "sortOrder":0,
-        "colSpan":2,
-        "detail": { "fileCount":3 },
-        "linkedIssueTotal":5,
-        "linkedIssueDone":2
+        "colSpan":1,
+        "detail": {
+          "chkBlockId":3,
+          "totalCount":5,
+          "completedCount":2,
+          "items": [
+            { "chkId":11, "content":"중점 평가항목 도출",   "isCompleted":true  },
+            { "chkId":12, "content":"제안요청서 분석 완료", "isCompleted":true  },
+            { "chkId":13, "content":"경쟁사 분석 자료 수집", "isCompleted":false }
+          ]
+        },
+        "linkedIssueTotal":2,
+        "linkedIssueDone":0
+      },
+      {
+        "blockId":16,
+        "type":"TEXT",
+        "title":"핵심 요구사항 메모",
+        "owner":null,
+        "rowIndex":0,
+        "sortOrder":1,
+        "colSpan":1,
+        "detail": {
+          "txtId":7,
+          "content":"통합 관제 시스템과 AI 기반 데이터 분석 모듈 필수 포함.\n\n## 경쟁사 분석 자료 수집\n\n- 핵심 메시지 설정"
+        },
+        "linkedIssueTotal":1,
+        "linkedIssueDone":1
+      },
+      {
+        "blockId":17,
+        "type":"TEXT",
+        "title":null,
+        "owner":null,
+        "rowIndex":1,
+        "sortOrder":0,
+        "colSpan":1,
+        "detail": { "txtId":8, "content":null },
+        "linkedIssueTotal":0,
+        "linkedIssueDone":0
       }
     ]
   }
@@ -2347,10 +2427,10 @@ GET /api/v1/steps/10/blocks
 | 파라미터명 | 타입 | 필수 여부 | 설명 |
 | --- | --- | --- | --- |
 | `type` | String | Y | 블록 타입. **ERD `block.type` enum 안에서만** (아래 표) |
-| `title` | String | N | 블록 제목 (**최대 200자**. 입금확인 블록에서는 **회차명**) |
-| `owner` | String | N | 블록 담당자 **사번** (`block.owner VARCHAR(20)`). **선택 입력** (BLK-012) |
-| `rowIndex` | int | N | 행 인덱스. 미지정 시 맨 아래 |
-| `sortOrder` | int | N | 행 내 순서 |
+| `title` | String | N | 블록 제목 (**최대 200자**. 입금확인 블록에서는 **회차명**). ⭐ **미지정이면 `null` 로 생성되고** `PATCH /api/v1/blocks/{blockId}` 로 나중에 채운다 — "블록 추가 → 빈 카드 → 제목 입력" 흐름을 위한 것이다 |
+| `owner` | String | N | 블록 담당자 **사번** (`block.owner VARCHAR(20)`). **선택 입력** (BLK-012). 미지정이면 `null`, 이후 `PATCH` 로 지정 |
+| `rowIndex` | int | N | 행 인덱스. 미지정 시 맨 아래 (`max(row_index) + 1`) |
+| `sortOrder` | int | N | 행 내 순서. ⭐ **미지정 시 그 행 안의 `max(sort_order) + 1`** (2026-08-05 명시 — 기본값이 없어 구현이 갈렸다) |
 | `colSpan` | int | N | 열 병합 수 (1~3). 기본 1 |
 
 **`type` 허용값 — ✅ 10종 (2026-08-03 · `MEMO` 폐기 · `BID_NOTICE` 신설)**
@@ -2379,6 +2459,22 @@ GET /api/v1/steps/10/blocks
 블록은 **항상 스텝에 붙는다** (BLK-002). ⛔ **`block.project_id` 는 없다** (2026-08-03 폐기) — 프로젝트는 `step` 을 조인해 얻는다.
 ⭐ `block.type_id` 는 **있다** (2026-08-03 재확정 · 다형성 양방향 ID). 시스템이 상세 행 INSERT 후 채운다 — **응답에 `typeId` 를 내리지 않는다** (내부 식별자).
 ⛔ **확장형 JSON 스키마 입력 경로가 없다** (BLK-001).
+
+### ⭐ 생성은 3단계 한 트랜잭션이다 (2026-08-05 확정)
+
+상세 테이블은 전부 `block_id BIGINT NOT NULL` 이고 `block.type_id` 만 `NULL` 허용이다. **순서가 스키마로 강제돼 있다.**
+
+```
+① block  INSERT (type_id = NULL)              → block_id
+② {상세} INSERT (block_id = ①)                → 상세 PK
+③ block  UPDATE SET type_id = ②
+```
+
+- **⛔ 순서를 뒤집을 수 없다.** `text` 를 먼저 넣으려면 `text.block_id` 를 nullable 로 바꿔야 하는데, 그러면 `UNIQUE(block_id)` 가 NULL 중복을 허용해 **고아 행과 생성 중 상태를 구분할 수 없게 된다.**
+- **FK 가 없으므로 롤백이 유일한 고아 방어다.** ①②③ 을 반드시 한 트랜잭션에 둔다.
+- ②에서 만드는 것은 **빈 행**이다. 내용은 타입별 수정 API 가 나중에 채운다 (`TEXT` → `content = NULL`, `CHECKLIST` → `checklist_block` 만 만들고 항목 0개).
+- **⭐ 상세 행을 만들지 않는 타입은 `type_id` 를 `NULL` 로 둔다 — 3종이다**: `FILE`(복합 PK) · `PERFORMANCE_VIEW`(상세 테이블 없음) · **`TAX_INVOICE_VIEW`**(`tax_invoice_id NOT NULL` 이라 계산서 연결 전에는 행을 만들 수 없다 — *"행이 없으면 `WAITING`"* TXL-008 이 그 의미다).
+- 상세 행 **삭제도 같은 트랜잭션**이다. ⛔ **이벤트로 처리하지 않는다** — 상세는 독립 생명주기가 없고(`block_id NOT NULL`) 삭제 판정 주인이 `block.deleted_at`(BLK-007)이라, 유실되면 회수할 주체가 없다.
 
 ## Request Example
 ```
@@ -2432,7 +2528,8 @@ GET /api/v1/steps/10/blocks
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 201 | Created | - | 블록 생성 성공 |
-| 400 | Bad Request | `BLOCK_TYPE_INVALID` | 정의된 **10종** 밖의 타입 (`MEMO` 포함) |
+| 400 | Bad Request | `BLOCK_TYPE_INVALID` | 정의된 **10종** 밖의 타입 (`MEMO` 포함) · ⭐ **`BID_NOTICE` 도 여기로 떨어진다** (전환 API 만 생성한다 — 아래 참조) |
+| 400 | Bad Request | ⭐ `BLOCK_TITLE_TOO_LONG` | `title` 이 200자 초과 (`block.title VARCHAR(200)`) — **2026-08-05 신설.** 없으면 DB 1406 이 500 으로 샌다 |
 | 400 | Bad Request | `BLOCK_COL_SPAN_INVALID` | `colSpan` 이 1~3 범위 밖 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `STEP_EDIT_DENIED` | 스텝 편집 권한 없음 |
@@ -2443,6 +2540,85 @@ GET /api/v1/steps/10/blocks
 
 > ⚠️ **`TAX_INVOICE_VIEW` 도 스텝당 1개다** (`TAX-V1.md` TXL-001B · `PAY-V1.md` INV-07C).
 > 이 API 가 두 타입 모두 스텝당 1개를 검사해야 한다 → [`../재무관리/FIN-V1-API.md`](../재무관리/FIN-V1-API.md) §1-2
+
+---
+
+# PATCH `/api/v1/blocks/{blockId}` — 블록 제목·담당자 수정 ⭐신설 (2026-08-05)
+
+## 기본 정보
+| 항목 | 내용 |
+| --- | --- |
+| API 명 | 블록 제목·담당자 수정 |
+| Method | PATCH |
+| URL | `/api/v1/blocks/{blockId}` |
+| 인증 필요 여부 | Y |
+| 권한 | 스텝 EDITOR |
+| 요구사항 | BLK-012 |
+
+> 🚨 **신설 이유** — 기존 명세에 블록 **제목·담당자를 수정하는 경로가 아예 없었다.** `blocks/layout` 은 배치 3필드만 받는다.
+> 그런데 실제 유스케이스는 *"블록 추가 → 빈 카드 생성 → 제목 입력 후 저장"* 이라 생성 시점에 제목이 없다.
+> 이 엔드포인트가 없으면 **블록 제목을 영구히 바꿀 수 없다.**
+
+## Path Parameter
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `blockId` | Long | Y | 수정할 블록 ID |
+
+## Request Parameter
+없음
+
+## Request Body
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `title` | String | N | 블록 제목 (**최대 200자**) |
+| `owner` | String | N | 블록 담당자 **사번** |
+
+⭐ **부분 수정 규칙**: **보낸 필드만 반영한다.** `null` 을 **명시해서 보내면 해제**다 (담당자 해제를 표현할 수단이 이것뿐이다).
+필드를 **생략**하면 기존 값을 유지한다. 둘 다 생략하면 400 이다.
+
+⛔ **`type`·`rowIndex`·`sortOrder`·`colSpan` 은 이 엔드포인트로 바꾸지 않는다.**
+타입은 생성 후 변경 불가(상세 테이블이 달라진다), 배치는 `PATCH .../blocks/layout` 담당이다.
+
+## Request Example
+```
+{ "title":"핵심 요구사항 메모", "owner":"E2024001" }
+```
+
+## Response Parameter
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
+| `data` | Object | 응답 데이터 |
+| `blockId` | Long | 블록 ID |
+| `title` | String | 반영된 제목. 해제했으면 `null` |
+| `owner` | Object | 반영된 담당자 (`userId`·`name`). 해제했으면 `null` |
+| `updatedAt` | LocalDateTime | 수정 일시 |
+
+## Success Example
+```
+{
+  "httpStatus":200,
+  "message":"요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "blockId":16,
+    "title":"핵심 요구사항 메모",
+    "owner": { "userId":"E2024001", "name":"김민수" },
+    "updatedAt":"2026-08-05T14:20:00"
+  }
+}
+```
+
+## Status Code
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | - | 블록 수정 성공 |
+| 400 | Bad Request | `BLOCK_TITLE_TOO_LONG` | `title` 이 200자 초과 |
+| 400 | Bad Request | `BLOCK_UPDATE_FIELD_REQUIRED` | `title`·`owner` 를 **둘 다 생략**했다 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | Forbidden | `STEP_EDIT_DENIED` | 스텝 편집 권한 없음 |
+| 404 | Not Found | `BLOCK_NOT_FOUND` | 블록이 존재하지 않음 |
+| 404 | Not Found | `USER_NOT_FOUND` | 지정한 담당자(`owner`)가 존재하지 않음 |
 
 ---
 
