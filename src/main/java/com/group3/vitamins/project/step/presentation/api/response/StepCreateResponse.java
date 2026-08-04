@@ -34,7 +34,7 @@ public record StepCreateResponse(
         LocalDate endedOn,
 
         @Schema(description = "책임자. ownerUserId 를 안 보냈으면 null")
-        OwnerResponse owner,
+        StepPersonResponse owner,
 
         @Schema(description = "생성 일시")
         LocalDateTime createdAt
@@ -42,20 +42,13 @@ public record StepCreateResponse(
 
     /** 생성 결과를 응답으로 옮긴다. */
     public static StepCreateResponse from(StepResult result) {
-        OwnerResponse owner = result.owner() == null
+        StepPersonResponse owner = result.owner() == null
                 ? null
-                : new OwnerResponse(result.owner().userId(), result.owner().name());
+                : new StepPersonResponse(result.owner().userId(), result.owner().name());
 
         return new StepCreateResponse(
                 result.stepId(), result.projectId(), result.stageId(), result.name(),
                 result.status(), result.sortOrder(), result.startedOn(), result.endedOn(),
                 owner, result.createdAt());
-    }
-
-    @Schema(description = "책임자")
-    public record OwnerResponse(
-            @Schema(description = "사번", example = "E2024001") String userId,
-            @Schema(description = "이름", example = "김용준") String name
-    ) {
     }
 }

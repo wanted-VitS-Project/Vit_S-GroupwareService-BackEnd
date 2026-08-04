@@ -1,8 +1,12 @@
 package com.group3.vitamins.project.step.infrastructure.persistence;
 
+import com.group3.vitamins.project.step.domain.model.StepStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
 
 public interface SpringDataStepRepository extends JpaRepository<StepJpaEntity, Long> {
 
@@ -10,4 +14,11 @@ public interface SpringDataStepRepository extends JpaRepository<StepJpaEntity, L
     @Query("select max(s.sortOrder) from StepJpaEntity s "
             + "where s.projectId = :projectId and s.deletedAt is null")
     Integer findMaxSortOrder(@Param("projectId") Long projectId);
+
+    Optional<StepJpaEntity> findByStepIdAndDeletedAtIsNull(Long stepId);
+
+    List<StepJpaEntity> findByProjectIdAndDeletedAtIsNullOrderBySortOrderAsc(Long projectId);
+
+    List<StepJpaEntity> findByProjectIdAndStatusAndDeletedAtIsNullOrderBySortOrderAsc(
+            Long projectId, StepStatus status);
 }
