@@ -3,8 +3,10 @@ package com.group3.vitamins.text.application.service;
 import com.group3.vitamins.text.application.command.UpdateTextContentCommand;
 import com.group3.vitamins.text.application.policy.TextEligibilityPolicy;
 import com.group3.vitamins.text.application.usecase.TextCommandUseCase;
+import com.group3.vitamins.text.domain.exception.TextErrorCode;
 import com.group3.vitamins.text.domain.model.Text;
 import com.group3.vitamins.text.domain.repository.TextRepository;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,8 +26,12 @@ public class TextCommandService implements TextCommandUseCase {
     private final TextRepository textRepository;
 
     @Override
-    public Text updateContent(UpdateTextContentCommand command) {
+    public UpdateTextContentView updateContent(UpdateTextContentCommand command) {
         log.info("텍스트 본문 수정 요청 - txtId={}, userId={}", command.txtId(), command.userId());
+
+        if (command.content() == null) {
+            throw new ValidationException(TextErrorCode.INVALID_CONTENT);
+        }
 
         eligibilityPolicy.getActiveTextOrThrow(command.txtId());
         eligibilityPolicy.assertEditPermission(command.txtId(), command.userId());
@@ -46,6 +52,6 @@ public class TextCommandService implements TextCommandUseCase {
         //     );
         // }
 
-        return saved;
+        return new UpdateTextContentView(saved.getTxtId(), saved.getContent(), saved.getUpdatedAt());
     }
 }
