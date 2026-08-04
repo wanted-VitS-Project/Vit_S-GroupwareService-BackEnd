@@ -2,6 +2,7 @@
 
 **최종 업데이트**
 - 2026-08-03 — 비타메이트 AI 문서 추가 · 입찰관리 노션 정리본 반영
+- 2026-08-04 — Flyway 마이그레이션 컨벤션 추가
 - 2026-08-01 — 도메인 문서 인덱스 작성
 
 > 이 폴더가 **도메인 문서의 집**이다. AI 는 작업 전에 여기서 해당 문서를 찾아 읽는다.
@@ -19,6 +20,7 @@
 │   ├── PAGE.md         페이지 체계 (탭 8개 · 화면 P-00~P-70 역할·담당)
 │   ├── PERMISSION.md   권한 체계 (3층 판정 · ADMIN/MASTER/MEMBER 차이)
 │   ├── BLOCK.md        블록 정보 (공통 규칙 · 배치 · 9종 카탈로그)
+│   ├── FLYWAY.md       DB 마이그레이션 컨벤션
 │   └── USECASE.md      전 과정 흐름 (공고 → 실적)
 └── domain/        도메인별 구현 계약 + 유스케이스
     ├── 입찰관리/   BID-V1 · BID-V1-USECASE          (정현)
@@ -37,6 +39,7 @@
 | [PERMISSION.md](global/PERMISSION.md) | 3층 판정 · role 차이표 | 권한 검사 코드 · 관리자 화면 ⚠️ **`MASTER` 는 최상위가 아니다** |
 | [PAGE.md](global/PAGE.md) | 화면 P-00~P-70 역할 · 백엔드/프론트 담당 | 화면·라우팅 설계 · "이 페이지가 무슨 역할인가" |
 | [BLOCK.md](global/BLOCK.md) | 공통 규칙 · 배치 · 9종 카탈로그 · 삭제 잠금 | 블록이 걸린 **모든** 작업 |
+| [FLYWAY.md](global/FLYWAY.md) | DB 마이그레이션 컨벤션 · RDS 반영 규칙 | 테이블·컬럼·인덱스·FK·seed 변경 전 |
 | [USECASE.md](global/USECASE.md) | 공고 → 실적 전 과정 흐름 | 기능 구현 전 흐름 확인 |
 
 ---
