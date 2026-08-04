@@ -13,6 +13,11 @@ public class NotFoundException extends DomainException {
         super(errorCode, cause);
     }
 
+    /** 상황별 메시지가 필요한 경우 (코드는 유지) */
+    public NotFoundException(ErrorCode errorCode, String message) {
+        super(errorCode, message);
+    }
+
     @Override
     public int getHttpStatus() {
         return 404;

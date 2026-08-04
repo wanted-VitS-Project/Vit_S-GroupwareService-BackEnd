@@ -19,6 +19,11 @@ public class PasswordHashingBusyException extends DomainException {
         super(Code.PASSWORD_HASHING_BUSY, cause);
     }
 
+    /** 상황별 메시지가 필요한 경우 (코드는 유지) */
+    public PasswordHashingBusyException(String message) {
+        super(Code.PASSWORD_HASHING_BUSY, message);
+    }
+
     @Override
     public int getHttpStatus() {
         return 503;

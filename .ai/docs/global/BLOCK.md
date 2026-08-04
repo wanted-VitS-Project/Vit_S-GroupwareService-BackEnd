@@ -1,21 +1,35 @@
-# 🧩 블록 정보 — 9종 카탈로그
+# 🧩 블록 정보 — 10종 카탈로그
 
 **최종 업데이트**
+- 2026-08-03 — **`BID_NOTICE` 신설 → 10종** · **다형성 양방향 ID 반영** · `block.project_id` 폐기 · 상세 테이블명·PK 정정
 - 2026-08-03 — 비타메이트 AI 상세 문서 연결 추가
 - 2026-08-01 — `DOMAIN.md` §3 에서 분리 신설 + 타입별 카탈로그(§4) 신규 작성 · `PAYMENT_CONFIRM` 담당 재배정
+
+> 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
 ## 1. 기본 규칙 <sub>(구 DOMAIN §3-1)</sub>
 
 | 항목 | 확정 |
 |------|------|
 | 소유자 | **전부 스텝.** 예외 없음 |
-| 타입 | **닫힌 enum 9종.** 확장형 JSON 스키마 금지 |
+| 타입 | **닫힌 enum 10종.** 확장형 JSON 스키마 금지 |
 | 테이블 | `block` 공통 테이블 + **타입별 상세 테이블** |
-| **다형성 방향** | **상세 테이블이 `block_id` 를 갖는다.** `block` 은 상세를 가리키지 않는다 |
-| 공통 컬럼 | `step_id`, **`project_id`(비정규화)**, `type`, `title`, 배치 3종, `created_by`, 생성/수정/삭제 시각 |
+| ⭐ **다형성 방향** | **양방향 ID · 양쪽 다 FK 없음.** `block.type`(판별자) + `block.type_id`(상세 PK) ↔ `{상세}.block_id`(역방향) |
+| 공통 컬럼 | `step_id`, `type`, **`type_id`**, `title`, `owner`, 배치 3종, `created_by`, 생성/수정/삭제 시각 |
 | **블록 상태** | **없다.** `block.status` 를 만들지 마라 — 진행 상태는 연결된 이슈가 표현한다 (§6) |
 
-`project_id` 를 비정규화로 들고 있는 이유 — 프로젝트 전역 조회(대시보드, 정산 현황)가 **스텝 조인 없이** 되어야 한다.
+⛔ **`block.project_id` 는 없다** (2026-08-03 폐기). 프로젝트를 알아야 하면 **`step` 을 조인한다** —
+`idx_step_project` + `idx_block_step` 으로 커버된다. 정산 회차 집계는 `block_payment_confirm.project_id` 를 그대로 쓴다.
+
+### ⭐ 다형성 규약 5줄
+
+1. **판별자는 `block.type`** — 이 값으로 어느 상세 테이블인지 고른다
+2. **`block.type_id`** = 상세 행 PK · `BIGINT NULL` · ⛔ **FK 없음** (타입마다 대상 테이블이 다르다)
+3. **`{상세}.block_id`** = 역방향 · ⛔ **FK 없음** · ✅ **`UNIQUE(block_id)` 는 반드시 건다**
+4. **다중 항목은 상세 *아래* 자식 테이블로 내린다** — `block → image_block → image`. 덕분에 상세가 전부 1:1 이라 MyBatis `<discriminator>` 한 방에 끝난다
+5. **생성은 3단계 한 트랜잭션** — ① `block` INSERT(`type_id=NULL`) → ② `{상세}` INSERT(`block_id`) → ③ `block` UPDATE `type_id`
+
+> ⚠️ **정합성은 전적으로 앱 책임이다.** FK 가 없어 DB 가 아무것도 막지 않는다. 고아 행은 이벤트로 회수한다.
 
 **닫힌 enum 으로 가는 이유:**
 1. 도메인 블록(입금확인·결재)은 JSON 에 안 들어간다. 매칭·상태머신·권한 제약이 붙는다.
@@ -39,7 +53,7 @@
 
 ---
 
-## 4. ⭐ 9종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
+## 4. ⭐ 10종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
 
 > 계열은 **설명을 위한 구분**이지 상속 계층이 아니다. 소유자는 전부 스텝으로 동일하다.
 
@@ -48,7 +62,7 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 콘텐츠 |
-| 상세 테이블 | `text` (1:1, PK = `block_id`) — `mediumtext content` |
+| 상세 테이블 | `text` — PK `txt_id` · `block_id` UNIQUE(FK없음) · `content TEXT` |
 | **역할** | 자유 서술. 본문 · 목차 · 회의 메모 · 구조화가 필요 없는 모든 기록 |
 | 권한 | 스텝 권한 그대로 (추가 제약 없음) |
 | 삭제 | 그냥 soft delete |
@@ -62,7 +76,7 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 콘텐츠 |
-| 상세 테이블 | `image` (**1:N**, `img_id` PK + `block_id` FK) — `image_url` · `caption` · `order_index` |
+| 상세 테이블 | `image_block` — PK `img_block_id` · `block_id` UNIQUE(FK없음)<br/>└ 자식 `image` (**1:N**, `img_id` PK + `img_block_id` FK) — `image_url` · `caption` · `order_index` |
 | **역할** | 이미지 여러 장을 순서대로. 캡션 있음 |
 | 권한 | 스텝 권한 그대로 |
 | 삭제 | 그냥 soft delete |
@@ -74,9 +88,9 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 콘텐츠 |
-| 상세 테이블 | `checklist` (**1:N**, `chk_id` PK + `block_id` FK) — `content` · `is_completed` · `sort_order` · `checked_by` · **`issue_id`** |
+| 상세 테이블 | `checklist_block` — PK `chk_block_id` · `block_id` UNIQUE(FK없음)<br/>└ 자식 `checklist` (**1:N**, `chk_id` PK + `chk_block_id` FK) — `content` · `is_completed` |
 | **역할** | **내가 빠뜨리지 않으려는 확인 목록.** 담당자·기한이 없다 (§6) |
-| 특수 기능 | 항목마다 **`이슈로 승격`** → `checklist.issue_id` 에 연결 → **그 이슈가 완료되면 항목이 자동 체크**된다 |
+| 특수 기능 | 항목마다 **`이슈로 승격`** → 🚨 **구현 불가** — 아래 참조 |
 | 권한 | 스텝 권한 그대로 |
 | 삭제 | 그냥 soft delete |
 | 템플릿 | 담김: **항목 목록** / 안 담김: **체크 상태** |
@@ -84,12 +98,16 @@
 
 ⛔ **체크리스트에 담당자·기한을 넣지 마라.** 넣는 순간 이슈와 구분이 사라지고, 알림·마감관리·`내 할일` 인프라를 통째로 복제해야 한다 (§6).
 
+> 🚨 **정본 `checklist` 에 `issue_id`·`sort_order`·`checked_by` 가 없다** ([`../domain/ERD.md`](../domain/ERD.md) §3).
+> 그래서 **`이슈로 승격` → 자동 체크 · 항목 정렬 · 체크한 사람 표시가 전부 구현 불가**다.
+> 컬럼을 추가할지 기능을 접을지 결정해야 한다 — **담당: 정림** → [`../domain/HANDOFF.md`](../domain/HANDOFF.md)
+
 ### 4-4. `FILE` — 문서 업로드
 
 | 항목 | 값 |
 |------|-----|
 | 계열 | 콘텐츠 |
-| 상세 테이블 | `block_file` (**1:N**, 복합 PK `block_id` + `file_id`) — `sort_order` · `linked_by` |
+| 상세 테이블 | `block_file` (**1:N**, 복합 PK `block_id` + `file_id`) — `linked_by` · ⛔ `block_id` FK 없음 · **`block.type_id` 는 NULL** |
 | **역할** | **파일은 하나, 버전이 붙는다.** `보고서_최종2.xlsx` 를 죽이는 블록 |
 | 소유 구조 ⚠️ | **파일은 프로젝트 소속**(`file.project_id`)이고 블록은 그걸 **참조**한다. 블록을 지워도 파일은 산다 |
 | 권한 | 스텝 권한 그대로 |
@@ -107,7 +125,7 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 도메인 |
-| 상세 테이블 | `block_payment_confirm` (1:1, PK = `block_id`) — `linked_by` ⚠️ 입금 연결은 **1:N** 이라 이 테이블에 담기지 않는다 → [`PAY-V1.md`](PAY-V1.md) §5-4 |
+| 상세 테이블 | `block_payment_confirm` — PK `payment_block_id` · `block_id` UNIQUE(FK없음) · `project_id` · `round_no` ⚠️ 입금 연결은 **1:N** 이라 `payment.block_id` 가 갖는다 → [`PAY-V1.md`](PAY-V1.md) §5-4 |
 | **역할** | **정산 회차 그 자체다.** 별도 회차 레코드를 두지 않는다. **블록 제목이 회차명**(`1차 정산(선급 60%)`) |
 | **카디널리티** | **블록 1 : 입금 N** (분할 입금). 반대로 **입금 1 : 블록 1** — 같은 돈이 두 회차에 잡히면 안 된다 |
 | **⚠️ 스텝당 1개** | 한 스텝에 이 블록은 **하나만.** 둘이면 같은 스텝의 세금계산서 블록이 어느 회차 것인지 알 수 없다 |
@@ -125,7 +143,7 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 도메인 |
-| 상세 테이블 | `tax_invoice_confirm` (1:1, PK = `block_id`) — `tax_invoice_id` · `linked_by` |
+| 상세 테이블 | `tax_invoice_confirm` — PK `tax_invoice_block_id` · `block_id` UNIQUE(FK없음) · `tax_invoice_id` · `linked_by` |
 | **역할** | 홈택스에서 발행돼 수집된 세금계산서를 **프로젝트 회차에서 조회**한다 |
 | **권한** ⚠️ | 연결·해제는 **`page_code='FINANCE'` + `EDITOR`.** 프로젝트 쪽은 읽기 전용 |
 | **삭제 잠금** | **계산서가 연결되면 블록과 그 블록이 든 스텝 둘 다 삭제 불가.** 연결 해제는 재무만 |
@@ -140,7 +158,7 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 도메인 |
-| 상세 테이블 | **없음** — 조회 전용이라 `block.type` 만으로 충분하다 |
+| 상세 테이블 | **없음** — 조회 전용이라 `block.type` 만으로 충분하다 (**`block.type_id` 는 NULL**) |
 | **역할** | 등재된 실적(분류 · 등재일 · 실적금액)을 프로젝트에서 조회 |
 | 권한 | 프로젝트 쪽 읽기 전용 |
 | 삭제 | 그냥 soft delete |
@@ -155,7 +173,7 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 프로세스 |
-| 상세 테이블 | `approval` (1:1, PK = `block_id`) → `approval_revision` → `approval_line` · `approval_document` (**3층**) |
+| 상세 테이블 | `approval` — PK `approval_id` · `block_id` **NULL 허용** UNIQUE(FK없음) → `approval_revision` → `approval_line` · `approval_document` (**3층**) |
 | **역할** | **상신만 한다.** 승인·반려는 결재관리 탭(P-31)에서 (`DOMAIN §12-1-1`) |
 | 대상 지정 ⚠️ | **같은 스텝의 파일 블록을 지목**한다. 결재 블록에 직접 업로드 금지 |
 | 버전 고정 | 상신 시점 `file_version_id` 를 박는다. 새 버전 업로드는 허용하되 `대상보다 새 버전 있음` 경고 배지 |
@@ -171,33 +189,57 @@
 | 항목 | 값 |
 |------|-----|
 | 계열 | 외부 |
-| 상세 테이블 | `vitamate_block` (1:1, PK = `block_id`) → `vitamate_analysis` → `vitamate_analysis_document` · `vitamate_analysis_citation` |
+| 상세 테이블 | `vitamate_block` — PK `vitamate_block_id` · `block_id` UNIQUE(FK없음) → `vitamate_analysis` → `vitamate_analysis_document` · `vitamate_analysis_citation` |
 | **역할** | 프로젝트 문서를 파이썬 서버로 보내 분석. 사용자가 프롬프트로 분석 기준을 넣는다 |
 | 권한 | 스텝 권한 그대로 |
 | 삭제 | 그냥 soft delete |
 | 템플릿 | 담김: **프롬프트 설정** / 안 담김: 실행 결과 |
 | 담당 | 정현 |
-| 상세 문서 | [`VITAMATE-V1.md`](../domain/비타메이트/VITAMATE-V1.md) |
+| 상세 문서 | 정현 소관 (문서 별도 관리) |
 
 > 공고 탭의 **AI 요약과는 다른 기능**이다. 그건 공고 영역 기능이고 이건 스텝 안의 문서 작업용이다 (UC-03).
+
+### 4-10. `BID_NOTICE` — 입찰 공고 ⭐ **신설 (2026-08-03)**
+
+| 항목 | 값 |
+|------|-----|
+| 계열 | 도메인 |
+| 상세 테이블 | `bid_notice_block` — PK `bid_notice_block_id` · `block_id` UNIQUE(FK없음) · `bid_notice_id` **FK 있음** · `notice_snapshot JSON` · `notice_changed` |
+| **역할** | 공고 → 프로젝트 전환 시 자동 생성. **프로젝트 안에서 공고를 보는 창**이다 |
+| **생성 주체** | 사용자가 아니라 **전환 API 가 자동 생성**한다 (`BID-V1` CNV-06 · 프로젝트·멤버·스테이지·스텝과 한 트랜잭션) |
+| **스냅샷** | 전환 시점 공고 값을 `notice_snapshot JSON` 에 박는다. 재수집이 이 값을 **덮지 않는다** (`BID-V1` INV-01) |
+| **변경 감지** | 재수집 결과가 스냅샷과 다르면 `notice_changed = 1`. **반영 여부는 사람이 결정**한다 (INV-02) |
+| 권한 | 스텝 권한 그대로. ⛔ **블록에서 `bid_notice` 원본을 수정할 수 없다** (INV-08) |
+| 삭제 | 그냥 soft delete (잠금 없음) |
+| 템플릿 | 담기지 않는다 — 공고에 종속된 블록이다 |
+| 담당 | 정현 |
+| 상세 문서 | 정현 소관 (문서 별도 관리) |
+
+⛔ **`bid_notice_id` 에 UNIQUE 를 걸지 않는다.** soft delete 라 지운 블록의 행이 재생성을 막는다.
+"공고 1건 = 블록 1개" 는 `uk_project_bid_notice` 와 앱(`BID-V1` INV-10)이 지킨다.
+
+⚠️ **`bid_notice_id` 의 FK 는 유지한다.** 이건 다형성 대상이 아니라 **실제 테이블 참조**다 —
+`payment.block_id`·`notification.block_id` 와 같은 취급이다 (§1 규약 2·3 은 `block_id` 에만 적용).
 > 사용자는 채팅하는 것이 아니라 분석 기준 프롬프트를 입력하고, 시스템은 프로젝트 문서 청크를 검색해 분석 결과와 출처 문장을 남긴다.
 ---
 
 ## 5. 한눈에 보는 요약
 
-| `block.type` | 이름 | 계열 | 상세 테이블 | 카디널리티 | 삭제 잠금 | 담당 | 상세 문서 |
+| `block.type` | 이름 | 계열 | 상세 테이블 (`block.type_id` 대상 PK) | 자식 (1:N) | 삭제 잠금 | 담당 | 상세 문서 |
 |-------------|------|------|-----------|-----------|:---------:|------|----------|
-| `TEXT` | 텍스트 | 콘텐츠 | `text` | 1:1 | — | 정림 | — |
-| `IMAGE` | 이미지 | 콘텐츠 | `image` | 1:N | — | 정림 | — |
-| `CHECKLIST` | 체크리스트 | 콘텐츠 | `checklist` | 1:N | — | 정림 | — |
-| `FILE` | 문서 업로드 | 콘텐츠 | `block_file` | 1:N | ⚠️ 결재 대상일 때 | 김동현 | — |
-| `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` | 1:1 | ⚠️ **입금 연결 시 (스텝까지)** | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
-| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` | 1:1 | ⚠️ **계산서 연결 시 (스텝까지)** | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
-| `PERFORMANCE_VIEW` | 실적 조회 | 도메인 | **없음** | — | — | 동훈 | 🚨 T2 미결 |
-| `APPROVAL` | **결재 상신** | 프로세스 | `approval` | 1:1 | ⚠️ 진행 중일 때 | 이강욱 | — |
-| `AI` | AI 검토 | 외부 | `vitamate_block` | 1:1 | — | 정현 | [`VITAMATE-V1.md`](../domain/비타메이트/VITAMATE-V1.md) |
+| `TEXT` | 텍스트 | 콘텐츠 | `text` (`txt_id`) | — | — | 정림 | — |
+| `IMAGE` | 이미지 | 콘텐츠 | `image_block` (`img_block_id`) | `image` | — | 정림 | — |
+| `CHECKLIST` | 체크리스트 | 콘텐츠 | `checklist_block` (`chk_block_id`) | `checklist` | — | 정림 | — |
+| `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | ⚠️ 결재 대상일 때 | 김동현 | — |
+| `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | ⚠️ **입금 연결 시 (스텝까지)** | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
+| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) | — | ⚠️ **계산서 연결 시 (스텝까지)** | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
+| `PERFORMANCE_VIEW` | 실적 조회 | 도메인 | ⛔ **없음** (`type_id` **NULL**) | — | — | 동훈 | 🚨 T2 미결 |
+| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ 진행 중일 때 | 이강욱 | — |
+| `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
+| **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
-**도메인 계열 3종은 재무 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
+**도메인 계열은 재무·공고 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
+**`type_id` 가 `NULL` 인 타입은 2종뿐** — `FILE`(복합 PK) · `PERFORMANCE_VIEW`(상세 없음).
 
 ---
 
@@ -223,16 +265,18 @@
 
 | 연결 | 테이블 | 쓰는 곳 |
 |------|--------|--------|
-| **블록 ↔ 이슈** (N:M, 선택) | `issue_block` | 블록 카드 우하단 `완료/전체` 배지 |
-| **체크리스트 항목 → 승격된 이슈** (1:1, 선택) | **`checklist.issue_id`** | 이슈 완료 시 **항목 자동 체크** |
+| **블록 ↔ 이슈** (N:M, 선택) | `issue_block` ✅ 있다 | 블록 카드 우하단 `완료/전체` 배지 |
+| **체크리스트 항목 → 승격된 이슈** (1:1, 선택) | 🚨 **`checklist.issue_id` — 정본에 없다** | 이슈 완료 시 **항목 자동 체크** → **구현 불가** |
 
-**`issue_block` 만으로는 자동 체크를 못 한다.** 그건 블록 단위 연결이라 "5번 항목이 이 이슈다"를 표현할 수 없다. 그래서 `checklist.issue_id` 가 따로 필요하다.
+**`issue_block` 만으로는 자동 체크를 못 한다.** 그건 블록 단위 연결이라 "5번 항목이 이 이슈다"를 표현할 수 없다.
+그래서 `checklist.issue_id` 가 따로 필요한데 **확정 ERD 에 그 컬럼이 없다** (§4-3 · 담당 정림).
 
 | 규칙 | 확정 |
 |------|------|
-| 중복 연결 | `UNIQUE(issue_id, block_id)` 로 막는다 |
+| 중복 연결 | `UNIQUE(issue_id, block_id)` (`uk_ib`) 로 막는다 |
 | **같은 스텝 제약** | `issue_block` 연결 시 **`block.step_id = issue.step_id` 를 애플리케이션이 검증**한다. 위반 시 400 |
 | 블록 삭제 시 | `issue_block` 행은 **유지**. 조회에서 `block.deleted_at IS NULL` 로 거른다 |
+| ⛔ **연결 해제 시** | **하드 `DELETE`** — `issue_block` 에 `deleted_at` 이 없다. soft 로 두면 `uk_ib` 를 시체가 점유해 재연결이 막힌다 (§8-1) |
 
 **같은 스텝 제약이 없으면**, 스텝 A 의 블록 카드에는 `2/5` 가 뜨는데 스텝 A 진척률([`PROJECT.md`](PROJECT.md) §6-1)에는 그 5개가 안 들어간다. 사용자 눈에는 그냥 버그다.
 **DB 제약으로는 못 걸어서**(두 테이블을 타야 한다) **애플리케이션이 막아야 한다.**
@@ -249,6 +293,19 @@
 | **결재 대상으로 지목된** 파일 블록 | 결재 진행 중에만 삭제 불가 |
 
 나머지는 전부 그냥 soft delete. **잠금을 늘리지 마라** — 잠금이 많으면 사용자가 지우지도 못하고 왜 안 되는지도 모른다.
+
+### 8-1. ⭐ 블록 계열 삭제 방식 — soft 가 전부는 아니다
+
+> **판정의 주인은 언제나 `block.deleted_at` 이다** (BLK-007). 상세의 `deleted_at` 은 상세 행만 따로 정리할 때 쓴다.
+
+| 방식 | 테이블 |
+|---|---|
+| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · `block_payment_confirm` · **`bid_notice_block`** |
+| ⛔ **hard `DELETE`** (`deleted_at` 없음) | `block_file` · `tax_invoice_confirm` · `issue_block` |
+
+**hard 3개의 공통점** — 담긴 정보가 없는 **순수 연결 행**이다. `deleted_at` 을 달면 UNIQUE·복합 PK 를 시체가 점유해
+**재연결이 `1062` 로 죽는다.** `tax_invoice_confirm` 은 원래 *"행이 없으면 `WAITING`"* (TXL-008) 이라 이 의미였다.
+삭제 사실은 `activity_log` 가 갖는다 → [`../domain/ERD.md`](../domain/ERD.md) §0-5.
 
 ---
 
