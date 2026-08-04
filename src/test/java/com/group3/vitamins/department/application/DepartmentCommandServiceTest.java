@@ -75,7 +75,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("하위 부서를 생성하면 상위 부서명(parentName)이 응답에 담긴다")
         void createsChildDepartment() {
-            when(departmentRepository.findById(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
+            when(departmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
             when(departmentRepository.existsByName("인사팀")).thenReturn(false);
             when(departmentRepository.saveAndFlush(any())).thenReturn(department(11L, "인사팀", 1L));
 
@@ -124,7 +124,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("상위 부서가 없으면 DEPT_PARENT_NOT_FOUND")
         void rejectsMissingParent() {
-            when(departmentRepository.findById(99L)).thenReturn(Optional.empty());
+            when(departmentRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> commandService.create("ADMIN", "인사팀", 99L))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_PARENT_NOT_FOUND));
@@ -134,7 +134,7 @@ class DepartmentCommandServiceTest {
         @DisplayName("하위 부서를 상위로 지정하면 계층 2단 초과 — DEPT_MAX_DEPTH_EXCEEDED")
         void rejectsThirdLevel() {
             // 인사팀(parentId=1)은 이미 하위 부서다. 이걸 상위로 지정하면 3단이 된다.
-            when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
+            when(departmentRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
 
             assertThatThrownBy(() -> commandService.create("ADMIN", "인사1파트", 4L))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_MAX_DEPTH_EXCEEDED));

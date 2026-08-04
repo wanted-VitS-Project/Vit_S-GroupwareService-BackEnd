@@ -53,7 +53,10 @@ public class DepartmentCommandService {
 
         String parentName = null;
         if (parentId != null) {
-            DepartmentEntity parent = departmentRepository.findById(parentId)
+            // 부모 행을 배타 잠금으로 읽는다 — 삭제(findByIdForUpdate)와 잠금 순서를 맞춰,
+            // "부모가 동시에 삭제돼 저장 시 FK 위반(→ 이름중복으로 오분류)" 레이스를 원천 차단한다.
+            // 잠금을 쥐고 있는 동안 부모는 삭제되지 못하므로, 커밋 시점까지 parentId 참조가 유효하다.
+            DepartmentEntity parent = departmentRepository.findByIdForUpdate(parentId)
                     .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_PARENT_NOT_FOUND));
             if (!parent.isRoot()) {
                 throw new ConflictException(DepartmentErrorCode.DEPT_MAX_DEPTH_EXCEEDED);
@@ -66,7 +69,8 @@ public class DepartmentCommandService {
 
         // existsByName 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_name 이
         // 최종 방어선이므로, 그 위반은 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
-        // (이 시점의 제약 위반은 부서명 유니크뿐이라 코드 매핑이 결정적이다. 즉시 감지하려 flush 한다.)
+        // 부모 행을 위에서 잠갔으므로 이 시점의 제약 위반은 부서명 유니크뿐이다(FK 위반 불가) → 매핑이 결정적.
+        // 즉시 감지하려 flush 한다.
         DepartmentEntity saved;
         try {
             saved = departmentRepository.saveAndFlush(DepartmentEntity.create(name, parentId));
