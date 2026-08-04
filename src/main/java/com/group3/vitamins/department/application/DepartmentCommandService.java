@@ -13,6 +13,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,7 +64,15 @@ public class DepartmentCommandService {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
-        DepartmentEntity saved = departmentRepository.save(DepartmentEntity.create(name, parentId));
+        // existsByName 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_name 이
+        // 최종 방어선이므로, 그 위반은 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
+        // (이 시점의 제약 위반은 부서명 유니크뿐이라 코드 매핑이 결정적이다. 즉시 감지하려 flush 한다.)
+        DepartmentEntity saved;
+        try {
+            saved = departmentRepository.saveAndFlush(DepartmentEntity.create(name, parentId));
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED, e);
+        }
         log.info("부서 생성 — departmentId={} name={} parentId={}", saved.getDepartmentId(), name, parentId);
         return new DepartmentCreateResponse(
                 saved.getDepartmentId(), saved.getName(), parentId, parentName, 0, 0);
@@ -86,6 +95,12 @@ public class DepartmentCommandService {
         }
 
         department.rename(name);
+        // 검사~커밋 틈의 동시 중복은 uk_department_name 이 잡는다 → 500 대신 409 로 변환 (즉시 감지하려 flush).
+        try {
+            departmentRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED, e);
+        }
         log.info("부서명 수정 — departmentId={} name={}", departmentId, name);
         return new DepartmentUpdateResponse(
                 department.getDepartmentId(), department.getName(),
@@ -102,7 +117,9 @@ public class DepartmentCommandService {
     public void delete(String currentUserRole, Long departmentId) {
         requireAdmin(currentUserRole);
 
-        DepartmentEntity department = departmentRepository.findById(departmentId)
+        // 부서 행을 배타 잠금으로 읽는다 — 아래 차단 검사와 삭제 사이에 다른 트랜잭션이 이 부서로
+        // 사원 배정·하위 부서 생성을 끼워 넣어 FK 위반(500)이 나는 레이스를 막는다 (`findByIdForUpdate` javadoc).
+        DepartmentEntity department = departmentRepository.findByIdForUpdate(departmentId)
                 .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_NOT_FOUND));
 
         long directEmployees = departmentMapper.countDirectEmployees(departmentId);
