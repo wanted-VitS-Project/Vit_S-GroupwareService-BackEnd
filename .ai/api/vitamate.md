@@ -1,11 +1,11 @@
 # 비타메이트 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-03 (CodeRabbit 피드백 재반영 — documents 반환·내부 범위·attemptId 규칙 보강)
+**최종 동기화**: 2026-08-04 (노션 반영 완료 — 비타메이트 API 구현 가능 상태로 전환)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
-> 현재 문서는 노션 정리본을 로컬에 옮긴 **초안**이다. 팀 합의와 프론트 공유가 끝나면 상태를 `✅ 확정`으로 바꾼다.
+> 현재 문서는 노션 반영이 끝난 비타메이트 API 계약 사본이다. 변경이 필요하면 노션을 먼저 수정하고 프론트에 공유한다.
 
 ---
 
@@ -13,16 +13,16 @@
 
 | 상태 | 기능 | METHOD | URL | 권한 |
 |------|------|--------|-----|------|
-| 📝 초안 | 문서 분석 요청 | POST | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
-| 📝 초안 | AI 분석 상태 및 결과 조회 | GET | `/api/v1/vitamate/analyses/{analysisId}` | 스텝 접근 권한 |
-| 📝 초안 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
-| 📝 초안 | Python 내부 분석 요청 | POST | `/internal/v1/vitamate/analyses` | 내부 서버 |
+| ✅ 확정 | 문서 분석 요청 | POST | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
+| ✅ 확정 | AI 분석 상태 및 결과 조회 | GET | `/api/v1/vitamate/analyses/{analysisId}` | 스텝 접근 권한 |
+| ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
+| ✅ 확정 | Python 내부 분석 요청 | POST | `/internal/v1/vitamate/analyses` | 내부 서버 |
 
 ---
 
 ## 문서 분석 요청 `POST /api/v1/blocks/{blockId}/vitamate/analyses`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
 
 선택한 문서 버전과 프롬프트를 기준으로 AI 분석을 요청한다.
 
@@ -75,7 +75,7 @@
 
 ## AI 분석 상태 및 결과 조회 `GET /api/v1/vitamate/analyses/{analysisId}`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
 
 분석 요청 정보, 처리 상태, 생성 결과, 실패 메시지, 선택 문서와 근거를 조회한다.
 
@@ -149,7 +149,7 @@ analysisId
 
 ## 블록별 분석 실행 이력 조회 `GET /api/v1/blocks/{blockId}/vitamate/analyses`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
 
 해당 비타메이트 블록에서 수행한 분석 실행 이력을 조회한다.
 
@@ -169,7 +169,7 @@ analysisId
 
 ## Python 내부 분석 요청 `POST /internal/v1/vitamate/analyses`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
 
 프론트에서 호출하지 않는 서버 간 내부 API다.
 
