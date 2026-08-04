@@ -28,4 +28,15 @@ public class ProjectAccessPolicy {
         }
         return memberPermission;
     }
+
+    /** 편집 권한을 요구한다. 참여자가 아니거나 VIEWER 면 거부한다 (스테이지·스텝 생성 등 쓰기 작업용). */
+    public void requireEditor(String role, MemberPermission memberPermission) {
+        if (GLOBAL_ADMIN_ROLES.contains(role)) {
+            return;
+        }
+        if (memberPermission != MemberPermission.EDITOR) {
+            log.warn("프로젝트 편집 권한 없음 - role={}, permission={}", role, memberPermission);
+            throw new ForbiddenException(ProjectErrorCode.PROJECT_EDIT_DENIED);
+        }
+    }
 }

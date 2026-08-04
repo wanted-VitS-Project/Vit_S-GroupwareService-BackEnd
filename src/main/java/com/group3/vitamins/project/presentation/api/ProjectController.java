@@ -1,6 +1,7 @@
 package com.group3.vitamins.project.presentation.api;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
+import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.application.query.ProjectDetailQuery;
 import com.group3.vitamins.project.application.result.ProjectDetailResult;
 import com.group3.vitamins.project.application.result.ProjectResult;
@@ -16,7 +17,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,8 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/projects")
 @RequiredArgsConstructor
 public class ProjectController {
-
-    private static final String ROLE_PREFIX = "ROLE_";
 
     private final ProjectCommandUseCase projectCommandUseCase;
     private final ProjectQueryUseCase projectQueryUseCase;
@@ -85,20 +83,10 @@ public class ProjectController {
     ) {
         ProjectDetailResult result = projectQueryUseCase.getProjectDetail(
                 new ProjectDetailQuery(projectId, authentication.getName(),
-                        currentRole(authentication)));
+                        RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         ProjectDetailResponse.from(result)));
-    }
-
-    /** 세션 권한(ROLE_ADMIN 형태)에서 전역 role 문자열을 꺼낸다. */
-    private String currentRole(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .filter(authority -> authority.startsWith(ROLE_PREFIX))
-                .findFirst()
-                .map(authority -> authority.substring(ROLE_PREFIX.length()))
-                .orElse("");
     }
 }

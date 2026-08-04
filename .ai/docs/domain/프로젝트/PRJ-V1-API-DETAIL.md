@@ -1,8 +1,8 @@
 # 📁 프로젝트 ~ 블록 계층 v1 — API 상세 명세
 
+**최종 업데이트**: 2026-08-04 (⭐ 생성 계열 7건 `httpStatus` `200`→`201` 정정(상태코드 표와 모순) · `STAGE_NAME_TOO_LONG` 신설)
 **최종 업데이트**: 2026-08-04 (⭐ FE 프로젝트 상세 화면 반영 — 상세 조회 응답에 `description` 추가 · `businessCategories[].code`(업무코드) 전 엔드포인트 추가)
 **최종 업데이트**: 2026-08-04 (⭐ 전 엔드포인트 로컬 기준 `✅ 확정` — `AGENTS.md` §3 완화, 노션 동기화는 게이트 아님)
-**최종 업데이트**: 2026-08-04 (401 정정 — `AUTH_TOKEN_EXPIRED` → `AUTH_UNAUTHENTICATED` · 인증 방식 **세션 쿠키** 확정)
 **담당**: 동훈
 **목록 문서**: [`PRJ-V1-API.md`](PRJ-V1-API.md) · **요구사항**: [`PRJ-V1.md`](PRJ-V1.md) · **흐름도**: [`PRJ-V1-API-FLOW.md`](PRJ-V1-API-FLOW.md)
 
@@ -688,7 +688,7 @@ GET /api/v1/projects/12/progress
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `projectId` | Long | 프로젝트 ID |
@@ -700,7 +700,7 @@ GET /api/v1/projects/12/progress
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "projectId":12,
@@ -879,7 +879,7 @@ GET /api/v1/projects/12/members
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `memberId` | Long | 생성된 참여자 행 ID |
@@ -890,7 +890,7 @@ GET /api/v1/projects/12/members
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "memberId":32, "userId":"E2024007", "name":"김동훈", "permission":"VIEWER" }
 }
@@ -1125,7 +1125,7 @@ GET /api/v1/projects/12/stages
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `stageId` | Long | 생성된 스테이지 ID |
@@ -1136,7 +1136,7 @@ GET /api/v1/projects/12/stages
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "stageId":7, "projectId":12, "name":"제안", "sortOrder":1 }
 }
@@ -1147,6 +1147,7 @@ GET /api/v1/projects/12/stages
 | --- | --- | --- | --- |
 | 201 | Created | - | 스테이지 생성 성공 |
 | 400 | Bad Request | `STAGE_NAME_REQUIRED` | 스테이지명이 입력되지 않음 |
+| 400 | Bad Request | `STAGE_NAME_TOO_LONG` | 스테이지명이 100자를 초과함 (2026-08-04 신설 — `stage.name VARCHAR(100)` 제약에 대한 에러코드가 빠져 있어 초과 입력이 500 으로 샜다, `PROJECT_NAME_TOO_LONG` 선례) |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `PROJECT_EDIT_DENIED` | 프로젝트 편집 권한 없음 |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | 프로젝트가 존재하지 않음 |
@@ -1207,6 +1208,7 @@ GET /api/v1/projects/12/stages
 | --- | --- | --- | --- |
 | 200 | OK | - | 스테이지 수정 성공 |
 | 400 | Bad Request | `STAGE_NAME_REQUIRED` | 스테이지명이 입력되지 않음 |
+| 400 | Bad Request | `STAGE_NAME_TOO_LONG` | 스테이지명이 100자를 초과함 (2026-08-04 신설) |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | Forbidden | `PROJECT_EDIT_DENIED` | 프로젝트 편집 권한 없음 |
 | 404 | Not Found | `STAGE_NOT_FOUND` | 스테이지가 존재하지 않음 |
@@ -1381,7 +1383,7 @@ DELETE /api/v1/stages/7?moveToStageId=8
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `stageId` | Long | 스테이지 ID |
@@ -1392,7 +1394,7 @@ DELETE /api/v1/stages/7?moveToStageId=8
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "stageId":7, "userId":"E2024007", "permission":"EDITOR", "appliedStepCount":3 }
 }
@@ -1629,7 +1631,7 @@ GET /api/v1/steps/10
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `stepId` | Long | 생성된 스텝 ID |
@@ -1646,7 +1648,7 @@ GET /api/v1/steps/10
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "stepId":10,
@@ -2386,7 +2388,7 @@ GET /api/v1/steps/10/blocks
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `blockId` | Long | 생성된 블록 ID |
@@ -2403,7 +2405,7 @@ GET /api/v1/steps/10/blocks
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": {
     "blockId":21,
@@ -2609,7 +2611,7 @@ DELETE /api/v1/blocks/21
 ## Response Parameter
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
-| `httpStatus` | int | HTTP 상태 코드 (`200` 고정) |
+| `httpStatus` | int | HTTP 상태 코드 (`201` 고정) |
 | `message` | String | 응답 메시지 (`요청이 성공적으로 처리되었습니다.` 고정) |
 | `data` | Object | 응답 데이터 |
 | `blockId` | Long | 블록 ID |
@@ -2620,7 +2622,7 @@ DELETE /api/v1/blocks/21
 ## Success Example
 ```
 {
-  "httpStatus":200,
+  "httpStatus":201,
   "message":"요청이 성공적으로 처리되었습니다.",
   "data": { "blockId":15, "issueId":101, "linkedIssueTotal":6, "linkedIssueDone":2 }
 }
