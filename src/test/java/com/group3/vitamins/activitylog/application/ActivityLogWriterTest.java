@@ -13,26 +13,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-@DisplayName("Activity Log 이벤트 수집")
-class ActivityLogEventListenerTest {
+@DisplayName("Activity Log Writer")
+class ActivityLogWriterTest {
 
     @Test
-    @DisplayName("이벤트를 수신하면 ActivityLogWriter에 전달한다")
-    void delegatesEventToWriter() {
-        ActivityLogWriter activityLogWriter = mock(ActivityLogWriter.class);
-        ActivityLogEventListener listener = new ActivityLogEventListener(activityLogWriter);
+    @DisplayName("수신한 이벤트를 저장 포트에 위임한다")
+    void delegatesEventToRecorder() {
+        ActivityLogRecorder activityLogRecorder = mock(ActivityLogRecorder.class);
+        ActivityLogWriter writer = new ActivityLogWriter(activityLogRecorder);
         ActivityOccurredEvent event = ActivityOccurredEvent.of(
-                ActivityLogAction.DELETE,
+                ActivityLogAction.MODIFY,
                 30L,
-                null,
+                30L,
                 "EMP001",
-                List.of(new ActivityFieldChange(null, "제안서", null))
+                List.of(
+                        new ActivityFieldChange("title", "제안서", "제안서 작성"),
+                        new ActivityFieldChange("rowIndex", "1", "2")
+                )
         );
 
-        listener.handle(event);
+        writer.write(event);
 
         ArgumentCaptor<ActivityOccurredEvent> captor = ArgumentCaptor.forClass(ActivityOccurredEvent.class);
-        verify(activityLogWriter).write(captor.capture());
+        verify(activityLogRecorder).record(captor.capture());
         assertThat(captor.getValue()).isSameAs(event);
     }
 }
