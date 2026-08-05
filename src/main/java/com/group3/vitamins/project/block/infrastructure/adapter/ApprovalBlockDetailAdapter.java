@@ -4,6 +4,7 @@ import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
+import com.group3.vitamins.approval.domain.model.ApprovalRevision;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
@@ -22,6 +23,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * APPROVAL 블록의 {@link BlockDetailPort} 구현. 결재 상세 생성(APR-001)이 별도 REST API가 아니라
@@ -85,14 +87,20 @@ public class ApprovalBlockDetailAdapter implements BlockDetailPort {
         Map<Long, BlockDetail> details = new HashMap<>();
         for (Long approvalId : typeIds) {
             approvalRepository.findApproval(approvalId).ifPresent(approval -> {
-                List<ApprovalLine> lines = approvalRepository.findLatestRevision(approvalId)
+                // 읽기 전용 호출이라 findLatestRevisionReadOnly(락 없음)를 쓴다 — findLatestRevision은
+                // @Lock(PESSIMISTIC_WRITE)라 읽기 전용 트랜잭션에서 부르면 DB가 거부한다
+                Optional<ApprovalRevision> latestRevision = approvalRepository.findLatestRevisionReadOnly(approvalId);
+                List<ApprovalLine> lines = latestRevision
                         .map(revision -> approvalRepository.findLinesByRevisionId(revision.getRevisionId()))
                         .orElse(List.of());
                 int approvedCount = (int) lines.stream()
                         .filter(line -> line.getStatus() == ApprovalLineStatus.APPROVED)
                         .count();
                 details.put(approvalId, new ApprovalDetail(
-                        approvalId, approval.getStatus().name(), lines.size(), approvedCount));
+                        approvalId,
+                        latestRevision.map(ApprovalRevision::getRevisionId).orElse(null),
+                        latestRevision.map(ApprovalRevision::getRevisionNo).orElse(0),
+                        approval.getStatus().name(), lines.size(), approvedCount));
             });
         }
         return details;

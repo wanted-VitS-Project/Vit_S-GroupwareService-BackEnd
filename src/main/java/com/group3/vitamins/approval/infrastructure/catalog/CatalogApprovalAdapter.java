@@ -84,6 +84,12 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     }
 
     @Override
+    public Optional<ApprovalRevision> findLatestRevisionReadOnly(Long approvalId) {
+        return springDataApprovalRevisionRepository.findFirstByApprovalIdOrderByRevisionNoDesc(approvalId)
+                .map(this::toRevision);
+    }
+
+    @Override
     public List<ApprovalLine> findLinesByRevisionId(Long revisionId) {
         return springDataApprovalLineRepository.findByApprovalRevisionIdOrderBySequenceNo(revisionId).stream()
                 .map(this::toLine)

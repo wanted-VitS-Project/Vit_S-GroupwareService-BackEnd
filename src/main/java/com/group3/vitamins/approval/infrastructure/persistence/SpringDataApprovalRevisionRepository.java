@@ -24,6 +24,13 @@ public interface SpringDataApprovalRevisionRepository extends JpaRepository<Appr
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ApprovalRevisionJpaEntity> findTopByApprovalIdOrderByRevisionNoDesc(Long approvalId);
 
+    /**
+     * 위와 동일한 조건(최신 회차)이지만 잠금이 없는 순수 조회 버전. 블록 카드 미리보기
+     * (`ApprovalBlockDetailAdapter.loadDetails`)처럼 읽기 전용 트랜잭션에서 호출해야 하는 경우 쓴다 —
+     * `@Lock(PESSIMISTIC_WRITE)`는 `SELECT ... FOR UPDATE`라 읽기 전용 트랜잭션에서 실행하면 DB가 거부한다.
+     */
+    Optional<ApprovalRevisionJpaEntity> findFirstByApprovalIdOrderByRevisionNoDesc(Long approvalId);
+
     /** {@code updateLines}(APR-009)가 결재선 치환 직전 회차 상태를 잠금 조회로 재확인할 때 쓴다 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM ApprovalRevisionJpaEntity r WHERE r.approvalRevisionId = :revisionId")

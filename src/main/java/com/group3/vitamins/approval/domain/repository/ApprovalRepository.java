@@ -24,8 +24,15 @@ public interface ApprovalRepository {
     /** 결재선 전체 치환(APR-009) 직전 상태 재확인용 잠금 조회 — 상신(동시 상태 변경)과의 레이스 방지 */
     Optional<ApprovalRevision> findRevisionByIdForUpdate(Long revisionId);
 
-    /** SUB-005~008 — 이 결재의 가장 최신 회차(재상신 대상 판단·멱등 확인용) */
+    /** SUB-005~008 — 이 결재의 가장 최신 회차(재상신 대상 판단·멱등 확인용). 비관적 락 있음(쓰기 경로 전용) */
     Optional<ApprovalRevision> findLatestRevision(Long approvalId);
+
+    /**
+     * {@link #findLatestRevision}과 조건은 같지만 잠금이 없다. 블록 카드 미리보기처럼
+     * 읽기 전용 트랜잭션에서 최신 회차만 가볍게 조회할 때 쓴다(락 걸린 쿼리를 읽기 전용
+     * 트랜잭션에서 호출하면 DB가 거부한다).
+     */
+    Optional<ApprovalRevision> findLatestRevisionReadOnly(Long approvalId);
 
     List<ApprovalLine> findLinesByRevisionId(Long revisionId);
 
