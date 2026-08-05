@@ -34,12 +34,9 @@ public class TextHandlerService {
 
         log.info("텍스트 블록 삭제 완료 - txtId={}", txtId);
 
-        // TODO: 활동 로그(블록 삭제) 이벤트 발행 — 활동 로그 인프라(ActivityOccurredEvent 등)가 아직
-        //       실제로 만들어지지 않아 주석으로만 남긴다. resourceId=null, 기록 정보=삭제 전 Block명 (§5.1 Block 공통).
-        //       blockId 가 필요하면 markDeleted 이전에 findActiveByTxtId 로 미리 읽어두거나,
-        //       삭제된 행도 조회 가능한 별도 메서드를 추가해야 한다 (지금은 조회 안 함).
-        // activityEventPublisher.publish(
-        //         ActivityOccurredEvent.deleted(blockId, null, userId, blockTitle)
-        // );
+        // 활동 로그(블록 삭제, §5.1)는 여기서 발행하지 않는다 — 어댑터가 없는 타입(FILE·APPROVAL 등)의
+        // 블록은 이 메서드 자체가 호출되지 않으므로, 이 위치에서 발행하면 그 타입들은 삭제 로그가
+        // 영원히 누락된다. 모든 블록 타입에 공통 적용되는 로그이니, 실제 block.deleted_at 을 찍는
+        // Block 도메인 쪽 삭제 서비스가 발행해야 한다.
     }
 }
