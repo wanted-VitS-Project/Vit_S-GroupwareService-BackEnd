@@ -56,6 +56,7 @@ public class FileUploadService implements FileUploadUseCase {
     private final UploaderLookupPort uploaderLookupPort;
     private final FileStoragePort fileStoragePort;
     private final PdfPageCounterPort pdfPageCounterPort;
+    private final FileVersionFailureRecorder failureRecorder;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
@@ -126,14 +127,16 @@ public class FileUploadService implements FileUploadUseCase {
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
         requireEditable(stepId, command.requesterUserId(), command.role());
 
+        // 실패 전이는 별도 트랜잭션(REQUIRES_NEW)으로 확정 저장한다 — 여기서 예외를 던지면
+        // 이 서비스의 @Transactional 이 롤백되므로 인라인 save 는 사라진다. 객체 없음·크기 불일치 모두 대칭 처리.
         FileStoragePort.StoredObject stored = fileStoragePort.head(version.getStorageKey())
                 .orElse(null);
         if (stored == null) {
-            version.fail();
-            fileVersionRepository.save(version);
+            failureRecorder.markFailed(version);
             throw new ConflictException(FileErrorCode.FILE_OBJECT_NOT_FOUND);
         }
         if (stored.sizeBytes() != version.getSizeBytes()) {
+            failureRecorder.markFailed(version);
             throw new ConflictException(FileErrorCode.FILE_SIZE_MISMATCH);
         }
 
@@ -166,7 +169,7 @@ public class FileUploadService implements FileUploadUseCase {
         try {
             return stepAccessUseCase.requireEditable(stepId, userId, role);
         } catch (ForbiddenException | NotFoundException e) {
-            throw new ForbiddenException(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED);
+            throw new ForbiddenException(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED, e);
         }
     }
 
@@ -191,7 +194,7 @@ public class FileUploadService implements FileUploadUseCase {
         if (dot < 0 || dot == originalFileName.length() - 1) {
             return "";
         }
-        return originalFileName.substring(dot + 1).toLowerCase();
+        return originalFileName.substring(dot + 1).toLowerCase(java.util.Locale.ROOT);
     }
 
     /** 표시명 — 명시 name 이 있으면 그대로, 없으면 원본 파일명에서 확장자를 뗀 값(§1). */

@@ -1,7 +1,6 @@
 package com.group3.vitamins.file.infrastructure.storage;
 
 import com.group3.vitamins.file.application.port.FileStoragePort;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -21,7 +20,6 @@ import java.time.Duration;
 import java.util.Optional;
 
 @Component
-@RequiredArgsConstructor
 public class S3FileStorageAdapter implements FileStoragePort {
 
     /** presigned 만료 (2026-08-06 확정). */
@@ -30,9 +28,14 @@ public class S3FileStorageAdapter implements FileStoragePort {
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
+    private final String bucket;
 
-    @Value("${cloud.aws.s3.bucket}")
-    private String bucket;
+    public S3FileStorageAdapter(S3Client s3Client, S3Presigner s3Presigner,
+                                @Value("${cloud.aws.s3.bucket}") String bucket) {
+        this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
+        this.bucket = bucket;
+    }
 
     @Override
     public PresignedUrl presignUpload(String storageKey, String contentType, long sizeBytes) {

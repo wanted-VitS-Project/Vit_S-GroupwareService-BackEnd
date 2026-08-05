@@ -73,7 +73,9 @@ public class FileQueryService implements FileQueryUseCase {
     public FileVersionSingleResult getVersion(Long fileVersionId, String requesterUserId, String role) {
         VersionContext ctx = requireVersionAccess(fileVersionId, requesterUserId, role);
         FileVersion v = ctx.version();
-        int latestVersionNo = fileVersionRepository.findMaxVersionNo(v.getFileId());
+        // §8 이력과 동일 정의 — 완료(COMPLETED) 버전 기준 최대 차수. findMaxVersionNo 는 UPLOADING·FAILED 도
+        // 세므로, 새 버전 업로드 시작 직후 §11 이 §8 과 latest 판정이 어긋나는 문제를 막는다.
+        int latestVersionNo = fileQueryPort.findMaxCompletedVersionNo(v.getFileId());
 
         return new FileVersionSingleResult(
                 v.getFileVersionId(), v.getFileId(), ctx.file().getName(), v.getVersionNo(),
@@ -136,8 +138,10 @@ public class FileQueryService implements FileQueryUseCase {
             throw new ConflictException(FileErrorCode.FILE_PREVIEW_NOT_SUPPORTED);
         }
 
-        byte[] bytes = fileStoragePort.getObject(ctx.version().getStorageKey());
+        // getObject 도 try 안에 둔다 — S3 조회 실패(SdkException 등)도 FILE_PREVIEW_FAILED 로 변환해
+        // 원시 런타임 예외가 500 계열로 새는 것을 막는다.
         try {
+            byte[] bytes = fileStoragePort.getObject(ctx.version().getStorageKey());
             PdfPreviewPort.Preview preview = pdfPreviewPort.render(bytes, MAX_PREVIEW_PAGES);
             return new FilePreviewResult(
                     preview.content(), preview.previewPageCount(), preview.totalPageCount());
@@ -176,7 +180,7 @@ public class FileQueryService implements FileQueryUseCase {
         try {
             return stepAccessUseCase.requireAccess(stepId, userId, role);
         } catch (ForbiddenException | NotFoundException e) {
-            throw new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED);
+            throw new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED, e);
         }
     }
 

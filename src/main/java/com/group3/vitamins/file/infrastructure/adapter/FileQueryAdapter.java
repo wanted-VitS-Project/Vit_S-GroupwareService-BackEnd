@@ -1,8 +1,13 @@
 package com.group3.vitamins.file.infrastructure.adapter;
 
 import com.group3.vitamins.file.application.port.FileQueryPort;
+import com.group3.vitamins.file.application.result.BlockFileProjection;
+import com.group3.vitamins.file.application.result.FileVersionProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -16,17 +21,22 @@ public class FileQueryAdapter implements FileQueryPort {
     }
 
     @Override
-    public java.util.Optional<Long> findBlockIdByFileId(Long fileId) {
-        return java.util.Optional.ofNullable(fileQueryMapper.findBlockIdByFileId(fileId));
+    public Optional<Long> findBlockIdByFileId(Long fileId) {
+        return Optional.ofNullable(fileQueryMapper.findBlockIdByFileId(fileId));
     }
 
     @Override
-    public java.util.List<com.group3.vitamins.file.application.result.FileVersionProjection> findCompletedVersions(Long fileId) {
+    public List<FileVersionProjection> findCompletedVersions(Long fileId) {
         return fileQueryMapper.findCompletedVersions(fileId);
     }
 
     @Override
-    public java.util.List<com.group3.vitamins.file.application.result.BlockFileProjection> findBlockFiles(Long blockId, boolean deleted) {
+    public int findMaxCompletedVersionNo(Long fileId) {
+        return fileQueryMapper.findMaxCompletedVersionNo(fileId);
+    }
+
+    @Override
+    public List<BlockFileProjection> findBlockFiles(Long blockId, boolean deleted) {
         return fileQueryMapper.findBlockFiles(blockId, deleted);
     }
 }

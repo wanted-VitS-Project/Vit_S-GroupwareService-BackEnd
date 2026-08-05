@@ -1,5 +1,6 @@
 package com.group3.vitamins.file.presentation.api;
 
+import com.group3.vitamins.file.application.command.TrashFileCommand;
 import com.group3.vitamins.file.application.usecase.FileCommandUseCase;
 import com.group3.vitamins.file.application.usecase.FileQueryUseCase;
 import com.group3.vitamins.file.presentation.api.request.FileRenameRequest;
@@ -91,7 +92,7 @@ public class FileController {
     ) {
         FileTrashResponse data = FileTrashResponse.from(
                 fileCommandUseCase.moveToTrash(
-                        new com.group3.vitamins.file.application.command.TrashFileCommand(
+                        new TrashFileCommand(
                                 fileId, authentication.getName(), RequesterRole.from(authentication))));
 
         return ApiResponse.success(FileResponseMessage.FILE_TRASHED, data);

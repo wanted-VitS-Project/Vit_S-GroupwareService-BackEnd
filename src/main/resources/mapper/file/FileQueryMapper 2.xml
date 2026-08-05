@@ -46,15 +46,6 @@
          ORDER BY version_no DESC
     </select>
 
-    <!-- 완료 버전 기준 최대 차수(§11 latest 판정). 완료 버전이 없으면 0. §8 이력과 같은 정의. -->
-    <select id="findMaxCompletedVersionNo" resultType="int">
-        SELECT COALESCE(MAX(version_no), 0)
-          FROM file_version
-         WHERE file_id = #{fileId}
-           AND upload_status = 'COMPLETED'
-           AND deleted_at IS NULL
-    </select>
-
     <!-- 블록 파일 목록(§3) — 문서별 최신 완료 버전 + 전체 버전 수. 완료 버전 0개 문서는 INNER JOIN 으로 제외. -->
     <!-- deleted=false: 재직 문서(deleted_at IS NULL) / true: 휴지통. 정렬은 블록 연결일 오름차순. -->
     <select id="findBlockFiles"
@@ -75,10 +66,8 @@
           FROM block_file bf
           JOIN file f ON f.file_id = bf.file_id
           JOIN (
-                -- 블록에 연결된 문서로 먼저 좁힌 뒤 집계한다 — file_version 전체를 스캔하지 않도록.
                 SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
                   FROM file_version fv
-                  JOIN block_file bfi ON bfi.file_id = fv.file_id AND bfi.block_id = #{blockId}
                  WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
                  GROUP BY fv.file_id
                ) vc ON vc.file_id = f.file_id
@@ -92,7 +81,7 @@
                 (#{deleted} = FALSE AND f.deleted_at IS NULL)
                 OR (#{deleted} = TRUE AND f.deleted_at IS NOT NULL)
                )
-         ORDER BY bf.linked_at ASC, f.file_id ASC
+         ORDER BY bf.linked_at ASC
     </select>
 
 </mapper>

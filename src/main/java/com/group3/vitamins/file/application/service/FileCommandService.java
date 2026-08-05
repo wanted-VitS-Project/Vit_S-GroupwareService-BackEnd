@@ -101,8 +101,12 @@ public class FileCommandService implements FileCommandUseCase {
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
         try {
             stepAccessUseCase.requireEditable(stepId, userId, role);
-        } catch (ForbiddenException | NotFoundException e) {
-            throw new ForbiddenException(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED);
+        } catch (ForbiddenException e) {
+            // 권한 부족만 403 으로 변환한다.
+            throw new ForbiddenException(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED, e);
+        } catch (NotFoundException e) {
+            // 스텝 자체가 없는 건 참조 유실(정합성 문제)이므로 권한 오류로 위장하지 않고 404 로 남긴다.
+            throw new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND, e);
         }
     }
 }

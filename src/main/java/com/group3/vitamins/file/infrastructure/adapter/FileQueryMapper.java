@@ -17,5 +17,7 @@ public interface FileQueryMapper {
 
     List<FileVersionProjection> findCompletedVersions(@Param("fileId") Long fileId);
 
+    int findMaxCompletedVersionNo(@Param("fileId") Long fileId);
+
     List<BlockFileProjection> findBlockFiles(@Param("blockId") Long blockId, @Param("deleted") boolean deleted);
 }

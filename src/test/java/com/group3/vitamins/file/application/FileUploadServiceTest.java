@@ -10,6 +10,7 @@ import com.group3.vitamins.file.application.port.UploaderLookupPort;
 import com.group3.vitamins.file.application.result.FileUploadStartResult;
 import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.service.FileUploadService;
+import com.group3.vitamins.file.application.service.FileVersionFailureRecorder;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
 import com.group3.vitamins.file.domain.model.File;
 import com.group3.vitamins.file.domain.model.FileVersion;
@@ -59,6 +60,7 @@ class FileUploadServiceTest {
     private UploaderLookupPort uploaderLookupPort;
     private FileStoragePort fileStoragePort;
     private PdfPageCounterPort pdfPageCounterPort;
+    private FileVersionFailureRecorder failureRecorder;
     private FileUploadService service;
 
     @BeforeEach
@@ -72,9 +74,11 @@ class FileUploadServiceTest {
         uploaderLookupPort = Mockito.mock(UploaderLookupPort.class);
         fileStoragePort = Mockito.mock(FileStoragePort.class);
         pdfPageCounterPort = Mockito.mock(PdfPageCounterPort.class);
+        failureRecorder = Mockito.mock(FileVersionFailureRecorder.class);
         service = new FileUploadService(
                 blockCatalogPort, stepAccessUseCase, fileRepository, fileVersionRepository,
-                blockFileRepository, fileQueryPort, uploaderLookupPort, fileStoragePort, pdfPageCounterPort);
+                blockFileRepository, fileQueryPort, uploaderLookupPort, fileStoragePort, pdfPageCounterPort,
+                failureRecorder);
     }
 
     private void stubBlockAndEditable() {
@@ -257,8 +261,8 @@ class FileUploadServiceTest {
 
             assertThatThrownBy(() -> service.completeUpload(completeCmd()))
                     .satisfies(hasCode(FileErrorCode.FILE_OBJECT_NOT_FOUND));
-            assertThat(version.getUploadStatus()).isEqualTo(UploadStatus.FAILED);
-            verify(fileVersionRepository, times(1)).save(version);
+            // FAILED 전이는 REQUIRES_NEW 레코더가 별도 트랜잭션에서 확정 저장한다(롤백 회피).
+            verify(failureRecorder, times(1)).markFailed(version);
         }
 
         @Test
@@ -271,6 +275,8 @@ class FileUploadServiceTest {
 
             assertThatThrownBy(() -> service.completeUpload(completeCmd()))
                     .satisfies(hasCode(FileErrorCode.FILE_SIZE_MISMATCH));
+            // 크기 불일치도 객체 없음과 대칭으로 FAILED 를 기록한다.
+            verify(failureRecorder, times(1)).markFailed(version);
         }
 
         @Test

@@ -180,7 +180,7 @@ class FileQueryServiceTest {
         @DisplayName("최신 차수면 latest=true 로 반환한다")
         void latestVersion() {
             stubVersionAccess(version(2, UploadStatus.COMPLETED, "pdf"), activeFile(), MemberPermission.VIEWER);
-            when(fileVersionRepository.findMaxVersionNo(FILE_ID)).thenReturn(2);
+            when(fileQueryPort.findMaxCompletedVersionNo(FILE_ID)).thenReturn(2);
 
             FileVersionSingleResult result = service.getVersion(FILE_VERSION_ID, USER, ROLE);
 
@@ -194,7 +194,7 @@ class FileQueryServiceTest {
         @DisplayName("휴지통 문서의 버전도 반환하되 fileDeleted=true 로 표시한다 (§11)")
         void deletedFileStillReturned() {
             stubVersionAccess(version(1, UploadStatus.COMPLETED, "pdf"), trashedFile(), MemberPermission.VIEWER);
-            when(fileVersionRepository.findMaxVersionNo(FILE_ID)).thenReturn(2);
+            when(fileQueryPort.findMaxCompletedVersionNo(FILE_ID)).thenReturn(2);
 
             FileVersionSingleResult result = service.getVersion(FILE_VERSION_ID, USER, ROLE);
 
