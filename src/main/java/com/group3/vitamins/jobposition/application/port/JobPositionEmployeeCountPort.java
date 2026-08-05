@@ -20,6 +20,15 @@ public interface JobPositionEmployeeCountPort {
      */
     Map<Long, Integer> countByJobPosition();
 
-    /** 직급 1건의 사용 인원 — 삭제 차단({@code POS_IN_USE}) 판정용. 목록과 같은 제외 기준. */
+    /** 직급 1건의 표시용 사용 인원 — 수정 응답의 {@code employeeCount}. 목록과 같은 제외 기준(시스템·퇴사·삭제 제외). */
     long countByJobPositionId(Long jobPositionId);
+
+    /**
+     * 직급을 참조하는 <b>모든</b> 사원 수 (필터 없음) — 삭제 차단({@code POS_IN_USE}) 판정용.
+     *
+     * <p>⚠️ 표시용 {@link #countByJobPositionId} 와 <b>다르다.</b> 퇴사자·삭제 사원·시스템 계정도 센다 —
+     * 이들도 {@code employee.job_position_id} FK 로 직급 행을 <b>물리적으로 참조</b>하므로, 제외하고 세면
+     * "퇴사자만 남은 직급"을 삭제하려다 FK 제약 위반으로 500 이 난다. 하드 삭제는 참조가 0 일 때만 안전하다.
+     */
+    long countAllReferencing(Long jobPositionId);
 }

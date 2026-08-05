@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -125,6 +126,18 @@ class JobPositionCommandServiceTest {
                     .satisfies(hasCode(JobPositionErrorCode.POS_NAME_DUPLICATED));
             verify(jobPositionRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("선검사 통과 후 저장 시 UNIQUE 위반이 나면 POS_NAME_DUPLICATED 로 변환한다(500 방지)")
+        void mapsUniqueViolationToConflict() {
+            when(jobPositionRepository.findByName("대리")).thenReturn(Optional.empty());
+            when(jobPositionRepository.save(any()))
+                    .thenThrow(new DataIntegrityViolationException("uk_job_position_name"));
+
+            assertThatThrownBy(() -> commandService.createJobPosition(
+                    new CreateJobPositionCommand("대리", 2, "ADMIN")))
+                    .satisfies(hasCode(JobPositionErrorCode.POS_NAME_DUPLICATED));
+        }
     }
 
     @Nested
@@ -208,6 +221,19 @@ class JobPositionCommandServiceTest {
         }
 
         @Test
+        @DisplayName("수정 저장 시 UNIQUE 위반이 나면 POS_NAME_DUPLICATED 로 변환한다(500 방지)")
+        void mapsUniqueViolationToConflict() {
+            when(jobPositionRepository.findById(4L)).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findByName("과장")).thenReturn(Optional.empty());
+            when(jobPositionRepository.save(any()))
+                    .thenThrow(new DataIntegrityViolationException("uk_job_position_name"));
+
+            assertThatThrownBy(() -> commandService.updateJobPosition(
+                    new UpdateJobPositionCommand(4L, true, "과장", false, null, "ADMIN")))
+                    .satisfies(hasCode(JobPositionErrorCode.POS_NAME_DUPLICATED));
+        }
+
+        @Test
         @DisplayName("ADMIN 이 아니면 ACC_ADMIN_REQUIRED")
         void rejectsNonAdmin() {
             assertThatThrownBy(() -> commandService.updateJobPosition(
@@ -222,15 +248,42 @@ class JobPositionCommandServiceTest {
     class Delete {
 
         @Test
-        @DisplayName("사용 인원이 없으면 삭제된다")
+        @DisplayName("참조하는 사원이 없으면 삭제된다")
         void deletesWhenUnused() {
             JobPosition target = position(5L, "인턴", 6);
             when(jobPositionRepository.findById(5L)).thenReturn(Optional.of(target));
-            when(employeeCountPort.countByJobPositionId(5L)).thenReturn(0L);
+            when(employeeCountPort.countAllReferencing(5L)).thenReturn(0L);
 
             commandService.deleteJobPosition(new DeleteJobPositionCommand(5L, "ADMIN"));
 
             verify(jobPositionRepository, times(1)).delete(target);
+        }
+
+        @Test
+        @DisplayName("퇴사자·삭제 사원만 참조해도(표시 인원 0) 전체 참조 수로 삭제를 막는다 — FK 위반 방지")
+        void blocksByAllReferencesNotDisplayCount() {
+            when(jobPositionRepository.findById(5L)).thenReturn(Optional.of(position(5L, "인턴", 6)));
+            // 표시용 countByJobPositionId 가 아니라 전체 참조 수(countAllReferencing)로 판정해야 한다.
+            when(employeeCountPort.countAllReferencing(5L)).thenReturn(2L);
+
+            assertThatThrownBy(() -> commandService.deleteJobPosition(new DeleteJobPositionCommand(5L, "ADMIN")))
+                    .satisfies(hasCode(JobPositionErrorCode.POS_IN_USE))
+                    .hasMessageContaining("2");
+            verify(jobPositionRepository, never()).delete(any());
+            verify(employeeCountPort, never()).countByJobPositionId(anyLong());
+        }
+
+        @Test
+        @DisplayName("게이트 통과 후 삭제 중 FK 위반(경합)이 나면 POS_IN_USE 로 변환한다(500 방지)")
+        void mapsForeignKeyViolationToConflict() {
+            JobPosition target = position(5L, "인턴", 6);
+            when(jobPositionRepository.findById(5L)).thenReturn(Optional.of(target));
+            when(employeeCountPort.countAllReferencing(5L)).thenReturn(0L);
+            Mockito.doThrow(new DataIntegrityViolationException("fk_employee_job_position"))
+                    .when(jobPositionRepository).delete(target);
+
+            assertThatThrownBy(() -> commandService.deleteJobPosition(new DeleteJobPositionCommand(5L, "ADMIN")))
+                    .satisfies(hasCode(JobPositionErrorCode.POS_IN_USE));
         }
 
         @Test
@@ -247,7 +300,7 @@ class JobPositionCommandServiceTest {
         @DisplayName("사용 인원이 있으면 POS_IN_USE — 메시지에 인원 수를 담는다")
         void rejectsWhenInUse() {
             when(jobPositionRepository.findById(1L)).thenReturn(Optional.of(position(1L, "사원", 1)));
-            when(employeeCountPort.countByJobPositionId(1L)).thenReturn(14L);
+            when(employeeCountPort.countAllReferencing(1L)).thenReturn(14L);
 
             assertThatThrownBy(() -> commandService.deleteJobPosition(
                     new DeleteJobPositionCommand(1L, "ADMIN")))

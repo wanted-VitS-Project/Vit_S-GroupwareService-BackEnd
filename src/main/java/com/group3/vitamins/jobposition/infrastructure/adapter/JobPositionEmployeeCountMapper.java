@@ -23,6 +23,9 @@ public interface JobPositionEmployeeCountMapper {
      */
     List<JobPositionEmployeeCountRow> countByJobPosition();
 
-    /** 직급 1건의 사용 인원 — 삭제 차단 판정용. 목록과 같은 제외 기준. */
+    /** 직급 1건의 표시용 사용 인원 — 수정 응답용. 목록과 같은 제외 기준. */
     long countByJobPositionId(@Param("jobPositionId") Long jobPositionId);
+
+    /** 직급을 참조하는 모든 사원 수(필터 없음) — 삭제 차단 판정용(FK 위반 방지). */
+    long countAllReferencing(@Param("jobPositionId") Long jobPositionId);
 }

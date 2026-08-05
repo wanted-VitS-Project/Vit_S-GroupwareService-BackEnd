@@ -34,7 +34,7 @@
          GROUP BY e.job_position_id
     </select>
 
-    <!-- 삭제 차단 판정용 직급 1건 사용 인원. 목록과 같은 제외 기준을 쓴다. -->
+    <!-- 수정 응답 표시용 직급 1건 사용 인원. 목록과 같은 제외 기준을 쓴다. -->
     <select id="countByJobPositionId" resultType="long">
         SELECT COUNT(*)
           FROM employee e
@@ -42,6 +42,17 @@
            AND e.is_system = 0
            AND e.resigned_at IS NULL
            AND e.deleted_at IS NULL
+    </select>
+
+    <!--
+      삭제 차단 판정용 — 직급을 참조하는 모든 사원 수(필터 없음).
+      퇴사자·삭제 사원·시스템 계정도 employee.job_position_id FK 로 직급 행을 물리적으로 참조하므로,
+      표시용 집계처럼 제외하고 세면 하드 삭제 시 FK 제약(fk_employee_job_position) 위반이 난다.
+    -->
+    <select id="countAllReferencing" resultType="long">
+        SELECT COUNT(*)
+          FROM employee e
+         WHERE e.job_position_id = #{jobPositionId}
     </select>
 
 </mapper>

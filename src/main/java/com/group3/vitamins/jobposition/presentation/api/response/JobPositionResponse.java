@@ -15,7 +15,7 @@ public record JobPositionResponse(
         @Schema(description = "정렬 순서", example = "1")
         int sortOrder,
 
-        @Schema(description = "사용 인원 (시스템 계정·퇴사자 제외)", example = "14")
+        @Schema(description = "사용 인원 (시스템 계정·퇴사자·삭제 사원 제외)", example = "14")
         int employeeCount
 ) {
 

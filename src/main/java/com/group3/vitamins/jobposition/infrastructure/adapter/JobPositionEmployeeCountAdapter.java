@@ -31,4 +31,9 @@ public class JobPositionEmployeeCountAdapter implements JobPositionEmployeeCount
     public long countByJobPositionId(Long jobPositionId) {
         return jobPositionEmployeeCountMapper.countByJobPositionId(jobPositionId);
     }
+
+    @Override
+    public long countAllReferencing(Long jobPositionId) {
+        return jobPositionEmployeeCountMapper.countAllReferencing(jobPositionId);
+    }
 }

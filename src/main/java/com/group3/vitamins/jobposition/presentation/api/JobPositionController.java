@@ -1,6 +1,7 @@
 package com.group3.vitamins.jobposition.presentation.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.jobposition.application.command.DeleteJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.UpdateJobPositionCommand;
@@ -8,6 +9,7 @@ import com.group3.vitamins.jobposition.application.query.JobPositionListQuery;
 import com.group3.vitamins.jobposition.application.result.JobPositionResult;
 import com.group3.vitamins.jobposition.application.usecase.JobPositionCommandUseCase;
 import com.group3.vitamins.jobposition.application.usecase.JobPositionQueryUseCase;
+import com.group3.vitamins.jobposition.domain.exception.JobPositionErrorCode;
 import com.group3.vitamins.jobposition.presentation.api.request.JobPositionCreateRequest;
 import com.group3.vitamins.jobposition.presentation.api.request.JobPositionUpdateRequest;
 import com.group3.vitamins.jobposition.presentation.api.response.JobPositionDetailResponse;
@@ -32,7 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "JobPosition - 직급", description = "직급 조회 / 생성 / 수정 / 삭제 — 전부 ADMIN 전용 (담당: 김동현)")
+@Tag(name = "JobPosition - 직급", description = "직급 조회 / 생성 / 수정 / 삭제 — 전부 ADMIN 전용")
 @RestController
 @RequestMapping("/api/v1/job-positions")
 @RequiredArgsConstructor
@@ -45,7 +47,7 @@ public class JobPositionController {
 
     @Operation(summary = "직급 목록 조회",
             description = "직급을 정렬 순서 오름차순(같으면 직급명 오름차순)으로 조회한다. 페이징·검색 파라미터는 없다. "
-                    + "각 항목의 employeeCount 는 시스템 계정·퇴사자를 제외한 사용 인원이다.")
+                    + "각 항목의 employeeCount 는 시스템 계정·퇴사자·삭제 사원을 제외한 사용 인원이다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "조회 성공 (0건이면 빈 배열)"),
@@ -161,21 +163,36 @@ public class JobPositionController {
 
     /**
      * raw JSON 에서 필드 존재 여부(생략 vs 값 전달)를 직접 확인해 커맨드로 옮긴다.
+     *
+     * <p>⚠️ <b>타입을 강제 검증한다.</b> {@code asText()}·{@code asInt()} 는 타입을 강제 변환하므로
+     * {@code {"name":1}}·{@code {"sortOrder":"2"}}·{@code {"sortOrder":true}} 가 조용히 통과한다.
+     * 명세는 name=String·sortOrder=int 이므로, 타입이 어긋나면 {@code POS_INVALID_REQUEST}(400)로 막는다.
      * {@code "sortOrder": null} 은 "전달 안 함" 으로 취급한다 — sortOrder 는 지울 수 있는 값이 아니다.
      */
     private UpdateJobPositionCommand toUpdateCommand(Long jobPositionId, JsonNode body, String role) {
         boolean nameProvided = body.has("name");
         boolean sortOrderProvided = body.has("sortOrder") && !body.get("sortOrder").isNull();
 
-        String name = nameProvided ? textOrNull(body, "name") : null;
-        Integer sortOrder = sortOrderProvided ? body.get("sortOrder").asInt() : null;
+        String name = null;
+        if (nameProvided) {
+            JsonNode nameNode = body.get("name");
+            // null 은 서비스의 validateName 이 POS_INVALID_REQUEST 로 처리한다. 그 외 비문자열은 여기서 막는다.
+            if (!nameNode.isNull() && !nameNode.isTextual()) {
+                throw new ValidationException(JobPositionErrorCode.POS_INVALID_REQUEST);
+            }
+            name = nameNode.isNull() ? null : nameNode.asText();
+        }
+
+        Integer sortOrder = null;
+        if (sortOrderProvided) {
+            JsonNode sortNode = body.get("sortOrder");
+            if (!sortNode.isIntegralNumber() || !sortNode.canConvertToInt()) {
+                throw new ValidationException(JobPositionErrorCode.POS_INVALID_REQUEST);
+            }
+            sortOrder = sortNode.intValue();
+        }
 
         return new UpdateJobPositionCommand(
                 jobPositionId, nameProvided, name, sortOrderProvided, sortOrder, role);
-    }
-
-    private String textOrNull(JsonNode body, String field) {
-        JsonNode value = body.get(field);
-        return (value == null || value.isNull()) ? null : value.asText();
     }
 }
