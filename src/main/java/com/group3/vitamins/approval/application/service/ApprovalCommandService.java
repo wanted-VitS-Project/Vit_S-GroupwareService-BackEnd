@@ -4,17 +4,14 @@ import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
 import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.approval.application.command.AddApprovalDocumentCommand;
-import com.group3.vitamins.approval.application.command.CreateApprovalCommand;
 import com.group3.vitamins.approval.application.command.RemoveApprovalDocumentCommand;
 import com.group3.vitamins.approval.application.command.ResubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.SubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalLinesCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalRevisionCommand;
-import com.group3.vitamins.approval.application.policy.ApprovalBlockEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalDocumentEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalLineEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalRevisionEligibilityPolicy;
-import com.group3.vitamins.approval.application.port.BlockSummary;
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
 import com.group3.vitamins.approval.application.port.FileCatalogPort;
@@ -31,7 +28,6 @@ import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalRevision;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
-import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.model.NewApprovalLine;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
@@ -48,10 +44,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 결재 블록 생성(APR-001) · 제목·내용 수정(APR-002) · 결재선 등록·수정(APR-009~014) ·
- * 재상신 회차 생성(SUB-005~009) · 문서 추가·제거(APR-005~007) · 상신(SUB-001~004).
- * {@code block} 행 자체는 만들지 않는다 — 이미 존재하는 blockId 에 {@code approval}+1회차
- * {@code approval_revision} 만 붙인다(INV-08).
+ * 제목·내용 수정(APR-002) · 결재선 등록·수정(APR-009~014) · 재상신 회차 생성(SUB-005~009) ·
+ * 문서 추가·제거(APR-005~007) · 상신(SUB-001~004).
+ *
+ * <p>결재 상세 생성(APR-001)은 여기 없다 — {@code block} 생성과 같은 트랜잭션에서
+ * {@code ApprovalBlockDetailAdapter}(블록팀의 {@code BlockDetailPort} 구현체)를 통해 이뤄진다.
  */
 @Service
 @RequiredArgsConstructor
@@ -59,7 +56,6 @@ import java.util.Objects;
 @Slf4j
 public class ApprovalCommandService implements ApprovalCommandUseCase {
 
-    private final ApprovalBlockEligibilityPolicy blockEligibilityPolicy;
     private final ApprovalRevisionEligibilityPolicy revisionEligibilityPolicy;
     private final ApprovalLineEligibilityPolicy lineEligibilityPolicy;
     private final ApprovalDocumentEligibilityPolicy documentEligibilityPolicy;
@@ -67,20 +63,6 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     private final FileCatalogPort fileCatalogPort;
     private final ApprovalRepository approvalRepository;
     private final DomainEventPublisher domainEventPublisher;
-
-    @Override
-    public ApprovalWithRevision createApproval(CreateApprovalCommand command) {
-        log.info("결재 블록 생성 요청 - blockId={}, drafterId={}", command.blockId(), command.drafterId());
-
-        BlockSummary block = blockEligibilityPolicy.getApprovalBlockOrThrow(command.blockId());
-        blockEligibilityPolicy.assertProjectMember(block.projectId(), command.drafterId());
-
-        ApprovalWithRevision created = approvalRepository.createDraft(command.blockId(), command.drafterId());
-
-        log.info("결재 블록 생성 완료 - blockId={}, approvalId={}",
-                command.blockId(), created.approval().getApprovalId());
-        return created;
-    }
 
     @Override
     public ApprovalRevision updateRevisionDraft(UpdateApprovalRevisionCommand command) {

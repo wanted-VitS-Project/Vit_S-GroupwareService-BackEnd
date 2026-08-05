@@ -27,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -187,6 +188,14 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
         springDataApprovalLineRepository.activateFirstAndWaitRest(
                 revisionId, ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
         return findLinesByRevisionId(revisionId);
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteCascade(Long approvalId, LocalDateTime deletedAt) {
+        springDataApprovalLineRepository.softDeleteByApprovalId(approvalId, deletedAt);
+        springDataApprovalRevisionRepository.softDeleteByApprovalId(approvalId, deletedAt);
+        springDataApprovalRepository.softDelete(approvalId, deletedAt);
     }
 
     @Override

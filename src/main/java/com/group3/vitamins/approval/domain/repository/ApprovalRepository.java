@@ -7,6 +7,7 @@ import com.group3.vitamins.approval.domain.model.ApprovalRevision;
 import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.model.NewApprovalLine;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -64,4 +65,12 @@ public interface ApprovalRepository {
 
     /** SUB-002 — 1번 결재선은 ACTIVE, 나머지는 WAITING 으로 전환한 뒤 순서대로 다시 읽어 반환한다 */
     List<ApprovalLine> activateLines(Long revisionId);
+
+    /**
+     * 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) 시 호출 — {@code approval}과 그 아래
+     * 모든 {@code approval_revision}·{@code approval_line}을 논리 삭제한다. 호출 전에 이미
+     * {@code IN_PROGRESS}가 아님이 확인된 상태라고 가정한다. {@code approval_document}는 애초에
+     * 하드 삭제 전용(APR-007)이라 {@code deleted_at}을 안 쓰므로 여기서 건드리지 않는다.
+     */
+    void softDeleteCascade(Long approvalId, LocalDateTime deletedAt);
 }

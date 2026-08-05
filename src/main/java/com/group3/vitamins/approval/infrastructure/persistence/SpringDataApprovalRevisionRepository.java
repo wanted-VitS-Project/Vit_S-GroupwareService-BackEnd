@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface SpringDataApprovalRevisionRepository extends JpaRepository<ApprovalRevisionJpaEntity, Long> {
@@ -50,4 +51,10 @@ public interface SpringDataApprovalRevisionRepository extends JpaRepository<Appr
     @Query("UPDATE ApprovalRevisionJpaEntity r SET r.status = :inProgress, r.submittedAt = CURRENT_TIMESTAMP, "
             + "r.updatedAt = CURRENT_TIMESTAMP WHERE r.approvalRevisionId = :revisionId")
     void markSubmitted(@Param("revisionId") Long revisionId, @Param("inProgress") ApprovalStatus inProgress);
+
+    /** 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) — 이 결재의 회차 전부를 논리 삭제한다 */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalRevisionJpaEntity r SET r.deletedAt = :deletedAt, r.updatedAt = :deletedAt "
+            + "WHERE r.approvalId = :approvalId")
+    void softDeleteByApprovalId(@Param("approvalId") Long approvalId, @Param("deletedAt") LocalDateTime deletedAt);
 }

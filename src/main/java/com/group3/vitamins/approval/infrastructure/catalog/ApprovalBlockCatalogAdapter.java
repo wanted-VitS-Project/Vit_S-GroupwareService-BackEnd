@@ -2,29 +2,39 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 
 import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.application.port.BlockSummary;
+import com.group3.vitamins.project.block.domain.repository.BlockRepository;
+import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
+import com.group3.vitamins.project.step.domain.repository.StepRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
 /**
- * Block/Project 도메인(동훈님 소관) 연동 지점. {@code block}·{@code step}·{@code project_member}
- * 테이블 조회 인프라가 아직 없어 임시로 항상 통과시킨다
- * (`text.infrastructure.catalog.CatalogBlockAdapter`와 동일한 임시 처리).
+ * Block/Project 도메인(동훈님 소관) 실 연동. 블록·프로젝트 코드가 실제로 존재하게 된 뒤로는
+ * 스텁을 유지할 이유가 없어 정식 리포지토리를 직접 참조한다
+ * (`ApprovalEmployeeCatalogAdapter`가 `auth.AuthQueryMapper`를 재사용하는 것과 동일한 패턴).
  */
 @Component
+@RequiredArgsConstructor
 public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
 
-    private static final String APPROVAL_BLOCK_TYPE = "APPROVAL";
+    private final BlockRepository blockRepository;
+    private final StepRepository stepRepository;
+    private final ProjectMemberRepository projectMemberRepository;
 
+    /** {@code block.project_id} 컬럼이 없어(폐기됨) {@code step}을 거쳐야 projectId를 얻는다 */
     @Override
     public Optional<BlockSummary> findBlock(Long blockId) {
-        // TODO: 공용 block 테이블 조회 인프라가 아직 없어 임시로 항상 존재·APPROVAL 타입으로 간주한다.
-        return Optional.of(new BlockSummary(blockId, APPROVAL_BLOCK_TYPE, null));
+        return blockRepository.findById(blockId)
+                .flatMap(block -> stepRepository.findById(block.getStepId())
+                        .map(step -> new BlockSummary(
+                                block.getBlockId(), block.getType().name(), step.getProjectId())));
     }
 
+    /** 참여자 행이 있으면(권한 레벨 무관) member로 본다 — APR-012는 EDITOR까지 요구하지 않는다 */
     @Override
     public boolean isProjectMember(Long projectId, String userId) {
-        // TODO: project_member 조회 인프라가 아직 없어 임시로 항상 true 를 반환한다.
-        return true;
+        return projectMemberRepository.findPermission(projectId, userId).isPresent();
     }
 }

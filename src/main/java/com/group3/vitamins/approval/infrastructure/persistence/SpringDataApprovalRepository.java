@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+
 public interface SpringDataApprovalRepository extends JpaRepository<ApprovalJpaEntity, Long> {
 
     /**
@@ -18,4 +20,10 @@ public interface SpringDataApprovalRepository extends JpaRepository<ApprovalJpaE
     void markInProgress(@Param("approvalId") Long approvalId,
                          @Param("revisionNo") int revisionNo,
                          @Param("inProgress") ApprovalStatus inProgress);
+
+    /** 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) — approval 자체를 논리 삭제한다 */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalJpaEntity a SET a.deletedAt = :deletedAt, a.updatedAt = :deletedAt "
+            + "WHERE a.approvalId = :approvalId")
+    void softDelete(@Param("approvalId") Long approvalId, @Param("deletedAt") LocalDateTime deletedAt);
 }
