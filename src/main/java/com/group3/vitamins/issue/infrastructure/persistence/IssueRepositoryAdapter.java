@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -22,6 +23,12 @@ public class IssueRepositoryAdapter implements IssueRepository {
     }
 
     @Override
+    public Optional<Issue> findActiveById(Long issueId) {
+        return springDataIssueRepository.findByIssueIdAndDeletedAtIsNull(issueId)
+                .map(IssueMapper::toDomain);
+    }
+
+    @Override
     public void saveAssignees(Long issueId, List<String> userIds) {
         springDataIssueAssignRepository.saveAll(userIds.stream()
                 .map(userId -> IssueAssignEntity.link(issueId, userId))
@@ -33,5 +40,15 @@ public class IssueRepositoryAdapter implements IssueRepository {
         springDataIssueBlockRepository.saveAll(blockIds.stream()
                 .map(blockId -> IssueBlockEntity.link(issueId, blockId))
                 .toList());
+    }
+
+    @Override
+    public void deleteAssignees(Long issueId) {
+        springDataIssueAssignRepository.deleteByIssueId(issueId);
+    }
+
+    @Override
+    public void deleteBlockLinks(Long issueId) {
+        springDataIssueBlockRepository.deleteByIssueId(issueId);
     }
 }

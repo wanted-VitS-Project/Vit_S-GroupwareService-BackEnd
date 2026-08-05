@@ -55,6 +55,10 @@ public class Issue {
                 createdBy, createdAt, updatedAt, completedAt, deletedAt);
     }
 
+    public void delete(LocalDateTime now) {
+        this.deletedAt = now;
+    }
+
     public Long getIssueId() { return issueId; }
     public Long getStepId() { return stepId; }
     public String getTitle() { return title; }

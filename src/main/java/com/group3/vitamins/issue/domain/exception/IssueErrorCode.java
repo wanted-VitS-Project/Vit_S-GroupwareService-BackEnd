@@ -11,6 +11,7 @@ public enum IssueErrorCode implements ErrorCode {
 
     ISS_ACCESS_PERMISSION_REQUIRED("ISS_ACCESS_PERMISSION_REQUIRED", "Step 열람 권한이 없습니다."),
     ISS_EDIT_PERMISSION_REQUIRED("ISS_EDIT_PERMISSION_REQUIRED", "Step 편집 권한이 없습니다."),
+    ISS_NOT_FOUND("ISS_NOT_FOUND", "Issue 없음 또는 이미 논리 삭제되었습니다."),
     ISS_ASSIGNEE_NOT_FOUND("ISS_ASSIGNEE_NOT_FOUND", "존재하지 않는 사번이 포함되어 있습니다."),
     ISS_BLOCK_NOT_FOUND("ISS_BLOCK_NOT_FOUND", "존재하지 않거나 삭제된 Block이 포함되어 있습니다.");
 
