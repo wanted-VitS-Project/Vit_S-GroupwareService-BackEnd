@@ -1,5 +1,6 @@
-package com.group3.vitamins.department.presentation.api.dto.request;
+package com.group3.vitamins.department.presentation.api.request;
 
+import com.group3.vitamins.department.application.command.CreateDepartmentCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -18,4 +19,9 @@ public record CreateDepartmentRequest(
         @Schema(description = "상위 부서 번호. 생략하면 최상위 부서", example = "1")
         Long parentId
 ) {
+
+    /** 요청을 서비스 커맨드로 옮긴다. role 은 세션에서 가져온 값이라 요청 바디에 없다. */
+    public CreateDepartmentCommand toCommand(String role) {
+        return new CreateDepartmentCommand(role, name, parentId);
+    }
 }
