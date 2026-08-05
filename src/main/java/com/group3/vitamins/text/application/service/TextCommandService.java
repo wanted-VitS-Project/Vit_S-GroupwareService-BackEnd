@@ -42,7 +42,7 @@ public class TextCommandService implements TextCommandUseCase {
         }
 
         Text before = eligibilityPolicy.getActiveTextOrThrow(command.txtId());
-        eligibilityPolicy.assertEditPermission(command.txtId(), command.userId());
+        eligibilityPolicy.assertEditPermission(command.txtId(), command.userId(), command.role());
 
         Text saved = textRepository.updateContent(command.txtId(), command.content());
 
