@@ -13,9 +13,8 @@ public interface BlockCatalogPort {
     Optional<BlockSummary> findBlock(Long blockId);
 
     /**
-     * 해당 프로젝트의 member 인지 확인한다(`approval.md` 1번 요구사항 BND-001, `PERMISSION.md` §6).
-     * TODO: project_member 조회 인프라가 아직 없어 임시로 항상 true 를 반환한다
-     * (`text.infrastructure.catalog.CatalogBlockAdapter`와 동일한 임시 처리).
+     * 해당 프로젝트의 member 인지 확인한다(APR-012, `PERMISSION.md` §6).
+     * 실제 `project_member` 조회로 구현됨(2026-08-05) — `ApprovalBlockCatalogAdapter` 참고.
      */
     boolean isProjectMember(Long projectId, String userId);
 }

@@ -17,6 +17,9 @@ import java.time.LocalDateTime;
  *
  * <p>INV-04: {@code file_version_id} 만 참조한다 — 파일 실물 저장은 파일 도메인 소관이라
  * 여기서 {@code file_version} 과 JPA 연관관계를 맺지 않는다.
+ *
+ * <p>{@code deleted_at} 컬럼은 스키마에 있지만 매핑하지 않는다 — APR-007이 "하드 삭제(이력 보존
+ * 대상 아님)"로 확정했고, 실제로 이 컬럼을 세팅하는 코드가 없다(제거는 {@code deleteById}로 바로 지운다).
  */
 @Entity
 @NoArgsConstructor
@@ -38,9 +41,6 @@ public class ApprovalDocumentJpaEntity {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
 
     /** 문서 추가(APR-005) · 재상신 복사(SUB-006) 공용 생성 */
     public static ApprovalDocumentJpaEntity create(Long approvalRevisionId, Long fileVersionId) {
