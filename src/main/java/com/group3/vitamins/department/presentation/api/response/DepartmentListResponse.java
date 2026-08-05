@@ -1,5 +1,6 @@
-package com.group3.vitamins.department.presentation.api.dto.response;
+package com.group3.vitamins.department.presentation.api.response;
 
+import com.group3.vitamins.department.application.result.DepartmentTreeResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -15,4 +16,12 @@ public record DepartmentListResponse(
         @Schema(description = "최상위 부서 목록")
         List<DepartmentTreeResponse> content
 ) {
+
+    /** 조립된 트리 결과를 응답 봉투의 data 로 감싼다. */
+    public static DepartmentListResponse from(List<DepartmentTreeResult> results) {
+        return new DepartmentListResponse(
+                results.stream()
+                        .map(DepartmentTreeResponse::from)
+                        .toList());
+    }
 }
