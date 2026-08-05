@@ -3,9 +3,12 @@ package com.group3.vitamins.vitamate.presentation.api;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.vitamate.application.command.CreateVitamateAnalysisCommand;
 import com.group3.vitamins.vitamate.application.result.CreateVitamateAnalysisResult;
+import com.group3.vitamins.vitamate.application.result.VitamateAnalysisDetailResult;
 import com.group3.vitamins.vitamate.application.service.VitamateAnalysisCreateService;
+import com.group3.vitamins.vitamate.application.service.VitamateAnalysisQueryService;
 import com.group3.vitamins.vitamate.presentation.api.dto.request.CreateVitamateAnalysisRequest;
 import com.group3.vitamins.vitamate.presentation.api.dto.response.CreateVitamateAnalysisResponse;
+import com.group3.vitamins.vitamate.presentation.api.dto.response.VitamateAnalysisResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class VitamateAnalysisController {
 
     private final VitamateAnalysisCreateService createService;
+    private final VitamateAnalysisQueryService queryService;
 
     @Operation(summary = "문서 분석 요청", description = "선택한 문서 버전과 프롬프트를 기준으로 AI 분석을 요청한다.")
     @ApiResponses({
@@ -58,5 +62,28 @@ public class VitamateAnalysisController {
                         "비타메이트 분석 요청이 생성되었습니다.",
                         CreateVitamateAnalysisResponse.from(result)
                 ));
+    }
+
+    @Operation(summary = "AI 분석 상태 및 결과 조회", description = "분석 요청 정보, 처리 상태, 생성 결과, 실패 메시지, 선택 문서와 근거를 조회한다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "분석 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "VITAMATE_INVALID_REQUEST — 잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "VITAMATE_ACCESS_PERMISSION_REQUIRED — 접근 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_ANALYSIS_NOT_FOUND — 분석 이력 없음")
+    })
+    @GetMapping("/vitamate/analyses/{analysisId}")
+    // 분석 ID 기준으로 요청자가 접근 가능한 분석 상태와 결과를 조회한다.
+    public ResponseEntity<ApiResponse<VitamateAnalysisResponse>> getAnalysis(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long analysisId
+    ) {
+        VitamateAnalysisDetailResult result = queryService.getAnalysis(analysisId, userId);
+
+        return ResponseEntity.ok(ApiResponse.of(
+                200,
+                "비타메이트 분석 조회 성공",
+                VitamateAnalysisResponse.from(result)
+        ));
     }
 }
