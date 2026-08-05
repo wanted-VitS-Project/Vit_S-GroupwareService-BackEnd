@@ -1,11 +1,7 @@
 # MyBatis Convention
 
-**최종 업데이트**: 2026-08-04
-**대상**: JPA/MyBatis 역할 분리, MyBatis Mapper·XML 작성 작업
+**최종 업데이트**: 2026-08-04  
 **목적**: MyBatis SQL 위치와 작성 방식을 통일해서 팀원이 코드를 쉽게 찾고 유지보수할 수 있게 한다.
-
-> 이 문서는 AI와 팀원이 MyBatis Mapper를 작성할 때 반드시 따라야 하는 기준이다.
-> Mapper·XML 작성/수정, 복잡한 조회 SQL 설계 전 이 문서를 먼저 확인한다.
 
 ---
 
@@ -31,9 +27,6 @@ MyBatis는 아래 경우에 사용한다.
 - XML의 `namespace`는 Mapper 인터페이스 전체 경로와 같게 작성한다.
 - XML의 `id`는 Mapper 메서드명과 같게 작성한다.
 
-> ⚠️ `auth.infrastructure.persistence.AuthQueryMapper`는 이 규칙 확정 전에 작성되어 `@Select` 어노테이션 방식을 쓴다.
-> 새로 작성하는 Mapper는 이 파일을 벤치마킹하지 말고 아래 XML 방식을 따른다.
-
 ---
 
 ## 3. 파일 위치
@@ -46,17 +39,10 @@ XML Mapper
 src/main/resources/mapper/{domain}/{Domain}Mapper.xml
 ```
 
-Row 클래스 위치:
-
-```text
-src/main/java/com/group3/vitamins/{domain}/infrastructure/persistence/row/{Domain}Row.java
-```
-
 예시:
 
 ```text
 src/main/java/com/group3/vitamins/vitamate/infrastructure/persistence/mapper/VitamateAnalysisMapper.java
-src/main/java/com/group3/vitamins/vitamate/infrastructure/persistence/row/VitamateAnalysisRow.java
 src/main/resources/mapper/vitamate/VitamateAnalysisMapper.xml
 ```
 

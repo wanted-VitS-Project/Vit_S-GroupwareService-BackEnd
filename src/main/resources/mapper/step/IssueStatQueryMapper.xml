@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.step.infrastructure.adapter.IssueStatQueryMapper">
+
+    <select id="countByStepIds"
+            resultType="com.group3.vitamins.project.step.infrastructure.adapter.IssueStatRow">
+        SELECT step_id AS stepId,
+               COUNT(*) AS totalCount,
+               COALESCE(SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END), 0) AS doneCount,
+               COALESCE(SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END), 0) AS inProgressCount
+          FROM issue
+         WHERE step_id IN
+        <foreach item="id" collection="stepIds" open="(" separator="," close=")">#{id}</foreach>
+           AND deleted_at IS NULL
+         GROUP BY step_id
+    </select>
+
+</mapper>

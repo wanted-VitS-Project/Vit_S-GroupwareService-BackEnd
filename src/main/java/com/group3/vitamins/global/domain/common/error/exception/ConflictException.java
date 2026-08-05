@@ -9,13 +9,18 @@ public class ConflictException extends DomainException {
         super(errorCode);
     }
 
-    public ConflictException(ErrorCode errorCode, Throwable cause) {
-        super(errorCode, cause);
-    }
-
-    /** 상황별 메시지가 필요한 경우 (코드는 유지) — 사용 중 건수·삭제분 안내 문구 */
+    /**
+     * 코드는 그대로 두고 메시지만 상황에 맞게 덮어쓴다.
+     *
+     * <p>예: {@code DEPT_HAS_EMPLOYEES} 는 명세상 <b>메시지에 인원 수를 담아야</b> 한다
+     * (`.ai/api/department.md` §4). 코드가 바뀌면 프론트 분기가 깨지므로 <b>메시지만</b> 바꾼다.
+     */
     public ConflictException(ErrorCode errorCode, String message) {
         super(errorCode, message);
+    }
+
+    public ConflictException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode, cause);
     }
 
     @Override

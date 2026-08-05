@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.vitamate.infrastructure.persistence.mapper.VitamateAnalysisMapper">
+
+    <select id="findAccessibleVitamateBlock"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateBlockContextRow">
+        SELECT
+            b.block_id AS blockId,
+            vb.vitamate_block_id AS vitamateBlockId,
+            b.step_id AS stepId,
+            s.project_id AS projectId
+        FROM block b
+                 JOIN vitamate_block vb
+                      ON vb.vitamate_block_id = b.type_id
+                 JOIN step s
+                      ON s.step_id = b.step_id
+        WHERE b.block_id = #{blockId}
+          AND b.type = 'AI'
+          AND b.deleted_at IS NULL
+          AND vb.deleted_at IS NULL
+          AND (
+            EXISTS (
+                SELECT 1
+                FROM step_permission sp
+                WHERE sp.step_id = b.step_id
+                  AND sp.user_id = #{userId}
+                  AND sp.permission != 'NONE'
+            )
+                OR (
+                NOT EXISTS (
+                    SELECT 1
+                    FROM step_permission sp
+                    WHERE sp.step_id = b.step_id
+                      AND sp.user_id = #{userId}
+                )
+                    AND EXISTS (
+                    SELECT 1
+                    FROM project_member pm
+                    WHERE pm.project_id = s.project_id
+                      AND pm.user_id = #{userId}
+                      AND pm.permission != 'NONE'
+                )
+                )
+            )
+    </select>
+
+    <select id="countCompletedFileVersionsInProject" resultType="int">
+        SELECT COUNT(DISTINCT fv.file_version_id)
+        FROM file_version fv
+        JOIN `file` f
+        ON f.file_id = fv.file_id
+        WHERE f.project_id = #{projectId}
+        AND f.deleted_at IS NULL
+        AND fv.deleted_at IS NULL
+        AND fv.upload_status = 'COMPLETED'
+        AND fv.file_version_id IN
+        <foreach collection="fileVersionIds" item="fileVersionId" open="(" separator="," close=")">
+            #{fileVersionId}
+        </foreach>
+    </select>
+
+</mapper>

@@ -31,9 +31,12 @@ public class PasswordResetGateFilter extends OncePerRequestFilter {
 
     /** 비밀번호를 바꾸기 위해 반드시 열려 있어야 하는 경로 */
     private static final Set<String> ALLOWED_PATHS = Set.of(
-            "/api/v1/auth/password",   // 바꾸러 가는 곳
-            "/api/v1/auth/logout",     // 안 바꾸고 나갈 자유
-            "/api/v1/auth/me"          // 상태를 확인해야 화면을 그린다
+            "/api/v1/auth/password",           // 바꾸러 가는 곳
+            "/api/v1/auth/logout",             // 안 바꾸고 나갈 자유
+            "/api/v1/auth/me",                 // 상태를 확인해야 화면을 그린다
+            // 최초 로그인은 약관·비번 게이트가 동시에 켜진다. 약관 동의가 두 게이트를 다 통과해야
+            // 순서(약관 → 비번)가 성립하므로 여기에도 넣는다 (auth.md §6-7).
+            "/api/v1/auth/terms-agreements"
     );
 
     private final HandlerExceptionResolver resolver;
@@ -65,6 +68,9 @@ public class PasswordResetGateFilter extends OncePerRequestFilter {
         if (HttpMethod.OPTIONS.matches(request.getMethod())) {
             return false;
         }
-        return !ALLOWED_PATHS.contains(request.getRequestURI());
+        // getRequestURI() 는 컨텍스트 경로를 포함한다. 컨텍스트 경로를 떼고 비교해야
+        // server.servlet.context-path 설정·프록시 배포 시에도 예외 경로가 어긋나지 않는다 (미설정이면 "" 라 무해).
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return !ALLOWED_PATHS.contains(path);
     }
 }
