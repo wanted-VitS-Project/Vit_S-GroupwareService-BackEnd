@@ -1,0 +1,49 @@
+### 로그인 (세션 쿠키 발급 — 아래 요청들 실행 전에 먼저 실행)
+POST localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+    "userId": "EMP001",
+    "password": ""
+}
+
+### 이미지 항목 생성
+POST localhost:8080/api/v1/blocks/images/1/items
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="files"; filename="스크린샷 2026-02-23 181201.png"
+Content-Type: image/png
+
+< C:\Users\user\Pictures\Screenshots\스크린샷 2026-02-23 181201.png
+--WebAppBoundary
+Content-Disposition: form-data; name="files"; filename="스크린샷 2026-02-23 145619.png"
+Content-Type: image/png
+
+< C:\Users\user\Pictures\Screenshots\스크린샷 2026-02-23 145619.png
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "captions": ["취뽀 부적", "병아리"]
+}
+--WebAppBoundary--
+
+### 이미지 항목 수정 (순서·캡션) — images 배열에 없는 이미지는 삭제 처리됨 (부분집합 OK)
+### 위 SQL로 img_id 목록 조회한 뒤 원하는 순서대로 나열해서 imgId 값들 교체할 것
+PATCH localhost:8080/api/v1/blocks/images/items/1
+Content-Type: application/json
+
+{
+    "images": [
+        { "imgId": 2, "caption": "취뽀 부적" },
+        { "imgId": 3, "caption": "병아리 첫번째" },
+        { "imgId": 4, "caption": "또 다른 병아리" },
+        { "imgId": 5, "caption": "모듈6 ERD.v1" },
+        { "imgId": 6, "caption": "모듈6 ERD.v2" }
+    ]
+}
+
+### 이미지 항목 삭제 (단건) — imgId를 실제 삭제할 이미지 ID로 교체할 것
+DELETE localhost:8080/api/v1/blocks/images/items/1
