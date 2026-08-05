@@ -42,12 +42,17 @@ public class JobPositionRepositoryAdapter implements JobPositionRepository {
 
     @Override
     public JobPosition save(JobPosition jobPosition) {
+        // saveAndFlush — 이름 UNIQUE 위반을 커밋이 아니라 지금 발생시킨다.
+        // 일반 save 는 UPDATE(수정 경로)를 커밋 때 flush 해서, 서비스의 try/catch 밖에서 예외가 터진다.
         return JobPositionMapper.toDomain(
-                springDataRepository.save(JobPositionMapper.toEntity(jobPosition)));
+                springDataRepository.saveAndFlush(JobPositionMapper.toEntity(jobPosition)));
     }
 
     @Override
     public void delete(JobPosition jobPosition) {
         springDataRepository.deleteById(jobPosition.getJobPositionId());
+        // flush — DELETE 를 지금 실행해 FK 위반을 커밋이 아니라 이 시점에 발생시킨다.
+        // 그래야 서비스의 try/catch 가 잡아 POS_IN_USE(409)로 변환할 수 있다(안 하면 커밋 때 터져 500).
+        springDataRepository.flush();
     }
 }

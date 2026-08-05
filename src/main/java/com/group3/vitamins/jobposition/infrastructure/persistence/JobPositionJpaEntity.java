@@ -30,7 +30,9 @@ public class JobPositionJpaEntity {
     @Column(name = "job_position_id")
     private Long jobPositionId;
 
-    @Column(name = "name", nullable = false, length = 30)
+    // unique=true 로 DB 의 uk_job_position_name 을 엔티티에도 명시한다. validate 는 UNIQUE 를 검사하지
+    // 않으므로 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨 중복 저장이 실제로 막힌다.
+    @Column(name = "name", nullable = false, length = 30, unique = true)
     private String name;
 
     @Column(name = "sort_order", nullable = false)
