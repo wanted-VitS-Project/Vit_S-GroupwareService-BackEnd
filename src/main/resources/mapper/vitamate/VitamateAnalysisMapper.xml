@@ -15,6 +15,7 @@
         FROM block b
                  JOIN vitamate_block vb
                       ON vb.vitamate_block_id = b.type_id
+                          AND vb.block_id = b.block_id
                  JOIN step s
                       ON s.step_id = b.step_id
         WHERE b.block_id = #{blockId}
@@ -148,6 +149,70 @@
           AND vad.deleted_at IS NULL
           AND dc.deleted_at IS NULL
         ORDER BY vac.rank_order ASC
+    </select>
+
+    <select id="findProcessingAnalysisJob"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobRow">
+        SELECT
+            va.vitamate_analysis_id AS analysisId,
+            va.processing_attempt_id AS attemptId,
+            va.prompt AS prompt,
+            s.project_id AS projectId,
+            b.block_id AS blockId
+        FROM vitamate_analysis va
+                 JOIN vitamate_block vb
+                      ON vb.vitamate_block_id = va.vitamate_block_id
+                 JOIN block b
+                      ON b.block_id = vb.block_id
+                          AND b.type_id = vb.vitamate_block_id
+                 JOIN step s
+                      ON s.step_id = b.step_id
+        WHERE va.vitamate_analysis_id = #{analysisId}
+          AND va.processing_attempt_id = #{attemptId}
+          AND va.analysis_status = 'PROCESSING'
+          AND va.lease_expires_at > NOW()
+          AND b.type = 'AI'
+          AND va.deleted_at IS NULL
+          AND vb.deleted_at IS NULL
+          AND b.deleted_at IS NULL
+    </select>
+
+    <select id="findAnalysisJobDocuments"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow">
+        SELECT
+            vad.file_version_id AS fileVersionId,
+            f.name AS fileName
+        FROM vitamate_analysis_document vad
+                 JOIN file_version fv
+                      ON fv.file_version_id = vad.file_version_id
+                 JOIN `file` f
+                      ON f.file_id = fv.file_id
+        WHERE vad.vitamate_analysis_id = #{analysisId}
+          AND vad.deleted_at IS NULL
+          AND fv.deleted_at IS NULL
+          AND f.deleted_at IS NULL
+        ORDER BY vad.created_at ASC, vad.vitamate_analysis_document_id ASC
+    </select>
+
+    <select id="findAnalysisJobChunks"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobChunkRow">
+        SELECT
+            dc.file_version_id AS fileVersionId,
+            dc.document_chunk_id AS documentChunkId,
+            dc.chroma_id AS chromaId,
+            dc.page_number AS pageNumber,
+            dc.excerpt AS excerpt
+        FROM vitamate_analysis_document vad
+                 JOIN file_version fv
+                      ON fv.file_version_id = vad.file_version_id
+                 JOIN document_chunk dc
+                      ON dc.file_version_id = fv.file_version_id
+        WHERE vad.vitamate_analysis_id = #{analysisId}
+          AND vad.deleted_at IS NULL
+          AND fv.deleted_at IS NULL
+          AND dc.deleted_at IS NULL
+          AND dc.embedding_status = 'COMPLETED'
+        ORDER BY vad.created_at ASC, vad.vitamate_analysis_document_id ASC, dc.chunk_index ASC
     </select>
 
 </mapper>

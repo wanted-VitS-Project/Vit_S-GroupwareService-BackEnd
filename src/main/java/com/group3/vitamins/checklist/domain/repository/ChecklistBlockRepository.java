@@ -27,4 +27,7 @@ public interface ChecklistBlockRepository {
      *         (중복 삭제 이벤트 판별용)
      */
     boolean markDeleted(Long chkBlockId, LocalDateTime deletedAt);
+
+    /** 활동 로그 이벤트 발행용 — 이 블록 상세 행이 참조하는 공용 block 테이블 PK. */
+    Long findBlockId(Long chkBlockId);
 }

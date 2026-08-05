@@ -4,18 +4,23 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.vitamate.application.command.CreateVitamateAnalysisCommand;
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStore;
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStore.ExistingAnalysis;
-import com.group3.vitamins.vitamate.application.port.VitamateBlockReader;
-import com.group3.vitamins.vitamate.application.port.VitamateFileReader;
+import com.group3.vitamins.vitamate.application.command.DispatchVitamateAnalysisJobCommand;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort.ExistingAnalysis;
+import com.group3.vitamins.vitamate.application.port.VitamateBlockReaderPort;
+import com.group3.vitamins.vitamate.application.port.VitamateFileReaderPort;
 import com.group3.vitamins.vitamate.application.result.CreateVitamateAnalysisResult;
 import com.group3.vitamins.vitamate.application.support.VitamateRequestHashGenerator;
+import com.group3.vitamins.vitamate.application.usecase.CreateVitamateAnalysisUseCase;
+import com.group3.vitamins.vitamate.application.usecase.DispatchVitamateAnalysisJobUseCase;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -25,19 +30,21 @@ import java.util.Optional;
 // 비타메이트 분석 요청 생성 흐름을 처리하는 서비스
 @Service
 @RequiredArgsConstructor
-public class VitamateAnalysisCreateService {
+public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseCase {
 
-    private final VitamateAnalysisStore analysisStore;
-    private final VitamateBlockReader blockReader;
-    private final VitamateFileReader fileReader;
+    private final VitamateAnalysisStorePort analysisStore;
+    private final VitamateBlockReaderPort blockReader;
+    private final VitamateFileReaderPort fileReader;
     private final VitamateRequestHashGenerator requestHashGenerator;
+    private final DispatchVitamateAnalysisJobUseCase dispatchUseCase;
 
     // 분석 요청 생성 전체 흐름을 조율한다.
+    @Override
     @Transactional(propagation = Propagation.REQUIRED)
-    public CreateVitamateAnalysisResult create(CreateVitamateAnalysisCommand command) {
+    public CreateVitamateAnalysisResult handle(CreateVitamateAnalysisCommand command) {
         validateCommand(command);
 
-        VitamateBlockReader.VitamateBlockContext blockContext = blockReader.findAccessibleVitamateBlock(
+        VitamateBlockReaderPort.VitamateBlockContext blockContext = blockReader.findAccessibleVitamateBlock(
                 command.blockId(),
                 command.requestedBy()
         ).orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_BLOCK_NOT_FOUND));
@@ -64,7 +71,7 @@ public class VitamateAnalysisCreateService {
 
         try {
             result = analysisStore.savePendingAnalysis(
-                    new VitamateAnalysisStore.NewAnalysis(
+                    new VitamateAnalysisStorePort.NewAnalysis(
                             blockContext.vitamateBlockId(),
                             command.requestedBy(),
                             command.idempotencyKey(),
@@ -84,7 +91,27 @@ public class VitamateAnalysisCreateService {
 
         analysisStore.saveAnalysisDocuments(result.analysisId(), command.fileVersionIds());
 
+        // DB 커밋이 끝난 뒤 Python worker가 조회할 큐 메시지를 발행한다.
+        dispatchAfterCommit(result.analysisId());
+
         return result;
+    }
+
+    // 트랜잭션 커밋 이후에 비동기 작업 큐로 분석 요청을 전달한다.
+    private void dispatchAfterCommit(Long analysisId) {
+        DispatchVitamateAnalysisJobCommand dispatchCommand = new DispatchVitamateAnalysisJobCommand(analysisId);
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            dispatchUseCase.handle(dispatchCommand);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                dispatchUseCase.handle(dispatchCommand);
+            }
+        });
     }
 
     // 기존 멱등성 요청이 같은 본문인지 확인하고 응답 결과로 변환한다.

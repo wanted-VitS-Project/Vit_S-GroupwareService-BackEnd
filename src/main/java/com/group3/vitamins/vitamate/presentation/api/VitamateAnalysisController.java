@@ -2,10 +2,11 @@ package com.group3.vitamins.vitamate.presentation.api;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.vitamate.application.command.CreateVitamateAnalysisCommand;
+import com.group3.vitamins.vitamate.application.query.GetVitamateAnalysisQuery;
 import com.group3.vitamins.vitamate.application.result.CreateVitamateAnalysisResult;
 import com.group3.vitamins.vitamate.application.result.VitamateAnalysisDetailResult;
-import com.group3.vitamins.vitamate.application.service.VitamateAnalysisCreateService;
-import com.group3.vitamins.vitamate.application.service.VitamateAnalysisQueryService;
+import com.group3.vitamins.vitamate.application.usecase.CreateVitamateAnalysisUseCase;
+import com.group3.vitamins.vitamate.application.usecase.GetVitamateAnalysisUseCase;
 import com.group3.vitamins.vitamate.presentation.api.dto.request.CreateVitamateAnalysisRequest;
 import com.group3.vitamins.vitamate.presentation.api.dto.response.CreateVitamateAnalysisResponse;
 import com.group3.vitamins.vitamate.presentation.api.dto.response.VitamateAnalysisResponse;
@@ -26,8 +27,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class VitamateAnalysisController {
 
-    private final VitamateAnalysisCreateService createService;
-    private final VitamateAnalysisQueryService queryService;
+    private final CreateVitamateAnalysisUseCase createUseCase;
+    private final GetVitamateAnalysisUseCase getAnalysisUseCase;
 
     @Operation(summary = "문서 분석 요청", description = "선택한 문서 버전과 프롬프트를 기준으로 AI 분석을 요청한다.")
     @ApiResponses({
@@ -38,14 +39,14 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "VITAMATE_IDEMPOTENCY_CONFLICT — 같은 키로 다른 요청")
     })
     @PostMapping("/blocks/{blockId}/vitamate/analyses")
-    // HTTP 요청값을 command로 변환하고 분석 요청 생성 서비스를 호출한다.
+    // HTTP 요청값을 command로 변환하고 분석 요청 생성 유스케이스를 호출한다.
     public ResponseEntity<ApiResponse<CreateVitamateAnalysisResponse>> createAnalysis(
             @AuthenticationPrincipal String userId,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @PathVariable Long blockId,
             @Valid @RequestBody CreateVitamateAnalysisRequest request
     ) {
-        CreateVitamateAnalysisResult result = createService.create(
+        CreateVitamateAnalysisResult result = createUseCase.handle(
                 new CreateVitamateAnalysisCommand(
                         blockId,
                         userId,
@@ -72,12 +73,14 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_ANALYSIS_NOT_FOUND — 분석 이력 없음 또는 접근 불가")
     })
     @GetMapping("/vitamate/analyses/{analysisId}")
-    // 분석 ID 기준으로 요청자가 접근 가능한 분석 상태와 결과를 조회한다.
+    // 분석 ID와 요청자 정보를 query로 변환하고 분석 조회 유스케이스를 호출한다.
     public ResponseEntity<ApiResponse<VitamateAnalysisResponse>> getAnalysis(
             @AuthenticationPrincipal String userId,
             @PathVariable Long analysisId
     ) {
-        VitamateAnalysisDetailResult result = queryService.getAnalysis(analysisId, userId);
+        VitamateAnalysisDetailResult result = getAnalysisUseCase.handle(
+                new GetVitamateAnalysisQuery(analysisId, userId)
+        );
 
         return ResponseEntity.ok(ApiResponse.of(
                 200,

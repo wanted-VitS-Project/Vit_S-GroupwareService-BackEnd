@@ -40,4 +40,10 @@ public class CatalogChecklistBlockAdapter implements ChecklistBlockRepository {
         int updated = springDataChecklistBlockRepository.markDeletedIfActive(chkBlockId, deletedAt);
         return updated > 0;
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Long findBlockId(Long chkBlockId) {
+        return springDataChecklistBlockRepository.findBlockIdByChkBlockId(chkBlockId).orElseThrow();
+    }
 }

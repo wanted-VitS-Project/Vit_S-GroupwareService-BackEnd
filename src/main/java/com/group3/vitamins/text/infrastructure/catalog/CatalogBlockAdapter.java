@@ -22,13 +22,6 @@ public class CatalogBlockAdapter implements BlockCatalogPort {
     private final StepAccessUseCase stepAccessUseCase;
 
     @Override
-    @Deprecated
-    public boolean hasEditPermission(String blockType, Long blockTypeId, String userId) {
-        // 체크리스트가 아직 role 을 안 실어 보내는 예전 호출부용 — 기존 스텁 동작(항상 true) 그대로 유지.
-        return true;
-    }
-
-    @Override
     public boolean hasEditPermission(String blockType, Long blockTypeId, String userId, String role) {
         return findStepId(blockType, blockTypeId)
                 .map(stepId -> isEditable(stepId, userId, role))
