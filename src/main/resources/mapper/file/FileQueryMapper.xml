@@ -25,4 +25,63 @@
          LIMIT 1
     </select>
 
+    <!-- 완료된 버전 목록(§8 이력) — 차수 내림차순. 실패·미완료·삭제 버전 제외. -->
+    <select id="findCompletedVersions"
+            resultType="com.group3.vitamins.file.application.result.FileVersionProjection">
+        SELECT file_version_id     AS fileVersionId,
+               version_no          AS versionNo,
+               original_file_name  AS originalFileName,
+               extension           AS extension,
+               size_bytes          AS sizeBytes,
+               page_count          AS pageCount,
+               comment             AS comment,
+               uploader_name       AS uploaderName,
+               uploader_department AS uploaderDepartment,
+               uploader_position   AS uploaderPosition,
+               completed_at        AS completedAt
+          FROM file_version
+         WHERE file_id = #{fileId}
+           AND upload_status = 'COMPLETED'
+           AND deleted_at IS NULL
+         ORDER BY version_no DESC
+    </select>
+
+    <!-- 블록 파일 목록(§3) — 문서별 최신 완료 버전 + 전체 버전 수. 완료 버전 0개 문서는 INNER JOIN 으로 제외. -->
+    <!-- deleted=false: 재직 문서(deleted_at IS NULL) / true: 휴지통. 정렬은 블록 연결일 오름차순. -->
+    <select id="findBlockFiles"
+            resultType="com.group3.vitamins.file.application.result.BlockFileProjection">
+        SELECT f.file_id             AS fileId,
+               f.name                AS name,
+               lv.file_version_id    AS latestVersionId,
+               lv.version_no         AS latestVersionNo,
+               vc.cnt                AS versionCount,
+               lv.original_file_name AS originalFileName,
+               lv.extension          AS extension,
+               lv.size_bytes         AS sizeBytes,
+               lv.uploader_name      AS uploaderName,
+               lv.uploader_department AS uploaderDepartment,
+               lv.uploader_position  AS uploaderPosition,
+               lv.completed_at       AS updatedAt,
+               f.deleted_at          AS deletedAt
+          FROM block_file bf
+          JOIN file f ON f.file_id = bf.file_id
+          JOIN (
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE bf.block_id = #{blockId}
+           AND (
+                (#{deleted} = FALSE AND f.deleted_at IS NULL)
+                OR (#{deleted} = TRUE AND f.deleted_at IS NOT NULL)
+               )
+         ORDER BY bf.linked_at ASC
+    </select>
+
 </mapper>

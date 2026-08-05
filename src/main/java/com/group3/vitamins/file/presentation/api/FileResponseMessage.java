@@ -5,6 +5,10 @@ public final class FileResponseMessage {
 
     public static final String UPLOAD_STARTED = "업로드 URL을 발급했습니다.";
     public static final String UPLOAD_COMPLETED = "업로드를 완료했습니다.";
+    public static final String DOWNLOAD_URL_ISSUED = "다운로드 URL을 발급했습니다.";
+    public static final String VERSION_DETAIL = "버전 조회 성공";
+    public static final String VERSION_HISTORY = "버전 이력 조회 성공";
+    public static final String BLOCK_FILES = "블록 파일 목록 조회 성공";
 
     private FileResponseMessage() {
     }

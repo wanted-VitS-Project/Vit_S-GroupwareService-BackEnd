@@ -15,6 +15,8 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -50,10 +52,12 @@ public class S3FileStorageAdapter implements FileStoragePort {
 
     @Override
     public PresignedUrl presignDownload(String storageKey, String originalFileName) {
+        // RFC 5987 — 한글 등 비ASCII 파일명이 깨지지 않도록 filename*=UTF-8'' 로 인코딩한다.
+        String encoded = URLEncoder.encode(originalFileName, StandardCharsets.UTF_8).replace("+", "%20");
         GetObjectRequest get = GetObjectRequest.builder()
                 .bucket(bucket)
                 .key(storageKey)
-                .responseContentDisposition("attachment; filename=\"" + originalFileName + "\"")
+                .responseContentDisposition("attachment; filename*=UTF-8''" + encoded)
                 .build();
 
         var presigned = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()

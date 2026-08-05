@@ -19,4 +19,14 @@ public class FileQueryAdapter implements FileQueryPort {
     public java.util.Optional<Long> findBlockIdByFileId(Long fileId) {
         return java.util.Optional.ofNullable(fileQueryMapper.findBlockIdByFileId(fileId));
     }
+
+    @Override
+    public java.util.List<com.group3.vitamins.file.application.result.FileVersionProjection> findCompletedVersions(Long fileId) {
+        return fileQueryMapper.findCompletedVersions(fileId);
+    }
+
+    @Override
+    public java.util.List<com.group3.vitamins.file.application.result.BlockFileProjection> findBlockFiles(Long blockId, boolean deleted) {
+        return fileQueryMapper.findBlockFiles(blockId, deleted);
+    }
 }
