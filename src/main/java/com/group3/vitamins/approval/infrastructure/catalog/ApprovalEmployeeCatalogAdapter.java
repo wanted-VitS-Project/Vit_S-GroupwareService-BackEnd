@@ -2,7 +2,7 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
-import com.group3.vitamins.auth.infrastructure.persistence.AuthQueryMapper;
+import com.group3.vitamins.auth.infrastructure.adapter.AuthQueryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

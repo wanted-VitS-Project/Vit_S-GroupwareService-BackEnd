@@ -8,6 +8,10 @@ import com.group3.vitamins.vitamate.infrastructure.persistence.repository.Vitama
 import com.group3.vitamins.vitamate.infrastructure.persistence.repository.VitamateAnalysisJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import com.group3.vitamins.vitamate.domain.model.AnalysisStatus;
+
+import java.time.LocalDateTime;
+
 
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +66,84 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStore {
                 .toList();
 
         documentRepository.saveAll(documents);
+    }
+
+    // PENDING 상태의 분석 요청을 PROCESSING 상태로 변경한다.
+    @Override
+    public boolean markProcessing(
+            Long analysisId,
+            String attemptId,
+            LocalDateTime startedAt,
+            LocalDateTime leaseExpiresAt
+    ) {
+        int updatedCount = analysisRepository.markProcessing(
+                analysisId,
+                AnalysisStatus.PENDING,
+                AnalysisStatus.PROCESSING,
+                attemptId,
+                startedAt,
+                leaseExpiresAt
+        );
+
+        return updatedCount == 1;
+    }
+
+    // PROCESSING 상태의 분석 요청을 COMPLETED 상태로 변경하고 결과를 저장한다.
+    @Override
+    public boolean markCompleted(
+            Long analysisId,
+            String attemptId,
+            String result,
+            LocalDateTime completedAt
+    ) {
+        int updatedCount = analysisRepository.markCompleted(
+                analysisId,
+                AnalysisStatus.PROCESSING,
+                AnalysisStatus.COMPLETED,
+                attemptId,
+                result,
+                completedAt
+        );
+
+        return updatedCount == 1;
+    }
+
+    // PROCESSING 상태의 분석 요청을 FAILED 상태로 변경하고 실패 사유를 저장한다.
+    @Override
+    public boolean markFailedFromProcessing(
+            Long analysisId,
+            String attemptId,
+            String errorMessage,
+            LocalDateTime failedAt
+    ) {
+        int updatedCount = analysisRepository.markFailedFromProcessing(
+                analysisId,
+                AnalysisStatus.PROCESSING,
+                AnalysisStatus.FAILED,
+                attemptId,
+                errorMessage,
+                failedAt
+        );
+
+        return updatedCount == 1;
+    }
+
+    // 아직 처리되지 않은 PENDING 상태의 분석 요청을 FAILED 상태로 마감한다.
+    @Override
+    public boolean markFailedFromPending(
+            Long analysisId,
+            String errorMessage,
+            LocalDateTime failedAt
+    ) {
+        int updatedCount = analysisRepository.markFailedFromPending(
+                analysisId,
+                AnalysisStatus.PENDING,
+                AnalysisStatus.FAILED,
+                errorMessage,
+                failedAt
+        );
+
+        return updatedCount == 1;
     }
 
     // JPA 엔티티를 application 계층에서 쓰는 기존 분석 요청 값으로 변환한다.

@@ -1,8 +1,8 @@
 # 🏗️ 아키텍처 컨벤션
 
+**최종 업데이트**: 2026-08-05 (§5 갱신 — `department`·`account`·`auth` 레거시 3도메인 헥사고날 이관 완료 반영)
 **최종 업데이트**: 2026-08-05 (§2-2 신설 — **쓰기 방향 포트**와 **타입별 확장(SPI)** 규칙. §2-1 은 조회만 다뤘다)
 **최종 업데이트**: 2026-08-04 (§2-1 신설 — 애그리게이트가 여러 개인 도메인의 서브패키지 규칙, `project` 계층 38개 엔드포인트 대응)
-**최종 업데이트**: 2026-08-04 (신설 — 헥사고날 구조 확정, `businesscategory` 기준)
 **담당**: 김동현 (DevOps)
 **근거**: `businesscategory` 도메인 구현 (#96~#99) — 4계층 + `command/query/result/usecase/service/policy/port` 전체를 갖춘 첫 완성 사례
 
@@ -203,17 +203,19 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 ---
 
-## 5. 기존 도메인 예외 (레거시)
+## 5. 레거시 도메인 이관 완료 (2026-08-05)
 
-`auth`·`account` 는 이 컨벤션이 확정되기 전에 만들어졌다. 두 도메인 모두:
+`department`·`account`·`auth` 는 이 컨벤션 확정 전에 만들어진 구세대 3계층이었으나 **2026-08-05 헥사고날로 이관 완료**했다.
+이제 전 도메인이 이 문서의 구조를 따른다 (`refactor/department-hexagonal` · `refactor/account-auth-hexagonal`).
 
-- `usecase`/`service` 분리가 없다 — Controller 가 `XxxService` 를 직접 호출한다.
-- `policy`/`port` 서브패키지가 없다.
-- `domain/repository` 포트가 없다 — Spring Data `JpaRepository`/MyBatis 매퍼 인터페이스를 `infrastructure` 에서 바로 서비스에 주입한다.
-- `presentation/api/dto/request|response` 처럼 `dto` 를 한 단계 더 감싼다 (신규 컨벤션은 `api/request|response`, `dto` 없이 바로 둔다).
+- **department** — 완전 이관. `domain/model`·`domain/repository` 포트 + `infrastructure/persistence` 어댑터까지 `businesscategory` 와 동형.
+- **account** — `application`(usecase·service·command·result·policy·port)·`presentation`(request/response) 이관 완료.
+  단 `AccountEntity`·`AccountJpaRepository` 는 **auth 와 공유하는 인증 애그리게이트**라 `domain/model` 완전 분리는 보류했다(아래 잔여).
+- **auth** — 이관 완료. **자기 소유 테이블이 없는 오케스트레이션 도메인**이라 `domain/model`·`domain/repository` 가 없다(정상).
+  로그인·잠금·약관은 account 의 공유 엔티티를 직접 쓰고, 실패 기록만 `LoginFailureRecordPort`(REQUIRES_NEW)로 분리했다.
 
-**신규 기능은 `auth`/`account` 의 구조를 참고하지 말고, 이 문서와 `businesscategory` 를 따른다.**
-두 도메인의 기존 코드를 이 컨벤션으로 옮기는 것은 이 문서의 범위 밖이다 — 필요하면 `.ai/local/STATE.md` 백로그에 별도로 등록한다.
+> 🔖 **잔여**: `AccountEntity` 를 account 소유 순수 도메인 모델로 완전 분리하는 것은 account·auth 양쪽에 걸친 별도 작업이다
+> (`.ai/local/STATE.md` 백로그). 인증 핵심 재배선이라 리스크가 커, 지금은 공유 인증 엔티티로 두는 것을 의도적으로 택했다(B2).
 
 ---
 

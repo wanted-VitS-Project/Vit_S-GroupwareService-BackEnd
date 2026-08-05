@@ -3,10 +3,10 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.group3.vitamins.auth.infrastructure.persistence.AuthQueryMapper">
+<mapper namespace="com.group3.vitamins.auth.infrastructure.adapter.AuthQueryMapper">
 
     <select id="findProfile"
-            resultType="com.group3.vitamins.auth.infrastructure.persistence.UserProfileRow">
+            resultType="com.group3.vitamins.auth.application.result.UserProfileRow">
         SELECT e.user_id              AS userId,
                e.name                 AS name,
                a.role                 AS role,

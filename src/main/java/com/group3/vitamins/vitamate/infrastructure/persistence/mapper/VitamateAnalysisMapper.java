@@ -1,6 +1,9 @@
 package com.group3.vitamins.vitamate.infrastructure.persistence.mapper;
 
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateBlockContextRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisCitationRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisDocumentRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -21,4 +24,16 @@ public interface VitamateAnalysisMapper {
             @Param("projectId") Long projectId,
             @Param("fileVersionIds") List<Long> fileVersionIds
     );
+
+    // 요청자가 접근할 수 있는 분석 상세 본문을 조회한다.
+    VitamateAnalysisRow findAccessibleAnalysis(
+            @Param("analysisId") Long analysisId,
+            @Param("userId") String userId
+    );
+
+    // 분석 요청 당시 선택된 문서 목록을 조회한다.
+    List<VitamateAnalysisDocumentRow> findAnalysisDocuments(@Param("analysisId") Long analysisId);
+
+    // 분석 결과의 근거 citation 목록을 순서대로 조회한다.
+    List<VitamateAnalysisCitationRow> findAnalysisCitations(@Param("analysisId") Long analysisId);
 }
