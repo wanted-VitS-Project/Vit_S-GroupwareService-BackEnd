@@ -3,22 +3,10 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.group3.vitamins.project.block.infrastructure.adapter.ChecklistDetailMapper">
-
-    <insert id="insertEmpty">
-        INSERT INTO checklist_block (block_id)
-        VALUES (#{blockId})
-    </insert>
-
-    <select id="findChkBlockIdByBlockId" resultType="java.lang.Long">
-        SELECT chk_block_id
-        FROM checklist_block
-        WHERE block_id = #{blockId}
-          AND deleted_at IS NULL
-    </select>
+<mapper namespace="com.group3.vitamins.checklist.infrastructure.blockdetail.ChecklistDetailMapper">
 
     <select id="findItemsByChkBlockIds"
-            resultType="com.group3.vitamins.project.block.infrastructure.adapter.ChecklistItemRow">
+            resultType="com.group3.vitamins.checklist.infrastructure.blockdetail.ChecklistItemRow">
         SELECT chk_block_id AS chkBlockId,
         chk_id       AS chkId,
         content      AS content,

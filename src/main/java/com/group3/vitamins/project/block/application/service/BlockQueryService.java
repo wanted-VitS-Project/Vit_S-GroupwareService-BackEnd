@@ -16,10 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,6 +32,8 @@ public class BlockQueryService implements BlockQueryUseCase {
 
     @Override
     public List<BlockSummary> getBlocks(BlockListQuery query) {
+
+        //STEP 권한 검증
         stepAccessUseCase.requireAccess(query.stepId(), query.requesterUserId(), query.role());
 
         List<Block> blocks = blockRepository.findByStepId(query.stepId());
@@ -44,10 +43,14 @@ public class BlockQueryService implements BlockQueryUseCase {
 
         Map<Long, BlockIssueStatLookupPort.BlockIssueStat> issueStats = blockIssueStatLookupPort
                 .countByBlockIds(blocks.stream().map(Block::getBlockId).toList());
+
+
         Map<String, String> names = employeeLookupPort.findNamesByUserIds(blocks.stream()
                 .map(Block::getOwner)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
+
+
         Map<Long, BlockDetail> details = loadDetails(blocks);
 
         return blocks.stream()
@@ -59,15 +62,34 @@ public class BlockQueryService implements BlockQueryUseCase {
      * 타입별로 typeId 를 모아 어댑터마다 한 번씩 배치 조회하고, 결과를 blockId 키로 바꿔 담는다.
      * 담당 어댑터가 없는 타입은 아무것도 담지 않아 응답에서 detail 이 null 이 된다.
      */
-    private Map<Long, BlockDetail> loadDetails(List<Block> blocks) {
+    private Map<Long, BlockDetail> loadDetails(Collection<Block> blocks) {
         Map<BlockType, List<Block>> byType = blocks.stream()
                 .filter(block -> block.getTypeId() != null)
                 .collect(Collectors.groupingBy(Block::getType));
 
         Map<Long, BlockDetail> byBlockId = new HashMap<>();
-        byType.forEach((type, typedBlocks) -> blockDetailRegistry.find(type).ifPresent(port ->
-                putLoaded(byBlockId, typedBlocks, port)));
+        for (Map.Entry<BlockType, List<Block>> entry : byType.entrySet()) {
+            Optional<BlockDetailPort> port = blockDetailRegistry.find(entry.getKey());
+            if (port.isEmpty()) {
+                continue;
+            }
+            byBlockId.putAll(loadByType(entry.getValue(), port.get()));
+        }
+        return byBlockId;
+    }
 
+    /** 어댑터를 한 번 호출해 배치 조회하고, typeId 키를 blockId 키로 바꿔 돌려준다. */
+    private Map<Long, BlockDetail> loadByType(List<Block> typedBlocks, BlockDetailPort port) {
+        Map<Long, BlockDetail> byTypeId = port.loadDetails(
+                typedBlocks.stream().map(Block::getTypeId).toList());
+
+        Map<Long, BlockDetail> byBlockId = new HashMap<>();
+        for (Block block : typedBlocks) {
+            BlockDetail detail = byTypeId.get(block.getTypeId());
+            if (detail != null) {
+                byBlockId.put(block.getBlockId(), detail);
+            }
+        }
         return byBlockId;
     }
 
