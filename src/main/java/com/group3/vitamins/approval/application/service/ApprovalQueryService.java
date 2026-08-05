@@ -2,6 +2,7 @@ package com.group3.vitamins.approval.application.service;
 
 import com.group3.vitamins.approval.application.policy.ApprovalRevisionEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalViewPolicy;
+import com.group3.vitamins.approval.application.port.ApprovalLineDetailPort;
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
 import com.group3.vitamins.approval.application.port.FileCatalogPort;
@@ -34,6 +35,7 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
     private final EmployeeCatalogPort employeeCatalogPort;
     private final FileCatalogPort fileCatalogPort;
     private final ApprovalRepository approvalRepository;
+    private final ApprovalLineDetailPort approvalLineDetailPort;
 
     @Override
     public ApprovalRevisionDetail getRevisionDetail(GetApprovalRevisionQuery query) {
@@ -59,15 +61,9 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
                 })
                 .toList();
 
-        List<ApprovalLineDetailView> lineViews = lines.stream()
-                .map(line -> {
-                    EmployeeSummary approver = employeeCatalogPort.findEmployee(line.getApproverId())
-                            .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null));
-                    return new ApprovalLineDetailView(line.getLineId(), line.getApproverId(), approver.name(),
-                            approver.position(), approver.department(), line.getSequenceNo(),
-                            line.getStatus().name(), line.getOpinion(), line.getProcessedAt());
-                })
-                .toList();
+        // MyBatis 조인 조회(approval_line+employee+department+job_position)로 대체 — 결재선마다
+        // employeeCatalogPort.findEmployee() 를 따로 부르던 N+1 을 없앤다(MYBATIS.md §1, INV-11 유지)
+        List<ApprovalLineDetailView> lineViews = approvalLineDetailPort.findLineDetails(query.revisionId());
 
         return new ApprovalRevisionDetail(revision.getRevisionId(), revision.getRevisionNo(),
                 revision.getTitle(), revision.getContent(),

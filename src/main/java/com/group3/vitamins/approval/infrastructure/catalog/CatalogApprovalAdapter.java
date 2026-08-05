@@ -10,6 +10,8 @@ import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.model.NewApprovalLine;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
+import com.group3.vitamins.approval.application.port.ApprovalLineDetailPort;
+import com.group3.vitamins.approval.application.result.ApprovalLineDetailView;
 import com.group3.vitamins.approval.infrastructure.persistence.ApprovalDocumentJpaEntity;
 import com.group3.vitamins.approval.infrastructure.persistence.ApprovalJpaEntity;
 import com.group3.vitamins.approval.infrastructure.persistence.ApprovalLineJpaEntity;
@@ -18,6 +20,8 @@ import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprova
 import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprovalLineRepository;
 import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprovalRepository;
 import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprovalRevisionRepository;
+import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper;
+import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLineDetailRow;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -26,16 +30,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
-/** {@code approval}·{@code approval_revision} 영속성 어댑터 (`text.infrastructure.catalog.CatalogTextAdapter`와 동일 구조) */
+/**
+ * {@code approval}·{@code approval_revision} 영속성 어댑터 (`text.infrastructure.catalog.CatalogTextAdapter`와 동일 구조).
+ *
+ * <p>{@link ApprovalLineDetailPort}도 함께 구현한다 — {@code approval_line}은 이 도메인 소유 테이블이라
+ * MyBatis 조인 조회({@code ApprovalQueryMapper})도 자기 영속성 어댑터가 맡는 게 자연스럽다(`MYBATIS.md`).
+ */
 @Repository
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-public class CatalogApprovalAdapter implements ApprovalRepository {
+public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineDetailPort {
 
     private final SpringDataApprovalRepository springDataApprovalRepository;
     private final SpringDataApprovalRevisionRepository springDataApprovalRevisionRepository;
     private final SpringDataApprovalLineRepository springDataApprovalLineRepository;
     private final SpringDataApprovalDocumentRepository springDataApprovalDocumentRepository;
+    private final ApprovalQueryMapper approvalQueryMapper;
 
     @Override
     @Transactional
@@ -177,6 +187,19 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
         springDataApprovalLineRepository.activateFirstAndWaitRest(
                 revisionId, ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
         return findLinesByRevisionId(revisionId);
+    }
+
+    @Override
+    public List<ApprovalLineDetailView> findLineDetails(Long revisionId) {
+        return approvalQueryMapper.findLineDetailsByRevisionId(revisionId).stream()
+                .map(this::toLineDetailView)
+                .toList();
+    }
+
+    private ApprovalLineDetailView toLineDetailView(ApprovalLineDetailRow row) {
+        return new ApprovalLineDetailView(row.lineId(), row.approverId(), row.approverName(),
+                row.jobPositionName(), row.approverDepartment(), row.sequenceNo(),
+                row.status(), row.opinion(), row.processedAt());
     }
 
     private Approval toApproval(ApprovalJpaEntity entity) {
