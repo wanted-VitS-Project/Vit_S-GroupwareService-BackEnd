@@ -1,6 +1,6 @@
 package com.group3.vitamins.activitylog.infrastructure.persistence;
 
-import com.group3.vitamins.activitylog.application.ActivityLogRecorder;
+import com.group3.vitamins.activitylog.application.port.ActivityLogRecordPort;
 import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
 import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +10,7 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
-public class JpaActivityLogRecorder implements ActivityLogRecorder {
+public class JpaActivityLogRecordAdapter implements ActivityLogRecordPort {
 
     private final ActivityLogJpaRepository activityLogJpaRepository;
 
@@ -28,6 +28,7 @@ public class JpaActivityLogRecorder implements ActivityLogRecorder {
                 event.action(),
                 event.blockId(),
                 event.resourceId(),
+                event.resourceName(),
                 change.field(),
                 change.beforeValue(),
                 change.afterValue(),

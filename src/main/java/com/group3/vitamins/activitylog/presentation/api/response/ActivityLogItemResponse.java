@@ -13,6 +13,12 @@ public record ActivityLogItemResponse(
         @Schema(description = "CREATE, MODIFY, DELETE", example = "MODIFY")
         String action,
 
+        @Schema(description = "BLOCK 또는 RESOURCE", example = "RESOURCE")
+        String targetType,
+
+        @Schema(description = "FE 단순 표시용 이름", example = "제안서 작성")
+        String displayName,
+
         @Schema(description = "수정 필드, 해당하지 않으면 null", example = "completed")
         String fieldName,
 
@@ -22,8 +28,8 @@ public record ActivityLogItemResponse(
         @Schema(description = "변경 후 값", example = "true")
         String afterValue,
 
-        @Schema(description = "Block 내부 데이터 ID, Block 자체 활동이면 null", example = "41")
-        Long resourceId,
+        @Schema(description = "Block 내부 데이터. Block 자체 활동이면 resourceId/name 모두 null")
+        ActivityLogResourceResponse resource,
 
         @Schema(description = "활동 수행자")
         ActivityLogActorResponse actor,
@@ -39,10 +45,12 @@ public record ActivityLogItemResponse(
         return new ActivityLogItemResponse(
                 result.activityLogId(),
                 result.action(),
+                result.targetType(),
+                result.displayName(),
                 result.fieldName(),
                 result.beforeValue(),
                 result.afterValue(),
-                result.resourceId(),
+                ActivityLogResourceResponse.from(result.resource()),
                 ActivityLogActorResponse.from(result.actor()),
                 ActivityLogBlockResponse.from(result.block()),
                 result.createdAt()

@@ -1,7 +1,7 @@
 package com.group3.vitamins.activitylog.infrastructure.adapter;
 
-import org.springframework.data.repository.query.Param;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,7 +22,4 @@ public interface ActivityLogQueryMapper {
             @Param("cursor") Long cursor,
             @Param("limit") int limit
     );
-
-
-
 }

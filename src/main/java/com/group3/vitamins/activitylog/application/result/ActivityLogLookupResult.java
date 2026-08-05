@@ -1,8 +1,8 @@
-package com.group3.vitamins.activitylog.infrastructure.adapter;
+package com.group3.vitamins.activitylog.application.result;
 
 import java.time.LocalDateTime;
 
-public record ActivityLogRow(
+public record ActivityLogLookupResult(
         Long activityLogId,
         String action,
         Long resourceId,

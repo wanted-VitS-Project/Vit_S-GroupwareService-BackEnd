@@ -1,187 +1,328 @@
-# 🧾 ActivityLog API
+# ActivityLog API
 
 **상태**: md 명세 기준 계약 (`../API.md` §0·§1)
-**최종 업데이트**: 2026-08-05 · **담당**: 김용준
+**최종 업데이트**: 2026-08-05 (API 명세 양식 정리 · field 단위 저장 반영) · **담당**: 김용준
 **Domain**: `프로젝트` · SUB-Domain `ActivityLog`
-**팀 공유 수집 컨벤션**: 노션 공유 문서 기준
 
 > `.ai/api/*.md` 가 단일 계약이다. 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
 
-## 엔드포인트
+---
 
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| Step 활동 기록 조회 | GET | `/api/v1/steps/{stepId}/activity-logs` | 스텝 접근 권한 |
+# GET `/api/v1/steps/{stepId}/activity-logs` — 스텝별 활동 기록 조회
 
-⛔ 로그 생성·수정·삭제를 위한 외부 API는 만들지 않는다.
+현재 Step에 속한 Block 및 Block 내부 데이터의 활동 기록을 최신순으로 조회한다.
 
-각 도메인의 데이터 변경 Service가 Spring 동기 이벤트를 발행하고 Activity Log 도메인이 같은 트랜잭션에서 자동 저장한다.
+`blockId`를 전달하면 특정 Block에서 발생한 활동 기록만 조회한다. 별도의 Block 활동 기록 API는 만들지 않는다.
 
-## 공통 응답 형식
+Activity Log는 Sprint1에서 BE가 완성된 자연어 문장을 만들지 않고, 화면 조립에 필요한 원자 데이터를 반환한다.
+
+## 기본 정보
+
+| 항목 | 내용 |
+| --- | --- |
+| API 명 | 스텝별 활동 기록 조회 |
+| Method | GET |
+| URL | `/api/v1/steps/{stepId}/activity-logs` |
+| 인증 필요 여부 | Y |
+| 권한 | 프로젝트 참여자 |
+
+## Path Parameter
+
+| 파라미터 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `stepId` | Long | Y | 조회할 Step ID |
+
+## Query Parameter
+
+| 파라미터 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `blockId` | Long | N | 해당 Block의 활동 기록만 조회 |
+| `cursor` | Long | N | 이전 응답의 `nextCursor` |
+| `size` | int | N | 조회 개수, 기본값 `20` |
+
+```text
+GET /api/v1/steps/10/activity-logs
+GET /api/v1/steps/10/activity-logs?blockId=15
+GET /api/v1/steps/10/activity-logs?cursor=481&size=20
+GET /api/v1/steps/10/activity-logs?blockId=15&cursor=481&size=20
+```
+
+## Request Body
+
+없음.
+
+## Response Parameter
+
+### 공통 응답
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `activities` | List | 활동 기록 목록 |
+| `nextCursor` | Long | 다음 조회 커서, 없으면 `null` |
+| `hasNext` | boolean | 다음 기록 존재 여부 |
+
+### Activity Object
+
+Activity Object 1개는 `activity_log` 1행에 대응한다. 한 수정 이벤트에서 여러 필드가 변경되면 응답에서도 여러 Activity Object로 내려갈 수 있다.
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `activityLogId` | Long | 활동 기록 ID |
+| `action` | String | `CREATE`, `MODIFY`, `DELETE` |
+| `targetType` | String | `BLOCK`, `RESOURCE` |
+| `displayName` | String | FE 단순 표시용 이름. `resource.name`이 있으면 그 값, 없으면 `block.title` |
+| `fieldName` | String | 수정 필드, 해당하지 않으면 `null` |
+| `beforeValue` | String | 변경 전 값 |
+| `afterValue` | String | 변경 후 값 |
+| `resource` | Object | Block 내부 데이터. Block 자체 활동이면 `resourceId/name` 모두 `null` |
+| `actor` | Object | 활동 수행자 |
+| `block` | Object | 활동이 발생한 Block |
+| `createdAt` | LocalDateTime | 활동 발생 일시 |
+
+### Resource Object
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `resourceId` | Long | Block 내부 데이터 ID. Block 자체 활동이면 `null` |
+| `name` | String | Block 내부 데이터 표시명 스냅샷. 없으면 `null` |
+
+### Actor Object
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `userId` | String | 사용자 사번 |
+| `name` | String | 사용자 이름 |
+| `profileImageUrl` | String | 프로필 이미지 URL. 현재 employee 테이블에 컬럼이 없어 Sprint1에서는 `null` |
+
+### Block Object
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `blockId` | Long | Block ID |
+| `title` | String | Block 제목 |
+| `type` | String | Block 유형 |
+
+`targetType` 구분 기준은 다음과 같다.
+
+```text
+resource.resourceId = null
+→ targetType = BLOCK
+
+resource.resourceId != null
+→ targetType = RESOURCE
+```
+
+`displayName` 계산 기준은 다음과 같다.
+
+```text
+resource.name != null
+→ displayName = resource.name
+
+resource.name == null
+→ displayName = block.title
+```
+
+## Success Example
 
 ```json
 {
   "httpStatus": 200,
-  "message": "요청 성공",
-  "data": {}
+  "message": "활동 기록 조회 성공",
+  "data": {
+    "activities": [
+      {
+        "activityLogId": 501,
+        "action": "MODIFY",
+        "targetType": "RESOURCE",
+        "displayName": "회사소개서 최신본 첨부",
+        "fieldName": "completed",
+        "beforeValue": "false",
+        "afterValue": "true",
+        "resource": {
+          "resourceId": 41,
+          "name": "회사소개서 최신본 첨부"
+        },
+        "actor": {
+          "userId": "EMP003",
+          "name": "이영희",
+          "profileImageUrl": null
+        },
+        "block": {
+          "blockId": 15,
+          "title": "제안서 작성 체크리스트",
+          "type": "CHECKLIST"
+        },
+        "createdAt": "2026-08-02T14:32:00"
+      },
+      {
+        "activityLogId": 500,
+        "action": "CREATE",
+        "targetType": "BLOCK",
+        "displayName": "문서 업로드 블록",
+        "fieldName": null,
+        "beforeValue": null,
+        "afterValue": null,
+        "resource": {
+          "resourceId": null,
+          "name": null
+        },
+        "actor": {
+          "userId": "EMP005",
+          "name": "최수아",
+          "profileImageUrl": null
+        },
+        "block": {
+          "blockId": 18,
+          "title": "문서 업로드 블록",
+          "type": "FILE"
+        },
+        "createdAt": "2026-08-02T13:15:00"
+      }
+    ],
+    "nextCursor": 500,
+    "hasNext": true
+  }
 }
 ```
 
-실패 응답은 `{ httpStatus, message, code }` 형식을 사용한다.
+조회 결과가 없으면 `200 OK`와 빈 배열을 반환한다.
 
-## 🔑 Activity Log는 Block 단위 활동 이력이다
-
-| 원칙 | 내용 |
-|---|---|
-| 조회 기준 | Step 활동 기록 조회 API에서 Step 하위 Block 로그를 조회한다 |
-| 저장 기준 | 모든 로그는 `blockId`를 필수로 가진다 |
-| 수집 범위 | Block 자체와 Block 내부 데이터의 사용자 주요 활동 |
-| 제외 범위 | Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 대상이 아니다 |
-| 생성 주체 | FE나 Controller가 아니라 각 원본 도메인 Application Service |
-| Block 자체 활동 | `resourceId = null` |
-| Block 내부 데이터 활동 | `resourceId = 해당 내부 데이터 ID` |
-| 수정 저장 | 실제 변경 필드 하나당 `activity_log` 한 행 |
-| 작업자 | 현재 인증 사용자의 `employee.user_id` |
-| 처리 방식 | Spring 동기 이벤트 + `@TransactionalEventListener(BEFORE_COMMIT)` |
-
-`projectId`는 이벤트와 로그 테이블에 저장하지 않는다. 로그 조회는 Step 기준이며, `blockId`를 통해 Step·Project를 역추적할 수 있다.
-
-### 현재 Action
-
-| API 값 | DB 값 | 의미 |
-|---|---|---|
-| `CREATE` | `create` | 대상 생성 |
-| `MODIFY` | `modify` | 대상 수정 |
-| `DELETE` | `delete` | 대상 삭제 |
-
-⛔ 이미지 다운로드는 현재 `activity_log.act`에 대응 값이 없으므로 이 명세에 포함하지 않는다. `DOWNLOAD` 추가가 확정되기 전까지 `MODIFY`로 변조해 저장하지 않는다.
-
-### 현재 저장 필드
-
-| DB 컬럼 | Java 필드 | 필수 | 설명 |
-|---|---|:---:|---|
-| `activity_log_id` | `activityLogId` | Y | 로그 PK |
-| `act` | `act` | Y | `CREATE` · `MODIFY` · `DELETE` |
-| `created_at` | `createdAt` | Y | 로그 생성 시각 |
-| `resource_id` | `resourceId` | N | Block 자체 활동이면 `null`, 내부 데이터 활동이면 해당 데이터 ID |
-| `field` | `field` | N | 변경 필드명. 생성·삭제면 `null` 허용 |
-| `before_value` | `beforeValue` | N | 변경 전 값 |
-| `after_value` | `afterValue` | N | 변경 후 값 |
-| `block_id` | `blockId` | Y | 활동이 발생한 Block ID |
-| `user_id` | `userId` | Y | 행위자 사번 |
-
-현재 ERD에는 `project_id`, `resource_type`, `target_name`, `privileged_override` 컬럼이 없다. 해당 정보가 필요해지면 Activity Log DDL·Entity·이벤트·조회 API를 함께 변경한다.
-
-### 도메인별 필수 수집 로그
-
-| 도메인 | 필수 수집 활동 | `resourceId` 기준 | 필드명 규칙 |
-|---|---|---|---|
-| Block 공통 | Block 생성 · Block명 수정 · Block 삭제 | Block 자체 활동은 `null` | Block 엔티티 필드명 기준 |
-| 체크리스트 | 항목 생성 · 내용 수정 · 체크 상태 수정 · 항목 삭제 | 체크리스트 항목 ID | 체크리스트 도메인 필드명 기준 |
-| 이미지 | 이미지 생성 · 캡션 수정 · 순서 수정 · 이미지 삭제 | 이미지 ID | 이미지 도메인 필드명 기준 |
-| 텍스트 | 본문 수정 | 텍스트 블록 내부 데이터 ID. 별도 내부 ID가 없으면 `null` | 텍스트 도메인 필드명 기준 |
-| 파일·파일 버전 | 업로드 완료 · 파일명 수정 · 파일 삭제 | 파일 또는 파일 버전 ID | 파일 도메인 필드명 기준 |
-
-파일은 여러 Block에서 공통 사용될 수 있으므로 이벤트 발행자가 **사용자 작업이 발생한 `blockId`**를 반드시 전달한다.
-
-위 표는 최소 수집 기준이다. 각 블록 도메인은 자기 요구사항에 맞춰 `field` 이름과 `beforeValue`·`afterValue` 표현을 정하되, 프론트 표시와 장애 추적이 가능하도록 도메인 문서 또는 API 문서에 필드명 의미를 남긴다.
-
----
-
-## 1. Step 활동 기록 조회
-
-| 항목 | 내용 |
-|---|---|
-| Method · URL | `GET /api/v1/steps/{stepId}/activity-logs` |
-| 인증 필요 | Y · 스텝 접근 권한 |
-| 요구사항 | QRY-001~007 · USC-QRY-001~010 |
-
-**Path Parameter**
-
-| 파라미터 | 타입 | 필수 | 설명 |
-|---|---|:---:|---|
-| `stepId` | Long | Y | 활동 기록을 조회할 Step 번호 |
-
-**Request Parameter**
-
-| 파라미터 | 타입 | 필수 | 설명 |
-|---|---|:---:|---|
-| `blockId` | Long | N | 전달 시 해당 Block의 활동만 조회 |
-| `cursor` | Long | N | 이전 응답의 `nextCursor`. 최초 요청은 생략 |
-| `size` | int | N | 조회 개수. 기본 20 |
-
-⛔ `activityType`, `action`, 날짜 범위 필터는 현재 제공하지 않는다.
-
-⛔ 별도 `/blocks/{blockId}/activity-logs` API를 만들지 않는다. Block 상세 필터도 동일 API에 `blockId`를 전달한다.
-
-### 커서 규칙
-
-```text
-최초 요청
-GET /api/v1/steps/10/activity-logs?size=20
-
-다음 요청
-GET /api/v1/steps/10/activity-logs?cursor={nextCursor}&size=20
-
-Block 필터 다음 요청
-GET /api/v1/steps/10/activity-logs?blockId=15&cursor={nextCursor}&size=20
+```json
+{
+  "httpStatus": 200,
+  "message": "활동 기록 조회 성공",
+  "data": {
+    "activities": [],
+    "nextCursor": null,
+    "hasNext": false
+  }
+}
 ```
 
-- `activityLogId` 내림차순으로 조회한다.
-- `cursor`가 있으면 `activity_log_id < cursor` 조건을 적용한다.
-- `size + 1`건을 조회해 `hasNext`를 계산할 수 있다.
-- Block 필터를 사용한 다음 요청에도 같은 `blockId`를 유지한다.
-- 전체 개수와 페이지 번호는 반환하지 않는다.
+## FE 처리 흐름
 
-**Response**
+### Step 활동 기록 화면
 
-| 파라미터 | 타입 | 설명 |
-|---|---|---|
-| `data.activities[].activityLogId` | Long | 활동 로그 번호 |
-| `data.activities[].action` | String | `CREATE` · `MODIFY` · `DELETE` |
-| `data.activities[].description` | String | Block 유형·Action·필드를 기준으로 BE가 만든 활동 문구. 행위자 이름은 제외 |
-| `data.activities[].fieldName` | String | 변경 필드명. 생성·삭제면 `null` |
-| `data.activities[].beforeValue` | String | 변경 전 값. `null` 허용 |
-| `data.activities[].afterValue` | String | 변경 후 값. `null` 허용 |
-| `data.activities[].resourceId` | Long | Block 자체 활동이면 `null`, 내부 데이터면 해당 ID |
-| `data.activities[].actor.userId` | String | 행위자 사번 |
-| `data.activities[].actor.name` | String | 행위자 이름 |
-| `data.activities[].block.blockId` | Long | 활동이 발생한 Block 번호 |
-| `data.activities[].block.title` | String | 현재 Block명 |
-| `data.activities[].block.type` | String | Block 타입 |
-| `data.activities[].createdAt` | String | 활동 발생 일시 `yyyy-MM-dd'T'HH:mm:ss` |
-| `data.nextCursor` | Long | 다음 조회 cursor. 다음 데이터가 없으면 `null` |
-| `data.hasNext` | boolean | 다음 데이터 존재 여부 |
+```text
+화면 진입
+→ blockId 없이 최초 조회
+→ 응답 순서대로 최신 기록 표시
+→ 하단 도달 시 nextCursor로 추가 조회
+```
 
-> Activity Log에는 Block명 스냅샷 컬럼이 없다. 현재 명세는 조회 시 현재 Block명을 조합한다. 과거 시점의 Block명을 보존해야 한다면 DDL과 API를 함께 변경해야 한다.
+Block 필터 목록은 다음 API에서 조회한다.
 
-> FE는 `actor.name + description`으로 문장을 표시하고, `createdAt`을 기준으로 오늘·어제·날짜 그룹과 상대 시간을 렌더링한다.
+```text
+GET /api/v1/steps/{stepId}/blocks
+```
 
-> 조회 결과가 없으면 `200`, 빈 `data.activities`, `nextCursor: null`, `hasNext: false`를 반환한다.
+필터를 변경하면 기존 목록과 커서를 초기화한 뒤 다시 조회한다.
+
+```text
+전체 선택
+→ blockId 없이 재조회
+
+특정 Block 선택
+→ blockId를 포함하여 재조회
+```
+
+### Block 활동 로그 팝업
+
+```text
+Block 활동 로그 버튼 선택
+→ 해당 blockId로 최초 조회
+→ 스크롤 시 blockId를 유지한 채 다음 커서 조회
+```
+
+화면에서는 다음 값을 FE가 조합한다.
+
+```text
+상단: actor.name + block.title + block.type
+하단: displayName + actionLabel
+```
+
+`오늘`, `어제`, 날짜별 그룹과 `14:32`, `2시간 전` 등의 시간 표현은 `createdAt`을 기준으로 FE에서 처리한다.
+
+## BE 처리 흐름
+
+```text
+Step 및 접근 권한 확인
+→ blockId 전달 시 Block과 Step 관계 검증
+→ cursor보다 작은 활동 기록 조회
+→ activityLogId 내림차순 정렬
+→ nextCursor와 hasNext 계산
+→ 수행자·Block·Resource 스냅샷 정보와 함께 반환
+```
+
+DB의 `create`, `modify`, `delete` 값은 API 응답에서 각각 `CREATE`, `MODIFY`, `DELETE`로 매핑한다.
+
+Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 조회 대상에 포함하지 않는다.
+
+## Status Code
 
 | 코드 | code | 설명 |
-|---|---|---|
-| 200 | – | 조회 성공 |
-| 400 | `LOG_INVALID_REQUEST` | cursor 또는 size 형식 오류 |
-| 400 | `LOG_BLOCK_STEP_MISMATCH` | 필터 Block이 요청 Step에 속하지 않음 |
-| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
-| 403 | `LOG_ACCESS_PERMISSION_REQUIRED` | Step 열람 권한 없음 |
-| 404 | `LOG_STEP_NOT_FOUND` | Step 없음 또는 논리 삭제됨 |
-| 404 | `LOG_BLOCK_NOT_FOUND` | 필터 Block 없음 또는 논리 삭제됨 |
+| --- | --- | --- |
+| 200 | - | 활동 기록 조회 성공 |
+| 400 | `ACTIVITY_LOG_CURSOR_INVALID` | 잘못된 커서 |
+| 400 | `ACTIVITY_LOG_SIZE_INVALID` | 잘못된 조회 개수 |
+| 400 | `ACTIVITY_LOG_BLOCK_STEP_MISMATCH` | Block이 요청한 Step에 속하지 않음 |
+| 401 | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 403 | `PROJECT_ACCESS_DENIED` | 프로젝트 접근 권한 없음 |
+| 404 | `STEP_NOT_FOUND` | Step이 존재하지 않음 |
+| 404 | `BLOCK_NOT_FOUND` | Block이 존재하지 않음 |
+
+> 인증 공통 구현이 `AUTH_UNAUTHENTICATED`를 사용 중이면 `AUTH_TOKEN_EXPIRED`와 통일 여부를 별도 확인한다.
 
 ---
 
-## 내부 수집 컨벤션 — 외부 API 아님
+# Activity Log 수집 컨벤션
 
 이 섹션은 Block 관련 도메인 담당자가 Activity Log를 남기기 위해 알아야 하는 팀 내부 계약이다. 외부 API Request·Response가 아니다.
 
-### 이벤트 구조
+## 전체 책임 범위
+
+각 도메인은 데이터 변경이 실제로 완료되는 Service 계층에서 Spring 동기 이벤트를 발행한다.
+
+```text
+각 도메인 Service
+→ 변경 전 값과 resourceName 스냅샷 확보
+→ 원본 데이터 생성·수정·삭제
+→ 실제 변경 필드 비교
+→ ActivityOccurredEvent 발행
+→ Activity Log Listener 수신
+→ field 단위 Activity Log 저장
+→ 전체 트랜잭션 커밋
+```
+
+## 적용 기준
+
+- `@Async`를 사용하지 않는다.
+- 트랜잭션 내부에서 이벤트를 발행한다.
+- `@TransactionalEventListener(BEFORE_COMMIT)`으로 처리한다.
+- 원본 데이터와 로그는 같은 트랜잭션에서 저장한다.
+- 로그 저장 실패 시 원본 데이터 변경도 함께 롤백한다.
+- Controller나 FE에서 로그 생성 API를 별도로 호출하지 않는다.
+- 각 도메인은 Activity Log Repository, Service, Port를 직접 호출하지 않는다.
+
+## 공통 이벤트 정보
+
+각 도메인은 다음 정보만 Activity Log 이벤트로 전달한다.
+
+| 항목 | 설명 |
+| --- | --- |
+| `action` | `CREATE`, `MODIFY`, `DELETE` |
+| `blockId` | 활동이 발생한 Block ID |
+| `resourceId` | Block 내부 데이터 ID. Block 자체 활동이면 `null` |
+| `resourceName` | Block 내부 데이터 표시명 스냅샷. Block 자체 활동 또는 표시명이 없으면 `null` |
+| `actorId` | 현재 인증 사용자의 사번 |
+| `changes` | 변경 필드와 변경 전·후 값 목록 |
 
 ```java
 public record ActivityOccurredEvent(
     ActivityLogAction action,
     Long blockId,
     Long resourceId,
+    String resourceName,
     String actorId,
     List<ActivityFieldChange> changes
 ) {}
@@ -195,83 +336,129 @@ public record ActivityFieldChange(
 ) {}
 ```
 
-### 발행·저장 흐름
+## 공통 기록 규칙
+
+### 생성·삭제
+
+생성·삭제처럼 변경 필드가 특정되지 않으면 null change 1개를 전달한다.
+
+```java
+List.of(new ActivityFieldChange(null, null, null))
+```
+
+표시명은 `beforeValue`나 `afterValue`가 아니라 `resourceName`에 스냅샷으로 담는다.
+
+### 수정
+
+수정은 실제로 변경된 필드 하나당 로그 한 행을 저장한다.
 
 ```text
-각 도메인 @Transactional Service
-→ 변경 전 값 확보
-→ 원본 데이터 변경
-→ 실제 변경 필드 비교
-→ ActivityOccurredEvent 발행
-→ @TransactionalEventListener(BEFORE_COMMIT)
-→ Activity Log 필드별 저장
-→ 전체 트랜잭션 커밋
+제목과 상태가 동시에 변경됨
+→ title 로그 1행
+→ status 로그 1행
 ```
 
-- Controller에서 이벤트를 발행하지 않는다.
-- JPA Entity를 이벤트에 직접 넣지 않는다.
-- `actorId`를 FE Request에서 받지 않는다.
-- `projectId`를 이벤트에 넣지 않는다.
-- `blockId`는 항상 필수다. 부모 엔티티가 추가되어도 Activity Log의 조회 기준은 흔들지 않는다.
-- 동일 값 수정은 이벤트와 로그를 생성하지 않는다.
-- 한 API에서 여러 필드가 바뀌면 `changes`에 여러 항목을 전달하고 로그 도메인이 여러 행으로 저장한다.
-- 각 원본 도메인은 `ActivityLogJpaRepository`를 직접 사용하지 않는다.
+요청값과 기존 값이 같으면 로그를 남기지 않는다.
 
-### 각 도메인이 갖춰야 할 구조
+### resourceName
+
+`resourceName`은 변경값이 아니라 사용자가 화면에서 대상을 알아볼 수 있는 표시명이다.
+
+| 상황 | 값 |
+| --- | --- |
+| Block 자체 생성·수정·삭제 | `null` |
+| 체크리스트 항목 | 항목 내용 |
+| 파일 | 파일명 |
+| 이미지 | caption 또는 이미지 표시명 |
+| 텍스트 본문 | `null` |
+
+예를 들어 체크리스트 완료 여부를 `false -> true`로 바꿔도 `resourceName`에는 `true`가 아니라 해당 체크리스트 항목 내용이 들어간다.
+
+### 작업자
+
+`actorId`는 FE Request에서 받지 않고 현재 인증 사용자의 사번을 사용한다.
+
+### 화면 문구
+
+각 도메인이 완성된 문장을 직접 전달하지 않는다.
+
+BE는 `actor`, `block`, `resource`, `action`, `fieldName`, `beforeValue`, `afterValue` 같은 원자 데이터를 내려주고, FE가 화면 문구를 조립한다.
+
+## 각 도메인이 갖춰야 할 구조
 
 | 위치 | 담당 | 규칙 |
-|---|---|---|
-| 원본 도메인 Service | 각 블록 도메인 | 실제 DB 변경이 완료되는 `@Transactional` Service에서 이벤트를 발행한다 |
-| 이벤트 발행기 | 공통 | `DomainEventPublisher`를 주입받아 발행한다 |
-| 이벤트 객체 | Activity Log 계약 | `ActivityOccurredEvent`와 `ActivityFieldChange`만 사용한다 |
-| 로그 저장 | Activity Log 도메인 | `ActivityLogEventListener`와 `ActivityLogWriter`가 담당한다 |
-| Repository 접근 | Activity Log 도메인 | 타 도메인은 `ActivityLogJpaRepository`를 직접 호출하지 않는다 |
-
-### 발행 예시
+| --- | --- | --- |
+| 원본 도메인 Service | 각 블록 도메인 | 실제 DB 변경이 완료되는 `@Transactional` Service에서 이벤트 발행 |
+| 이벤트 발행기 | 공통 | `DomainEventPublisher` 주입 |
+| 이벤트 객체 | Activity Log 계약 | `ActivityOccurredEvent`, `ActivityFieldChange` 사용 |
+| 로그 저장 | Activity Log 도메인 | `ActivityLogEventListener`, `ActivityLogRecordService`, `ActivityLogRecordPort`가 담당 |
+| Repository 접근 | Activity Log 도메인 | 타 도메인은 `ActivityLogJpaRepository` 직접 호출 금지 |
 
 ```java
 domainEventPublisher.publish(ActivityOccurredEvent.of(
-        ActivityLogAction.MODIFY,
-        blockId,
-        checklistItemId,
-        actorId,
-        List.of(new ActivityFieldChange("content", beforeContent, afterContent))
+    ActivityLogAction.MODIFY,
+    blockId,
+    checklistItemId,
+    checklistContent,
+    actorId,
+    List.of(new ActivityFieldChange("content", beforeContent, afterContent))
 ));
 ```
 
-생성·삭제처럼 변경 필드가 하나로 특정되지 않는 활동도 `changes`는 비울 수 없다. 이 경우 `field`, `beforeValue`, `afterValue`를 모두 `null`로 둔 `ActivityFieldChange` 하나를 전달한다.
+## 도메인별 수집 범위
 
-```java
-domainEventPublisher.publish(ActivityOccurredEvent.of(
-        ActivityLogAction.CREATE,
-        blockId,
-        checklistItemId,
-        actorId,
-        List.of(new ActivityFieldChange(null, null, null))
-));
-```
+### 부모 Block 도메인
 
-### 부모 엔티티 추가 시 수정 방향
+모든 Block 유형에 공통으로 적용한다.
 
-부모 엔티티가 나중에 추가되어도 타 도메인이 따라야 할 이벤트 계약은 최대한 유지한다.
+| 활동 | Action | `resourceId` | `resourceName` | 기록 정보 |
+| --- | --- | --- | --- | --- |
+| Block 생성 | `CREATE` | `null` | `null` | null change 1개 |
+| Block명 수정 | `MODIFY` | `null` | `null` | `title` 변경 전·후 값 |
+| Block 삭제 | `DELETE` | `null` | `null` | null change 1개 |
 
-| 변화 | 수정 위치 | 타 도메인 영향 |
-|---|---|---|
-| 조회에서 Step·Project 조인이 필요 | Activity Log 조회 Repository/Service | 없음. 기존 이벤트 발행 구조 유지 |
-| `blockId`만으로 부모 추적이 불가능 | Activity Log DDL·Entity·Event 계약 변경 필요 | 있음. 팀 합의 후 전체 도메인 이벤트 발행부 수정 |
-| Block 내부 데이터 타입 구분 필요 | 우선 각 도메인의 `field`/설명 조합으로 처리 | 없음 |
-| `resource_type` 재도입 필요 | DDL·Entity·Event·API Response 변경 | 있음. 노션 명세 확정 후 진행 |
+Block 위치, 크기, 정렬 순서 변경은 현재 로그 수집 대상에서 제외한다.
 
-현재 구조에서는 `blockId`가 부모 추적의 기준이다. 따라서 부모 엔티티가 추가되더라도 `blockId → Step → Project` 관계가 유지되면 타 블록 도메인은 수정하지 않는다.
+### 체크리스트
 
-### Block 엔티티 연동 메모
+| 활동 | Action | `resourceId` | `resourceName` | 기록 정보 |
+| --- | --- | --- | --- | --- |
+| 항목 생성 | `CREATE` | 체크리스트 항목 ID | 항목 내용 | null change 1개 |
+| 항목 내용 수정 | `MODIFY` | 체크리스트 항목 ID | 항목 내용 | `content` 변경 전·후 값 |
+| 체크 상태 변경 | `MODIFY` | 체크리스트 항목 ID | 항목 내용 | `isCompleted` 변경 전·후 값 |
+| 항목 삭제 | `DELETE` | 체크리스트 항목 ID | 삭제 전 항목 내용 | null change 1개 |
 
-`project.block` 엔티티가 추가된 뒤에도 수집 계약은 유지한다.
+### 이미지
 
-| 항목 | 기준 |
-|---|---|
-| Block 생성 로그 | `BlockCommandService`가 블록 생성·상세 연결 완료 후 `CREATE` 이벤트를 발행한다 |
-| Block 자체 활동 | `resourceId = null`, `field/beforeValue/afterValue = null` |
-| Step·Project | `activity_log`에 저장하지 않는다. 조회 시 `activity_log.block_id → block.step_id → step.project_id`로 역추적한다 |
-| Employee | `activity_log.user_id → employee.user_id` 조인으로 actor 표시 정보를 조회한다. `EmployeeEntity`가 없어도 MyBatis 조회 모델로 충분하다 |
-| 영향 범위 | `blockId → Step → Project` 관계가 유지되면 Block 외 Step·Project·Employee·각 블록 상세 엔티티는 Activity Log 때문에 구조 변경하지 않는다 |
+| 활동 | Action | `resourceId` | `resourceName` | 기록 정보 |
+| --- | --- | --- | --- | --- |
+| 이미지 항목 생성 | `CREATE` | 이미지 ID | 원본 이미지명 또는 caption | null change 1개 |
+| 캡션 수정 | `MODIFY` | 이미지 ID | caption 또는 이미지 표시명 | `caption` 변경 전·후 값 |
+| 이미지 순서 수정 | `MODIFY` | 이미지 ID | 이미지 표시명 | `orderIndex` 변경 전·후 값 |
+| 이미지 항목 삭제 | `DELETE` | 이미지 ID | 삭제 전 이미지 표시명 | null change 1개 |
+
+이미지 순서 변경은 사용자가 직접 이동한 이미지 한 건만 기록한다.
+
+### 텍스트 Block
+
+| 활동 | Action | `resourceId` | `resourceName` | 기록 정보 |
+| --- | --- | --- | --- | --- |
+| 본문 수정 | `MODIFY` | 텍스트 데이터 ID | `null` | `content` 변경 전·후 값 |
+
+텍스트 본문은 표시명으로 쓰지 않으므로 `resourceName = null`로 둔다.
+
+민감하거나 과도하게 큰 값은 기록하지 않는다.
+
+### 문서·파일 업로드
+
+파일은 여러 Block에서 공통 사용될 수 있으므로, 파일 정보만 보고 Block을 추론하지 않는다.
+
+파일 기능을 호출한 도메인이 반드시 현재 작업이 발생한 `blockId`를 이벤트에 전달한다.
+
+| 활동 | Action | `resourceId` | `resourceName` | 기록 정보 |
+| --- | --- | --- | --- | --- |
+| 파일 업로드 | `CREATE` | 파일 또는 파일 버전 ID | 업로드된 파일명 | null change 1개 |
+| 파일명 수정 | `MODIFY` | 수정 대상 파일 또는 버전 ID | 파일명 | `fileName` 변경 전·후 값 |
+| 파일 삭제 | `DELETE` | 파일 또는 파일 버전 ID | 삭제 전 파일명 | null change 1개 |
+
+파일명 수정 대상이 파일 엔티티인지 파일 버전 엔티티인지는 실제 API 설계 기준을 따른다. 한 기능 안에서는 동일한 `resourceId` 기준을 일관되게 사용한다.

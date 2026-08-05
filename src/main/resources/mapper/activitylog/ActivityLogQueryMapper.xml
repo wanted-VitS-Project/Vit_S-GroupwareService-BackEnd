@@ -35,6 +35,7 @@
         SELECT al.activity_log_id AS activityLogId,
                UPPER(al.act) AS action,
                al.resource_id AS resourceId,
+               al.resource_name AS resourceName,
                al.field AS fieldName,
                al.before_value AS beforeValue,
                al.after_value AS afterValue,

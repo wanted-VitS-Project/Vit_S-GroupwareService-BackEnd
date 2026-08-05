@@ -1,14 +1,12 @@
 package com.group3.vitamins.activitylog.application.service;
 
 import com.group3.vitamins.activitylog.application.query.ActivityLogListQuery;
+import com.group3.vitamins.activitylog.application.port.ActivityLogQueryPort;
+import com.group3.vitamins.activitylog.application.result.ActivityLogLookupResult;
 import com.group3.vitamins.activitylog.application.result.ActivityLogPageResult;
 import com.group3.vitamins.activitylog.application.result.ActivityLogResult;
 import com.group3.vitamins.activitylog.application.usecase.ActivityLogQueryUseCase;
 import com.group3.vitamins.activitylog.domain.exception.ActivityLogErrorCode;
-import com.group3.vitamins.activitylog.infrastructure.adapter.ActivityLogQueryMapper;
-import com.group3.vitamins.activitylog.infrastructure.adapter.ActivityLogRow;
-import com.group3.vitamins.activitylog.infrastructure.adapter.BlockStepRow;
-import com.group3.vitamins.activitylog.infrastructure.adapter.StepAccessRow;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -29,30 +27,30 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
     private static final int DEFAULT_SIZE = 20;
     private static final Set<String> GLOBAL_ACCESS_ROLES = Set.of("ADMIN", "MASTER");
 
-    private final ActivityLogQueryMapper activityLogQueryMapper;
+    private final ActivityLogQueryPort activityLogQueryPort;
 
     @Override
     public ActivityLogPageResult getActivityLogs(ActivityLogListQuery query) {
         int size = resolveSize(query.size());
         validateCursor(query.cursor());
 
-        StepAccessRow step = activityLogQueryMapper.findStepAccess(query.stepId(), query.requesterUserId())
+        var step = activityLogQueryPort.findStepAccess(query.stepId(), query.requesterUserId())
                 .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
 
         assertProjectAccess(query.role(), step.permission());
         validateBlockFilter(query.stepId(), query.blockId());
 
-        List<ActivityLogRow> rows = activityLogQueryMapper.findActivityLogs(
+        List<ActivityLogLookupResult> rows = activityLogQueryPort.findActivityLogs(
                 query.stepId(), query.blockId(), query.cursor(), size + 1);
 
         boolean hasNext = rows.size() > size;
-        List<ActivityLogRow> pageRows = hasNext ? rows.subList(0, size) : rows;
+        List<ActivityLogLookupResult> pageRows = hasNext ? rows.subList(0, size) : rows;
         Long nextCursor = hasNext && !pageRows.isEmpty()
                 ? pageRows.get(pageRows.size() - 1).activityLogId()
                 : null;
 
         return new ActivityLogPageResult(
-                pageRows.stream().map(this::toResult).toList(),
+                pageRows.stream().map(ActivityLogResult::from).toList(),
                 nextCursor,
                 hasNext
         );
@@ -88,33 +86,11 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
             return;
         }
 
-        BlockStepRow block = activityLogQueryMapper.findBlockStep(blockId)
+        var block = activityLogQueryPort.findBlockStep(blockId)
                 .orElseThrow(() -> new NotFoundException(ActivityLogErrorCode.BLOCK_NOT_FOUND));
 
         if (!stepId.equals(block.stepId())) {
             throw new ValidationException(ActivityLogErrorCode.ACTIVITY_LOG_BLOCK_STEP_MISMATCH);
         }
-    }
-
-    private ActivityLogResult toResult(ActivityLogRow row) {
-        return new ActivityLogResult(
-                row.activityLogId(),
-                row.action(),
-                row.fieldName(),
-                row.beforeValue(),
-                row.afterValue(),
-                row.resourceId(),
-                new ActivityLogResult.Actor(
-                        row.actorUserId(),
-                        row.actorName(),
-                        row.profileImageUrl()
-                ),
-                new ActivityLogResult.Block(
-                        row.blockId(),
-                        row.blockTitle(),
-                        row.blockType()
-                ),
-                row.createdAt()
-        );
     }
 }
