@@ -13,6 +13,7 @@ import com.group3.vitamins.checklist.presentation.api.response.CreateChecklistIt
 import com.group3.vitamins.checklist.presentation.api.response.DeleteChecklistItemResponse;
 import com.group3.vitamins.checklist.presentation.api.response.UpdateChecklistItemResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
+import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -20,7 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -58,10 +59,11 @@ public class ChecklistController {
             @Parameter(description = "체크리스트 항목을 생성할 블록의 ID", example = "1")
             @PathVariable Long chkBlockId,
             @RequestBody ChecklistItemCreateRequest request,
-            @AuthenticationPrincipal String userId
+            Authentication authentication
     ) {
         CreateChecklistItemView view = checklistCommandUseCase.create(
-                new CreateChecklistItemCommand(userId, chkBlockId, request.content()));
+                new CreateChecklistItemCommand(authentication.getName(), chkBlockId, request.content(),
+                        RequesterRole.from(authentication)));
 
         CreateChecklistItemResponse data = new CreateChecklistItemResponse(
                 view.chkBlockId(),
@@ -91,10 +93,11 @@ public class ChecklistController {
             @Parameter(description = "수정할 체크리스트 항목 ID", example = "1")
             @PathVariable Long chkId,
             @RequestBody ChecklistItemUpdateRequest request,
-            @AuthenticationPrincipal String userId
+            Authentication authentication
     ) {
         UpdateChecklistItemView view = checklistCommandUseCase.update(
-                new UpdateChecklistItemCommand(userId, chkId, request.content(), request.changeStatusTo()));
+                new UpdateChecklistItemCommand(authentication.getName(), chkId, request.content(),
+                        request.changeStatusTo(), RequesterRole.from(authentication)));
 
         UpdateChecklistItemResponse data = new UpdateChecklistItemResponse(
                 view.chkId(),
@@ -121,9 +124,10 @@ public class ChecklistController {
     public ResponseEntity<ApiResponse<DeleteChecklistItemResponse>> deleteItem(
             @Parameter(description = "삭제할 체크리스트 항목 ID", example = "1")
             @PathVariable Long chkId,
-            @AuthenticationPrincipal String userId
+            Authentication authentication
     ) {
-        DeleteChecklistItemView view = checklistCommandUseCase.delete(new DeleteChecklistItemCommand(userId, chkId));
+        DeleteChecklistItemView view = checklistCommandUseCase.delete(new DeleteChecklistItemCommand(
+                authentication.getName(), chkId, RequesterRole.from(authentication)));
 
         DeleteChecklistItemResponse data = new DeleteChecklistItemResponse(view.completedCount(), view.totalCount());
 

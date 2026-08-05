@@ -18,7 +18,7 @@ public interface BlockDetailPort {
 
     /**
      * 상세 빈 행을 만들고 그 PK 를 돌려준다 (생성 3단계 중 ②). 내용은 타입별 수정 API 가 나중에 채운다.
-     * 상세 행이 없는 타입(FILE·PERFORMANCE_VIEW·TAX_INVOICE_VIEW)은 null 을 돌려주고
+     * 상세 행이 없는 타입(FILE·TAX_INVOICE_VIEW)은 null 을 돌려주고
      * 호출자가 block.type_id 를 NULL 로 둔다.
      */
     Long createDetail(Long blockId);

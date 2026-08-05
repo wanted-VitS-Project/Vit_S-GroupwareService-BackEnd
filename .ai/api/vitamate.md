@@ -1,11 +1,11 @@
 # 비타메이트 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-04 (노션 반영 완료 — 비타메이트 API 구현 가능 상태로 전환)
+**최종 동기화**: 2026-08-05 (Queue + callback 비동기 분석 계약 반영)
 **도메인 담당**: 정현
 
-> 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
-> 현재 문서는 노션 반영이 끝난 비타메이트 API 계약 사본이다. 변경이 필요하면 노션을 먼저 수정하고 프론트에 공유한다.
+> 이 파일이 비타메이트 API 계약 기준이다. 임의 변경 금지.
+> 변경이 필요하면 이 문서를 먼저 수정하고 프론트/Python 담당자에게 공유한다.
 
 ---
 
@@ -16,7 +16,8 @@
 | ✅ 확정 | 문서 분석 요청 | POST | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
 | ✅ 확정 | AI 분석 상태 및 결과 조회 | GET | `/api/v1/vitamate/analyses/{analysisId}` | 스텝 접근 권한 |
 | ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
-| ✅ 확정 | Python 내부 분석 요청 | POST | `/internal/v1/vitamate/analyses` | 내부 서버 |
+| ✅ 확정 | Python 분석 작업 조회 | GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | 내부 서버 |
+| ✅ 확정 | Python 분석 결과 콜백 | POST | `/internal/v1/vitamate/analyses/{analysisId}/callback` | 내부 서버 |
 
 ---
 
@@ -70,6 +71,16 @@
 | 같은 사용자 + 같은 `blockId` + 같은 `Idempotency-Key` + 같은 본문 | 기존 `analysisId`와 상태를 반환 |
 | 같은 키인데 본문이 다름 | 409 |
 | 키 없음 | 400 |
+
+비동기 처리 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 요청 저장 | Spring Boot는 분석 요청을 `PENDING`으로 저장하고 `202`를 반환한다 |
+| 작업 발행 | 분석 실행은 Redis Streams 큐에 작업 메시지를 발행해 Python worker가 처리한다 |
+| 사용자 대기 | 프론트는 분석 완료를 기다리지 않고 `analysisId`로 조회 API를 polling한다 |
+| 큐 발행 실패 | Spring Boot는 실패 로그를 남기고 해당 분석을 `FAILED`로 마감한다 |
+| 처리 실패 | Python worker는 실패 사유를 callback으로 전달하고 Spring Boot가 `FAILED`로 저장한다 |
 
 ---
 
@@ -167,24 +178,113 @@ analysisId
 
 ---
 
-## Python 내부 분석 요청 `POST /internal/v1/vitamate/analyses`
+## 분석 작업 큐 메시지 `Redis Streams`
 
 **상태**: ✅ 확정
 
-프론트에서 호출하지 않는 서버 간 내부 API다.
+프론트에서 호출하지 않는 내부 비동기 작업 계약이다.
 
-Spring Boot가 Python 서버에 전달한다.
+Spring Boot가 Redis Streams에 분석 작업 메시지를 발행하고, Python worker가 메시지를 소비한다.
+
+처리 흐름:
+
+```text
+Client
+→ Spring Boot: POST /api/v1/blocks/{blockId}/vitamate/analyses
+→ Spring Boot: PENDING 저장
+→ Spring Boot: PROCESSING 선점 + attemptId 발급
+→ Spring Boot: Redis Streams에 작업 메시지 발행
+→ Python worker: 큐 메시지 소비
+→ Python worker: Spring 내부 API로 분석 작업 상세 조회
+→ Python worker: 분석 수행
+→ Python worker: Spring callback API로 결과 전달
+→ Spring Boot: attemptId 검증 후 COMPLETED 또는 FAILED 저장
+```
+
+큐 설정:
+
+| 항목 | 값 |
+|------|----|
+| Stream key | `vitamate:analysis:jobs` |
+| Consumer group | `vitamate-python-workers` |
+| 메시지 보존 | 운영 정책에 따라 Redis 설정으로 관리 |
+| Ack 기준 | Python worker가 Spring callback 응답을 받은 뒤 ack |
+
+메시지 필드:
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `analysisId` | Long | Spring Boot에서 생성한 분석 ID |
+| `attemptId` | String | 현재 워커 실행 토큰. 늦은 응답 저장 방지용 UUID |
+| `retryCount` | Integer | 현재 재시도 횟수. 최초 발행은 `0` |
+| `createdAt` | LocalDateTime | 큐 메시지 발행 시각 |
+
+큐 메시지 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 최소 메시지 | 큐에는 큰 문서 본문, 프롬프트 전문, 분석 결과 전문을 넣지 않는다 |
+| 입력 조회 | Python worker는 `analysisId`, `attemptId`로 Spring 내부 API를 호출해 분석 입력을 조회한다 |
+| 중복 소비 | 같은 메시지가 중복 소비되어도 `attemptId` 조건으로 늦은 결과 저장을 막는다 |
+| 재시도 | 일시 장애만 최대 3회 재시도한다 |
+| 최종 실패 | 최대 재시도 초과 또는 복구 불가능한 오류는 callback으로 `FAILED`를 전달한다 |
+| 로그 | 큐 발행, 소비, callback, 저장 성공/실패는 단계별 로그를 남긴다 |
+
+로그 규칙:
+
+| 단계 | 로그 레벨 | 필수 값 |
+|------|----------|---------|
+| 큐 발행 성공 | `INFO` | `analysisId`, `attemptId`, `streamKey` |
+| 큐 발행 실패 | `ERROR` | `analysisId`, `attemptId`, 실패 타입 |
+| Python 작업 시작 | Python `INFO` | `analysisId`, `attemptId`, `retryCount` |
+| Python 분석 실패 | Python `ERROR` | `analysisId`, `attemptId`, 실패 타입 |
+| Spring callback 수신 | `INFO` | `analysisId`, `attemptId`, `analysisStatus` |
+| attemptId 불일치 | `WARN` | `analysisId`, `attemptId` |
+| 결과 저장 성공 | `INFO` | `analysisId`, `citationCount` |
+| 결과 저장 실패 | `ERROR` | `analysisId`, 실패 타입 |
+
+로그 금지 값:
+
+| 항목 | 규칙 |
+|------|------|
+| 문서 원문 | 로그에 남기지 않는다 |
+| 프롬프트 전문 | 로그에 남기지 않는다 |
+| 분석 결과 전문 | 로그에 남기지 않는다 |
+| S3 storage key 전체 | 로그에 남기지 않는다 |
+| 내부 토큰 | 로그에 남기지 않는다 |
+
+---
+
+## Python 분석 작업 조회 `GET /internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}`
+
+**상태**: ✅ 확정
+
+Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 내부 API다.
+
+프론트에서 호출하지 않는다.
 
 서비스 인증:
 
 | 항목 | 규칙 |
 |------|------|
-| 호출자 | Spring Boot 서버만 호출 |
-| 인증 방식 | 내부 서비스 토큰 또는 mTLS 중 팀 합의 후 선택 |
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
-**Request**
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `analysisId` | Long | 분석 ID |
+| `attemptId` | String | 큐 메시지에 포함된 워커 실행 토큰 |
+
+**Response — `200`**
 
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
@@ -194,17 +294,30 @@ Spring Boot가 Python 서버에 전달한다.
 | `searchScope` | Object | 검색 범위 |
 | `documents` | Object[] | 선택 문서와 청크 후보 |
 
-내부 요청 일관성 규칙:
+작업 조회 검증 규칙:
 
 | 항목 | 규칙 |
 |------|------|
-| 기준 집합 | `searchScope.fileVersionIds`가 분석 요청에서 선택되어 `vitamate_analysis_document`에 저장된 전체 파일 버전 집합이다 |
+| 상태 조건 | `analysisId`가 `PROCESSING` 상태여야 한다 |
+| 시도 조건 | 요청 `attemptId`가 DB의 현재 `processing_attempt_id`와 일치해야 한다 |
+| lease 조건 | `lease_expires_at`이 만료되지 않아야 한다 |
+| 기준 집합 | `searchScope.fileVersionIds`는 분석 요청에서 선택되어 `vitamate_analysis_document`에 저장된 전체 파일 버전 집합이다 |
 | `documents` 범위 | `documents[].fileVersionId` 집합은 `searchScope.fileVersionIds`와 정확히 같아야 한다. 누락/추가가 있으면 내부 요청을 만들지 않는다 |
 | 청크 소속 | 각 `chunks[]`는 부모 `documents[].fileVersionId`에 속한 `document_chunk`만 포함한다 |
 | 빈 청크 | 선택 문서가 검색 가능한 청크를 아직 갖지 못한 경우 `chunks: []`는 허용한다. 단, 문서 항목 자체는 누락하지 않는다 |
 | 분석 소속 | `analysisId → vitamate_analysis → vitamate_block → block` 경로가 `searchScope.blockId`, `searchScope.projectId`와 일치해야 한다 |
 | 신뢰 경계 | Spring Boot가 DB 검증 후 내부 요청을 구성한다. 프론트 입력값을 그대로 Python에 전달하지 않는다 |
-| citation 범위 | Python 응답의 citation도 `searchScope.fileVersionIds`와 전달된 청크 범위 안으로 제한한다. Spring Boot가 저장 전 다시 검증한다 |
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 작업 입력 조회 성공. 분석을 수행한 뒤 callback을 보낸다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 메시지 필드가 잘못된 경우. 로그를 남기고 ack 후 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_ANALYSIS_NOT_FOUND` | 상태 불일치, attemptId 불일치, lease 만료, 이미 완료된 오래된 메시지. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
 
 **searchScope**
 
@@ -232,6 +345,12 @@ Spring Boot가 Python 서버에 전달한다.
 | `excerpt` | String | 청크 미리보기 |
 
 **Request 예시**
+
+```text
+GET /internal/v1/vitamate/analyses/501/jobs/9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138
+```
+
+**Response 예시**
 
 ```json
 {
@@ -265,10 +384,41 @@ Spring Boot가 Python 서버에 전달한다.
 }
 ```
 
-Python 서버가 반환한다.
+---
+
+## Python 분석 결과 콜백 `POST /internal/v1/vitamate/analyses/{analysisId}/callback`
+
+**상태**: ✅ 확정
+
+Python worker가 분석 처리 결과를 Spring Boot에 전달하는 내부 API다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
+| 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
 
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
+| `analysisId` | Long | 분석 ID |
+
+**Request**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `attemptId` | String | 현재 워커 실행 토큰 |
 | `analysisStatus` | String | `COMPLETED` 또는 `FAILED` |
 | `result` | String | 분석 결과 |
 | `citations` | Object[] | 검색 근거 청크 |
@@ -284,21 +434,86 @@ Python 서버가 반환한다.
 | `distanceScore` | Decimal | 검색 거리 점수 |
 | `excerpt` | String | 근거 발췌문 |
 
-내부 응답 검증:
+**Request 예시 — 성공**
+
+```json
+{
+  "attemptId": "9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138",
+  "analysisStatus": "COMPLETED",
+  "result": "핵심 기술 요구사항은 통합 관제, 실시간 데이터 분석, 보안 인증입니다.",
+  "citations": [
+    {
+      "documentChunkId": 9001,
+      "fileVersionId": 101,
+      "rankOrder": 1,
+      "distanceScore": 0.14321,
+      "excerpt": "통합 관제 플랫폼 구축..."
+    }
+  ],
+  "errorMessage": null
+}
+```
+
+**Request 예시 — 실패**
+
+```json
+{
+  "attemptId": "9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138",
+  "analysisStatus": "FAILED",
+  "result": null,
+  "citations": [],
+  "errorMessage": "문서 청크를 찾을 수 없습니다."
+}
+```
+
+callback 검증:
 
 | 항목 | 규칙 |
 |------|------|
+| 상태 조건 | `analysisId`가 `PROCESSING` 상태여야 한다 |
+| 시도 조건 | 요청 `attemptId`가 DB의 현재 `processing_attempt_id`와 일치해야 한다 |
 | 응답 상태 | `COMPLETED` 또는 `FAILED`만 허용한다 |
-| citation 파일 | `citations[].fileVersionId`는 요청의 `searchScope.fileVersionIds` 안에 있어야 한다 |
+| citation 파일 | `citations[].fileVersionId`는 분석 요청 당시 선택한 파일 버전 ID 안에 있어야 한다 |
 | citation 청크 | `citations[].documentChunkId`는 해당 `fileVersionId`의 `document_chunk`여야 한다 |
 | 저장 방식 | Spring Boot는 현재 `attemptId`와 `PROCESSING` 상태가 일치할 때만 결과와 citation을 저장한다 |
 | 범위 위반 | 범위 밖 citation이 있으면 결과를 부분 저장하지 않고 해당 분석을 `FAILED`로 마감한다 |
+| 늦은 응답 | attemptId가 다르거나 이미 완료된 분석이면 저장하지 않고 `accepted=false`로 응답한다 |
 
-내부 응답 null 규칙:
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | callback 수신 성공. `accepted=false`면 오래된 응답으로 보고 ack한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | callback body 형식 또는 상태별 null 규칙 위반. 로그를 남기고 ack 후 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+callback null 규칙:
 
 | 상태 | `result` | `citations` | `errorMessage` |
 |------|----------|-------------|----------------|
 | `COMPLETED` | 필수 | `[]` 가능 | `null` |
 | `FAILED` | `null` | `[]` | 필수 |
 
-> 이 API는 피그마 화면 댓글에 달지 않고 백엔드 API 문서 또는 시퀀스 다이어그램에만 기록한다.
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `accepted` | Boolean | 결과 저장 여부 |
+| `analysisId` | Long | 분석 ID |
+| `analysisStatus` | String | 저장된 상태. 저장하지 않은 경우 현재 상태 |
+| `reason` | String | `accepted=false`일 때 무시 사유 |
+
+**Response 예시**
+
+```json
+{
+  "accepted": true,
+  "analysisId": 501,
+  "analysisStatus": "COMPLETED",
+  "reason": null
+}
+```
+
+> 내부 API와 큐 메시지는 피그마 화면 댓글에 달지 않고 백엔드 API 문서 또는 시퀀스 다이어그램에만 기록한다.

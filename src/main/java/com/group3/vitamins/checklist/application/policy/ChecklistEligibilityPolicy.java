@@ -37,8 +37,8 @@ public class ChecklistEligibilityPolicy {
                 });
     }
 
-    public void assertEditPermission(Long chkBlockId, String userId) {
-        if (!blockCatalogPort.hasEditPermission(BLOCK_TYPE, chkBlockId, userId)) {
+    public void assertEditPermission(Long chkBlockId, String userId, String role) {
+        if (!blockCatalogPort.hasEditPermission(BLOCK_TYPE, chkBlockId, userId, role)) {
             log.warn("편집 권한 없음 - blockType={}, chkBlockId={}, userId={}", BLOCK_TYPE, chkBlockId, userId);
             throw new ForbiddenException(ChecklistErrorCode.FORBIDDEN);
         }

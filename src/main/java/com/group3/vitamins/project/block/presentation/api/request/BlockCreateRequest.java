@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record BlockCreateRequest(
 
         @Schema(description = "블록 타입. TEXT · IMAGE · FILE · CHECKLIST · PAYMENT_CONFIRM · "
-                + "TAX_INVOICE_VIEW · PERFORMANCE_VIEW · APPROVAL · AI 중 하나. "
+                + "TAX_INVOICE_VIEW · APPROVAL · AI 중 하나. "
                 + "BID_NOTICE 는 공고 전환 API 만 생성하므로 보내면 400 이다",
                 example = "CHECKLIST", requiredMode = Schema.RequiredMode.REQUIRED)
         String type,

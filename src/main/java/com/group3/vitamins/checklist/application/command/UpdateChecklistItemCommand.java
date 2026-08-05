@@ -4,6 +4,7 @@ public record UpdateChecklistItemCommand(
         String userId,
         Long chkId,
         String content,
-        Boolean changeStatusTo
+        Boolean changeStatusTo,
+        String role
 ) {
 }
