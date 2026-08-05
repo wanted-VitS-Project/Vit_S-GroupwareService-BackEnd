@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 // 비타메이트 분석 요청을 비동기 작업 큐로 발행하는 서비스
@@ -38,11 +39,12 @@ public class VitamateAnalysisJobDispatchService implements DispatchVitamateAnaly
         StartVitamateAnalysisResult result = started.get();
 
         try {
+            LocalDateTime publishedAt = LocalDateTime.now();
             jobPublisherPort.publish(new VitamateAnalysisJobPublisherPort.AnalysisJob(
                     result.analysisId(),
                     result.attemptId(),
                     INITIAL_RETRY_COUNT,
-                    result.startedAt()
+                    publishedAt
             ));
         } catch (RuntimeException e) {
             log.error("Failed to publish vitamate analysis job. analysisId={}, attemptId={}, reason=queue_publish_failed",

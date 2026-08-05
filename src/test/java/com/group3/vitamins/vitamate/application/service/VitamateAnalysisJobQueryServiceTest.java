@@ -102,6 +102,17 @@ class VitamateAnalysisJobQueryServiceTest {
         }
 
         @Test
+        @DisplayName("분석 ID가 0 이하면 조회 포트를 호출하지 않는다")
+        void rejectsNonPositiveAnalysisId() {
+            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisJobQuery(0L, ATTEMPT_ID)))
+                    .isInstanceOf(ValidationException.class)
+                    .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
+                            .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
+
+            verify(analysisReader, never()).findProcessingAnalysisJob(0L, ATTEMPT_ID);
+        }
+
+        @Test
         @DisplayName("attemptId가 비어 있으면 조회 포트를 호출하지 않는다")
         void rejectsBlankAttemptId() {
             assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisJobQuery(ANALYSIS_ID, " ")))

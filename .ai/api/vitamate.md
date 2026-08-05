@@ -268,8 +268,13 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | 항목 | 규칙 |
 |------|------|
 | 호출자 | Python worker만 호출 |
-| 인증 방식 | 내부 서비스 토큰 또는 mTLS 중 팀 합의 후 선택 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -302,6 +307,17 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | 빈 청크 | 선택 문서가 검색 가능한 청크를 아직 갖지 못한 경우 `chunks: []`는 허용한다. 단, 문서 항목 자체는 누락하지 않는다 |
 | 분석 소속 | `analysisId → vitamate_analysis → vitamate_block → block` 경로가 `searchScope.blockId`, `searchScope.projectId`와 일치해야 한다 |
 | 신뢰 경계 | Spring Boot가 DB 검증 후 내부 요청을 구성한다. 프론트 입력값을 그대로 Python에 전달하지 않는다 |
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 작업 입력 조회 성공. 분석을 수행한 뒤 callback을 보낸다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 메시지 필드가 잘못된 경우. 로그를 남기고 ack 후 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_ANALYSIS_NOT_FOUND` | 상태 불일치, attemptId 불일치, lease 만료, 이미 완료된 오래된 메시지. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
 
 **searchScope**
 
@@ -383,8 +399,13 @@ Python worker가 분석 처리 결과를 Spring Boot에 전달하는 내부 API�
 | 항목 | 규칙 |
 |------|------|
 | 호출자 | Python worker만 호출 |
-| 인증 방식 | 내부 서비스 토큰 또는 mTLS 중 팀 합의 후 선택 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -457,6 +478,16 @@ callback 검증:
 | 저장 방식 | Spring Boot는 현재 `attemptId`와 `PROCESSING` 상태가 일치할 때만 결과와 citation을 저장한다 |
 | 범위 위반 | 범위 밖 citation이 있으면 결과를 부분 저장하지 않고 해당 분석을 `FAILED`로 마감한다 |
 | 늦은 응답 | attemptId가 다르거나 이미 완료된 분석이면 저장하지 않고 `accepted=false`로 응답한다 |
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | callback 수신 성공. `accepted=false`면 오래된 응답으로 보고 ack한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | callback body 형식 또는 상태별 null 규칙 위반. 로그를 남기고 ack 후 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
 
 callback null 규칙:
 
