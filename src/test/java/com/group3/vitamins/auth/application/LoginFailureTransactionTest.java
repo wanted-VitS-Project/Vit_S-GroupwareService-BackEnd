@@ -2,8 +2,12 @@ package com.group3.vitamins.auth.application;
 
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
+import com.group3.vitamins.auth.application.command.LoginCommand;
+import com.group3.vitamins.auth.application.service.AuthCommandService;
 import com.group3.vitamins.auth.domain.exception.AuthErrorCode;
-import com.group3.vitamins.auth.infrastructure.persistence.AuthQueryMapper;
+import com.group3.vitamins.auth.infrastructure.adapter.AuthQueryMapper;
+import com.group3.vitamins.auth.infrastructure.adapter.LoginFailureRecordAdapter;
+import com.group3.vitamins.auth.infrastructure.adapter.UserProfileQueryAdapter;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,7 +58,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "security.login.lock-duration=10m",
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({AuthService.class, LoginFailureRecorder.class, LoginFailureTransactionTest.TestBeans.class})
+@Import({AuthCommandService.class, LoginFailureRecordAdapter.class, UserProfileQueryAdapter.class,
+        LoginFailureTransactionTest.TestBeans.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("로그인 실패 기록의 트랜잭션 경계")
 class LoginFailureTransactionTest {
@@ -64,7 +69,7 @@ class LoginFailureTransactionTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 3, 9, 0);
 
     @Autowired
-    private AuthService authService;
+    private AuthCommandService authService;
 
     @Autowired
     private AccountJpaRepository accountRepository;
@@ -78,7 +83,7 @@ class LoginFailureTransactionTest {
     @Test
     @DisplayName("비밀번호가 틀려 예외가 나가도 실패 카운트는 커밋된다")
     void failureCountSurvivesRollback() {
-        assertThatThrownBy(() -> authService.login(USER_ID, "wrong"))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, "wrong")))
                 .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
                         .isEqualTo(AuthErrorCode.AUTH_LOGIN_FAILED));
 
@@ -90,14 +95,14 @@ class LoginFailureTransactionTest {
     @DisplayName("임계치(5회)에 닿으면 실제로 잠기고 그 상태가 DB 에 남는다")
     void locksAfterThresholdAndPersists() {
         for (int attempt = 1; attempt <= 4; attempt++) {
-            assertThatThrownBy(() -> authService.login(USER_ID, "wrong"))
+            assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, "wrong")))
                     .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
                             .isEqualTo(AuthErrorCode.AUTH_LOGIN_FAILED));
         }
         assertThat(reload().getLoginFailCount()).isEqualTo(4);
 
         // 5회째 — 잠긴다
-        assertThatThrownBy(() -> authService.login(USER_ID, "wrong"))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, "wrong")))
                 .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
                         .isEqualTo(AuthErrorCode.AUTH_ACCOUNT_LOCKED));
 
@@ -107,7 +112,7 @@ class LoginFailureTransactionTest {
         assertThat(locked.getLoginFailCount()).isZero();
 
         // 잠긴 뒤에는 올바른 비밀번호여도 막힌다
-        assertThatThrownBy(() -> authService.login(USER_ID, "right"))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, "right")))
                 .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
                         .isEqualTo(AuthErrorCode.AUTH_ACCOUNT_LOCKED));
     }

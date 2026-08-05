@@ -1,12 +1,17 @@
 package com.group3.vitamins.account.application;
 
+import com.group3.vitamins.account.application.command.ResetPasswordsCommand;
+import com.group3.vitamins.account.application.policy.AccountAdminPolicy;
+import com.group3.vitamins.account.application.port.AccountQueryPort;
+import com.group3.vitamins.account.application.result.AccountTargetRow;
+import com.group3.vitamins.account.application.result.PasswordResetResult;
+import com.group3.vitamins.account.application.service.AccountPasswordResetService;
+import com.group3.vitamins.account.application.service.AccountPasswordUpdater;
+import com.group3.vitamins.account.domain.PasswordResetFailureReason;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
-import com.group3.vitamins.account.infrastructure.mail.MailDeliveryException;
-import com.group3.vitamins.account.infrastructure.mail.PasswordResetMailSender;
-import com.group3.vitamins.account.infrastructure.persistence.AccountQueryMapper;
-import com.group3.vitamins.account.infrastructure.persistence.AccountTargetRow;
-import com.group3.vitamins.account.presentation.api.dto.response.PasswordResetResponse;
+import com.group3.vitamins.account.application.port.MailDeliveryException;
+import com.group3.vitamins.account.application.port.PasswordResetMailPort;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,21 +37,22 @@ import static org.mockito.Mockito.when;
 @DisplayName("AccountPasswordResetService 비밀번호 재설정")
 class AccountPasswordResetServiceTest {
 
-    private AccountQueryMapper accountQueryMapper;
+    private AccountQueryPort accountQueryPort;
     private AccountPasswordUpdater accountPasswordUpdater;
-    private PasswordResetMailSender mailSender;
+    private PasswordResetMailPort mailSender;
     private AccountPasswordResetService service;
 
     @BeforeEach
     void setUp() {
-        accountQueryMapper = Mockito.mock(AccountQueryMapper.class);
+        accountQueryPort = Mockito.mock(AccountQueryPort.class);
         accountPasswordUpdater = Mockito.mock(AccountPasswordUpdater.class);
-        mailSender = Mockito.mock(PasswordResetMailSender.class);
+        mailSender = Mockito.mock(PasswordResetMailPort.class);
         // 아래 둘은 setUp 에서 스텁만 하고 테스트 본문에서 참조하지 않으므로 지역 변수로 둔다.
         ThrottledPasswordEncoder passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         TempPasswordGenerator tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         service = new AccountPasswordResetService(
-                accountQueryMapper, accountPasswordUpdater, passwordEncoder, tempPasswordGenerator, mailSender);
+                accountQueryPort, accountPasswordUpdater, passwordEncoder, tempPasswordGenerator,
+                mailSender, new AccountAdminPolicy());
 
         when(tempPasswordGenerator.generate()).thenReturn("TempPw12!@");
         when(passwordEncoder.encodeBulk(anyString())).thenReturn("$argon2id$temp");
@@ -56,35 +62,39 @@ class AccountPasswordResetServiceTest {
         return new AccountTargetRow(userId, "이름" + userId, email, role, "ADMIN".equals(role));
     }
 
+    private ResetPasswordsCommand command(String actorRole, List<String> userIds) {
+        return new ResetPasswordsCommand(actorRole, userIds);
+    }
+
     @Test
     @DisplayName("ADMIN 이 아니면 ACC_ADMIN_REQUIRED")
     void rejectsNonAdmin() {
-        assertThatThrownBy(() -> service.resetPasswords("MASTER", List.of("EMP001")))
+        assertThatThrownBy(() -> service.resetPasswords(command("MASTER", List.of("EMP001"))))
                 .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-        verify(accountQueryMapper, never()).findTargets(any());
+        verify(accountQueryPort, never()).findTargets(any());
     }
 
     @Test
     @DisplayName("userIds 가 비어 있으면 ACC_INVALID_REQUEST")
     void rejectsEmptyUserIds() {
-        assertThatThrownBy(() -> service.resetPasswords("ADMIN", List.of()))
+        assertThatThrownBy(() -> service.resetPasswords(command("ADMIN", List.of())))
                 .satisfies(hasCode(AccountErrorCode.ACC_INVALID_REQUEST));
     }
 
     @Test
     @DisplayName("userIds 가 null 이어도 ACC_INVALID_REQUEST")
     void rejectsNullUserIds() {
-        assertThatThrownBy(() -> service.resetPasswords("ADMIN", null))
+        assertThatThrownBy(() -> service.resetPasswords(command("ADMIN", null)))
                 .satisfies(hasCode(AccountErrorCode.ACC_INVALID_REQUEST));
     }
 
     @Test
     @DisplayName("존재하지 않는 사번이 섞이면 전체 거부 — ACC_NOT_FOUND")
     void rejectsWhenAnyMissing() {
-        when(accountQueryMapper.findTargets(any()))
+        when(accountQueryPort.findTargets(any()))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER")));   // 2개 요청, 1개만 존재
 
-        assertThatThrownBy(() -> service.resetPasswords("ADMIN", List.of("EMP001", "EMP999")))
+        assertThatThrownBy(() -> service.resetPasswords(command("ADMIN", List.of("EMP001", "EMP999"))))
                 .satisfies(hasCode(AccountErrorCode.ACC_NOT_FOUND));
         verify(accountPasswordUpdater, never()).applyResets(any());
     }
@@ -92,10 +102,10 @@ class AccountPasswordResetServiceTest {
     @Test
     @DisplayName("대상에 ADMIN 계정이 있으면 ACC_ADMIN_ACCOUNT_NOT_ALLOWED")
     void rejectsWhenAdminIncluded() {
-        when(accountQueryMapper.findTargets(any()))
+        when(accountQueryPort.findTargets(any()))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER"), row("ADMIN01", null, "ADMIN")));
 
-        assertThatThrownBy(() -> service.resetPasswords("ADMIN", List.of("EMP001", "ADMIN01")))
+        assertThatThrownBy(() -> service.resetPasswords(command("ADMIN", List.of("EMP001", "ADMIN01"))))
                 .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_ACCOUNT_NOT_ALLOWED));
         verify(accountPasswordUpdater, never()).applyResets(any());
     }
@@ -104,18 +114,18 @@ class AccountPasswordResetServiceTest {
     @SuppressWarnings("unchecked")   // ArgumentCaptor.forClass(Map.class) 는 제네릭을 못 잡는다 (Mockito 한계)
     @DisplayName("이메일 없는 대상은 비밀번호를 바꾸지 않는다 — EMAIL_NOT_REGISTERED(passwordChanged=false)")
     void skipsPasswordChangeWhenEmailMissing() {
-        when(accountQueryMapper.findTargets(any()))
+        when(accountQueryPort.findTargets(any()))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER"), row("EMP002", null, "MEMBER")));
 
-        PasswordResetResponse response = service.resetPasswords("ADMIN", List.of("EMP001", "EMP002"));
+        PasswordResetResult result = service.resetPasswords(command("ADMIN", List.of("EMP001", "EMP002")));
 
-        assertThat(response.requestedCount()).isEqualTo(2);
-        assertThat(response.successCount()).isEqualTo(1);
-        assertThat(response.failedCount()).isEqualTo(1);
-        assertThat(response.failures()).singleElement().satisfies(f -> {
+        assertThat(result.requestedCount()).isEqualTo(2);
+        assertThat(result.successCount()).isEqualTo(1);
+        assertThat(result.failedCount()).isEqualTo(1);
+        assertThat(result.failures()).singleElement().satisfies(f -> {
             assertThat(f.userId()).isEqualTo("EMP002");
-            assertThat(f.reason()).isEqualTo("EMAIL_NOT_REGISTERED");
-            assertThat(f.passwordChanged()).isFalse();
+            assertThat(f.reason()).isEqualTo(PasswordResetFailureReason.EMAIL_NOT_REGISTERED);
+            assertThat(f.reason().isPasswordChanged()).isFalse();
         });
 
         // 이메일 있는 대상만 해싱·저장한다
@@ -128,18 +138,18 @@ class AccountPasswordResetServiceTest {
     @Test
     @DisplayName("메일 발송이 실패하면 MAIL_SEND_FAILED(passwordChanged=true) — 비번은 이미 바뀌었다")
     void reportsMailFailureAsPasswordChanged() {
-        when(accountQueryMapper.findTargets(any()))
+        when(accountQueryPort.findTargets(any()))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER")));
         doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
                 .when(mailSender).sendTempPassword(anyString(), anyString(), anyString());
 
-        PasswordResetResponse response = service.resetPasswords("ADMIN", List.of("EMP001"));
+        PasswordResetResult result = service.resetPasswords(command("ADMIN", List.of("EMP001")));
 
-        assertThat(response.successCount()).isZero();
-        assertThat(response.failedCount()).isEqualTo(1);
-        assertThat(response.failures()).singleElement().satisfies(f -> {
-            assertThat(f.reason()).isEqualTo("MAIL_SEND_FAILED");
-            assertThat(f.passwordChanged()).isTrue();
+        assertThat(result.successCount()).isZero();
+        assertThat(result.failedCount()).isEqualTo(1);
+        assertThat(result.failures()).singleElement().satisfies(f -> {
+            assertThat(f.reason()).isEqualTo(PasswordResetFailureReason.MAIL_SEND_FAILED);
+            assertThat(f.reason().isPasswordChanged()).isTrue();
         });
         // 비밀번호 변경은 메일보다 먼저 커밋됐다
         verify(accountPasswordUpdater, times(1)).applyResets(any());
