@@ -10,8 +10,8 @@ import com.group3.vitamins.account.application.usecase.AccountPasswordResetUseCa
 import com.group3.vitamins.account.domain.PasswordResetFailureReason;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
-import com.group3.vitamins.account.infrastructure.mail.MailDeliveryException;
-import com.group3.vitamins.account.infrastructure.mail.PasswordResetMailSender;
+import com.group3.vitamins.account.application.port.MailDeliveryException;
+import com.group3.vitamins.account.application.port.PasswordResetMailPort;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -49,7 +49,7 @@ public class AccountPasswordResetService implements AccountPasswordResetUseCase 
     private final AccountPasswordUpdater accountPasswordUpdater;
     private final ThrottledPasswordEncoder passwordEncoder;
     private final TempPasswordGenerator tempPasswordGenerator;
-    private final PasswordResetMailSender mailSender;
+    private final PasswordResetMailPort mailSender;
     private final AccountAdminPolicy accountAdminPolicy;
 
     @Override

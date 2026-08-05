@@ -171,6 +171,20 @@ class AuthCommandServiceTest {
     }
 
     @Test
+    @DisplayName("약관 동의는 멱등 — 이미 동의한 계정이 다시 호출해도 최초 동의 시각을 유지한다")
+    void agreeTermsIsIdempotent() {
+        AccountEntity account = account();
+        LocalDateTime firstAgreedAt = NOW.minusDays(1);
+        ReflectionTestUtils.setField(account, "termsAgreedAt", firstAgreedAt);
+        when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
+
+        authService.agreeTerms(new AgreeTermsCommand(USER_ID));
+
+        // NOW 로 덮어쓰지 않고 최초 시각을 유지한다 (감사·법적 기록 보존)
+        assertThat(account.getTermsAgreedAt()).isEqualTo(firstAgreedAt);
+    }
+
+    @Test
     @DisplayName("약관 동의 — 계정이 없으면 AUTH_UNAUTHENTICATED")
     void agreeTermsRejectsMissingAccount() {
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());

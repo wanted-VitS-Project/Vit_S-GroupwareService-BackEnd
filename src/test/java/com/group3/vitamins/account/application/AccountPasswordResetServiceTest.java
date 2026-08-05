@@ -10,8 +10,8 @@ import com.group3.vitamins.account.application.service.AccountPasswordUpdater;
 import com.group3.vitamins.account.domain.PasswordResetFailureReason;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
-import com.group3.vitamins.account.infrastructure.mail.MailDeliveryException;
-import com.group3.vitamins.account.infrastructure.mail.PasswordResetMailSender;
+import com.group3.vitamins.account.application.port.MailDeliveryException;
+import com.group3.vitamins.account.application.port.PasswordResetMailPort;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,14 +39,14 @@ class AccountPasswordResetServiceTest {
 
     private AccountQueryPort accountQueryPort;
     private AccountPasswordUpdater accountPasswordUpdater;
-    private PasswordResetMailSender mailSender;
+    private PasswordResetMailPort mailSender;
     private AccountPasswordResetService service;
 
     @BeforeEach
     void setUp() {
         accountQueryPort = Mockito.mock(AccountQueryPort.class);
         accountPasswordUpdater = Mockito.mock(AccountPasswordUpdater.class);
-        mailSender = Mockito.mock(PasswordResetMailSender.class);
+        mailSender = Mockito.mock(PasswordResetMailPort.class);
         // 아래 둘은 setUp 에서 스텁만 하고 테스트 본문에서 참조하지 않으므로 지역 변수로 둔다.
         ThrottledPasswordEncoder passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         TempPasswordGenerator tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);

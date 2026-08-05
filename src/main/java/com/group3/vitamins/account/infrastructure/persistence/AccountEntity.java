@@ -143,10 +143,13 @@ public class AccountEntity {
      * 약관 동의 — 최초 로그인 시 1회. 동의 시각을 기록해 게이트를 해제한다 (`auth.md` §5).
      *
      * <p>재설정({@link #resetPassword})은 이 값을 건드리지 않으므로 재로그인 시 약관을 다시 받지 않는다.
-     * 이미 동의한 계정이 다시 호출해도 시각만 갱신될 뿐 무해하다(멱등).
+     * <b>멱등</b>이다 — 이미 동의한 계정이 다시 호출하면 <b>최초 동의 시각을 유지</b>한다(덮어쓰지 않는다).
+     * 최초 동의 시각은 감사·법적 기록이 될 수 있어 재호출로 바뀌면 안 된다.
      */
     public void agreeTerms(LocalDateTime agreedAt) {
-        this.termsAgreedAt = agreedAt;
+        if (this.termsAgreedAt == null) {
+            this.termsAgreedAt = agreedAt;
+        }
     }
 
     public boolean hasAgreedTerms() {
