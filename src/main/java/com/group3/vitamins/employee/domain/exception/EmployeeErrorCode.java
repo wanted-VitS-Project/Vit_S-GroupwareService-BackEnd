@@ -33,7 +33,11 @@ public enum EmployeeErrorCode implements ErrorCode {
             "직급을 찾을 수 없습니다."),
 
     EMP_USER_ID_DUPLICATED("EMP_USER_ID_DUPLICATED",
-            "이미 등록된 사번입니다.");
+            "이미 등록된 사번입니다."),
+
+    // ── 퇴사 (employee.md §5) ──
+    EMP_ALREADY_RESIGNED("EMP_ALREADY_RESIGNED",
+            "이미 퇴사 처리된 사원입니다.");
 
     private final String code;
     private final String message;

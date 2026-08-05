@@ -63,4 +63,31 @@ class EmployeeRepositoryAdapterTest {
         assertThatThrownBy(() -> adapter.save(sample("EMP021")))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    @DisplayName("update 는 로드한 엔티티(isNew=false)를 UPDATE 한다 — PK 충돌 없이 필드가 바뀐다")
+    void updateModifiesExisting() {
+        adapter.save(sample("EMP021"));
+
+        Employee current = adapter.findById("EMP021").orElseThrow();
+        adapter.update(current.withInfo("김철수", "010-9999-8888", null, 2L, null,
+                LocalDate.of(2024, 3, 2)));
+
+        Employee reloaded = adapter.findById("EMP021").orElseThrow();
+        assertThat(reloaded.getName()).isEqualTo("김철수");
+        assertThat(reloaded.getEmail()).isNull();          // 명시적으로 지움
+        assertThat(reloaded.getJobPositionId()).isNull();  // 직급 미지정으로 변경
+    }
+
+    @Test
+    @DisplayName("update 는 퇴사일도 기록한다")
+    void updateRecordsResignation() {
+        adapter.save(sample("EMP021"));
+
+        Employee current = adapter.findById("EMP021").orElseThrow();
+        adapter.update(current.resigned(LocalDate.of(2026, 8, 31)));
+
+        assertThat(adapter.findById("EMP021").orElseThrow().getResignedAt())
+                .isEqualTo(LocalDate.of(2026, 8, 31));
+    }
 }

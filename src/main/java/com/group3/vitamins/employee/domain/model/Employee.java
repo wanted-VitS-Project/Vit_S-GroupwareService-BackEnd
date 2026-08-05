@@ -52,8 +52,26 @@ public class Employee {
         return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
     }
 
+    /**
+     * 정보 수정 (`employee.md` §4). 사번·시스템여부·퇴사일은 이 API 로 바꾸지 않으므로 유지한다.
+     * 부분 수정(전달한 필드만)은 서비스가 현재값과 병합해 최종값을 넘긴다 — 여기서는 그 최종 상태를 만든다.
+     */
+    public Employee withInfo(String name, String phone, String email,
+                             Long departmentId, Long jobPositionId, LocalDate hiredAt) {
+        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
+    }
+
+    /** 퇴사 처리 (`employee.md` §5). 사원 정보는 지우지 않고 퇴사일만 기록한다(계정 비활성화는 별도 포트). */
+    public Employee resigned(LocalDate resignedAt) {
+        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
+    }
+
     public boolean isSystem() {
         return system;
+    }
+
+    public boolean isResigned() {
+        return resignedAt != null;
     }
 
     public boolean hasEmail() {

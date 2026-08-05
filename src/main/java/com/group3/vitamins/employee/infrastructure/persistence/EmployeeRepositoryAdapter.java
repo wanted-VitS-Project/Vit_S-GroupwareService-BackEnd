@@ -5,6 +5,8 @@ import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 /**
  * {@link EmployeeRepository} 포트의 JPA 어댑터.
  *
@@ -28,5 +30,25 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     @Override
     public boolean existsById(String userId) {
         return springDataRepository.existsById(userId);
+    }
+
+    @Override
+    public Optional<Employee> findById(String userId) {
+        return springDataRepository.findById(userId).map(EmployeePersistenceMapper::toDomain);
+    }
+
+    /**
+     * 저장된 엔티티를 불러 가변 필드를 갱신한다({@code isNew=false} → UPDATE). 등록의 {@link #save}
+     * ({@code Persistable} 로 INSERT 강제)와 경로가 다르다. {@code saveAndFlush} 로 즉시 반영한다.
+     */
+    @Override
+    public Employee update(Employee employee) {
+        EmployeeJpaEntity entity = springDataRepository.findById(employee.getUserId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "수정 대상 사원이 조회 직후 사라졌습니다: " + employee.getUserId()));
+        entity.apply(employee.getName(), employee.getDepartmentId(), employee.getJobPositionId(),
+                employee.getEmail(), employee.getPhone(), employee.getHiredAt(), employee.getResignedAt());
+        EmployeeJpaEntity saved = springDataRepository.saveAndFlush(entity);
+        return EmployeePersistenceMapper.toDomain(saved);
     }
 }
