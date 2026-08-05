@@ -1,9 +1,9 @@
-package com.group3.vitamins.vitamate.application.service;
+package com.group3.vitamins.vitamate.application.support;
 
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStore;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort;
 import com.group3.vitamins.vitamate.application.result.StartVitamateAnalysisResult;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -11,14 +11,14 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-// 비타메이트 AI 워커의 분석 상태 전이를 처리하는 서비스
-@Service
+// 비타메이트 분석 상태 전이를 한 곳에서 관리하는 내부 컴포넌트
+@Component
 @RequiredArgsConstructor
-public class VitamateAnalysisWorkerService {
+public class VitamateAnalysisStateManager {
 
     private static final Duration PROCESSING_LEASE_DURATION = Duration.ofMinutes(10);
 
-    private final VitamateAnalysisStore analysisStore;
+    private final VitamateAnalysisStorePort analysisStore;
 
     // PENDING 분석 요청을 PROCESSING 상태로 선점한다.
     @Transactional

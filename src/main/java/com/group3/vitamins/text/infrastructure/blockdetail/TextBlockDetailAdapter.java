@@ -27,7 +27,7 @@ public class TextBlockDetailAdapter implements BlockDetailPort {
 
     /** 본문이 빈 행을 만든다. INSERT 는 텍스트 도메인이 JPA 로 처리하고 PK 를 돌려준다. */
     @Override
-    public Long createDetail(Long blockId) {
+    public Long createDetail(Long blockId, String userId) {
         return textHandlerService.create(blockId);
     }
 

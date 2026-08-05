@@ -3,6 +3,9 @@ package com.group3.vitamins.vitamate.infrastructure.persistence.mapper;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateBlockContextRow;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisCitationRow;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisDocumentRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobChunkRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobRow;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -36,4 +39,16 @@ public interface VitamateAnalysisMapper {
 
     // 분석 결과의 근거 citation 목록을 순서대로 조회한다.
     List<VitamateAnalysisCitationRow> findAnalysisCitations(@Param("analysisId") Long analysisId);
+
+    // Python worker가 처리할 수 있는 PROCESSING 분석 작업 기본 정보를 조회한다.
+    VitamateAnalysisJobRow findProcessingAnalysisJob(
+            @Param("analysisId") Long analysisId,
+            @Param("attemptId") String attemptId
+    );
+
+    // Python worker 분석 작업의 선택 문서 목록을 조회한다.
+    List<VitamateAnalysisJobDocumentRow> findAnalysisJobDocuments(@Param("analysisId") Long analysisId);
+
+    // Python worker 분석 작업의 문서별 후보 청크 목록을 조회한다.
+    List<VitamateAnalysisJobChunkRow> findAnalysisJobChunks(@Param("analysisId") Long analysisId);
 }

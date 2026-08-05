@@ -3,41 +3,39 @@ package com.group3.vitamins.vitamate.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReaderPort;
-import com.group3.vitamins.vitamate.application.query.GetVitamateAnalysisQuery;
-import com.group3.vitamins.vitamate.application.result.VitamateAnalysisDetailResult;
-import com.group3.vitamins.vitamate.application.usecase.GetVitamateAnalysisUseCase;
+import com.group3.vitamins.vitamate.application.query.GetVitamateAnalysisJobQuery;
+import com.group3.vitamins.vitamate.application.result.VitamateAnalysisJobDetailResult;
+import com.group3.vitamins.vitamate.application.usecase.GetVitamateAnalysisJobUseCase;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 비타메이트 분석 결과와 블록별 이력 조회를 처리하는 서비스입니다.
- */
+// Python worker가 처리할 비타메이트 분석 작업 입력 조회 서비스
 @Service
 @RequiredArgsConstructor
-public class VitamateAnalysisQueryService implements GetVitamateAnalysisUseCase {
+public class VitamateAnalysisJobQueryService implements GetVitamateAnalysisJobUseCase {
 
     private final VitamateAnalysisReaderPort analysisReaderPort;
 
-    // 요청자가 접근 가능한 분석 상세를 조회한다.
+    // PROCESSING 상태와 attemptId가 일치하는 분석 작업 입력을 조회한다.
     @Override
     @Transactional(readOnly = true)
-    public VitamateAnalysisDetailResult handle(GetVitamateAnalysisQuery query) {
+    public VitamateAnalysisJobDetailResult handle(GetVitamateAnalysisJobQuery query) {
         validateQuery(query);
 
-        return analysisReaderPort.findAccessibleAnalysis(query.analysisId(), query.userId())
-                .map(VitamateAnalysisDetailResult::from)
+        return analysisReaderPort.findProcessingAnalysisJob(query.analysisId(), query.attemptId())
+                .map(VitamateAnalysisJobDetailResult::from)
                 .orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_ANALYSIS_NOT_FOUND));
     }
 
-    // 조회에 필요한 식별자가 비어 있지 않은지 확인한다.
-    private void validateQuery(GetVitamateAnalysisQuery query) {
+    // 내부 작업 조회에 필요한 분석 ID와 attemptId가 유효한지 확인한다.
+    private void validateQuery(GetVitamateAnalysisJobQuery query) {
         if (query == null
                 || query.analysisId() == null
                 || query.analysisId() <= 0
-                || query.userId() == null
-                || query.userId().isBlank()) {
+                || query.attemptId() == null
+                || query.attemptId().isBlank()) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
     }

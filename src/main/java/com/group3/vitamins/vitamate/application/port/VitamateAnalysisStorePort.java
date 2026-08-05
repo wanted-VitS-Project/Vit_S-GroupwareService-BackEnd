@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 // 비타메이트 분석 요청 저장과 멱등성 조회를 담당하는 포트
-public interface VitamateAnalysisStore {
+public interface VitamateAnalysisStorePort {
 
     // 멱등성 키 기준으로 이미 생성된 분석 요청을 찾는다.
     Optional<ExistingAnalysis> findExistingAnalysis(Long vitamateBlockId, String requestedBy, String idempotencyKey);
@@ -25,6 +25,21 @@ public interface VitamateAnalysisStore {
     boolean markFailedFromProcessing(Long analysisId, String attemptId, String errorMessage, LocalDateTime failedAt);
 
     boolean markFailedFromPending(Long analysisId, String errorMessage, LocalDateTime failedAt);
+
+    Optional<String> findAnalysisStatus(Long analysisId);
+
+    boolean existsAllCitationTargets(Long analysisId, List<NewCitation> citations);
+
+    void saveAnalysisCitations(Long analysisId, List<NewCitation> citations);
+
+    record NewCitation(
+            Long documentChunkId,
+            Long fileVersionId,
+            Integer rankOrder,
+            java.math.BigDecimal distanceScore,
+            String excerpt
+    ) {
+    }
 
     record NewAnalysis(
             Long vitamateBlockId,

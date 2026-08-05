@@ -31,7 +31,7 @@ public class ChecklistBlockDetailAdapter implements BlockDetailPort {
 
     /** 항목이 0개인 블록 행만 만든다. INSERT 는 체크리스트 도메인이 JPA 로 처리하고 PK 를 돌려준다. */
     @Override
-    public Long createDetail(Long blockId) {
+    public Long createDetail(Long blockId, String userId) {
         return checklistHandlerService.create(blockId);
     }
 

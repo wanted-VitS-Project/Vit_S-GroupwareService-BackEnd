@@ -68,7 +68,7 @@ public class BlockCommandService implements BlockCommandUseCase {
                 rowIndex, sortOrder, colSpan, command.requesterUserId(), now));
 
         //2. 1)상세 테이블 조회, 2)행 추가, 3)TYPE ID 조회, 4) TYPE ID 삽입
-        linkDetail(block, type, now);
+        linkDetail(block, type, command.requesterUserId(), now);
 
         return new BlockResult(
                 block.getBlockId(), block.getStepId(), step.projectId(), type.name(),
@@ -80,13 +80,13 @@ public class BlockCommandService implements BlockCommandUseCase {
      * 상세 빈 행을 만들고 type_id 를 연결한다 (3단계 중 ②③).
      * 담당 어댑터가 없는 타입(FILE·PERFORMANCE_VIEW·TAX_INVOICE_VIEW)은 type_id 를 NULL 로 둔다.
      */
-    private void linkDetail(Block block, BlockType type, LocalDateTime now) {
+    private void linkDetail(Block block, BlockType type, String userId, LocalDateTime now) {
         Optional<BlockDetailPort> port = blockDetailRegistry.find(type);
         if (port.isEmpty()) {
             return;
         }
 
-        Long typeId = port.get().createDetail(block.getBlockId());
+        Long typeId = port.get().createDetail(block.getBlockId(), userId);
         if (typeId == null) {
             throw new IllegalStateException(
                     "상세 행을 만들었는데 PK 를 찾지 못했다 - type=" + type + ", blockId=" + block.getBlockId());
