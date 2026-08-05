@@ -10,7 +10,9 @@
         SELECT r.approval_id           AS approvalId,
                r.approval_revision_id  AS revisionId,
                r.revision_no           AS revisionNo,
-               r.status                AS status
+               r.status                AS status,
+               r.title                 AS title,
+               r.content               AS content
         FROM approval_revision r
         WHERE r.approval_id IN
         <foreach item="id" collection="approvalIds" open="(" separator="," close=")">#{id}</foreach>
