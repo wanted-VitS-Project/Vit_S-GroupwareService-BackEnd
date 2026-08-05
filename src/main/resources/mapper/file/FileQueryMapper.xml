@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.file.infrastructure.adapter.FileQueryMapper">
+
+    <!-- 블록 안 동명(살아있는) 문서 존재 여부 (§1). block_file ⋈ file, deleted_at IS NULL. -->
+    <select id="existsActiveNameInBlock" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM block_file bf
+              JOIN file f ON f.file_id = bf.file_id
+             WHERE bf.block_id = #{blockId}
+               AND f.name = #{name}
+               AND f.deleted_at IS NULL
+        )
+    </select>
+
+</mapper>
