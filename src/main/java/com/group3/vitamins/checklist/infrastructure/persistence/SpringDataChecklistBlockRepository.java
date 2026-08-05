@@ -29,4 +29,7 @@ public interface SpringDataChecklistBlockRepository extends JpaRepository<Checkl
     @Query("UPDATE ChecklistBlockJpaEntity c SET c.deletedAt = :deletedAt "
             + "WHERE c.chkBlockId = :chkBlockId AND c.deletedAt IS NULL")
     int markDeletedIfActive(@Param("chkBlockId") Long chkBlockId, @Param("deletedAt") LocalDateTime deletedAt);
+
+    @Query("SELECT c.blockId FROM ChecklistBlockJpaEntity c WHERE c.chkBlockId = :chkBlockId")
+    Optional<Long> findBlockIdByChkBlockId(@Param("chkBlockId") Long chkBlockId);
 }

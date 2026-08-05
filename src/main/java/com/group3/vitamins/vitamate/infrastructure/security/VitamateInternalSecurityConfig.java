@@ -6,7 +6,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
@@ -24,7 +23,7 @@ public class VitamateInternalSecurityConfig {
     public SecurityFilterChain vitamateInternalSecurityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .securityMatcher("/internal/v1/vitamate/**")
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/internal/v1/vitamate/**"))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new VitamateWorkerTokenAuthenticationFilter(properties), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("VITAMATE_WORKER"))

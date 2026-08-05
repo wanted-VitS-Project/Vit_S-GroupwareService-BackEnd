@@ -11,20 +11,15 @@ public interface BlockCatalogPort {
 
     /**
      * blockType + blockTypeId(상세 테이블 PK) 로 그 블록이 속한 step 에 대해
-     * 현재 사용자가 편집 권한이 있는지 확인한다. (공용 block 테이블의 type/blockTypeId 컬럼 기준)
-     * TODO: 권한 인프라(step_permission/project_member)가 아직 없어 구현체는 임시로 항상 true 를 반환한다.
+     * 현재 사용자가 편집 권한이 있는지 확인한다. Step 도메인의 {@code StepAccessUseCase}를 재사용한다.
      */
-    boolean hasEditPermission(String blockType, Long blockTypeId, String userId);
+    boolean hasEditPermission(String blockType, Long blockTypeId, String userId, String role);
 
     /**
      * blockType + blockTypeId 로 그 블록이 속한 step 을 현재 사용자가 조회(VIEWER 이상)할 수 있는지 확인한다.
-     * TODO: 권한 인프라(step_permission/project_member)가 아직 없어 구현체는 임시로 항상 true 를 반환한다.
      */
-    boolean hasViewPermission(String blockType, Long blockTypeId, String userId);
+    boolean hasViewPermission(String blockType, Long blockTypeId, String userId, String role);
 
-    /**
-     * 활동 로그(Block 생성/삭제)에 남길 Block명을 blockType + blockTypeId 로 조회한다.
-     * TODO: block 테이블 연동이 아직 없어 구현체는 임시로 null 을 반환한다.
-     */
+    /** 활동 로그(Block 생성/삭제)에 남길 Block명을 blockType + blockTypeId 로 조회한다. */
     String getBlockTitle(String blockType, Long blockTypeId);
 }
