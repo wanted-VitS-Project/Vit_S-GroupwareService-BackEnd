@@ -1,4 +1,4 @@
-package com.group3.vitamins.auth.application;
+package com.group3.vitamins.auth.infrastructure.web;
 
 import com.group3.vitamins.global.infrastructure.session.SessionTerminator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +21,9 @@ import java.util.List;
  *
  * <p>폼 로그인을 쓰지 않으므로 Spring Security 의 인증 필터가 해주던 일(세션 고정 방어 · 단일 세션 ·
  * SecurityContext 저장)을 <b>여기서 명시적으로</b> 한다. 필터 기반 전략은 우리 로그인 경로에서 동작하지 않는다.
+ *
+ * <p>{@code HttpServletRequest/Response}·{@code SecurityContextHolder}·{@code HttpSession} 같은 Servlet/Security
+ * 인프라를 직접 다루므로 application 이 아니라 {@code infrastructure/web} 에 둔다.
  */
 @Slf4j
 @Component

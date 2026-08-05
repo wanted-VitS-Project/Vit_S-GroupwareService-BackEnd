@@ -1,6 +1,5 @@
 package com.group3.vitamins.auth.infrastructure.web;
 
-import com.group3.vitamins.auth.application.AuthSessionManager;
 import com.group3.vitamins.auth.domain.exception.AuthErrorCode;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import jakarta.servlet.FilterChain;

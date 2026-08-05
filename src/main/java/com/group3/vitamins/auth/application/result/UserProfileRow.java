@@ -1,4 +1,4 @@
-package com.group3.vitamins.auth.infrastructure.persistence;
+package com.group3.vitamins.auth.application.result;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
  *
  * <p>읽기 모델이므로 엔티티가 아니다. 애그리거트 4개(계정·사원·부서·직급)를 가로지르는데
  * JPA 로 짜면 지연 로딩으로 쿼리가 4번 나간다.
+ * ({@link com.group3.vitamins.auth.application.port.UserProfileQueryPort} 의 반환 타입)
  */
 public record UserProfileRow(
         String userId,

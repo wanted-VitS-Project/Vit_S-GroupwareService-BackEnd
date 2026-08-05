@@ -2,9 +2,13 @@ package com.group3.vitamins.auth.application;
 
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
+import com.group3.vitamins.auth.application.command.AgreeTermsCommand;
+import com.group3.vitamins.auth.application.command.LoginCommand;
+import com.group3.vitamins.auth.application.port.UserProfileQueryPort;
+import com.group3.vitamins.auth.application.result.UserProfileRow;
+import com.group3.vitamins.auth.application.service.AuthCommandService;
 import com.group3.vitamins.auth.domain.exception.AuthErrorCode;
-import com.group3.vitamins.auth.infrastructure.persistence.AuthQueryMapper;
-import com.group3.vitamins.auth.infrastructure.persistence.UserProfileRow;
+import com.group3.vitamins.auth.infrastructure.adapter.LoginFailureRecordAdapter;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,8 +33,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@DisplayName("AuthService 로그인")
-class AuthServiceTest {
+@DisplayName("AuthCommandService 로그인")
+class AuthCommandServiceTest {
 
     private static final String USER_ID = "EMP001";
     private static final String RAW_PASSWORD = "Vit-S!2026";
@@ -40,23 +44,23 @@ class AuthServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 3, 9, 0);
 
     private AccountJpaRepository accountRepository;
-    private AuthQueryMapper authQueryMapper;
+    private UserProfileQueryPort userProfileQueryPort;
     private PasswordEncoder passwordEncoder;
-    private AuthService authService;
+    private AuthCommandService authService;
 
     @BeforeEach
     void setUp() {
         accountRepository = Mockito.mock(AccountJpaRepository.class);
-        authQueryMapper = Mockito.mock(AuthQueryMapper.class);
+        userProfileQueryPort = Mockito.mock(UserProfileQueryPort.class);
         passwordEncoder = Mockito.mock(PasswordEncoder.class);
         when(passwordEncoder.encode(anyString())).thenReturn("$argon2id$dummy");
 
         // 실제 구현을 쓴다 — 목으로 대체하면 "실패를 기록한다" 는 계약이 검증되지 않는다.
         // 단 여기엔 프록시가 없어 REQUIRES_NEW 는 걸리지 않는다. 그건 LoginFailureTransactionTest 가 본다.
-        LoginFailureRecorder loginFailureRecorder = new LoginFailureRecorder(accountRepository);
+        LoginFailureRecordAdapter loginFailureRecorder = new LoginFailureRecordAdapter(accountRepository);
 
         Clock fixed = Clock.fixed(NOW.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
-        authService = new AuthService(accountRepository, authQueryMapper, loginFailureRecorder,
+        authService = new AuthCommandService(accountRepository, userProfileQueryPort, loginFailureRecorder,
                 passwordEncoder, fixed, LOCK_THRESHOLD, LOCK_DURATION);
         authService.prepareDummyHash();
     }
@@ -66,7 +70,7 @@ class AuthServiceTest {
     void runsDummyHashWhenAccountNotFound() {
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, RAW_PASSWORD)))
                 .satisfies(hasCode(AuthErrorCode.AUTH_LOGIN_FAILED));
 
         // 더미 해시로라도 matches 를 호출해 시간을 맞춰야 한다
@@ -80,7 +84,7 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(account, "lockedUntil", NOW.plusMinutes(3));
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
 
-        assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, RAW_PASSWORD)))
                 .satisfies(hasCode(AuthErrorCode.AUTH_ACCOUNT_LOCKED))
                 // 423 이다. 비활성(403)과 합치면 프론트가 "관리자 문의" 와 "잠시 후 재시도" 를 구분 못 한다
                 .satisfies(hasStatus(423))
@@ -96,7 +100,7 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(account, "status", "INACTIVE");
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
 
-        assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, RAW_PASSWORD)))
                 .satisfies(hasCode(AuthErrorCode.AUTH_ACCOUNT_INACTIVE))
                 .satisfies(hasStatus(403));
     }
@@ -109,7 +113,7 @@ class AuthServiceTest {
         when(accountRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches(RAW_PASSWORD, ENCODED)).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, RAW_PASSWORD)))
                 .satisfies(hasCode(AuthErrorCode.AUTH_LOGIN_FAILED));
 
         assertThat(account.getLoginFailCount()).isEqualTo(1);
@@ -127,7 +131,7 @@ class AuthServiceTest {
         when(accountRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches(RAW_PASSWORD, ENCODED)).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.login(USER_ID, RAW_PASSWORD))
+        assertThatThrownBy(() -> authService.login(new LoginCommand(USER_ID, RAW_PASSWORD)))
                 .satisfies(hasCode(AuthErrorCode.AUTH_ACCOUNT_LOCKED));
 
         assertThat(account.getLockedUntil()).isEqualTo(NOW.plus(LOCK_DURATION));
@@ -142,9 +146,9 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(account, "loginFailCount", 3);
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches(RAW_PASSWORD, ENCODED)).thenReturn(true);
-        when(authQueryMapper.findProfile(USER_ID)).thenReturn(Optional.of(profileRow()));
+        when(userProfileQueryPort.findProfile(USER_ID)).thenReturn(Optional.of(profileRow()));
 
-        UserProfileRow profile = authService.login(USER_ID, RAW_PASSWORD);
+        UserProfileRow profile = authService.login(new LoginCommand(USER_ID, RAW_PASSWORD));
 
         assertThat(profile.userId()).isEqualTo(USER_ID);
         assertThat(account.getLoginFailCount()).isZero();
@@ -160,7 +164,7 @@ class AuthServiceTest {
         AccountEntity account = account();   // issue() 는 termsAgreedAt = null (미동의)
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.of(account));
 
-        authService.agreeTerms(USER_ID);
+        authService.agreeTerms(new AgreeTermsCommand(USER_ID));
 
         assertThat(account.hasAgreedTerms()).isTrue();
         assertThat(account.getTermsAgreedAt()).isEqualTo(NOW);
@@ -171,7 +175,7 @@ class AuthServiceTest {
     void agreeTermsRejectsMissingAccount() {
         when(accountRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.agreeTerms(USER_ID))
+        assertThatThrownBy(() -> authService.agreeTerms(new AgreeTermsCommand(USER_ID)))
                 .satisfies(hasCode(AuthErrorCode.AUTH_UNAUTHENTICATED));
     }
 

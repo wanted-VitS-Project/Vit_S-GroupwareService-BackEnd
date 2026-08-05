@@ -1,5 +1,6 @@
-package com.group3.vitamins.auth.infrastructure.persistence;
+package com.group3.vitamins.auth.infrastructure.adapter;
 
+import com.group3.vitamins.auth.application.result.UserProfileRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -10,6 +11,7 @@ import java.util.Optional;
  * (계정 · 사원 · 부서 · 직급). JPA 로 짜면 연관관계를 타느라 쿼리가 여러 번 나간다.
  *
  * <p>쓰기는 JPA({@code AccountEntity})가 담당한다. 역할을 섞지 마라.
+ * SQL 은 XML 에 둔다 — {@code src/main/resources/mapper/auth/AuthQueryMapper.xml} (namespace = 이 인터페이스 FQN).
  */
 @Mapper
 public interface AuthQueryMapper {

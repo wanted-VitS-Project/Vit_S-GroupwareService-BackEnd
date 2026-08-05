@@ -1,6 +1,6 @@
-package com.group3.vitamins.auth.presentation.api.dto.response;
+package com.group3.vitamins.auth.presentation.api.response;
 
-import com.group3.vitamins.auth.infrastructure.persistence.UserProfileRow;
+import com.group3.vitamins.auth.application.result.UserProfileRow;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**

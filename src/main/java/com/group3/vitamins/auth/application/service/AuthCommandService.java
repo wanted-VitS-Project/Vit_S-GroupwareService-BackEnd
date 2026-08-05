@@ -1,11 +1,16 @@
-package com.group3.vitamins.auth.application;
+package com.group3.vitamins.auth.application.service;
 
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
+import com.group3.vitamins.auth.application.command.AgreeTermsCommand;
+import com.group3.vitamins.auth.application.command.ChangePasswordCommand;
+import com.group3.vitamins.auth.application.command.LoginCommand;
+import com.group3.vitamins.auth.application.port.LoginFailureRecordPort;
+import com.group3.vitamins.auth.application.port.UserProfileQueryPort;
+import com.group3.vitamins.auth.application.result.UserProfileRow;
+import com.group3.vitamins.auth.application.usecase.AuthCommandUseCase;
 import com.group3.vitamins.auth.domain.PasswordPolicy;
 import com.group3.vitamins.auth.domain.exception.AuthErrorCode;
-import com.group3.vitamins.auth.infrastructure.persistence.AuthQueryMapper;
-import com.group3.vitamins.auth.infrastructure.persistence.UserProfileRow;
 import com.group3.vitamins.global.domain.common.error.exception.AccountLockedException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.UnauthorizedException;
@@ -24,20 +29,21 @@ import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 /**
- * 인증 유스케이스 — 로그인 · 내 정보 · 비밀번호 변경.
+ * 인증 쓰기 유스케이스 — 로그인 · 비밀번호 변경 · 약관 동의.
  *
- * <p>세션 수립은 {@link AuthSessionManager}, 조회는 {@link AuthQueryMapper}(MyBatis),
- * 계정 상태 변경은 {@link AccountEntity}(JPA)가 맡는다.
+ * <p>세션 수립은 {@code AuthSessionManager}(presentation 이 호출), 조회는 {@link UserProfileQueryPort}(MyBatis),
+ * 계정 상태 변경은 공유 인증 엔티티 {@link AccountEntity}(JPA)가 맡는다. 실패 기록은 별도 트랜잭션 포트
+ * ({@link LoginFailureRecordPort}) 로 분리한다.
  */
 @Slf4j
 @Service
-public class AuthService {
+public class AuthCommandService implements AuthCommandUseCase {
 
     private static final DateTimeFormatter UNLOCK_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final AccountJpaRepository accountRepository;
-    private final AuthQueryMapper authQueryMapper;
-    private final LoginFailureRecorder loginFailureRecorder;
+    private final UserProfileQueryPort userProfileQueryPort;
+    private final LoginFailureRecordPort loginFailureRecordPort;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
     private final int lockThreshold;
@@ -51,16 +57,16 @@ public class AuthService {
      */
     private String dummyHash;
 
-    public AuthService(AccountJpaRepository accountRepository,
-                       AuthQueryMapper authQueryMapper,
-                       LoginFailureRecorder loginFailureRecorder,
-                       PasswordEncoder passwordEncoder,
-                       Clock clock,
-                       @Value("${security.login.lock-threshold}") int lockThreshold,
-                       @Value("${security.login.lock-duration}") Duration lockDuration) {
+    public AuthCommandService(AccountJpaRepository accountRepository,
+                              UserProfileQueryPort userProfileQueryPort,
+                              LoginFailureRecordPort loginFailureRecordPort,
+                              PasswordEncoder passwordEncoder,
+                              Clock clock,
+                              @Value("${security.login.lock-threshold}") int lockThreshold,
+                              @Value("${security.login.lock-duration}") Duration lockDuration) {
         this.accountRepository = accountRepository;
-        this.authQueryMapper = authQueryMapper;
-        this.loginFailureRecorder = loginFailureRecorder;
+        this.userProfileQueryPort = userProfileQueryPort;
+        this.loginFailureRecordPort = loginFailureRecordPort;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
         this.lockThreshold = lockThreshold;
@@ -68,7 +74,7 @@ public class AuthService {
     }
 
     @PostConstruct
-    void prepareDummyHash() {
+    public void prepareDummyHash() {
         this.dummyHash = passwordEncoder.encode("vitamins-dummy-" + System.nanoTime());
     }
 
@@ -81,12 +87,14 @@ public class AuthService {
      * <p>이 순서는 "사번이 존재한다" 는 사실을 노출한다. 다만 <b>계정 잠금 기능 자체가 존재를 노출</b>하므로
      * (없는 사번은 잠기지 않는다) 순서를 바꿔도 막을 수 없다. 열거 속도는 IP 레이트리밋으로 제한한다.
      */
+    @Override
     @Transactional
-    public UserProfileRow login(String userId, String rawPassword) {
+    public UserProfileRow login(LoginCommand command) {
+        String userId = command.userId();
         Optional<AccountEntity> found = accountRepository.findByUserId(userId);
 
         if (found.isEmpty()) {
-            passwordEncoder.matches(rawPassword, dummyHash);   // 타이밍 맞추기 — 결과는 버린다
+            passwordEncoder.matches(command.rawPassword(), dummyHash);   // 타이밍 맞추기 — 결과는 버린다
             throw new UnauthorizedException(AuthErrorCode.AUTH_LOGIN_FAILED);
         }
 
@@ -100,11 +108,11 @@ public class AuthService {
             throw new ForbiddenException(AuthErrorCode.AUTH_ACCOUNT_INACTIVE);
         }
 
-        if (!passwordEncoder.matches(rawPassword, account.getPassword())) {
+        if (!passwordEncoder.matches(command.rawPassword(), account.getPassword())) {
             // 🚨 이 트랜잭션에서 기록하면 안 된다. 바로 아래 예외로 전부 롤백돼 잠금이 걸리지 않는다.
             //    별도 트랜잭션(REQUIRES_NEW)에서 먼저 커밋시킨다.
-            LoginFailureRecorder.Result failure =
-                    loginFailureRecorder.record(userId, lockThreshold, now, now.plus(lockDuration));
+            LoginFailureRecordPort.Result failure =
+                    loginFailureRecordPort.record(userId, lockThreshold, now, now.plus(lockDuration));
             // ⚠️ 사번은 개인 식별자다. 로그 수집 시스템에 평문으로 쌓이면 안 된다.
             //    공격 분석에는 내부 키로 충분하다.
             log.info("로그인 실패 — accountId={} failCount={}", account.getAccountId(), failure.failCount());
@@ -119,13 +127,7 @@ public class AuthService {
         // ⚠️ 아래 조회는 MyBatis 라 위 JPA 변경(last_login_at)이 아직 안 보인다 (flush 전).
         //    로그인 응답에 lastLoginAt 이 없어서 지금은 문제가 없다.
         //    응답에 추가하게 되면 여기서 entityManager.flush() 를 먼저 호출해야 한다.
-        return loadProfile(userId);
-    }
-
-    @Transactional(readOnly = true)
-    public UserProfileRow loadProfile(String userId) {
-        return authQueryMapper.findProfile(userId)
-                // 세션은 살아 있는데 계정이 사라진 경우. 재로그인시키는 게 맞다.
+        return userProfileQueryPort.findProfile(userId)
                 .orElseThrow(() -> new UnauthorizedException(AuthErrorCode.AUTH_UNAUTHENTICATED));
     }
 
@@ -135,11 +137,14 @@ public class AuthService {
      * <p>{@code currentPassword} 는 최초 변경(`RESET_REQUIRED`)일 때만 생략할 수 있다.
      * 이미 임시 비밀번호로 인증해 세션이 있기 때문이다 (`.ai/api/auth.md` §4).
      */
+    @Override
     @Transactional
-    public void changePassword(String userId, String currentPassword,
-                               String newPassword, String newPasswordConfirm) {
-        AccountEntity account = accountRepository.findByUserId(userId)
+    public void changePassword(ChangePasswordCommand command) {
+        AccountEntity account = accountRepository.findByUserId(command.userId())
                 .orElseThrow(() -> new UnauthorizedException(AuthErrorCode.AUTH_UNAUTHENTICATED));
+
+        String currentPassword = command.currentPassword();
+        String newPassword = command.newPassword();
 
         boolean initialChange = account.isMustChangePassword();
         if (!initialChange) {
@@ -151,7 +156,7 @@ public class AuthService {
             }
         }
 
-        if (!newPassword.equals(newPasswordConfirm)) {
+        if (!newPassword.equals(command.newPasswordConfirm())) {
             throw new ValidationException(AuthErrorCode.AUTH_PASSWORD_CONFIRM_MISMATCH);
         }
         PasswordPolicy.validate(newPassword);
@@ -177,9 +182,10 @@ public class AuthService {
      * <p>동의 시각을 기록해 약관 게이트를 해제한다. 재설정({@code resetPassword})은 이 값을 건드리지 않으므로
      * 재로그인 시 약관을 다시 받지 않는다. 이미 동의한 계정이 다시 호출해도 시각만 갱신될 뿐 무해하다(멱등).
      */
+    @Override
     @Transactional
-    public void agreeTerms(String userId) {
-        AccountEntity account = accountRepository.findByUserId(userId)
+    public void agreeTerms(AgreeTermsCommand command) {
+        AccountEntity account = accountRepository.findByUserId(command.userId())
                 .orElseThrow(() -> new UnauthorizedException(AuthErrorCode.AUTH_UNAUTHENTICATED));
         account.agreeTerms(LocalDateTime.now(clock));
         log.info("약관 동의 완료 — accountId={}", account.getAccountId());

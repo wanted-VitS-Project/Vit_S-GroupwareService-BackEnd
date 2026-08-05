@@ -1,5 +1,6 @@
-package com.group3.vitamins.auth.presentation.api.dto.request;
+package com.group3.vitamins.auth.presentation.api.request;
 
+import com.group3.vitamins.auth.application.command.ChangePasswordCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
@@ -17,4 +18,9 @@ public record ChangePasswordRequest(
         @NotBlank(message = "새 비밀번호 확인을 입력해 주세요.")
         String newPasswordConfirm
 ) {
+
+    /** 요청을 서비스 커맨드로 옮긴다. {@code userId} 는 세션에서 온다. */
+    public ChangePasswordCommand toCommand(String userId) {
+        return new ChangePasswordCommand(userId, currentPassword, newPassword, newPasswordConfirm);
+    }
 }

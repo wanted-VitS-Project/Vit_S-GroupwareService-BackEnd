@@ -1,13 +1,15 @@
 package com.group3.vitamins.auth.presentation.api;
 
-import com.group3.vitamins.auth.application.AuthService;
-import com.group3.vitamins.auth.application.AuthSessionManager;
-import com.group3.vitamins.auth.infrastructure.persistence.UserProfileRow;
+import com.group3.vitamins.auth.application.command.AgreeTermsCommand;
+import com.group3.vitamins.auth.application.result.UserProfileRow;
+import com.group3.vitamins.auth.application.usecase.AuthCommandUseCase;
+import com.group3.vitamins.auth.application.usecase.AuthQueryUseCase;
 import com.group3.vitamins.auth.infrastructure.ratelimit.LoginRateLimiter;
-import com.group3.vitamins.auth.presentation.api.dto.request.ChangePasswordRequest;
-import com.group3.vitamins.auth.presentation.api.dto.request.LoginRequest;
-import com.group3.vitamins.auth.presentation.api.dto.response.LoginResponse;
-import com.group3.vitamins.auth.presentation.api.dto.response.MyInfoResponse;
+import com.group3.vitamins.auth.infrastructure.web.AuthSessionManager;
+import com.group3.vitamins.auth.presentation.api.request.ChangePasswordRequest;
+import com.group3.vitamins.auth.presentation.api.request.LoginRequest;
+import com.group3.vitamins.auth.presentation.api.response.LoginResponse;
+import com.group3.vitamins.auth.presentation.api.response.MyInfoResponse;
 import com.group3.vitamins.global.infrastructure.web.ClientIpResolver;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,15 +20,15 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 인증 API — `.ai/api/auth.md` (노션 확정).
+ * 인증 API — `.ai/api/auth.md`.
  *
  * <p>인증 수단은 <b>HttpOnly 세션 쿠키</b>다. 응답 본문에 토큰이 없고 재발급 API 도 없다.
  * 프론트는 요청에 {@code credentials: 'include'} 만 켜면 된다.
@@ -37,7 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthService authService;
+    private final AuthCommandUseCase authCommandUseCase;
+    private final AuthQueryUseCase authQueryUseCase;
     private final AuthSessionManager authSessionManager;
     private final LoginRateLimiter loginRateLimiter;
     private final ClientIpResolver clientIpResolver;
@@ -67,13 +70,13 @@ public class AuthController {
         // ⚠️ 반드시 해시 이전에. 뒤에 두면 이미 64MB 를 쓴 뒤라 방어가 되지 않는다.
         loginRateLimiter.check(clientIpResolver.resolve(httpRequest));
 
-        UserProfileRow profile = authService.login(request.userId(), request.password());
+        UserProfileRow profile = authCommandUseCase.login(request.toCommand());
         authSessionManager.openSession(
                 profile.userId(), profile.role(),
                 profile.termsAgreementRequired(), profile.mustChangePassword(),
                 httpRequest, httpResponse);
 
-        return ApiResponse.success("로그인 성공", LoginResponse.from(profile));
+        return ApiResponse.success(AuthResponseMessage.LOGIN_SUCCESS, LoginResponse.from(profile));
     }
 
     @Operation(summary = "로그아웃", description = "세션을 종료하고 쿠키를 만료시킨다.")
@@ -85,7 +88,7 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(HttpServletRequest httpRequest) {
         authSessionManager.closeCurrentSession(httpRequest);
-        return ApiResponse.success("로그아웃 성공");
+        return ApiResponse.success(AuthResponseMessage.LOGOUT_SUCCESS);
     }
 
     @Operation(summary = "내 정보 조회", description = "마이페이지가 쓰는 필드 전체를 반환한다.")
@@ -96,7 +99,8 @@ public class AuthController {
     })
     @GetMapping("/me")
     public ApiResponse<MyInfoResponse> myInfo(@AuthenticationPrincipal String userId) {
-        return ApiResponse.success("조회 성공", MyInfoResponse.from(authService.loadProfile(userId)));
+        return ApiResponse.success(AuthResponseMessage.MY_INFO_SUCCESS,
+                MyInfoResponse.from(authQueryUseCase.loadProfile(userId)));
     }
 
     @Operation(summary = "약관 동의",
@@ -110,10 +114,10 @@ public class AuthController {
     @PostMapping("/terms-agreements")
     public ApiResponse<Void> agreeTerms(@AuthenticationPrincipal String userId,
                                         HttpServletRequest httpRequest) {
-        authService.agreeTerms(userId);
+        authCommandUseCase.agreeTerms(new AgreeTermsCommand(userId));
         // 약관 게이트 해제. 세션은 유지한다 — 이후 비밀번호 변경 게이트가 이어받는다
         authSessionManager.clearTermsAgreementFlag(httpRequest);
-        return ApiResponse.success("약관에 동의했습니다.");
+        return ApiResponse.success(AuthResponseMessage.TERMS_AGREED);
     }
 
     @Operation(summary = "비밀번호 변경",
@@ -132,10 +136,9 @@ public class AuthController {
     public ApiResponse<Void> changePassword(@AuthenticationPrincipal String userId,
                                             @Valid @RequestBody ChangePasswordRequest request,
                                             HttpServletRequest httpRequest) {
-        authService.changePassword(
-                userId, request.currentPassword(), request.newPassword(), request.newPasswordConfirm());
+        authCommandUseCase.changePassword(request.toCommand(userId));
         // 게이트 해제. 세션은 유지한다 — 명세가 재로그인을 요구하지 않는다
         authSessionManager.clearPasswordResetFlag(httpRequest);
-        return ApiResponse.success("비밀번호가 변경되었습니다.");
+        return ApiResponse.success(AuthResponseMessage.PASSWORD_CHANGED);
     }
 }
