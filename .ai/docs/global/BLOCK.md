@@ -1,9 +1,9 @@
-# 🧩 블록 정보 — 9종 카탈로그
+# 🧩 블록 정보 — 10종 카탈로그
 
 **최종 업데이트**
-- 2026-08-05 — 입찰용 블록 `BID_NOTICE` 폐기 · 입찰 상세는 프로젝트/입찰 공고 API에서 조회
+- 2026-08-05 — ⭐ **§2 타입별 상세 확장 가이드 신설** (담당자용 계약 10건 · 파일 위치 · 스켈레톤) · **쓰기는 JPA 위임 · 조회만 MyBatis** 확정 · 어댑터·매퍼·XML 을 **타입 담당자 패키지로 이관** · 규약 5줄의 `<discriminator>`·"이벤트 회수" 문구 정정
 - 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
-- 2026-08-03 — 비타메이트 AI 상세 문서 연결 추가
+- 2026-08-04 — 입찰 공고 블록 `BID_NOTICE` 추가
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
@@ -12,7 +12,7 @@
 | 항목 | 확정 |
 |------|------|
 | 소유자 | **전부 스텝.** 예외 없음 |
-| 타입 | **닫힌 enum 9종.** 확장형 JSON 스키마 금지 |
+| 타입 | **닫힌 enum 10종.** 확장형 JSON 스키마 금지 |
 | 테이블 | `block` 공통 테이블 + **타입별 상세 테이블** |
 | ⭐ **다형성 방향** | **양방향 ID · 양쪽 다 FK 없음.** `block.type`(판별자) + `block.type_id`(상세 PK) ↔ `{상세}.block_id`(역방향) |
 | 공통 컬럼 | `step_id`, `type`, **`type_id`**, `title`, `owner`, 배치 3종, `created_by`, 생성/수정/삭제 시각 |
@@ -26,10 +26,17 @@
 1. **판별자는 `block.type`** — 이 값으로 어느 상세 테이블인지 고른다
 2. **`block.type_id`** = 상세 행 PK · `BIGINT NULL` · ⛔ **FK 없음** (타입마다 대상 테이블이 다르다)
 3. **`{상세}.block_id`** = 역방향 · ⛔ **FK 없음** · ✅ **`UNIQUE(block_id)` 는 반드시 건다**
-4. **다중 항목은 상세 *아래* 자식 테이블로 내린다** — `block → image_block → image`. 덕분에 상세가 전부 1:1 이라 MyBatis `<discriminator>` 한 방에 끝난다
+4. **다중 항목은 상세 *아래* 자식 테이블로 내린다** — `block → image_block → image`
 5. **생성은 3단계 한 트랜잭션** — ① `block` INSERT(`type_id=NULL`) → ② `{상세}` INSERT(`block_id`) → ③ `block` UPDATE `type_id`
 
-> ⚠️ **정합성은 전적으로 앱 책임이다.** FK 가 없어 DB 가 아무것도 막지 않는다. 고아 행은 이벤트로 회수한다.
+> ⚠️ **정합성은 전적으로 앱 책임이다.** FK 가 없어 DB 가 아무것도 막지 않는다.
+> 그래서 생성·삭제를 **한 트랜잭션에 묶는다** — 고아 행을 만들지 않는 것이 회수하는 것보다 싸다 (§1 규약 5 보강).
+
+> ⛔ **MyBatis `<discriminator>` 로 10종을 한 쿼리에 담는 방식은 폐기했다 (2026-08-05).**
+> ① 1:N 타입(`CHECKLIST`·`FILE`·`IMAGE`)은 `<collection>` 이 필요해 **N+1** 이 된다 — "한 방" 이 애초에 성립하지 않는다
+> ② 미구현 타입(`bid_notice_block` 테이블 없음) 하나가 **조회 전체를 500** 낸다
+> ③ 담당자 5명이 **한 XML 을 동시 편집**한다
+> → 대신 **타입별 어댑터가 각자 배치 조회**한다. 금지선은 *타입 수* 가 아니라 **블록 개수에 비례하는 쿼리(N+1)** 다 (BLK-006).
 
 ### ⭐ 규약 5 보강 (2026-08-05 확정)
 
@@ -44,6 +51,177 @@
 **닫힌 enum 으로 가는 이유:**
 1. 도메인 블록(입금확인·결재)은 JSON 에 안 들어간다. 매칭·상태머신·권한 제약이 붙는다.
 2. "확장 가능"은 환상이다. 새 타입을 넣어도 **프론트에 렌더러가 없으면 못 쓴다** → 결국 매번 배포한다.
+
+
+## 2. ⭐ 타입별 상세 확장 가이드 (담당자용) <sub>2026-08-05 신설</sub>
+
+> 자기 타입의 상세를 블록 조회·생성·삭제에 물릴 때 읽어라. **Block 도메인 파일은 고치지 않는다.**
+
+### 2-1. 소유 경계
+
+```
+┌─ project/block ─────────────────────── Block 도메인 소관 (고치지 마세요) ─┐
+│  application/port/BlockDetailPort.java          ★ 계약                   │
+│  application/result/BlockDetail.java            ★ 마커 인터페이스        │
+│  application/result/{Xxx}Detail.java               ↑ 타입별 응답 shape    │
+│  application/service/BlockDetailRegistry.java   타입 → 어댑터 매칭        │
+│  application/service/BlockCommandService.java   생성 3단계 · 삭제         │
+│  application/service/BlockQueryService.java     타입별 배치 조회          │
+└────────────────────────────┬─────────────────────────────────────────────┘
+                             │ implements (스프링이 List<BlockDetailPort> 로 주입)
+   ┌─────────────────────────┼─────────────────────────┐
+   ↓                         ↓                         ↓
+{도메인}/infrastructure/blockdetail/          ← 담당자 소관
+   {Xxx}BlockDetailAdapter.java   포트 구현 · 자기 도메인 서비스에 위임
+   {Xxx}DetailMapper.java         MyBatis 인터페이스 (조회 전용)
+   {Xxx}DetailRow.java            SELECT 결과 매핑 record
+resources/mapper/{도메인}/{Xxx}DetailMapper.xml   ← 담당자 소관
+```
+
+**패키지를 담당자 쪽에 두는 이유**: 상세 테이블 스키마가 바뀌면 그 SQL 을 고칠 사람이 테이블 주인이다.
+Block 도메인이 남의 컬럼명을 들고 있으면 **남의 스키마 변경이 Block 도메인을 깨뜨린다.**
+어댑터 위치는 자유다 — `@Mapper` 스캔과 `mapper-locations: classpath:mapper/**/*.xml` 가 위치에 무관하다.
+
+### 2-2. ⭐ 쓰기는 JPA 위임 · 조회만 MyBatis
+
+`application.yml` 의 팀 규약(*"쓰기는 JPA, 목록 조회는 MyBatis"*)을 그대로 따른다.
+
+| 동작 | 수단 | 이유 |
+|------|------|------|
+| `createDetail` (INSERT) | **자기 도메인 서비스에 위임 → JPA `save()`** | ① IDENTITY 라 `save()` 가 PK 를 채워 돌려준다 → **PK 되찾기 SELECT 가 없다** ② 기본값·`@CreationTimestamp` 가 엔티티에 이미 있다 ③ NOT NULL 컬럼 누락이 SQL 문자열이 아니라 매핑에서 잡힌다 |
+| `deleteDetail` (UPDATE) | **자기 도메인 서비스에 위임** | 멱등 판정·자식 캐스케이드가 그쪽에 있다. 복제하면 로직이 갈라진다 |
+| `loadDetails` (SELECT) | **MyBatis XML** | 화면 모양이 도메인 모양과 다르다(집계·부분 필드·1:N 평탄화). JPA 로 하면 `@OneToMany` 나 N+1 이 된다 |
+
+⛔ **어댑터에서 `INSERT`/`UPDATE` SQL 을 직접 쓰지 마라.** 남의 테이블에 내 SQL 을 심는 것이고,
+도메인 규칙(기본값·불변식·타임스탬프)이 엔티티와 XML 두 곳으로 갈라진다.
+어댑터의 역할은 **"상대 도메인의 언어로 번역"** 이다.
+
+> **누가 부르는가 ≠ 누가 쓰는가.** 만들 **시점** 판단은 Block 도메인이, 실제 **INSERT** 는 타입 도메인이 한다.
+
+### 2-3. 담당자가 만들 파일 4개 + 요청 1건
+
+| # | 파일 | 역할 |
+|:-:|------|------|
+| 1 | `{도메인}/infrastructure/blockdetail/{Xxx}BlockDetailAdapter.java` | `BlockDetailPort` 구현. `@Component` |
+| 2 | `{도메인}/infrastructure/blockdetail/{Xxx}DetailMapper.java` | MyBatis 인터페이스. `@Mapper`. **조회만** |
+| 3 | `{도메인}/infrastructure/blockdetail/{Xxx}DetailRow.java` | SELECT 결과 record |
+| 4 | `resources/mapper/{도메인}/{Xxx}DetailMapper.xml` | SQL. **namespace = 1번 인터페이스 FQN** |
+| 5 | 자기 도메인 리포지토리·서비스에 **`Long create(Long blockId)`** 추가 | 상세 빈 행 INSERT (JPA) |
+
+**Block 담당자(동훈)에게 요청할 것**: `{Xxx}Detail` record 를 `block/application/result/` 에 추가 + API 명세에
+`detail` shape 등록. **필드 목록만 주면 된다.** (record 를 담당자 패키지로 넘기지 않는 이유 — 그건 스키마가 아니라
+**FE 계약**이고, 10개 패키지로 흩어지면 프론트가 물어볼 곳이 없어진다)
+
+### 2-4. 스키마 요구사항
+
+| 요구 | 어기면 |
+|------|--------|
+| `block_id BIGINT NOT NULL` (⛔ FK 없음) | 역방향 참조가 성립하지 않는다 |
+| `block_id` 에 **`UNIQUE`** | 상세 행이 중복돼 어느 게 진짜인지 알 수 없다 |
+| `deleted_at DATETIME NULL` | 논리 삭제를 못 한다 |
+| 내용 컬럼은 **nullable** | 생성 직후 **빈 행**이 정상 상태다 (§1 규약 5 보강) |
+| PK 는 단일 `BIGINT AUTO_INCREMENT` | 복합 PK 면 `block.type_id` 로 못 가리킨다 → `createDetail` 이 `null` 반환 (`FILE` 이 이 경로) |
+
+### 2-5. 계약 10건
+
+| # | 지켜야 할 것 | 어기면 |
+|:-:|------|--------|
+| 1 | `supportedType()` 은 타입당 **1개** | **기동 실패** (레지스트리 duplicate key) |
+| 2 | 상세 테이블에 `block_id NOT NULL UNIQUE` | 상세 행 중복 |
+| 3 | `createDetail` 은 **빈 행만** 만든다 | 사용자가 안 쓴 내용이 카드에 뜬다 |
+| 4 | 상세 PK 를 만들 수 없는 타입은 **`null` 반환** | — (정상 경로. `block.type_id` 가 NULL 로 남고 `detail` 도 `null`) |
+| 5 | `createDetail`·`deleteDetail` 은 **JPA 로 위임**. ⛔ INSERT/UPDATE SQL 직접 작성 금지 | §2-2 |
+| 6 | 위임받는 서비스에 ⛔ **`REQUIRES_NEW` 금지** | 부분 커밋 → 고아 상세 행 / 죽은 `type_id` |
+| 7 | `deleteDetail` 은 **멱등** (0행 UPDATE = 이미 삭제 → 무시) | 재시도 시 예외 |
+| 8 | `loadDetails` 는 **`IN` + `<foreach>` 배치 1발** | 블록 20개면 쿼리 20발 (BLK-006 위반) |
+| 9 | `loadDetails` 는 **요청받은 PK 전체**에 엔트리를 만든다 (내용 0건이어도) | 갓 만든 빈 블록의 `detail` 이 `null` → FE 가 카드를 못 그린다 |
+| 10 | `{Xxx}Detail` record 추가 + **API 명세에 shape 등록** | 프론트가 필드명을 모른다 |
+
+**8·9 가 실수하기 쉽다.** 특히 9번 — 1:N 타입은 쿼리 결과가 아니라 **요청 PK 를 순회**해야 한다.
+`ChecklistBlockDetailAdapter.loadDetails` 가 그 참조 구현이다 (항목 0개 블록도 `0/0 · items:[]` 로 내린다).
+
+### 2-6. 스켈레톤
+
+⚠️ 컬럼명은 자기 스키마에 맞춰라. 아래는 **형식만** 이다.
+
+```java
+// {도메인}/infrastructure/blockdetail/XxxBlockDetailAdapter.java
+@Component
+@RequiredArgsConstructor
+public class XxxBlockDetailAdapter implements BlockDetailPort {
+
+    private final XxxDetailMapper xxxDetailMapper;
+    private final XxxHandlerService xxxHandlerService;   // 자기 도메인 (JPA)
+
+    @Override
+    public BlockType supportedType() {
+        return BlockType.XXX;
+    }
+
+    /** 빈 행을 만든다. INSERT 는 자기 도메인이 JPA 로 처리하고 PK 를 돌려준다. */
+    @Override
+    public Long createDetail(Long blockId) {
+        return xxxHandlerService.create(blockId);
+    }
+
+    /** 블록 삭제와 같은 트랜잭션에서 호출된다. */
+    @Override
+    public void deleteDetail(Long typeId, String userId, String blockTitle, LocalDateTime deletedAt) {
+        xxxHandlerService.delete(typeId, userId, blockTitle, deletedAt);
+    }
+
+    /** IN 배치 1발. 키는 상세 PK 다. */
+    @Override
+    public Map<Long, BlockDetail> loadDetails(Collection<Long> typeIds) {
+        if (typeIds.isEmpty()) {
+            return Map.of();
+        }
+        return xxxDetailMapper.findByXxxIds(typeIds).stream()
+                .collect(Collectors.toMap(XxxDetailRow::xxxId,
+                        row -> new XxxDetail(row.xxxId(), row.someField())));
+    }
+}
+```
+
+```java
+// 자기 도메인 리포지토리 구현체 — 상세 빈 행 INSERT
+@Override
+@Transactional
+public Long create(Long blockId) {
+    // IDENTITY 라 save() 시점에 INSERT 가 나가고 PK 가 채워져 돌아온다 — 되찾기 조회가 필요없다.
+    return springDataXxxRepository.save(new XxxJpaEntity(blockId)).getXxxId();
+}
+```
+
+엔티티에 **`@GeneratedValue(IDENTITY)` · `@CreationTimestamp` · `blockId` 생성자** 3개가 있어야 한다.
+읽기 전용으로만 매핑해뒀다면 세 개 다 빠져 있을 수 있다 (`ChecklistBlockJpaEntity` 가 그랬다).
+
+### 2-7. 자주 하는 실수
+
+| 실수 | 증상 |
+|------|------|
+| XML `namespace` 를 인터페이스 FQN 과 다르게 씀 | 첫 호출에 `BindingException: Invalid bound statement` |
+| `@Mapper` 누락 | 주입 실패로 기동 실패 |
+| 엔티티에 `@GeneratedValue` 없이 `save()` | PK 가 `null` 인 채 INSERT 시도 → 실패 |
+| 엔티티에 `@CreationTimestamp` 없이 `save()` | `created_at NOT NULL` 위반 |
+| 어댑터에서 INSERT SQL 직접 작성 | 계약 5 위반. 리뷰 반려 |
+| `loadDetails` 에서 블록마다 쿼리 | BLK-006 위반. 리뷰 반려 |
+| `${}` 사용 / `SELECT *` | [`MYBATIS.md`](MYBATIS.md) §8 금지 |
+
+### 2-8. 현재 등록 상태
+
+| 타입 | 어댑터 | `type_id` | 비고 |
+|------|:-----:|:---------:|------|
+| `TEXT` | ✅ `text/infrastructure/blockdetail/` | 값 | 참조 구현 (1:1) |
+| `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
+| `IMAGE` · `APPROVAL` · `AI` | ❌ 미등록 | **NULL** | 어댑터 추가하면 살아난다 |
+| `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환 |
+| `PERFORMANCE_VIEW` | ❌ | **NULL** | 상세 테이블 없음 |
+| `TAX_INVOICE_VIEW` | ❌ | **NULL** | 행 존재 자체가 "연결됨" 신호 (TXL-008) — 빈 행을 만들면 안 된다 |
+| `BID_NOTICE` | — | — | 사용자 생성 금지 (`POST` 에서 400) |
+
+> 어댑터가 없어도 **`POST` 는 정상 동작한다** — `type_id` 가 NULL 로 남고 조회에서 `detail: null` 이 된다.
+> 500 이 아니다. 담당자가 어댑터만 추가하면 Block 도메인 코드는 **한 줄도 안 바뀐다.**
 
 
 ## 3. 배치 — 3열 그리드 <sub>(구 DOMAIN §3-1)</sub>
@@ -63,7 +241,7 @@
 
 ---
 
-## 4. ⭐ 9종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
+## 4. ⭐ 10종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
 
 > 계열은 **설명을 위한 구분**이지 상속 계층이 아니다. 소유자는 전부 스텝으로 동일하다.
 
@@ -194,7 +372,24 @@
 
 ⚠️ **`MASTER` 는 결재와 무관하다.** 최종 결재자는 `approval_line.sequence_no` **최댓값**이고 건마다 달라진다 ([`PERMISSION.md`](PERMISSION.md) §7-2).
 
-### 4-9. `AI` — AI 검토 (비타메이트)
+### 4-9. `BID_NOTICE` — 입찰 공고 조회
+
+| 항목 | 값 |
+|------|-----|
+| 계열 | 도메인 |
+| 상세 테이블 | 별도 상세 테이블 없음. `block → step → project → project.bid_notice_id` 경로로 조회 |
+| **역할** | 입찰 공고로 생성된 프로젝트 안에서 해당 공고의 상세 정보와 프로젝트 스냅샷 변경 여부를 보여준다 |
+| 권한 | 스텝 접근 권한 그대로 |
+| 삭제 | 블록만 soft delete. `bid_notice` 원본과 `project.bid_notice_id` 는 유지 |
+| 템플릿 | 담김: 블록 껍데기만 / 안 담김: 연결된 공고 데이터 |
+| 담당 | 정현 |
+| 상세 문서 | [`BID-V1.md`](../domain/입찰관리/BID-V1.md) · [`bid.md`](../../api/bid.md) |
+
+입찰 블록은 **조회 전용 진입점**이다. 공고 원본 수정은 입찰 공고 API가 담당하고, 프로젝트 스냅샷 반영은 `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot` 이 담당한다.
+
+⛔ 입찰 블록 전용 수정/삭제 API를 만들지 않는다. 제목·위치·삭제는 공통 블록 API 정책을 따른다.
+
+### 4-10. `AI` — AI 검토 (비타메이트)
 
 | 항목 | 값 |
 |------|-----|
@@ -209,6 +404,30 @@
 
 > 공고 탭의 **AI 요약과는 다른 기능**이다. 그건 공고 영역 기능이고 이건 스텝 안의 문서 작업용이다 (UC-03).
 
+### 4-10. `BID_NOTICE` — 입찰 공고 ⭐ **신설 (2026-08-03)**
+
+| 항목 | 값 |
+|------|-----|
+| 계열 | 도메인 |
+| 상세 테이블 | `bid_notice_block` — PK `bid_notice_block_id` · `block_id` UNIQUE(FK없음) · `bid_notice_id` **FK 있음** · `notice_snapshot JSON` · `notice_changed` |
+| **역할** | 공고 → 프로젝트 전환 시 자동 생성. **프로젝트 안에서 공고를 보는 창**이다 |
+| **생성 주체** | 사용자가 아니라 **전환 API 가 자동 생성**한다 (`BID-V1` CNV-06 · 프로젝트·멤버·스테이지·스텝과 한 트랜잭션) |
+| **스냅샷** | 전환 시점 공고 값을 `notice_snapshot JSON` 에 박는다. 재수집이 이 값을 **덮지 않는다** (`BID-V1` INV-01) |
+| **변경 감지** | 재수집 결과가 스냅샷과 다르면 `notice_changed = 1`. **반영 여부는 사람이 결정**한다 (INV-02) |
+| 권한 | 스텝 권한 그대로. ⛔ **블록에서 `bid_notice` 원본을 수정할 수 없다** (INV-08) |
+| 삭제 | 그냥 soft delete (잠금 없음) |
+| 템플릿 | 담기지 않는다 — 공고에 종속된 블록이다 |
+| 담당 | 정현 |
+| 상세 문서 | 정현 소관 (문서 별도 관리) |
+
+⛔ **`bid_notice_id` 에 UNIQUE 를 걸지 않는다.** soft delete 라 지운 블록의 행이 재생성을 막는다.
+"공고 1건 = 블록 1개" 는 `uk_project_bid_notice` 와 앱(`BID-V1` INV-10)이 지킨다.
+
+⚠️ **`bid_notice_id` 의 FK 는 유지한다.** 이건 다형성 대상이 아니라 **실제 테이블 참조**다 —
+`payment.block_id`·`notification.block_id` 와 같은 취급이다 (§1 규약 2·3 은 `block_id` 에만 적용).
+> 사용자는 채팅하는 것이 아니라 분석 기준 프롬프트를 입력하고, 시스템은 프로젝트 문서 청크를 검색해 분석 결과와 출처 문장을 남긴다.
+---
+
 ## 5. 한눈에 보는 요약
 
 | `block.type` | 이름 | 계열 | 상세 테이블 (`block.type_id` 대상 PK) | 자식 (1:N) | 삭제 잠금 | 담당 | 상세 문서 |
@@ -222,6 +441,7 @@
 | `PERFORMANCE_VIEW` | 실적 조회 | 도메인 | ⛔ **없음** (`type_id` **NULL**) | — | — | 동훈 | 🚨 T2 미결 |
 | `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ 진행 중일 때 | 이강욱 | — |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
+| **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
 **도메인 계열은 재무·공고 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
 
@@ -292,7 +512,7 @@
 
 | 방식 | 테이블 |
 |---|---|
-| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · `block_payment_confirm` |
+| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · `block_payment_confirm` · **`bid_notice_block`** |
 | ⛔ **hard `DELETE`** (`deleted_at` 없음) | `block_file` · `tax_invoice_confirm` · `issue_block` |
 
 **hard 3개의 공통점** — 담긴 정보가 없는 **순수 연결 행**이다. `deleted_at` 을 달면 UNIQUE·복합 PK 를 시체가 점유해

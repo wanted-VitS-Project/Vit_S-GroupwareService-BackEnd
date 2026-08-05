@@ -47,6 +47,11 @@ public class TextJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /** 상세 빈 행 생성용. 본문은 나중에 applyContent 가 채운다. */
+    public TextJpaEntity(Long blockId) {
+        this.blockId = blockId;
+    }
+
     public void applyContent(String content) {
         this.content = content;
     }
