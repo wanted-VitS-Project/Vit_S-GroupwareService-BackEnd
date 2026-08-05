@@ -1,5 +1,9 @@
 package com.group3.vitamins.project.block.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -20,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -37,6 +42,7 @@ public class BlockCommandService implements BlockCommandUseCase {
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
     private final StepAccessUseCase stepAccessUseCase;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public BlockResult createBlock(CreateBlockCommand command) {
@@ -59,6 +65,7 @@ public class BlockCommandService implements BlockCommandUseCase {
                 rowIndex, sortOrder, colSpan, command.requesterUserId(), now));
 
         linkDetail(block, type, now);
+        publishBlockCreated(block, command.requesterUserId());
 
         return new BlockResult(
                 block.getBlockId(), block.getStepId(), step.projectId(), type.name(),
@@ -84,6 +91,16 @@ public class BlockCommandService implements BlockCommandUseCase {
 
         block.linkTypeId(typeId, now);
         blockRepository.save(block);
+    }
+
+    private void publishBlockCreated(Block block, String actorId) {
+        domainEventPublisher.publish(ActivityOccurredEvent.of(
+                ActivityLogAction.CREATE,
+                block.getBlockId(),
+                null,
+                actorId,
+                List.of(new ActivityFieldChange(null, null, null))
+        ));
     }
 
     /** 타입 문자열을 검증한다. enum 밖이거나 사용자가 만들 수 없는 타입이면 400 이다. */

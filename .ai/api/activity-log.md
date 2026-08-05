@@ -1,12 +1,11 @@
 # 🧾 ActivityLog API
 
-**상태**: `📝 초안` — 노션 미반영. 구현 금지 (`../API.md` §0·§1)
-**최종 업데이트**: 2026-08-04 · **담당**: 김용준
-**노션**: 미반영 · 예정 Domain `프로젝트` · SUB-Domain `ActivityLog`
+**상태**: md 명세 기준 계약 (`../API.md` §0·§1)
+**최종 업데이트**: 2026-08-05 · **담당**: 김용준
+**Domain**: `프로젝트` · SUB-Domain `ActivityLog`
 **팀 공유 수집 컨벤션**: 노션 공유 문서 기준
 
-> 📝 **레포 설계 초안이다.** 팀 리뷰와 노션 반영이 끝난 뒤 상태를 `✅ 확정`으로 변경해야 구현할 수 있다.
-> 확정 이후에는 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
+> `.ai/api/*.md` 가 단일 계약이다. 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
 
 ## 엔드포인트
 
@@ -264,3 +263,15 @@ domainEventPublisher.publish(ActivityOccurredEvent.of(
 | `resource_type` 재도입 필요 | DDL·Entity·Event·API Response 변경 | 있음. 노션 명세 확정 후 진행 |
 
 현재 구조에서는 `blockId`가 부모 추적의 기준이다. 따라서 부모 엔티티가 추가되더라도 `blockId → Step → Project` 관계가 유지되면 타 블록 도메인은 수정하지 않는다.
+
+### Block 엔티티 연동 메모
+
+`project.block` 엔티티가 추가된 뒤에도 수집 계약은 유지한다.
+
+| 항목 | 기준 |
+|---|---|
+| Block 생성 로그 | `BlockCommandService`가 블록 생성·상세 연결 완료 후 `CREATE` 이벤트를 발행한다 |
+| Block 자체 활동 | `resourceId = null`, `field/beforeValue/afterValue = null` |
+| Step·Project | `activity_log`에 저장하지 않는다. 조회 시 `activity_log.block_id → block.step_id → step.project_id`로 역추적한다 |
+| Employee | `activity_log.user_id → employee.user_id` 조인으로 actor 표시 정보를 조회한다. `EmployeeEntity`가 없어도 MyBatis 조회 모델로 충분하다 |
+| 영향 범위 | `blockId → Step → Project` 관계가 유지되면 Block 외 Step·Project·Employee·각 블록 상세 엔티티는 Activity Log 때문에 구조 변경하지 않는다 |
