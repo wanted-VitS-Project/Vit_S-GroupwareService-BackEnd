@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 사원 쓰기 유스케이스 (`employee.md` §3~) — 등록. 전부 ADMIN 전용이다.
@@ -49,6 +50,15 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
     private static final Set<String> ASSIGNABLE_ROLES = Set.of("MASTER", "MEMBER");
 
+    // DB 컬럼 폭과 동일한 길이 상한 (employee: user_id 20 · name 50 · email 100 · phone 20)
+    private static final int MAX_USER_ID_LENGTH = 20;
+    private static final int MAX_NAME_LENGTH = 50;
+    private static final int MAX_EMAIL_LENGTH = 100;
+    private static final int MAX_PHONE_LENGTH = 20;
+
+    // 형식만 거르는 가벼운 검사(RFC 전체 준수 아님) — "local@domain.tld" 최소 형태를 확인한다.
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
     private final EmployeeAdminPolicy employeeAdminPolicy;
     private final EmployeeRepository employeeRepository;
     private final EmployeeReferenceQueryPort referenceQueryPort;
@@ -63,15 +73,18 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         employeeAdminPolicy.assertAdmin(command.actorRole());
 
         // ── 1 검증 ──
-        String userId = required(command.userId());
-        String name = required(command.name());
+        // 길이 상한은 DB 컬럼 폭과 같다. 여기서 막지 않으면 INSERT 가 데이터 절단으로 터지고, 그 예외가
+        // 아래 catch 에서 사번 중복(409)으로 오인 변환된다 — 값 초과를 EMP_INVALID_REQUEST(400)로 먼저 막는다.
+        String userId = requiredWithMax(command.userId(), MAX_USER_ID_LENGTH);
+        String name = requiredWithMax(command.name(), MAX_NAME_LENGTH);
         Long departmentId = command.departmentId();
         if (departmentId == null) {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
         }
         String role = validateAssignableRole(command.role());
         LocalDate hiredAt = parseRequiredDate(command.hiredAt());
-        String email = normalize(command.email());
+        String email = validateEmail(normalize(command.email()));
+        String phone = optionalWithMax(normalize(command.phone()), MAX_PHONE_LENGTH);
 
         if (employeeRepository.existsById(userId)) {
             throw new ConflictException(EmployeeErrorCode.EMP_USER_ID_DUPLICATED);
@@ -90,7 +103,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
         // ── 3 DB 반영 (한 트랜잭션) ──
         Employee employee = Employee.register(
-                userId, name, departmentId, command.jobPositionId(), email, normalize(command.phone()), hiredAt);
+                userId, name, departmentId, command.jobPositionId(), email, phone, hiredAt);
         try {
             registrationWriter.register(employee, role, encodedPassword);
         } catch (DataIntegrityViolationException e) {
@@ -107,7 +120,8 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
                 emailSent = true;
             } catch (MailDeliveryException e) {
                 // 사원·계정은 이미 만들어졌다. 비밀번호만 다시 보내면 되므로 등록은 성공으로 둔다.
-                log.warn("초기 비밀번호 메일 발송 실패 - userId={}", userId);
+                // 원인 예외를 함께 남긴다 — SMTP 인증 실패·타임아웃·수신 거부를 구분해야 재발송을 판단할 수 있다.
+                log.warn("초기 비밀번호 메일 발송 실패 - userId={}", userId, e);
             }
         }
 
@@ -213,7 +227,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         try {
             return LocalDate.parse(normalized); // ISO yyyy-MM-dd
         } catch (DateTimeParseException e) {
-            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST, e);
         }
     }
 
@@ -223,6 +237,34 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
         }
         return normalized;
+    }
+
+    /** 필수값 + 최대 길이 검증. 비었거나 상한 초과면 EMP_INVALID_REQUEST. */
+    private String requiredWithMax(String value, int maxLength) {
+        String normalized = required(value);
+        if (normalized.length() > maxLength) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return normalized;
+    }
+
+    /** 선택값 최대 길이 검증. null 은 그대로, 상한 초과면 EMP_INVALID_REQUEST. */
+    private String optionalWithMax(String value, int maxLength) {
+        if (value != null && value.length() > maxLength) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return value;
+    }
+
+    /** 이메일 선택값 검증 — null 은 허용, 있으면 길이·형식을 본다. 잘못되면 EMP_INVALID_REQUEST. */
+    private String validateEmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        if (email.length() > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return email;
     }
 
     /** 앞뒤 공백 제거 후 빈 문자열은 null 로 눕힌다. */

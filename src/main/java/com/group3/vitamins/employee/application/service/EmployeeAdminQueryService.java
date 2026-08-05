@@ -36,6 +36,9 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
     private static final Set<String> ALLOWED_ROLES = Set.of("MASTER", "MEMBER");
     private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "RESET_REQUIRED", "INACTIVE");
 
+    /** 한 페이지 최대 크기. 30명 규모라 넉넉하며, ADMIN 이 거대한 LIMIT 조회로 부하를 주는 것을 막는다. */
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final EmployeeAdminQueryPort employeeAdminQueryPort;
     private final EmployeeAdminPolicy employeeAdminPolicy;
 
@@ -75,7 +78,7 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
      * <p>허용되지 않는 role·status·페이징 값은 {@code EMP_INVALID_PARAMETER}(400)로 막는다 — 명세 계약이다.
      */
     private EmployeeListCriteria toCriteria(EmployeeListQuery query) {
-        if (query.page() < 0 || query.size() <= 0) {
+        if (query.page() < 0 || query.size() <= 0 || query.size() > MAX_PAGE_SIZE) {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_PARAMETER);
         }
 
@@ -107,6 +110,15 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
 
         boolean resignedOnly = Boolean.TRUE.equals(query.resigned());
 
+        // offset = page * size. size 는 위에서 상한을 두지만 page 는 클 수 있어 int 곱셈이 넘칠 수 있다
+        //   (예: page=1_500_000_000, size=2 → 음수 offset → 잘못된 조회/DB 오류). 넘치면 400 으로 막는다.
+        int offset;
+        try {
+            offset = Math.multiplyExact(query.page(), query.size());
+        } catch (ArithmeticException e) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_PARAMETER, e);
+        }
+
         return new EmployeeListCriteria(
                 normalize(query.keyword()),
                 query.departmentId(),
@@ -114,7 +126,7 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
                 accountStatus,
                 mustChangePassword,
                 resignedOnly,
-                query.page() * query.size(),
+                offset,
                 query.size());
     }
 

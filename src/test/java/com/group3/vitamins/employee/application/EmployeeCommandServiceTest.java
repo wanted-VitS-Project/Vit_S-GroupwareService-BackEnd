@@ -116,6 +116,50 @@ class EmployeeCommandServiceTest {
     }
 
     @Test
+    @DisplayName("이메일 형식이 올바르지 않으면 EMP_INVALID_REQUEST — 저장·발송하지 않는다")
+    void rejectsInvalidEmail() {
+        assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "not-an-email")))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+        verify(registrationWriter, never()).register(any(), anyString(), anyString());
+        verifyNoInteractions(mailPort);
+    }
+
+    @Test
+    @DisplayName("이메일이 100자를 넘으면 EMP_INVALID_REQUEST")
+    void rejectsTooLongEmail() {
+        String longEmail = "a".repeat(95) + "@b.com"; // 101자
+        assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", longEmail)))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+    }
+
+    @Test
+    @DisplayName("이름이 50자를 넘으면 EMP_INVALID_REQUEST")
+    void rejectsTooLongName() {
+        RegisterEmployeeCommand command = new RegisterEmployeeCommand(
+                "ADMIN", "EMP021", "가".repeat(51), 2L, "2026-08-05", "MEMBER", null, "a@b.com", null);
+        assertThatThrownBy(() -> service.register(command))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+    }
+
+    @Test
+    @DisplayName("사번이 20자를 넘으면 EMP_INVALID_REQUEST")
+    void rejectsTooLongUserId() {
+        RegisterEmployeeCommand command = new RegisterEmployeeCommand(
+                "ADMIN", "E".repeat(21), "홍길동", 2L, "2026-08-05", "MEMBER", null, "a@b.com", null);
+        assertThatThrownBy(() -> service.register(command))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+    }
+
+    @Test
+    @DisplayName("연락처가 20자를 넘으면 EMP_INVALID_REQUEST")
+    void rejectsTooLongPhone() {
+        RegisterEmployeeCommand command = new RegisterEmployeeCommand(
+                "ADMIN", "EMP021", "홍길동", 2L, "2026-08-05", "MEMBER", null, "a@b.com", "0".repeat(21));
+        assertThatThrownBy(() -> service.register(command))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+    }
+
+    @Test
     @DisplayName("사번 중복은 EMP_USER_ID_DUPLICATED — 저장하지 않는다")
     void rejectsDuplicate() {
         when(employeeRepository.existsById("EMP021")).thenReturn(true);

@@ -142,6 +142,22 @@ class EmployeeAdminQueryServiceTest {
                     .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
             verify(port, never()).count(any());
         }
+
+        @Test
+        @DisplayName("size 가 상한(200)을 넘으면 EMP_INVALID_PARAMETER — 거대 LIMIT 차단")
+        void rejectsOversizeSize() {
+            assertThatThrownBy(() -> service.listEmployees(query("ADMIN", null, null, null, 0, 201)))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
+            verify(port, never()).count(any());
+        }
+
+        @Test
+        @DisplayName("page*size 가 int 를 넘치면 EMP_INVALID_PARAMETER — 음수 offset 방지")
+        void rejectsPagingOverflow() {
+            assertThatThrownBy(() -> service.listEmployees(query("ADMIN", null, null, null, Integer.MAX_VALUE, 2)))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
+            verify(port, never()).count(any());
+        }
     }
 
     @Nested
