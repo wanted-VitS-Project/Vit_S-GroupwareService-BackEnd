@@ -1,24 +1,30 @@
 package com.group3.vitamins.vitamate.infrastructure.persistence.adapter;
 
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReader;
-import com.group3.vitamins.vitamate.application.port.VitamateBlockReader;
-import com.group3.vitamins.vitamate.application.port.VitamateFileReader;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReaderPort;
+import com.group3.vitamins.vitamate.application.port.VitamateBlockReaderPort;
+import com.group3.vitamins.vitamate.application.port.VitamateFileReaderPort;
 import com.group3.vitamins.vitamate.infrastructure.persistence.mapper.VitamateAnalysisMapper;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisCitationRow;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisDocumentRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobChunkRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow;
+import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobRow;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisRow;
 import com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateBlockContextRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 // 비타메이트 블록 권한과 파일 버전 검증 조회를 담당하는 MyBatis 어댑터
 @Component
 @RequiredArgsConstructor
-public class MyBatisVitamateReader implements VitamateBlockReader, VitamateFileReader, VitamateAnalysisReader {
+public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateFileReaderPort, VitamateAnalysisReaderPort {
 
     private final VitamateAnalysisMapper mapper;
 
@@ -49,6 +55,17 @@ public class MyBatisVitamateReader implements VitamateBlockReader, VitamateFileR
                         analysis,
                         mapper.findAnalysisDocuments(analysisId),
                         mapper.findAnalysisCitations(analysisId)
+                ));
+    }
+
+    // Python worker가 처리할 수 있는 PROCESSING 분석 작업 입력을 조회한다.
+    @Override
+    public Optional<VitamateAnalysisJobDetail> findProcessingAnalysisJob(Long analysisId, String attemptId) {
+        return Optional.ofNullable(mapper.findProcessingAnalysisJob(analysisId, attemptId))
+                .map(job -> toAnalysisJobDetail(
+                        job,
+                        mapper.findAnalysisJobDocuments(analysisId),
+                        mapper.findAnalysisJobChunks(analysisId)
                 ));
     }
 
@@ -100,6 +117,67 @@ public class MyBatisVitamateReader implements VitamateBlockReader, VitamateFileR
                 row.getRankOrder(),
                 row.getFileVersionId(),
                 row.getDocumentChunkId(),
+                row.getPageNumber(),
+                row.getExcerpt()
+        );
+    }
+
+    // 분석 작업 기본 정보, 선택 문서, 후보 청크를 Python worker 입력 값으로 조립한다.
+    private VitamateAnalysisJobDetail toAnalysisJobDetail(
+            VitamateAnalysisJobRow job,
+            List<VitamateAnalysisJobDocumentRow> documents,
+            List<VitamateAnalysisJobChunkRow> chunks
+    ) {
+        Map<Long, List<JobChunk>> chunksByFileVersionId = groupChunksByFileVersionId(chunks);
+        List<Long> fileVersionIds = documents.stream()
+                .map(VitamateAnalysisJobDocumentRow::getFileVersionId)
+                .toList();
+
+        return new VitamateAnalysisJobDetail(
+                job.getAnalysisId(),
+                job.getAttemptId(),
+                job.getPrompt(),
+                new JobSearchScope(
+                        job.getProjectId(),
+                        job.getBlockId(),
+                        fileVersionIds
+                ),
+                documents.stream()
+                        .map(document -> toJobDocument(document, chunksByFileVersionId))
+                        .toList()
+        );
+    }
+
+    // 후보 청크를 파일 버전 ID별로 묶어 문서 응답에 붙일 수 있게 준비한다.
+    private Map<Long, List<JobChunk>> groupChunksByFileVersionId(List<VitamateAnalysisJobChunkRow> chunks) {
+        Map<Long, List<JobChunk>> chunksByFileVersionId = new LinkedHashMap<>();
+
+        for (VitamateAnalysisJobChunkRow chunk : chunks) {
+            chunksByFileVersionId
+                    .computeIfAbsent(chunk.getFileVersionId(), ignored -> new ArrayList<>())
+                    .add(toJobChunk(chunk));
+        }
+
+        return chunksByFileVersionId;
+    }
+
+    // 문서 Row와 해당 문서의 청크 목록을 Python worker 문서 값으로 변환한다.
+    private JobDocument toJobDocument(
+            VitamateAnalysisJobDocumentRow row,
+            Map<Long, List<JobChunk>> chunksByFileVersionId
+    ) {
+        return new JobDocument(
+                row.getFileVersionId(),
+                row.getFileName(),
+                chunksByFileVersionId.getOrDefault(row.getFileVersionId(), List.of())
+        );
+    }
+
+    // 청크 Row를 Python worker 후보 청크 값으로 변환한다.
+    private JobChunk toJobChunk(VitamateAnalysisJobChunkRow row) {
+        return new JobChunk(
+                row.getDocumentChunkId(),
+                row.getChromaId(),
                 row.getPageNumber(),
                 row.getExcerpt()
         );

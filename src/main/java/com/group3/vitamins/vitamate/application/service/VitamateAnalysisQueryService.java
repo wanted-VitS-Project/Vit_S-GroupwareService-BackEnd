@@ -2,8 +2,10 @@ package com.group3.vitamins.vitamate.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReader;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReaderPort;
+import com.group3.vitamins.vitamate.application.query.GetVitamateAnalysisQuery;
 import com.group3.vitamins.vitamate.application.result.VitamateAnalysisDetailResult;
+import com.group3.vitamins.vitamate.application.usecase.GetVitamateAnalysisUseCase;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,23 +16,28 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
-public class VitamateAnalysisQueryService {
+public class VitamateAnalysisQueryService implements GetVitamateAnalysisUseCase {
 
-    private final VitamateAnalysisReader analysisReader;
+    private final VitamateAnalysisReaderPort analysisReaderPort;
 
     // 요청자가 접근 가능한 분석 상세를 조회한다.
+    @Override
     @Transactional(readOnly = true)
-    public VitamateAnalysisDetailResult getAnalysis(Long analysisId, String userId) {
-        validateQuery(analysisId, userId);
+    public VitamateAnalysisDetailResult handle(GetVitamateAnalysisQuery query) {
+        validateQuery(query);
 
-        return analysisReader.findAccessibleAnalysis(analysisId, userId)
+        return analysisReaderPort.findAccessibleAnalysis(query.analysisId(), query.userId())
                 .map(VitamateAnalysisDetailResult::from)
                 .orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_ANALYSIS_NOT_FOUND));
     }
 
     // 조회에 필요한 식별자가 비어 있지 않은지 확인한다.
-    private void validateQuery(Long analysisId, String userId) {
-        if (analysisId == null || analysisId <= 0 || userId == null || userId.isBlank()) {
+    private void validateQuery(GetVitamateAnalysisQuery query) {
+        if (query == null
+                || query.analysisId() == null
+                || query.analysisId() <= 0
+                || query.userId() == null
+                || query.userId().isBlank()) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
     }

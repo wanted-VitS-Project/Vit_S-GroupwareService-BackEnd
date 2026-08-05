@@ -145,3 +145,8 @@ cloud:
 account:
   mail:
     login-url: ${APP_LOGIN_URL:http://localhost:3000/login}
+
+
+vitamate:
+  worker:
+    token: ${VITAMATE_WORKER_TOKEN:}

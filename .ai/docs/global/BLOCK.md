@@ -1,10 +1,12 @@
-``# 🧩 블록 정보 — 10종 카탈로그
+# 🧩 블록 정보 — 10종 카탈로그
 
 **최종 업데이트**
 - 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · §4 번호 당김(4-8~4-10 → 4-7~4-9) · DB 는 `V20260805170000` 로 ALTER
 - 2026-08-05 — 🩹 **`BID_NOTICE` 이중 정의 해소** — 상세 테이블 없는 구 §4-9 를 제거하고 `bid_notice_block` 모델 하나로 통일(§5 요약표 기준), **§4-10 번호 중복 정리**(AI → 4-9), AI 설명문 오배치 복구, 깨진 링크(`입찰관리/BID-V1.md`) 제거 · 엔드포인트 경로는 `api/bid.md` 단일 기준으로 위임 · `bid_notice_block` 테이블 부재 명시
+- 2026-08-05 — `AI` 블록 상세 어댑터 등록 완료 (`vitamate/infrastructure/blockdetail/`) · `detail` shape = `VitamateDetail(vitamateBlockId, welcomeMessage)`
 - 2026-08-05 — ⭐ **§2 타입별 상세 확장 가이드 신설** (담당자용 계약 10건 · 파일 위치 · 스켈레톤) · **쓰기는 JPA 위임 · 조회만 MyBatis** 확정 · 어댑터·매퍼·XML 을 **타입 담당자 패키지로 이관** · 규약 5줄의 `<discriminator>`·"이벤트 회수" 문구 정정
 - 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
+- 2026-08-04 — 입찰 공고 블록 `BID_NOTICE` 추가
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
@@ -215,8 +217,10 @@ public Long create(Long blockId) {
 |------|:-----:|:---------:|------|
 | `TEXT` | ✅ `text/infrastructure/blockdetail/` | 값 | 참조 구현 (1:1) |
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
-| `IMAGE` · `APPROVAL` · `AI` | ❌ 미등록 | **NULL** | 어댑터 추가하면 살아난다 |
+| `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail` 조회 |
+| `IMAGE` · `APPROVAL` | ❌ 미등록 | **NULL** | 어댑터 추가하면 살아난다 |
 | `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환 |
+| `PERFORMANCE_VIEW` | ❌ | **NULL** | 상세 테이블 없음 |
 | `TAX_INVOICE_VIEW` | ❌ | **NULL** | 행 존재 자체가 "연결됨" 신호 (TXL-008) — 빈 행을 만들면 안 된다 |
 | `BID_NOTICE` | — | — | 사용자 생성 금지 (`POST` 에서 400) |
 

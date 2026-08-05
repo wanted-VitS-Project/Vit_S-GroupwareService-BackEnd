@@ -1,6 +1,6 @@
 package com.group3.vitamins.vitamate.application.result;
 
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReader;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReaderPort;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,7 +22,7 @@ public record VitamateAnalysisDetailResult(
 ) {
 
     // 읽기 포트의 조회 결과를 컨트롤러 응답에 가까운 application result로 변환한다.
-    public static VitamateAnalysisDetailResult from(VitamateAnalysisReader.VitamateAnalysisDetail detail) {
+    public static VitamateAnalysisDetailResult from(VitamateAnalysisReaderPort.VitamateAnalysisDetail detail) {
         return new VitamateAnalysisDetailResult(
                 detail.analysisId(),
                 detail.blockId(),
@@ -46,7 +46,7 @@ public record VitamateAnalysisDetailResult(
             String fileName
     ) {
         // 포트의 문서 값을 application result 문서 값으로 변환한다.
-        private static Document from(VitamateAnalysisReader.Document document) {
+        private static Document from(VitamateAnalysisReaderPort.Document document) {
             return new Document(
                     document.fileVersionId(),
                     document.fileName()
@@ -62,7 +62,7 @@ public record VitamateAnalysisDetailResult(
             String excerpt
     ) {
         // 포트의 citation 값을 application result citation 값으로 변환한다.
-        private static Citation from(VitamateAnalysisReader.Citation citation) {
+        private static Citation from(VitamateAnalysisReaderPort.Citation citation) {
             return new Citation(
                     citation.rankOrder(),
                     citation.fileVersionId(),

@@ -1,6 +1,6 @@
-package com.group3.vitamins.vitamate.application.service;
+package com.group3.vitamins.vitamate.application.support;
 
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStore;
+import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort;
 import com.group3.vitamins.vitamate.application.result.StartVitamateAnalysisResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,19 +21,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@DisplayName("VitamateAnalysisWorkerService 상태 전이")
-class VitamateAnalysisWorkerServiceTest {
+@DisplayName("VitamateAnalysisStateManager 상태 전이")
+class VitamateAnalysisStateManagerTest {
 
     private static final Long ANALYSIS_ID = 1L;
     private static final String ATTEMPT_ID = "attempt-1";
 
-    private VitamateAnalysisStore analysisStore;
-    private VitamateAnalysisWorkerService workerService;
+    private VitamateAnalysisStorePort analysisStore;
+    private VitamateAnalysisStateManager stateManager;
 
     @BeforeEach
     void setUp() {
-        analysisStore = mock(VitamateAnalysisStore.class);
-        workerService = new VitamateAnalysisWorkerService(analysisStore);
+        analysisStore = mock(VitamateAnalysisStorePort.class);
+        stateManager = new VitamateAnalysisStateManager(analysisStore);
     }
 
     @Nested
@@ -50,7 +50,7 @@ class VitamateAnalysisWorkerServiceTest {
                     any(LocalDateTime.class)
             )).thenReturn(true);
 
-            Optional<StartVitamateAnalysisResult> result = workerService.startProcessing(ANALYSIS_ID);
+            Optional<StartVitamateAnalysisResult> result = stateManager.startProcessing(ANALYSIS_ID);
 
             assertThat(result).isPresent();
             StartVitamateAnalysisResult started = result.get();
@@ -76,7 +76,7 @@ class VitamateAnalysisWorkerServiceTest {
                     any(LocalDateTime.class)
             )).thenReturn(false);
 
-            Optional<StartVitamateAnalysisResult> result = workerService.startProcessing(ANALYSIS_ID);
+            Optional<StartVitamateAnalysisResult> result = stateManager.startProcessing(ANALYSIS_ID);
 
             assertThat(result).isEmpty();
         }
@@ -96,7 +96,7 @@ class VitamateAnalysisWorkerServiceTest {
                     any(LocalDateTime.class)
             )).thenReturn(true);
 
-            boolean completed = workerService.completeProcessing(ANALYSIS_ID, ATTEMPT_ID, "analysis result");
+            boolean completed = stateManager.completeProcessing(ANALYSIS_ID, ATTEMPT_ID, "analysis result");
 
             assertThat(completed).isTrue();
         }
@@ -111,7 +111,7 @@ class VitamateAnalysisWorkerServiceTest {
                     any(LocalDateTime.class)
             )).thenReturn(false);
 
-            boolean completed = workerService.completeProcessing(ANALYSIS_ID, ATTEMPT_ID, "analysis result");
+            boolean completed = stateManager.completeProcessing(ANALYSIS_ID, ATTEMPT_ID, "analysis result");
 
             assertThat(completed).isFalse();
         }
@@ -131,7 +131,7 @@ class VitamateAnalysisWorkerServiceTest {
                     any(LocalDateTime.class)
             )).thenReturn(true);
 
-            boolean failed = workerService.failProcessing(ANALYSIS_ID, ATTEMPT_ID, "python error");
+            boolean failed = stateManager.failProcessing(ANALYSIS_ID, ATTEMPT_ID, "python error");
 
             assertThat(failed).isTrue();
         }
@@ -145,7 +145,7 @@ class VitamateAnalysisWorkerServiceTest {
                     any(LocalDateTime.class)
             )).thenReturn(true);
 
-            boolean failed = workerService.failPending(ANALYSIS_ID, "validation error");
+            boolean failed = stateManager.failPending(ANALYSIS_ID, "validation error");
 
             assertThat(failed).isTrue();
         }
@@ -158,7 +158,7 @@ class VitamateAnalysisWorkerServiceTest {
         @Test
         @DisplayName("분석 ID가 없으면 Store를 호출하지 않는다")
         void rejectsMissingAnalysisId() {
-            assertThatThrownBy(() -> workerService.startProcessing(null))
+            assertThatThrownBy(() -> stateManager.startProcessing(null))
                     .isInstanceOf(IllegalArgumentException.class);
             verify(analysisStore, never()).markProcessing(any(), anyString(), any(), any());
         }
@@ -166,7 +166,7 @@ class VitamateAnalysisWorkerServiceTest {
         @Test
         @DisplayName("attemptId가 비어 있으면 완료 저장을 호출하지 않는다")
         void rejectsBlankAttemptId() {
-            assertThatThrownBy(() -> workerService.completeProcessing(ANALYSIS_ID, " ", "result"))
+            assertThatThrownBy(() -> stateManager.completeProcessing(ANALYSIS_ID, " ", "result"))
                     .isInstanceOf(IllegalArgumentException.class);
             verify(analysisStore, never()).markCompleted(any(), anyString(), anyString(), any());
         }
