@@ -27,7 +27,8 @@ public class EmployeeQueryService implements EmployeeQueryUseCase {
     @Override
     @Transactional(readOnly = true)
     public List<EmployeeSearchRow> searchByName(EmployeeSearchQuery query) {
-        if (query.name() == null) {
+        // query 자체 null 도 막는다 — 내부 호출자가 null 을 넘겨도 NPE(500)가 아니라 400 이 나가야 한다.
+        if (query == null || query.name() == null) {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_PARAMETER);
         }
         return employeeSearchQueryPort.searchByName(query.name());

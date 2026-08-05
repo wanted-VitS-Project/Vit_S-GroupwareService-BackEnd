@@ -82,6 +82,14 @@ class EmployeeQueryServiceTest {
         verify(searchPort, never()).searchByName(anyString());
     }
 
+    @Test
+    @DisplayName("query 자체가 null 이면 NPE 가 아니라 EMP_INVALID_PARAMETER")
+    void rejectsNullQuery() {
+        assertThatThrownBy(() -> queryService.searchByName(null))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
+        verify(searchPort, never()).searchByName(anyString());
+    }
+
     private Consumer<Throwable> hasCode(Object expected) {
         return throwable -> assertThat(throwable)
                 .isInstanceOf(DomainException.class)
