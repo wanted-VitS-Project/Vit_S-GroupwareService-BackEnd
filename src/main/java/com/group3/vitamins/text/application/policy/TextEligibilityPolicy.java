@@ -28,8 +28,8 @@ public class TextEligibilityPolicy {
                 });
     }
 
-    public void assertEditPermission(Long txtId, String userId) {
-        if (!blockCatalogPort.hasEditPermission(BLOCK_TYPE, txtId, userId)) {
+    public void assertEditPermission(Long txtId, String userId, String role) {
+        if (!blockCatalogPort.hasEditPermission(BLOCK_TYPE, txtId, userId, role)) {
             log.warn("편집 권한 없음 - blockType={}, txtId={}, userId={}", BLOCK_TYPE, txtId, userId);
             throw new ForbiddenException(TextErrorCode.FORBIDDEN);
         }

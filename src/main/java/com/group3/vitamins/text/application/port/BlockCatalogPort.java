@@ -10,8 +10,9 @@ package com.group3.vitamins.text.application.port;
 public interface BlockCatalogPort {
 
     /**
-     * @deprecated role 없이 판정하던 예전 시그니처. 텍스트 호출부가 role을 실어 나르게 되면 제거 예정 —
-     *             지금은 텍스트 호출부와의 호환을 위해 남겨둔다. 항상 true를 반환한다(기존 스텁 동작 그대로).
+     * @deprecated role 없이 판정하던 예전 시그니처. 체크리스트 호출부가 아직 role 을 안 실어 날라서
+     *             호환용으로 남겨둔다 — 체크리스트가 {@link #hasEditPermission(String, Long, String, String)}로
+     *             옮겨가면 제거할 것. 항상 true 를 반환한다(기존 스텁 동작 그대로).
      */
     @Deprecated
     boolean hasEditPermission(String blockType, Long blockTypeId, String userId);

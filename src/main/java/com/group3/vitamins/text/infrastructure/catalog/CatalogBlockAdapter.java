@@ -24,7 +24,7 @@ public class CatalogBlockAdapter implements BlockCatalogPort {
     @Override
     @Deprecated
     public boolean hasEditPermission(String blockType, Long blockTypeId, String userId) {
-        // 텍스트가 아직 role 을 안 실어 보내는 예전 호출부용 — 기존 스텁 동작(항상 true) 그대로 유지.
+        // 체크리스트가 아직 role 을 안 실어 보내는 예전 호출부용 — 기존 스텁 동작(항상 true) 그대로 유지.
         return true;
     }
 
