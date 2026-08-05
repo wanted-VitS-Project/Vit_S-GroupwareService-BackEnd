@@ -33,6 +33,7 @@ import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -295,11 +296,13 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         List<ApprovalLine> activatedLines = approvalRepository.activateLines(command.revisionId());
         Long firstActiveLineId = activatedLines.get(0).getLineId();
 
-        // TODO: SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행.
-        //       알림 도메인(NotificationRequestedEvent)이 아직 없어 주석으로만 남긴다
-        //       (text.application.service.TextCommandService 의 활동 로그 TODO와 동일한 처리).
-        // eventPublisher.publish(NotificationRequestedEvent.approvalRequested(
-        //         activatedLines.get(0).getApproverId(), command.approvalId(), submittedRevision.getRevisionId()));
+        // SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                activatedLines.get(0).getApproverId(),
+                "APPROVAL_REQUESTED",
+                "결재 요청",
+                submittedRevision.getTitle() + " 결재 요청이 도착했습니다.",
+                approval.getBlockId()));
 
         log.info("결재 상신 완료 - approvalId={}, revisionId={}, firstActiveLineId={}",
                 command.approvalId(), command.revisionId(), firstActiveLineId);
