@@ -1,13 +1,13 @@
 package com.group3.vitamins.account.presentation.api;
 
-import com.group3.vitamins.account.application.AccountPasswordResetService;
-import com.group3.vitamins.account.application.AccountService;
-import com.group3.vitamins.account.presentation.api.dto.request.ChangeRoleRequest;
-import com.group3.vitamins.account.presentation.api.dto.request.ChangeStatusRequest;
-import com.group3.vitamins.account.presentation.api.dto.request.ResetPasswordRequest;
-import com.group3.vitamins.account.presentation.api.dto.response.PasswordResetResponse;
-import com.group3.vitamins.account.presentation.api.dto.response.RoleChangeResponse;
-import com.group3.vitamins.account.presentation.api.dto.response.StatusChangeResponse;
+import com.group3.vitamins.account.application.usecase.AccountCommandUseCase;
+import com.group3.vitamins.account.application.usecase.AccountPasswordResetUseCase;
+import com.group3.vitamins.account.presentation.api.request.ChangeRoleRequest;
+import com.group3.vitamins.account.presentation.api.request.ChangeStatusRequest;
+import com.group3.vitamins.account.presentation.api.request.ResetPasswordRequest;
+import com.group3.vitamins.account.presentation.api.response.PasswordResetResponse;
+import com.group3.vitamins.account.presentation.api.response.RoleChangeResponse;
+import com.group3.vitamins.account.presentation.api.response.StatusChangeResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 계정 관리 API — `.ai/api/account.md` (노션 확정).
+ * 계정 관리 API — `.ai/api/account.md`.
  *
  * <p>전부 <b>ADMIN 전용</b>이다. 인증(세션)은 Security 필터가, ADMIN 판정은 서비스가
  * 도메인 코드({@code ACC_ADMIN_REQUIRED})와 함께 한다.
@@ -39,8 +39,8 @@ public class AccountController {
 
     private static final String ROLE_PREFIX = "ROLE_";
 
-    private final AccountService accountService;
-    private final AccountPasswordResetService accountPasswordResetService;
+    private final AccountCommandUseCase accountCommandUseCase;
+    private final AccountPasswordResetUseCase accountPasswordResetUseCase;
 
     @Operation(summary = "전역 권한 변경",
             description = "대상 사번의 전역 권한을 MASTER 또는 MEMBER 로 변경한다. "
@@ -65,8 +65,8 @@ public class AccountController {
                                                       Authentication authentication,
                                                       @PathVariable String userId,
                                                       @RequestBody ChangeRoleRequest request) {
-        accountService.changeRole(currentUserId, roleOf(authentication), userId, request.role());
-        return ApiResponse.success("권한이 변경되었습니다.", new RoleChangeResponse(userId, request.role()));
+        accountCommandUseCase.changeRole(request.toCommand(currentUserId, roleOf(authentication), userId));
+        return ApiResponse.success(AccountResponseMessage.ROLE_CHANGED, new RoleChangeResponse(userId, request.role()));
     }
 
     @Operation(summary = "계정 상태 변경",
@@ -88,8 +88,9 @@ public class AccountController {
     public ApiResponse<StatusChangeResponse> changeStatus(Authentication authentication,
                                                           @PathVariable String userId,
                                                           @RequestBody ChangeStatusRequest request) {
-        accountService.changeStatus(roleOf(authentication), userId, request.status());
-        return ApiResponse.success("계정 상태가 변경되었습니다.", new StatusChangeResponse(userId, request.status()));
+        accountCommandUseCase.changeStatus(request.toCommand(roleOf(authentication), userId));
+        return ApiResponse.success(AccountResponseMessage.STATUS_CHANGED,
+                new StatusChangeResponse(userId, request.status()));
     }
 
     @Operation(summary = "비밀번호 재설정",
@@ -114,9 +115,9 @@ public class AccountController {
     @PostMapping("/password-resets")
     public ApiResponse<PasswordResetResponse> resetPasswords(Authentication authentication,
                                                              @RequestBody ResetPasswordRequest request) {
-        PasswordResetResponse result =
-                accountPasswordResetService.resetPasswords(roleOf(authentication), request.userIds());
-        return ApiResponse.success("비밀번호 재설정 완료", result);
+        PasswordResetResponse result = PasswordResetResponse.from(
+                accountPasswordResetUseCase.resetPasswords(request.toCommand(roleOf(authentication))));
+        return ApiResponse.success(AccountResponseMessage.PASSWORD_RESET, result);
     }
 
     /**

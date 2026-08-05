@@ -5,11 +5,14 @@ import java.time.LocalDateTime;
 /**
  * 체크리스트 블록 상세 행({@code checklist_block}) 포트.
  *
- * <p>그 행의 생성은 Block 도메인(동훈님)이 처리한다 — 블록 골격(block)과 상세 행(checklist_block)을
- * 한 번에 만든다. 하지만 삭제는 텍스트 도메인과 동일하게, Block 도메인이 발행하는 삭제 이벤트를
- * 이 도메인이 받아 {@code deleted_at} 을 직접 찍는다 (도메인마다 정리 로직이 달라 각자 처리).
+ * <p>만들 시점은 Block 도메인(동훈님)이 판단한다 — 블록 골격(block)과 상세 행(checklist_block)을
+ * 한 트랜잭션에서 만든다. 실제 INSERT·삭제는 이 도메인이 하고, Block 도메인은 BlockDetailPort 로
+ * 요청만 보낸다 (도메인마다 정리 로직이 달라 각자 처리).
  */
 public interface ChecklistBlockRepository {
+
+    /** 항목이 0개인 상세 행을 만들고 그 PK 를 돌려준다. */
+    Long create(Long blockId);
 
     /**
      * 존재 확인 + 이번 트랜잭션이 끝날 때까지 이 행에 대한 동시 변경을 막는다.

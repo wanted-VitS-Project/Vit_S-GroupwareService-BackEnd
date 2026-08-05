@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.infrastructure.adapter.EmployeeLookupQueryMapper">
+
+    <select id="findNameByUserId" resultType="java.lang.String">
+        SELECT name FROM employee WHERE user_id = #{userId}
+    </select>
+
+    <select id="findNamesByUserIds"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.EmployeeNameRow">
+        SELECT user_id AS userId, name
+          FROM employee
+         WHERE user_id IN
+        <foreach item="id" collection="userIds" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+</mapper>

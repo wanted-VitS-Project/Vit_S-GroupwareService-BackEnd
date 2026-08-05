@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.auth.infrastructure.adapter.AuthQueryMapper">
+
+    <select id="findProfile"
+            resultType="com.group3.vitamins.auth.application.result.UserProfileRow">
+        SELECT e.user_id              AS userId,
+               e.name                 AS name,
+               a.role                 AS role,
+               a.must_change_password AS mustChangePassword,
+               a.terms_agreed_at      AS termsAgreedAt,
+               e.email                AS email,
+               e.phone                AS phone,
+               d.name                 AS departmentName,
+               p.name                 AS parentDepartmentName,
+               jp.name                AS jobPositionName,
+               e.hired_at             AS hiredAt,
+               a.last_login_at        AS lastLoginAt
+          FROM account a
+          JOIN employee e     ON e.user_id = a.user_id
+          LEFT JOIN department d  ON d.department_id = e.department_id
+          LEFT JOIN department p  ON p.department_id = d.parent_id
+          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id
+         WHERE a.user_id = #{userId}
+    </select>
+
+</mapper>

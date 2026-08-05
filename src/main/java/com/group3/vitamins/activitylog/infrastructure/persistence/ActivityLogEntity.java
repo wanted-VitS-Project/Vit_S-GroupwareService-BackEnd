@@ -34,6 +34,9 @@ public class ActivityLogEntity {
     @Column(name = "resource_id")
     private Long resourceId;
 
+    @Column(name = "resource_name", columnDefinition = "text")
+    private String resourceName;
+
     @Column(name = "field", length = 100)
     private String field;
 
@@ -57,6 +60,7 @@ public class ActivityLogEntity {
             ActivityLogAction act,
             Long blockId,
             Long resourceId,
+            String resourceName,
             String field,
             String beforeValue,
             String afterValue,
@@ -66,6 +70,7 @@ public class ActivityLogEntity {
         log.act = act;
         log.blockId = blockId;
         log.resourceId = resourceId;
+        log.resourceName = resourceName;
         log.field = field;
         log.beforeValue = beforeValue;
         log.afterValue = afterValue;

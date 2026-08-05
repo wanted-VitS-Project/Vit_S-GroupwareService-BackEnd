@@ -15,7 +15,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
- * text 행 생성은 Block 도메인(동훈님) 쪽에서 처리한다 — 여기서는 기존 행을 찾아 수정만 한다.
+ * text 행을 만들 시점은 Block 도메인(동훈님)이 판단하고, 실제 INSERT 는 여기서 한다 — Block 도메인은
+ * BlockDetailPort 로 요청만 보낸다.
  *
  * <p>updateContent/markDeleted 를 분리한 이유: 하나의 save() 가 content 와 deletedAt 을 같이
  * 덮어쓰면, 수정 흐름이 오래전에 읽어둔 deletedAt(=null)을 그대로 다시 써서 동시에 삭제된
@@ -28,6 +29,13 @@ import java.util.Optional;
 public class CatalogTextAdapter implements TextRepository {
 
     private final SpringDataTextRepository springDataTextRepository;
+
+    @Override
+    @Transactional
+    public Long create(Long blockId) {
+        // IDENTITY 라 save() 시점에 INSERT 가 나가고 PK 가 채워져 돌아온다 — 되찾기 조회가 필요없다.
+        return springDataTextRepository.save(new TextJpaEntity(blockId)).getTxtId();
+    }
 
     @Override
     @Transactional

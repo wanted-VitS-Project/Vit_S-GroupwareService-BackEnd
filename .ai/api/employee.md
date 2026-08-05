@@ -1,17 +1,16 @@
 # 👤 Employee API
 
-**상태**: `✅ 확정` — 노션 반영 완료 (2026-08-03). 이탈 금지 규칙 전면 적용 (`../API.md` §0)
-**최종 업데이트**: 2026-08-03 · **담당**: 김동현
-**노션**: `VitaSAPI` · Domain `인사` · SUB-Domain `Employee`
+**최종 업데이트**: 2026-08-04 · **담당**: 김동현 · Domain `인사` · SUB-Domain `Employee`
 
-> ✅ **노션 반영 완료 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
-> 변경이 필요하면 코드를 고치지 말고 **노션을 먼저 고친 뒤** 이 사본을 맞춘다.
+> 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
+> 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
 ## 엔드포인트
 
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
 | 사원 목록 조회 | GET | `/api/v1/employees` | ADMIN |
+| 사원 이름 검색 (결재선 지정용) | GET | `/api/v1/employees/search` | 로그인 사용자 |
 | 사원 상세 조회 | GET | `/api/v1/employees/{userId}` | ADMIN |
 | 사원 등록 | POST | `/api/v1/employees` | ADMIN |
 | 사원 정보 수정 | PATCH | `/api/v1/employees/{userId}` | ADMIN |
@@ -320,3 +319,41 @@
 | 400 | `EMP_FILE_REQUIRED` / `EMP_FILE_TYPE_INVALID` / `EMP_FILE_SIZE_EXCEEDED` | |
 | 400 | `EMP_HAS_ERRORS` | `skipErrors=false` 인데 오류 행이 있음 |
 | 401 · 403 | `AUTH_UNAUTHENTICATED` / `ACC_ADMIN_REQUIRED` | |
+
+---
+
+## 9. 사원 이름 검색 (결재선 지정용)
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/employees/search` |
+| 인증 필요 | Y · **로그인 사용자 누구나** (ADMIN 전용 아님) |
+| 요구사항 | EMP-020 · USC-EMP-015 |
+| 요청 출처 | 결재 도메인 — 결재선 등록 화면에서 기안자가 결재자를 이름으로 검색 → 후보에서 선택 |
+
+> ⚠️ **인사관리용 목록(`GET /api/v1/employees`, ADMIN)과 권한·용도가 다르다.**
+> 이건 결재자 자동완성이라 **로그인한 사용자 누구나** 호출한다. `SecurityConfig` 에서 두 경로의 권한을 분리한다.
+
+**Request Parameter**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `name` | String | Y | 이름 부분 일치 검색어 |
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data[].userId` | String | 사번 |
+| `data[].name` | String | 이름 |
+| `data[].department` | String | 부서명 (동명이인 구분용, `null` 허용) |
+| `data[].position` | String | 직급명 (동명이인 구분용, `null` 허용) |
+
+> 배열(후보 목록)로 내려준다. **급여 등 민감 정보는 포함하지 않는다** — 위 4개 필드만.
+> ⛔ **시스템 계정(`is_system=1`)과 퇴사자는 결재자 후보에 나오지 않는다** — `is_system=0` · 재직자만 (`EMP-003`).
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (결과 없으면 빈 배열) |
+| 400 | `EMP_INVALID_PARAMETER` | `name` 누락 등 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |

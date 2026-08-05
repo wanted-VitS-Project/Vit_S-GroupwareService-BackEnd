@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.businesscategory.infrastructure.adapter.ProjectCategoryLinkQueryMapper">
+
+    <select id="findLinkedCategoryIds" resultType="java.lang.Long">
+        SELECT DISTINCT business_category_id FROM project_business_category
+    </select>
+
+    <select id="countLinkedProjects" resultType="long">
+        SELECT COUNT(*) FROM project_business_category WHERE business_category_id = #{categoryId}
+    </select>
+
+</mapper>

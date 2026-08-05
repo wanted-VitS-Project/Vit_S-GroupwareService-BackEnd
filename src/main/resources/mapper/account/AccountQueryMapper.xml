@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.account.infrastructure.adapter.AccountQueryMapper">
+
+    <select id="findTarget"
+            resultType="com.group3.vitamins.account.application.result.AccountTargetRow">
+        SELECT e.user_id   AS userId,
+               e.name      AS name,
+               e.email     AS email,
+               a.role      AS role,
+               e.is_system AS isSystem
+          FROM account a
+          JOIN employee e ON e.user_id = a.user_id
+         WHERE a.user_id = #{userId}
+    </select>
+
+    <select id="findTargets"
+            resultType="com.group3.vitamins.account.application.result.AccountTargetRow">
+        SELECT e.user_id   AS userId,
+               e.name      AS name,
+               e.email     AS email,
+               a.role      AS role,
+               e.is_system AS isSystem
+          FROM account a
+          JOIN employee e ON e.user_id = a.user_id
+         WHERE a.user_id IN
+        <foreach item="id" collection="userIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>
