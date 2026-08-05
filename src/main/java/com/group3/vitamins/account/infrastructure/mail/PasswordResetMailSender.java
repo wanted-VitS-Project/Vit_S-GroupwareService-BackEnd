@@ -1,5 +1,7 @@
 package com.group3.vitamins.account.infrastructure.mail;
 
+import com.group3.vitamins.account.application.port.MailDeliveryException;
+import com.group3.vitamins.account.application.port.PasswordResetMailPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
@@ -18,7 +20,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-public class PasswordResetMailSender {
+public class PasswordResetMailSender implements PasswordResetMailPort {
 
     private final JavaMailSender mailSender;
     private final String from;
@@ -39,6 +41,7 @@ public class PasswordResetMailSender {
      * @param name        사원 이름 (인사말)
      * @param rawPassword 평문 임시 비밀번호. 로그에 남기지 않는다
      */
+    @Override
     public void sendTempPassword(String toEmail, String name, String rawPassword) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
