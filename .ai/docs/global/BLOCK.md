@@ -1,11 +1,9 @@
-# 🧩 블록 정보 — 10종 카탈로그
+# 🧩 블록 정보 — 9종 카탈로그
 
 **최종 업데이트**
+- 2026-08-05 — 입찰용 블록 `BID_NOTICE` 폐기 · 입찰 상세는 프로젝트/입찰 공고 API에서 조회
 - 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
-- 2026-08-04 — 입찰 공고 블록 `BID_NOTICE` 추가
-- 2026-08-03 — **`BID_NOTICE` 신설 → 10종** · **다형성 양방향 ID 반영** · `block.project_id` 폐기 · 상세 테이블명·PK 정정
 - 2026-08-03 — 비타메이트 AI 상세 문서 연결 추가
-- 2026-08-01 — `DOMAIN.md` §3 에서 분리 신설 + 타입별 카탈로그(§4) 신규 작성 · `PAYMENT_CONFIRM` 담당 재배정
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
@@ -14,7 +12,7 @@
 | 항목 | 확정 |
 |------|------|
 | 소유자 | **전부 스텝.** 예외 없음 |
-| 타입 | **닫힌 enum 10종.** 확장형 JSON 스키마 금지 |
+| 타입 | **닫힌 enum 9종.** 확장형 JSON 스키마 금지 |
 | 테이블 | `block` 공통 테이블 + **타입별 상세 테이블** |
 | ⭐ **다형성 방향** | **양방향 ID · 양쪽 다 FK 없음.** `block.type`(판별자) + `block.type_id`(상세 PK) ↔ `{상세}.block_id`(역방향) |
 | 공통 컬럼 | `step_id`, `type`, **`type_id`**, `title`, `owner`, 배치 3종, `created_by`, 생성/수정/삭제 시각 |
@@ -65,7 +63,7 @@
 
 ---
 
-## 4. ⭐ 10종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
+## 4. ⭐ 9종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
 
 > 계열은 **설명을 위한 구분**이지 상속 계층이 아니다. 소유자는 전부 스텝으로 동일하다.
 
@@ -196,24 +194,7 @@
 
 ⚠️ **`MASTER` 는 결재와 무관하다.** 최종 결재자는 `approval_line.sequence_no` **최댓값**이고 건마다 달라진다 ([`PERMISSION.md`](PERMISSION.md) §7-2).
 
-### 4-9. `BID_NOTICE` — 입찰 공고 조회
-
-| 항목 | 값 |
-|------|-----|
-| 계열 | 도메인 |
-| 상세 테이블 | 별도 상세 테이블 없음. `block → step → project → project.bid_notice_id` 경로로 조회 |
-| **역할** | 입찰 공고로 생성된 프로젝트 안에서 해당 공고의 상세 정보와 프로젝트 스냅샷 변경 여부를 보여준다 |
-| 권한 | 스텝 접근 권한 그대로 |
-| 삭제 | 블록만 soft delete. `bid_notice` 원본과 `project.bid_notice_id` 는 유지 |
-| 템플릿 | 담김: 블록 껍데기만 / 안 담김: 연결된 공고 데이터 |
-| 담당 | 정현 |
-| 상세 문서 | [`BID-V1.md`](../domain/입찰관리/BID-V1.md) · [`bid.md`](../../api/bid.md) |
-
-입찰 블록은 **조회 전용 진입점**이다. 공고 원본 수정은 입찰 공고 API가 담당하고, 프로젝트 스냅샷 반영은 `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot` 이 담당한다.
-
-⛔ 입찰 블록 전용 수정/삭제 API를 만들지 않는다. 제목·위치·삭제는 공통 블록 API 정책을 따른다.
-
-### 4-10. `AI` — AI 검토 (비타메이트)
+### 4-9. `AI` — AI 검토 (비타메이트)
 
 | 항목 | 값 |
 |------|-----|
@@ -228,30 +209,6 @@
 
 > 공고 탭의 **AI 요약과는 다른 기능**이다. 그건 공고 영역 기능이고 이건 스텝 안의 문서 작업용이다 (UC-03).
 
-### 4-10. `BID_NOTICE` — 입찰 공고 ⭐ **신설 (2026-08-03)**
-
-| 항목 | 값 |
-|------|-----|
-| 계열 | 도메인 |
-| 상세 테이블 | `bid_notice_block` — PK `bid_notice_block_id` · `block_id` UNIQUE(FK없음) · `bid_notice_id` **FK 있음** · `notice_snapshot JSON` · `notice_changed` |
-| **역할** | 공고 → 프로젝트 전환 시 자동 생성. **프로젝트 안에서 공고를 보는 창**이다 |
-| **생성 주체** | 사용자가 아니라 **전환 API 가 자동 생성**한다 (`BID-V1` CNV-06 · 프로젝트·멤버·스테이지·스텝과 한 트랜잭션) |
-| **스냅샷** | 전환 시점 공고 값을 `notice_snapshot JSON` 에 박는다. 재수집이 이 값을 **덮지 않는다** (`BID-V1` INV-01) |
-| **변경 감지** | 재수집 결과가 스냅샷과 다르면 `notice_changed = 1`. **반영 여부는 사람이 결정**한다 (INV-02) |
-| 권한 | 스텝 권한 그대로. ⛔ **블록에서 `bid_notice` 원본을 수정할 수 없다** (INV-08) |
-| 삭제 | 그냥 soft delete (잠금 없음) |
-| 템플릿 | 담기지 않는다 — 공고에 종속된 블록이다 |
-| 담당 | 정현 |
-| 상세 문서 | 정현 소관 (문서 별도 관리) |
-
-⛔ **`bid_notice_id` 에 UNIQUE 를 걸지 않는다.** soft delete 라 지운 블록의 행이 재생성을 막는다.
-"공고 1건 = 블록 1개" 는 `uk_project_bid_notice` 와 앱(`BID-V1` INV-10)이 지킨다.
-
-⚠️ **`bid_notice_id` 의 FK 는 유지한다.** 이건 다형성 대상이 아니라 **실제 테이블 참조**다 —
-`payment.block_id`·`notification.block_id` 와 같은 취급이다 (§1 규약 2·3 은 `block_id` 에만 적용).
-> 사용자는 채팅하는 것이 아니라 분석 기준 프롬프트를 입력하고, 시스템은 프로젝트 문서 청크를 검색해 분석 결과와 출처 문장을 남긴다.
----
-
 ## 5. 한눈에 보는 요약
 
 | `block.type` | 이름 | 계열 | 상세 테이블 (`block.type_id` 대상 PK) | 자식 (1:N) | 삭제 잠금 | 담당 | 상세 문서 |
@@ -265,7 +222,6 @@
 | `PERFORMANCE_VIEW` | 실적 조회 | 도메인 | ⛔ **없음** (`type_id` **NULL**) | — | — | 동훈 | 🚨 T2 미결 |
 | `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ 진행 중일 때 | 이강욱 | — |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
-| **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
 **도메인 계열은 재무·공고 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
 
@@ -336,7 +292,7 @@
 
 | 방식 | 테이블 |
 |---|---|
-| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · `block_payment_confirm` · **`bid_notice_block`** |
+| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · `block_payment_confirm` |
 | ⛔ **hard `DELETE`** (`deleted_at` 없음) | `block_file` · `tax_invoice_confirm` · `issue_block` |
 
 **hard 3개의 공통점** — 담긴 정보가 없는 **순수 연결 행**이다. `deleted_at` 을 달면 UNIQUE·복합 PK 를 시체가 점유해
