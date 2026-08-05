@@ -168,7 +168,7 @@
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
 | 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
-> 한 요청에서 `content`, `changeStatusTo` 가 동시에 바뀌어도 **필드 단위로 활동 로그를 남긴다** (§5.2 체크리스트, 활동 로그 인프라 도입 전까지는 주석 처리).
+> 한 요청에서 `content`, `changeStatusTo` 가 동시에 바뀌면 **필드 단위로 활동 로그 2행을 남긴다** (§5.2 체크리스트, 실 구현 완료 — 아래 활동 로그 절 참고).
 
 ---
 
@@ -227,5 +227,10 @@
 
 ## 활동 로그 (Activity Log)
 
-- **아직 미반영** — 생성·수정·삭제 전부 주석 처리 상태. 기존 주석은 실제 계약(`ActivityOccurredEvent.of`, `DomainEventPublisher`)과 안 맞는 죽은 코드라 그대로 주석 해제하면 컴파일 에러.
-- 활동 로그 담당(용준님) 쪽 계약이 다시 정리되는 중 (`resourceName` 필드 추가 등) — **그 PR 머지되면 텍스트에서 확립한 패턴(MODIFY는 필드 단위, 삭제 로그는 Block 도메인 책임) 그대로 반영 예정.**
+- ✅ **반영 완료** — 텍스트 도메인에서 확립한 패턴(`ActivityOccurredEvent.of`, `DomainEventPublisher`, resourceName 포함 6-파라미터)을 그대로 적용.
+- **생성**: `resourceId`=chkId, `resourceName`=생성된 항목 내용, changes는 null 1개.
+- **수정**: `content`/`isCompleted` 중 실제로 바뀐 필드만 각각 changes 1행으로 담아 발행 (둘 다 바뀌면 changes 2개). 아무 것도 안 바뀌면 발행하지 않음. `resourceName`=수정 후 항목 내용.
+- **삭제**: `resourceId`=chkId, `resourceName`=삭제 전 항목 내용, changes는 null 1개.
+- `blockId`는 `checklist_block.block_id`를 `ChecklistBlockRepository.findBlockId(chkBlockId)`로 조회해서 얻는다 (체크리스트는 항목 도메인모델에 blockId를 직접 들고 있지 않아서, 텍스트처럼 엔티티에서 바로 읽을 수 없음).
+- **블록 자체 삭제(§5.1)는 이 도메인이 발행하지 않는다** — 어댑터 없는 블록 타입까지 커버해야 해서 Block 도메인 쪽 삭제 서비스가 발행해야 한다는 텍스트와 동일한 결론(2026-08-05). 블록 삭제에 딸려가는 항목 개별 삭제도 로그 없음.
+- 죽은 이벤트 리스너 스켈레톤(`ChecklistLifeCycleEventHandler`)은 삭제함 — 블록 삭제는 이벤트가 아니라 `BlockDetailPort.deleteDetail` 동기 포트 콜로 확정됨 (텍스트의 `TextLifeCycleEventHandler` 삭제와 동일 이유).

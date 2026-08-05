@@ -33,7 +33,7 @@ Content-Type: application/json
 }
 
 ### 0-2. [준비] 스텝 생성 (stageId 생략 = 미소속 스텝) — 아래 URL의 1을 0-1 응답의 projectId로 교체할 것. stepId는 응답값을 0-3에 채워 넣을 것
-POST localhost:8080/api/v1/projects/1/steps
+POST localhost:8080/api/v1/projects/6/steps
 Content-Type: application/json
 
 {
@@ -43,7 +43,7 @@ Content-Type: application/json
 }
 
 ### 0-3. [준비] 체크리스트 블록 생성 — 아래 URL의 1을 0-2 응답의 stepId로 교체할 것
-POST localhost:8080/api/v1/steps/1/blocks
+POST localhost:8080/api/v1/steps/12/blocks
 Content-Type: application/json
 
 {
@@ -59,17 +59,17 @@ POST localhost:8080/api/v1/blocks/checklists/8/items
 Content-Type: application/json
 
 {
-    "content": "제안서 결재 보고하기2"
+    "content": "제안서 결재 보고하기"
 }
 
 ### 체크리스트 항목 수정 — URL의 3을 위 생성 응답의 chkId로 교체
-PATCH localhost:8080/api/v1/blocks/checklists/items/3
+PATCH localhost:8080/api/v1/blocks/checklists/items/26
 Content-Type: application/json
 
 {
-    "content": null,
-    "changeStatusTo": true
+    "content": "제안서 결재 보고하기(매우 중요)",
+    "changeStatusTo": false
 }
 
 ### 체크리스트 항목 삭제 — URL의 1을 삭제할 chkId로 교체
-DELETE localhost:8080/api/v1/blocks/checklists/items/1
+DELETE localhost:8080/api/v1/blocks/checklists/items/26
