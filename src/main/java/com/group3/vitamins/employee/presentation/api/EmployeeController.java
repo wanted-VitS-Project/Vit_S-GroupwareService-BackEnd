@@ -268,7 +268,7 @@ public class EmployeeController {
         return node.asText();
     }
 
-    /** 전달됐다면 정수이거나 null 이어야 한다. 그 외 타입이면 400. */
+    /** 전달됐다면 long 범위 정수이거나 null 이어야 한다. 그 외 타입·범위 초과면 400. */
     private Long longOrNull(JsonNode body, String field) {
         if (!body.has(field)) {
             return null;
@@ -277,7 +277,9 @@ public class EmployeeController {
         if (node.isNull()) {
             return null;
         }
-        if (!node.isIntegralNumber()) {
+        // isIntegralNumber() 만 보면 long 범위를 넘는 BigInteger 도 통과하고 asLong() 이 값을 축소한다.
+        // canConvertToLong() 으로 범위를 함께 검사한다.
+        if (!node.isIntegralNumber() || !node.canConvertToLong()) {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
         }
         return node.asLong();

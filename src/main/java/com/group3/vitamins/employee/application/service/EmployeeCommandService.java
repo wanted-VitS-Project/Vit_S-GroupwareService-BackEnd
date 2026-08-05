@@ -56,8 +56,11 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private static final int MAX_EMAIL_LENGTH = 100;
     private static final int MAX_PHONE_LENGTH = 20;
 
-    // 형식만 거르는 가벼운 검사(RFC 전체 준수 아님) — "local@domain.tld" 최소 형태를 확인한다.
-    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    // 형식만 거르는 가벼운 검사(RFC 전체 준수 아님) — "local@label.label(.label…)" 최소 형태를 확인한다.
+    // ⚠️ 도메인 라벨은 점을 제외한 문자({@code [^@\s.]})로 잡는다 — 라벨 문자에 점이 포함되면 뒤의 `\.` 와
+    // 겹쳐 다항 백트래킹(ReDoS, CodeQL High)이 된다. 점을 배제해 각 점이 라벨을 유일하게 나눠 선형이 된다.
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[^@\\s]+@[^@\\s.]+(\\.[^@\\s.]+)+$");
 
     private final EmployeeAdminPolicy employeeAdminPolicy;
     private final EmployeeRepository employeeRepository;
@@ -149,12 +152,17 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         }
 
         // 전달한 필드만 새 값으로, 나머지는 현재값 유지. jobPositionId 는 명시적 null = 직급 미지정.
+        // 등록과 동일한 길이·형식 검증을 건다 — 안 하면 DB 컬럼 폭 초과·잘못된 이메일이 UPDATE 절단으로 500 이 된다.
         String name = current.getName();
         if (command.nameProvided()) {
-            name = required(command.name()); // NOT NULL — 빈 값이면 EMP_INVALID_REQUEST
+            name = requiredWithMax(command.name(), MAX_NAME_LENGTH); // NOT NULL — 빈 값이면 EMP_INVALID_REQUEST
         }
-        String phone = command.phoneProvided() ? normalize(command.phone()) : current.getPhone();
-        String email = command.emailProvided() ? normalize(command.email()) : current.getEmail();
+        String phone = command.phoneProvided()
+                ? optionalWithMax(normalize(command.phone()), MAX_PHONE_LENGTH)
+                : current.getPhone();
+        String email = command.emailProvided()
+                ? validateEmail(normalize(command.email()))
+                : current.getEmail();
 
         Long departmentId = current.getDepartmentId();
         if (command.departmentIdProvided()) {
@@ -177,7 +185,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
             hiredAt = parseRequiredDate(command.hiredAt());
         }
 
-        employeeRepository.update(current.withInfo(name, phone, email, departmentId, jobPositionId, hiredAt));
+        employeeRepository.updateInfo(current.withInfo(name, phone, email, departmentId, jobPositionId, hiredAt));
         log.info("사원 수정 - userId={}", command.userId());
     }
 
@@ -200,7 +208,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         }
         LocalDate resignedAt = parseRequiredDate(command.resignedAt());
 
-        employeeRepository.update(current.resigned(resignedAt));
+        employeeRepository.resign(command.userId(), resignedAt);
         accountDeactivationPort.deactivate(command.userId());
 
         log.info("사원 퇴사 - userId={} resignedAt={}", command.userId(), resignedAt);

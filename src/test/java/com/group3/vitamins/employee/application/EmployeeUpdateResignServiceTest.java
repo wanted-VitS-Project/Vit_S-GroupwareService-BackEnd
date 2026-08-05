@@ -107,7 +107,7 @@ class EmployeeUpdateResignServiceTest {
                     true, "x", false, null, false, null, false, null, false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
                     .satisfies(hasCode(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED));
-            verify(employeeRepository, never()).update(any());
+            verify(employeeRepository, never()).updateInfo(any());
         }
 
         @Test
@@ -129,7 +129,7 @@ class EmployeeUpdateResignServiceTest {
             service.updateEmployee(onlyName("ADMIN", "김철수"));
 
             ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
-            verify(employeeRepository).update(captor.capture());
+            verify(employeeRepository).updateInfo(captor.capture());
             Employee saved = captor.getValue();
             assertThat(saved.getName()).isEqualTo("김철수");
             assertThat(saved.getDepartmentId()).isEqualTo(2L);      // 유지
@@ -147,9 +147,42 @@ class EmployeeUpdateResignServiceTest {
             service.updateEmployee(cmd);
 
             ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
-            verify(employeeRepository).update(captor.capture());
+            verify(employeeRepository).updateInfo(captor.capture());
             assertThat(captor.getValue().getJobPositionId()).isNull();
             verify(referenceQueryPort, never()).jobPositionExists(any());
+        }
+
+        @Test
+        @DisplayName("이름이 50자를 넘으면 EMP_INVALID_REQUEST — 저장하지 않는다")
+        void rejectsTooLongName() {
+            when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
+            assertThatThrownBy(() -> service.updateEmployee(onlyName("ADMIN", "가".repeat(51))))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+            verify(employeeRepository, never()).updateInfo(any());
+        }
+
+        @Test
+        @DisplayName("이메일 형식이 올바르지 않으면 EMP_INVALID_REQUEST — 저장하지 않는다")
+        void rejectsInvalidEmail() {
+            when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
+            UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
+                    false, null, false, null, true, "not-an-email",
+                    false, null, false, null, false, null);
+            assertThatThrownBy(() -> service.updateEmployee(cmd))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+            verify(employeeRepository, never()).updateInfo(any());
+        }
+
+        @Test
+        @DisplayName("연락처가 20자를 넘으면 EMP_INVALID_REQUEST — 저장하지 않는다")
+        void rejectsTooLongPhone() {
+            when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
+            UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
+                    false, null, true, "0".repeat(21), false, null,
+                    false, null, false, null, false, null);
+            assertThatThrownBy(() -> service.updateEmployee(cmd))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+            verify(employeeRepository, never()).updateInfo(any());
         }
     }
 
@@ -183,7 +216,7 @@ class EmployeeUpdateResignServiceTest {
             assertThatThrownBy(() -> service.resignEmployee(
                     new ResignEmployeeCommand("ADMIN", "EMP021", "2026-08-31")))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_ALREADY_RESIGNED));
-            verify(employeeRepository, never()).update(any());
+            verify(employeeRepository, never()).resign(anyString(), any());
         }
 
         @Test
@@ -203,9 +236,7 @@ class EmployeeUpdateResignServiceTest {
             EmployeeResignResult result = service.resignEmployee(
                     new ResignEmployeeCommand("ADMIN", "EMP021", "2026-08-31"));
 
-            ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
-            verify(employeeRepository).update(captor.capture());
-            assertThat(captor.getValue().getResignedAt()).isEqualTo(LocalDate.of(2026, 8, 31));
+            verify(employeeRepository).resign("EMP021", LocalDate.of(2026, 8, 31));
             verify(accountDeactivationPort).deactivate("EMP021");
             assertThat(result.resignedAt()).isEqualTo("2026-08-31");
             assertThat(result.accountStatus()).isEqualTo("INACTIVE");

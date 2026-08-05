@@ -5,6 +5,7 @@ import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 /**
@@ -38,17 +39,28 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     }
 
     /**
-     * 저장된 엔티티를 불러 가변 필드를 갱신한다({@code isNew=false} → UPDATE). 등록의 {@link #save}
-     * ({@code Persistable} 로 INSERT 강제)와 경로가 다르다. {@code saveAndFlush} 로 즉시 반영한다.
+     * 정보 수정 — 저장된 엔티티를 불러 정보 컬럼만 갱신한다({@code isNew=false} → UPDATE). 퇴사일은 건드리지
+     * 않고 {@code @DynamicUpdate} 가 바뀐 컬럼만 쓰므로 동시 퇴사 처리를 덮어쓰지 않는다.
      */
     @Override
-    public Employee update(Employee employee) {
-        EmployeeJpaEntity entity = springDataRepository.findById(employee.getUserId())
+    public void updateInfo(Employee employee) {
+        EmployeeJpaEntity entity = load(employee.getUserId());
+        entity.applyInfo(employee.getName(), employee.getDepartmentId(), employee.getJobPositionId(),
+                employee.getEmail(), employee.getPhone(), employee.getHiredAt());
+        springDataRepository.saveAndFlush(entity);
+    }
+
+    /** 퇴사 처리 — resigned_at 만 갱신한다. 정보 컬럼은 건드리지 않아 동시 정보 수정과 충돌하지 않는다. */
+    @Override
+    public void resign(String userId, LocalDate resignedAt) {
+        EmployeeJpaEntity entity = load(userId);
+        entity.resign(resignedAt);
+        springDataRepository.saveAndFlush(entity);
+    }
+
+    private EmployeeJpaEntity load(String userId) {
+        return springDataRepository.findById(userId)
                 .orElseThrow(() -> new IllegalStateException(
-                        "수정 대상 사원이 조회 직후 사라졌습니다: " + employee.getUserId()));
-        entity.apply(employee.getName(), employee.getDepartmentId(), employee.getJobPositionId(),
-                employee.getEmail(), employee.getPhone(), employee.getHiredAt(), employee.getResignedAt());
-        EmployeeJpaEntity saved = springDataRepository.saveAndFlush(entity);
-        return EmployeePersistenceMapper.toDomain(saved);
+                        "수정 대상 사원이 조회 직후 사라졌습니다: " + userId));
     }
 }

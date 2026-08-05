@@ -61,11 +61,6 @@ public class Employee {
         return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
     }
 
-    /** 퇴사 처리 (`employee.md` §5). 사원 정보는 지우지 않고 퇴사일만 기록한다(계정 비활성화는 별도 포트). */
-    public Employee resigned(LocalDate resignedAt) {
-        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
-    }
-
     public boolean isSystem() {
         return system;
     }

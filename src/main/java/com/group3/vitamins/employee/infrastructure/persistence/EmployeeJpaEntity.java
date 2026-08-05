@@ -10,6 +10,7 @@ import jakarta.persistence.Transient;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDate;
@@ -31,6 +32,10 @@ import java.time.LocalDate;
  */
 @Entity
 @Table(name = "employee")
+// 변경된 컬럼만 UPDATE 한다 — 정보 수정(§4)과 퇴사(§5)가 동시에 실행될 때 서로의 컬럼(정보 vs resigned_at)을
+// 덮어쓰는 lost-update 를 막는다. 아래 applyInfo/resign 이 각자 자기 컬럼만 건드리므로 두 작업이 충돌하지 않는다
+// (AccountEntity 와 같은 이유·같은 패턴).
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class EmployeeJpaEntity implements Persistable<String> {
@@ -100,18 +105,21 @@ public class EmployeeJpaEntity implements Persistable<String> {
     }
 
     /**
-     * 수정·퇴사 시 가변 필드를 갱신한다. 사번({@code userId})·시스템여부({@code system})는 바꾸지 않는다
-     * (사번은 PK 이자 모든 사람 참조 FK, 시스템여부는 이 경로로 안 바뀐다). 로드된 엔티티({@code isNew=false})를
-     * 대상으로 호출하므로 이후 {@code saveAndFlush} 는 UPDATE 로 나간다.
+     * 정보 수정 (`employee.md` §4). 사번·시스템여부·<b>퇴사일</b>은 건드리지 않는다 — 퇴사일을 함께 쓰면 동시
+     * 퇴사 처리를 덮어쓴다. {@code @DynamicUpdate} 와 함께 이 메서드가 바꾼 컬럼만 UPDATE 되므로 퇴사와 충돌하지 않는다.
      */
-    void apply(String name, Long departmentId, Long jobPositionId,
-               String email, String phone, LocalDate hiredAt, LocalDate resignedAt) {
+    void applyInfo(String name, Long departmentId, Long jobPositionId,
+                   String email, String phone, LocalDate hiredAt) {
         this.name = name;
         this.departmentId = departmentId;
         this.jobPositionId = jobPositionId;
         this.email = email;
         this.phone = phone;
         this.hiredAt = hiredAt;
+    }
+
+    /** 퇴사 처리 (`employee.md` §5). {@code resigned_at} 만 바꾼다 — 정보 컬럼은 건드리지 않아 동시 수정과 충돌하지 않는다. */
+    void resign(LocalDate resignedAt) {
         this.resignedAt = resignedAt;
     }
 }

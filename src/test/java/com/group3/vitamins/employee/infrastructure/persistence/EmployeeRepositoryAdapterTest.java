@@ -65,12 +65,12 @@ class EmployeeRepositoryAdapterTest {
     }
 
     @Test
-    @DisplayName("update 는 로드한 엔티티(isNew=false)를 UPDATE 한다 — PK 충돌 없이 필드가 바뀐다")
-    void updateModifiesExisting() {
+    @DisplayName("updateInfo 는 로드한 엔티티(isNew=false)를 UPDATE 한다 — PK 충돌 없이 필드가 바뀐다")
+    void updateInfoModifiesExisting() {
         adapter.save(sample("EMP021"));
 
         Employee current = adapter.findById("EMP021").orElseThrow();
-        adapter.update(current.withInfo("김철수", "010-9999-8888", null, 2L, null,
+        adapter.updateInfo(current.withInfo("김철수", "010-9999-8888", null, 2L, null,
                 LocalDate.of(2024, 3, 2)));
 
         Employee reloaded = adapter.findById("EMP021").orElseThrow();
@@ -80,14 +80,30 @@ class EmployeeRepositoryAdapterTest {
     }
 
     @Test
-    @DisplayName("update 는 퇴사일도 기록한다")
-    void updateRecordsResignation() {
+    @DisplayName("resign 은 퇴사일만 기록한다")
+    void resignRecordsDate() {
         adapter.save(sample("EMP021"));
 
-        Employee current = adapter.findById("EMP021").orElseThrow();
-        adapter.update(current.resigned(LocalDate.of(2026, 8, 31)));
+        adapter.resign("EMP021", LocalDate.of(2026, 8, 31));
 
         assertThat(adapter.findById("EMP021").orElseThrow().getResignedAt())
                 .isEqualTo(LocalDate.of(2026, 8, 31));
+    }
+
+    @Test
+    @DisplayName("updateInfo 는 퇴사일을 덮어쓰지 않는다 — 퇴사 후 정보 수정해도 resigned_at 유지")
+    void updateInfoDoesNotClobberResignation() {
+        adapter.save(sample("EMP021"));
+        adapter.resign("EMP021", LocalDate.of(2026, 8, 31));
+
+        // 퇴사 이전 스냅샷(resignedAt=null)으로 정보 수정 — 동시 수정 시나리오. resigned_at 을 되돌리면 안 된다.
+        Employee stale = Employee.restore("EMP021", "홍길동", false, 2L, 10L,
+                "hong@vitamins.com", "010-1111-2222", LocalDate.of(2024, 3, 2), null);
+        adapter.updateInfo(stale.withInfo("김철수", "010-9999-8888", "hong@vitamins.com", 2L, 10L,
+                LocalDate.of(2024, 3, 2)));
+
+        Employee reloaded = adapter.findById("EMP021").orElseThrow();
+        assertThat(reloaded.getName()).isEqualTo("김철수");                       // 정보는 반영
+        assertThat(reloaded.getResignedAt()).isEqualTo(LocalDate.of(2026, 8, 31)); // 퇴사일 유지
     }
 }

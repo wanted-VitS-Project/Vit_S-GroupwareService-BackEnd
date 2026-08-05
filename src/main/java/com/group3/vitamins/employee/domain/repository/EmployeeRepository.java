@@ -28,9 +28,15 @@ public interface EmployeeRepository {
     Optional<Employee> findById(String userId);
 
     /**
-     * 기존 사원을 수정한다 (수정·퇴사). 저장된 엔티티를 불러 필드를 갱신하므로 <b>UPDATE</b> 다
-     * (등록의 {@link #save} 는 {@code Persistable} 로 INSERT 를 강제하는 것과 대비). 구현은 {@code saveAndFlush}
-     * 로 즉시 반영해 FK 위반 등을 쓰기 시점에 드러낸다.
+     * 정보 수정 (`employee.md` §4). 저장된 엔티티를 불러 <b>정보 컬럼만</b> 갱신하는 UPDATE 다 — 퇴사일은
+     * 건드리지 않아 동시 퇴사 처리를 덮어쓰지 않는다({@code @DynamicUpdate} + 필드 분리). 등록의 {@link #save}
+     * (Persistable 로 INSERT 강제)와 경로가 다르다. 구현은 {@code saveAndFlush} 로 즉시 반영한다.
      */
-    Employee update(Employee employee);
+    void updateInfo(Employee employee);
+
+    /**
+     * 퇴사 처리 (`employee.md` §5). {@code resigned_at} 만 갱신하는 UPDATE 다 — 정보 컬럼은 건드리지 않아
+     * 동시 정보 수정과 충돌하지 않는다.
+     */
+    void resign(String userId, java.time.LocalDate resignedAt);
 }
