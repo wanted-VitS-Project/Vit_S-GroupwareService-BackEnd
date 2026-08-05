@@ -4,6 +4,8 @@ import com.group3.vitamins.global.domain.common.error.exception.ForbiddenExcepti
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
+import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
+import com.group3.vitamins.project.step.domain.exception.StepErrorCode;
 import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -13,6 +15,19 @@ import org.springframework.stereotype.Component;
 public class IssueStepAccessAdapter implements IssueStepAccessPort {
 
     private final StepAccessUseCase stepAccessUseCase;
+
+    @Override
+    public StepAccessView requireAccess(Long stepId, String requesterUserId, String role) {
+        try {
+            StepAccessUseCase.StepAccessView step =
+                    stepAccessUseCase.requireAccess(stepId, requesterUserId, role);
+            return new StepAccessView(step.stepId(), step.projectId());
+        } catch (NotFoundException e) {
+            throw new NotFoundException(StepErrorCode.STEP_NOT_FOUND, e);
+        } catch (ForbiddenException e) {
+            throw new ForbiddenException(ProjectErrorCode.PROJECT_ACCESS_DENIED, e);
+        }
+    }
 
     @Override
     public StepAccessView requireEditable(Long stepId, String requesterUserId, String role) {

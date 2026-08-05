@@ -9,17 +9,13 @@ public record ActivityLogActorResponse(
         String userId,
 
         @Schema(description = "사용자 이름", example = "이영희")
-        String name,
-
-        @Schema(description = "프로필 이미지 URL")
-        String profileImageUrl
+        String name
 ) {
 
     public static ActivityLogActorResponse from(ActivityLogResult.Actor actor) {
         return new ActivityLogActorResponse(
                 actor.userId(),
-                actor.name(),
-                actor.profileImageUrl()
+                actor.name()
         );
     }
 }
