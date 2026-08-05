@@ -33,6 +33,7 @@ import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 제목·내용 수정(APR-002) · 결재선 등록·수정(APR-009~014) · 재상신 회차 생성(SUB-005~009) ·
@@ -87,7 +89,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
             changes.add(new ActivityFieldChange("content", current.getContent(), updated.getContent()));
         }
         publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), updated.getRevisionId(),
-                command.requesterId(), changes);
+                resourceName(updated.getTitle()), command.requesterId(), changes);
 
         log.info("결재 제목·내용 수정 완료 - revisionId={}", updated.getRevisionId());
         return updated;
@@ -101,7 +103,8 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
         // 잠금 조회 — 상신(#7)이 이 트랜잭션 커밋 전까지 같은 회차의 상태를 못 바꾸게 막는다(CodeRabbit 지적 반영)
-        revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
+        ApprovalRevision revision =
+                revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
 
         lineEligibilityPolicy.assertNotEmpty(command.lines());
         lineEligibilityPolicy.assertOrderValid(
@@ -114,18 +117,23 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 lineEligibilityPolicy.assertApproversEligible(approval.getBlockId(), approverIds);
 
         List<ApprovalLine> previousLines = approvalRepository.findLinesByRevisionId(command.revisionId());
-        String previousLineLabel = String.join(",",
-                previousLines.stream().map(ApprovalLine::getApproverId).toList());
+        String previousLineLabel = previousLines.stream()
+                .sorted(Comparator.comparingInt(ApprovalLine::getSequenceNo))
+                .map(ApprovalLine::getApproverId)
+                .collect(Collectors.joining(","));
 
         List<NewApprovalLine> newLines = command.lines().stream()
                 .map(input -> new NewApprovalLine(input.approverId(), input.order()))
                 .toList();
         List<ApprovalLine> savedLines = approvalRepository.replaceLines(command.revisionId(), newLines);
 
-        String newLineLabel = String.join(",", approverIds);
+        String newLineLabel = command.lines().stream()
+                .sorted(Comparator.comparingInt(UpdateApprovalLinesCommand.LineInput::order))
+                .map(UpdateApprovalLinesCommand.LineInput::approverId)
+                .collect(Collectors.joining(","));
         if (!previousLineLabel.equals(newLineLabel)) {
             publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), command.revisionId(),
-                    command.requesterId(),
+                    resourceName(revision.getTitle()), command.requesterId(),
                     List.of(new ActivityFieldChange("lines", previousLineLabel, newLineLabel)));
         }
 
@@ -173,7 +181,8 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 command.approvalId(), nextRevisionNo, latestRevision.getTitle(), latestRevision.getContent());
 
         publishActivity(ActivityLogAction.CREATE, approval.getBlockId(), newRevision.getRevisionId(),
-                command.requesterId(), List.of(new ActivityFieldChange("title", null, newRevision.getTitle())));
+                resourceName(newRevision.getTitle()), command.requesterId(),
+                List.of(new ActivityFieldChange(null, null, null)));
 
         List<Long> fileVersionIds = approvalRepository.findDocumentsByRevisionId(latestRevision.getRevisionId())
                 .stream()
@@ -229,8 +238,9 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         ApprovalDocument saved = approvalRepository.addDocument(command.revisionId(), command.fileVersionId());
 
         String documentLabel = file.fileName() != null ? file.fileName() : String.valueOf(file.fileVersionId());
-        publishActivity(ActivityLogAction.CREATE, approval.getBlockId(), saved.getDocumentId(),
-                command.requesterId(), List.of(new ActivityFieldChange("document", null, documentLabel)));
+        publishActivity(ActivityLogAction.CREATE, approval.getBlockId(), saved.getFileVersionId(),
+                resourceName(documentLabel), command.requesterId(),
+                List.of(new ActivityFieldChange(null, null, null)));
 
         log.info("결재 문서 추가 완료 - documentId={}", saved.getDocumentId());
         return new ApprovalDocumentView(
@@ -253,8 +263,9 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 ? fileVersion.fileName() : String.valueOf(document.getFileVersionId());
         approvalRepository.deleteDocument(command.documentId());
 
-        publishActivity(ActivityLogAction.DELETE, approval.getBlockId(), command.documentId(),
-                command.requesterId(), List.of(new ActivityFieldChange("document", documentLabel, null)));
+        publishActivity(ActivityLogAction.DELETE, approval.getBlockId(), document.getFileVersionId(),
+                resourceName(documentLabel), command.requesterId(),
+                List.of(new ActivityFieldChange(null, null, null)));
 
         log.info("결재 문서 제거 완료 - documentId={}", command.documentId());
     }
@@ -288,18 +299,21 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         // SUB-002 — 상태 전이: revision IN_PROGRESS, approval IN_PROGRESS(+current_revision_no), 결재선 ACTIVE/WAITING
         ApprovalRevision submittedRevision = approvalRepository.markRevisionSubmitted(command.revisionId());
-        publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), command.revisionId(), command.requesterId(),
+        publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), command.revisionId(),
+                resourceName(submittedRevision.getTitle()), command.requesterId(),
                 List.of(new ActivityFieldChange(
                         "status", revision.getStatus().name(), submittedRevision.getStatus().name())));
         approvalRepository.markApprovalInProgress(command.approvalId(), submittedRevision.getRevisionNo());
         List<ApprovalLine> activatedLines = approvalRepository.activateLines(command.revisionId());
         Long firstActiveLineId = activatedLines.get(0).getLineId();
 
-        // TODO: SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행.
-        //       알림 도메인(NotificationRequestedEvent)이 아직 없어 주석으로만 남긴다
-        //       (text.application.service.TextCommandService 의 활동 로그 TODO와 동일한 처리).
-        // eventPublisher.publish(NotificationRequestedEvent.approvalRequested(
-        //         activatedLines.get(0).getApproverId(), command.approvalId(), submittedRevision.getRevisionId()));
+        // SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                activatedLines.get(0).getApproverId(),
+                "APPROVAL_REQUESTED",
+                "결재 요청",
+                submittedRevision.getTitle() + " 결재 요청이 도착했습니다.",
+                approval.getBlockId()));
 
         log.info("결재 상신 완료 - approvalId={}, revisionId={}, firstActiveLineId={}",
                 command.approvalId(), command.revisionId(), firstActiveLineId);
@@ -314,12 +328,17 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     }
 
     /** changes 가 비어 있으면 발행 안 함(생성자가 빈 리스트를 거부하기도 하고, 실제 변경이 없으면 로그도 없어야 함) */
-    private void publishActivity(ActivityLogAction action, Long blockId, Long resourceId, String actorId,
-                                  List<ActivityFieldChange> changes) {
+    private void publishActivity(ActivityLogAction action, Long blockId, Long resourceId, String resourceName,
+                                 String actorId, List<ActivityFieldChange> changes) {
         if (changes.isEmpty()) {
             return;
         }
-        domainEventPublisher.publish(ActivityOccurredEvent.of(action, blockId, resourceId, actorId, changes));
+        domainEventPublisher.publish(
+                ActivityOccurredEvent.of(action, blockId, resourceId, resourceName, actorId, changes));
+    }
+
+    private String resourceName(String value) {
+        return isBlank(value) ? null : value;
     }
 
     private List<ApprovalLineView> zipLinesWithEmployees(List<ApprovalLine> lines, List<EmployeeSummary> employees) {
