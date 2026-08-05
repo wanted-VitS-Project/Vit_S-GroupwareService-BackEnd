@@ -71,6 +71,7 @@
 | **`.ai/INFRA.md`** | 서버·리소스·배포 대상 관련 작업 · Docker/compose 수정 · 인프라 스크립트 작성 |
 | **`.ai/PIPELINE.md`** | `.github/workflows/` 수정 · CI/CD 잡 추가/변경 · 시크릿 참조 추가 |
 | **`.ai/docs/global/FLYWAY.md`** | Flyway SQL 작성/수정 · RDS 마이그레이션 판단 · seed 데이터 추가/변경 |
+| **`.ai/docs/global/MYBATIS.md`** | MyBatis Mapper·XML 작성/수정 · 복잡한 조회 SQL 설계 판단 · JPA/MyBatis 역할(쓰기/조회) 판단 |
 
 ### 🚨 API 는 프론트와의 계약이다
 

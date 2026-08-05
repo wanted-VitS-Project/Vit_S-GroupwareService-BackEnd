@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface SpringDataApprovalRevisionRepository extends JpaRepository<ApprovalRevisionJpaEntity, Long> {
@@ -22,6 +23,13 @@ public interface SpringDataApprovalRevisionRepository extends JpaRepository<Appr
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ApprovalRevisionJpaEntity> findTopByApprovalIdOrderByRevisionNoDesc(Long approvalId);
+
+    /**
+     * 위와 동일한 조건(최신 회차)이지만 잠금이 없는 순수 조회 버전. 블록 카드 미리보기
+     * (`ApprovalBlockDetailAdapter.loadDetails`)처럼 읽기 전용 트랜잭션에서 호출해야 하는 경우 쓴다 —
+     * `@Lock(PESSIMISTIC_WRITE)`는 `SELECT ... FOR UPDATE`라 읽기 전용 트랜잭션에서 실행하면 DB가 거부한다.
+     */
+    Optional<ApprovalRevisionJpaEntity> findFirstByApprovalIdOrderByRevisionNoDesc(Long approvalId);
 
     /** {@code updateLines}(APR-009)가 결재선 치환 직전 회차 상태를 잠금 조회로 재확인할 때 쓴다 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -41,4 +49,19 @@ public interface SpringDataApprovalRevisionRepository extends JpaRepository<Appr
                                    @Param("title") String title,
                                    @Param("content") String content,
                                    @Param("draftStatus") ApprovalStatus draftStatus);
+
+    /**
+     * SUB-002 — 상신. 호출 전에 {@code findByIdForUpdate} 로 이미 잠금·DRAFT 확인이 끝났다고 가정하고
+     * 조건 없이 전환한다(INV-07 — 락으로 이미 레이스를 막았으니 여기서 또 걸 필요 없음).
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalRevisionJpaEntity r SET r.status = :inProgress, r.submittedAt = CURRENT_TIMESTAMP, "
+            + "r.updatedAt = CURRENT_TIMESTAMP WHERE r.approvalRevisionId = :revisionId")
+    void markSubmitted(@Param("revisionId") Long revisionId, @Param("inProgress") ApprovalStatus inProgress);
+
+    /** 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) — 이 결재의 회차 전부를 논리 삭제한다 */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalRevisionJpaEntity r SET r.deletedAt = :deletedAt, r.updatedAt = :deletedAt "
+            + "WHERE r.approvalId = :approvalId")
+    void softDeleteByApprovalId(@Param("approvalId") Long approvalId, @Param("deletedAt") LocalDateTime deletedAt);
 }
