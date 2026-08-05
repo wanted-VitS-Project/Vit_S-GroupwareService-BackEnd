@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.text.infrastructure.blockdetail.TextDetailMapper">
+
+    <select id="findByTxtIds"
+            resultType="com.group3.vitamins.text.infrastructure.blockdetail.TextDetailRow">
+        SELECT txt_id AS txtId,
+        content AS content
+        FROM text
+        WHERE txt_id IN
+        <foreach item="id" collection="txtIds" open="(" separator="," close=")">#{id}</foreach>
+        AND deleted_at IS NULL
+    </select>
+
+</mapper>

@@ -1,4 +1,4 @@
-package com.group3.vitamins.project.block.infrastructure.adapter;
+package com.group3.vitamins.checklist.infrastructure.blockdetail;
 
 import com.group3.vitamins.checklist.application.service.ChecklistHandlerService;
 import com.group3.vitamins.project.block.application.port.BlockDetailPort;
@@ -29,11 +29,10 @@ public class ChecklistBlockDetailAdapter implements BlockDetailPort {
         return BlockType.CHECKLIST;
     }
 
-    /** 항목이 0개인 블록 행만 만든다. 항목은 POST /blocks/checklists/{chkBlockId}/items 가 넣는다. */
+    /** 항목이 0개인 블록 행만 만든다. INSERT 는 체크리스트 도메인이 JPA 로 처리하고 PK 를 돌려준다. */
     @Override
     public Long createDetail(Long blockId) {
-        checklistDetailMapper.insertEmpty(blockId);
-        return checklistDetailMapper.findChkBlockIdByBlockId(blockId);
+        return checklistHandlerService.create(blockId);
     }
 
     /** 체크리스트 도메인의 삭제 처리를 재사용한다 — 항목 일괄 정리가 그쪽에 있다. */

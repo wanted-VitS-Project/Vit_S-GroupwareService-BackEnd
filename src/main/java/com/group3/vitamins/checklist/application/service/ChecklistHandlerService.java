@@ -19,6 +19,13 @@ public class ChecklistHandlerService {
     private final ChecklistBlockRepository checklistBlockRepository;
     private final ChecklistRepository checklistRepository;
 
+    /** 블록 생성 시 항목이 0개인 상세 행을 만든다. 항목 추가는 ChecklistCommandService 소관이다. */
+    public Long create(Long blockId) {
+        Long chkBlockId = checklistBlockRepository.create(blockId);
+        log.info("체크리스트 블록 상세 행 생성 - blockId={}, chkBlockId={}", blockId, chkBlockId);
+        return chkBlockId;
+    }
+
     /**
      * 체크리스트 블록 삭제 이벤트 수신.
      *
