@@ -21,9 +21,9 @@ public class IssueStepAccessAdapter implements IssueStepAccessPort {
                     stepAccessUseCase.requireEditable(stepId, requesterUserId, role);
             return new StepAccessView(step.stepId(), step.projectId());
         } catch (NotFoundException e) {
-            throw new NotFoundException(IssueErrorCode.ISS_STEP_NOT_FOUND);
+            throw new NotFoundException(IssueErrorCode.ISS_STEP_NOT_FOUND, e);
         } catch (ForbiddenException e) {
-            throw new ForbiddenException(IssueErrorCode.ISS_EDIT_PERMISSION_REQUIRED);
+            throw new ForbiddenException(IssueErrorCode.ISS_EDIT_PERMISSION_REQUIRED, e);
         }
     }
 }

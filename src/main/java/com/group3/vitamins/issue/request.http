@@ -1,41 +1,32 @@
 ### 로그인 (세션 쿠키 발급 — 아래 요청들 실행 전에 먼저 실행)
+### LOCALADMIN은 로컬 전용 ADMIN 계정이다. password는 커밋하지 않는다 — 로컬에서 직접 채워 넣을 것.
 POST localhost:8080/api/v1/auth/login
 Content-Type: application/json
 
 {
     "userId": "LOCALADMIN",
-    "password": "LocalDev!2026"
+    "password": ""
 }
 
-### 0-0a. [준비, 최초 로그인 계정만] 약관 동의 — 로그인 응답에 termsAgreementRequired=true 면 먼저 실행. 본문 없음
-POST localhost:8080/api/v1/auth/terms-agreements
+### 0-0a. [해당 없음] ADMIN은 약관 게이트 대상이 아니다(auth.md §6-7) — 실행 불필요
+### 0-0b. [해당 없음] LOCALADMIN은 must_change_password=false로 발급돼 있다 — 실행 불필요
 
-### 0-0b. [준비, 최초 로그인 계정만] 비밀번호 변경 — 로그인 응답에 passwordStatus=RESET_REQUIRED 면 실행 (currentPassword 생략). 이후 요청은 세션이 유지되므로 재로그인 불필요
-PATCH localhost:8080/api/v1/auth/password
-Content-Type: application/json
-
-{
-    "newPassword": "실제 비밀번호로 교체",
-    "newPasswordConfirm": "실제 비밀번호로 교체"
-}
-
-### 이슈 생성 — step 1(요구사항 정의서 작성 · 프로젝트 1)에 이슈를 만든다.
-### EMP001은 project_member EDITOR(V20260805150000 seed)라 별도 준비 없이 바로 호출 가능하다.
-### blockIds 1·2 는 seed 블록(요구사항 정의서 TEXT · 정의서 작성 체크리스트 CHECKLIST), 둘 다 step 1 소속이다.
+### 이슈 생성 — step 15(로컬 테스트 스텝 · 로컬 테스트 프로젝트, 직접 INSERT한 데이터)에 이슈를 만든다.
+### LOCALADMIN은 ADMIN이라 모든 Step에 EDITOR로 자동 인정된다(StepAccessPolicy) — project_member 등록이 필요 없다.
+### 신규 스텝이라 아직 담당자·연결할 Block이 없다 — 둘 다 생략(명세 §2, 둘 다 선택값)하고 본체만 생성한다.
 POST localhost:8080/api/v1/steps/15/issues
 Content-Type: application/json
 
 {
-    "title": "요구사항 정의서 최종 검토",
-    "content": "발주처 회신 반영 여부 확인",
-    "priority": "HIGH",
-    "dueDate": "2026-08-10T18:00:00",
-    "assigneeIds": ["EMP001"],
-    "blockIds": [1, 2]
+    "title": "로컬 테스트 이슈",
+    "content": "로컬 검증용",
+    "priority": "MEDIUM",
+    "dueDate": "2026-08-10T18:00:00"
 }
 
-### [실패 케이스] 다른 Step의 Block 포함 — 400 ISS_BLOCK_STEP_MISMATCH 확인용 (block 3은 step 2 소속)
-POST localhost:8080/api/v1/steps/1/issues
+### [실패 케이스] 다른 Step의 Block 포함 — 400 ISS_BLOCK_STEP_MISMATCH 확인용
+### block 3(아키텍처 설계 노트)은 seed step 2 소속이라 step 15와 다르다.
+POST localhost:8080/api/v1/steps/15/issues
 Content-Type: application/json
 
 {
@@ -45,8 +36,8 @@ Content-Type: application/json
 }
 
 ### [실패 케이스] 프로젝트 참여자가 아닌 담당자 — 400 ISS_ASSIGNEE_NOT_PROJECT_MEMBER 확인용
-### EMP004는 project_member NONE(project 1, seed 데이터)이라 담당자로 지정할 수 없다.
-POST localhost:8080/api/v1/steps/1/issues
+### EMP004는 step 15가 속한(직접 INSERT한) 프로젝트의 project_member가 아니다.
+POST localhost:8080/api/v1/steps/15/issues
 Content-Type: application/json
 
 {

@@ -12,10 +12,6 @@ import com.group3.vitamins.issue.domain.IssueStatus;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import com.group3.vitamins.issue.domain.model.Issue;
 import com.group3.vitamins.issue.domain.repository.IssueRepository;
-import com.group3.vitamins.issue.infrastructure.persistence.IssueAssignEntity;
-import com.group3.vitamins.issue.infrastructure.persistence.IssueBlockEntity;
-import com.group3.vitamins.issue.infrastructure.persistence.SpringDataIssueAssignRepository;
-import com.group3.vitamins.issue.infrastructure.persistence.SpringDataIssueBlockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,8 +28,6 @@ public class IssueCommandService implements IssueCommandUseCase {
     private static final int TITLE_MAX_LENGTH = 200;
 
     private final IssueRepository issueRepository;
-    private final SpringDataIssueAssignRepository issueAssignRepository;
-    private final SpringDataIssueBlockRepository issueBlockRepository;
     private final IssueStepAccessPort issueStepAccessPort;
     private final IssueAssigneePort issueAssigneePort;
     private final IssueBlockPort issueBlockPort;
@@ -49,7 +43,7 @@ public class IssueCommandService implements IssueCommandUseCase {
         IssueStepAccessPort.StepAccessView step = issueStepAccessPort.requireEditable(
                 command.stepId(), command.requesterUserId(), command.role());
         List<IssueAssigneePort.AssigneeView> assignees = issueAssigneePort.validateAssignable(
-                step.stepId(), assigneeIds);
+                step.projectId(), assigneeIds);
         List<IssueBlockPort.BlockView> blocks = issueBlockPort.validateLinkable(
                 step.stepId(), blockIds);
 
@@ -63,12 +57,8 @@ public class IssueCommandService implements IssueCommandUseCase {
                 command.requesterUserId(),
                 LocalDateTime.now()));
 
-        issueAssignRepository.saveAll(assigneeIds.stream()
-                .map(userId -> IssueAssignEntity.link(saved.getIssueId(), userId))
-                .toList());
-        issueBlockRepository.saveAll(blockIds.stream()
-                .map(blockId -> IssueBlockEntity.link(saved.getIssueId(), blockId))
-                .toList());
+        issueRepository.saveAssignees(saved.getIssueId(), assigneeIds);
+        issueRepository.saveBlockLinks(saved.getIssueId(), blockIds);
 
         return toResult(saved, assignees, blocks);
     }

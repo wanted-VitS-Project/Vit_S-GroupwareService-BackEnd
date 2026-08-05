@@ -1,12 +1,12 @@
 package com.group3.vitamins.issue.infrastructure.adapter;
 
-import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.port.IssueAssigneePort;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
-import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import com.group3.vitamins.project.domain.model.MemberPermission;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +20,10 @@ import java.util.Map;
 public class IssueAssigneeAdapter implements IssueAssigneePort {
 
     private final EmployeeLookupPort employeeLookupPort;
-    private final StepAccessUseCase stepAccessUseCase;
+    private final ProjectAccessUseCase projectAccessUseCase;
 
     @Override
-    public List<AssigneeView> validateAssignable(Long stepId, List<String> userIds) {
+    public List<AssigneeView> validateAssignable(Long projectId, List<String> userIds) {
         if (userIds.isEmpty()) {
             return List.of();
         }
@@ -34,7 +34,7 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
         }
 
         for (String userId : userIds) {
-            requireProjectParticipant(stepId, userId);
+            requireProjectParticipant(projectId, userId);
         }
 
         return userIds.stream()
@@ -42,11 +42,14 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
                 .toList();
     }
 
-    /** 담당자의 스텝 접근 권한 판정은 스텝 도메인이 노출한 StepAccessUseCase에 위임한다 — 로직을 복제하지 않는다. */
-    private void requireProjectParticipant(Long stepId, String userId) {
-        try {
-            stepAccessUseCase.requireAccess(stepId, userId, "");
-        } catch (ForbiddenException | NotFoundException e) {
+    /**
+     * ASN-003(담당자는 프로젝트 참여자여야 한다)은 스텝 단위 오버라이드와 무관하다 — 그래서 스텝 접근
+     * 여부(StepAccessUseCase)가 아니라 프로젝트 참여 여부(ProjectAccessUseCase)만 본다. 프로젝트 도메인이
+     * 이미 노출한 인바운드 유스케이스를 재사용해 project_member 조회 로직을 복제하지 않는다.
+     */
+    private void requireProjectParticipant(Long projectId, String userId) {
+        MemberPermission permission = projectAccessUseCase.resolvePermission(projectId, userId, "");
+        if (permission == MemberPermission.NONE) {
             throw new ValidationException(IssueErrorCode.ISS_ASSIGNEE_NOT_PROJECT_MEMBER);
         }
     }
