@@ -141,7 +141,7 @@
 | 인증 필요 | Y · 기안자 본인 |
 | 요구사항 | APR-007 |
 
-**Response** — `204 No Content`, `data: null`
+**Response** — `204 No Content` (응답 본문 없음)
 
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|

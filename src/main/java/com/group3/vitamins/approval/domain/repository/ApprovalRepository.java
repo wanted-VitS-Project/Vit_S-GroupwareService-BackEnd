@@ -77,7 +77,8 @@ public interface ApprovalRepository {
      * 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) 시 호출 — {@code approval}과 그 아래
      * 모든 {@code approval_revision}·{@code approval_line}을 논리 삭제한다. 호출 전에 이미
      * {@code IN_PROGRESS}가 아님이 확인된 상태라고 가정한다. {@code approval_document}는 애초에
-     * 하드 삭제 전용(APR-007)이라 {@code deleted_at}을 안 쓰므로 여기서 건드리지 않는다.
+     * 하드 삭제 전용(APR-007)이라 {@code deleted_at}이 없다 — 삭제될 회차를 참조하는 문서가 안 남게
+     * 이 메서드가 먼저 하드 삭제까지 함께 처리한다(CodeRabbit 지적 반영).
      */
     void softDeleteCascade(Long approvalId, LocalDateTime deletedAt);
 }

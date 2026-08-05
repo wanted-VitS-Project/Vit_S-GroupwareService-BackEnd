@@ -199,6 +199,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public void softDeleteCascade(Long approvalId, LocalDateTime deletedAt) {
+        springDataApprovalDocumentRepository.deleteAllByApprovalId(approvalId);
         springDataApprovalLineRepository.softDeleteByApprovalId(approvalId, deletedAt);
         springDataApprovalRevisionRepository.softDeleteByApprovalId(approvalId, deletedAt);
         springDataApprovalRepository.softDelete(approvalId, deletedAt);

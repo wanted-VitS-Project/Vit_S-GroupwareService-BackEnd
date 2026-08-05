@@ -156,7 +156,7 @@ public class ApprovalRevisionController {
                     description = "APPROVAL_REVISION_NOT_DRAFT")
     })
     @DeleteMapping("/{approvalId}/revisions/{revisionId}/documents/{documentId}")
-    public ResponseEntity<ApiResponse<Void>> removeDocument(
+    public ResponseEntity<Void> removeDocument(
             @Parameter(description = "결재 구분 번호", example = "1")
             @PathVariable Long approvalId,
             @Parameter(description = "상신 회차 구분 번호", example = "1")
@@ -168,8 +168,8 @@ public class ApprovalRevisionController {
         approvalCommandUseCase.removeDocument(
                 new RemoveApprovalDocumentCommand(approvalId, revisionId, documentId, userId));
 
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.of(204, "제거 성공", null));
+        // 204 No Content 는 본문을 가질 수 없다(RFC 9110) — ApiResponse 래핑 없이 빈 응답으로 반환한다
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "결재선 등록·수정",

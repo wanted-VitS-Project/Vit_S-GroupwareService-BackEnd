@@ -1,12 +1,12 @@
 # 🔔 Notification API — 알림
 
-**상태**: `📝 초안` — 노션 미반영. **이 상태로는 구현 금지**(`AGENTS.md` §3). 노션에 반영 후 `✅ 확정`으로 바꿔야 시작 가능
+**상태**: `✅ 확정` — 노션 원본 4개 전부 대조 완료(2026-08-05). 이탈 금지 규칙 전면 적용(`../API.md` §0)
 **최종 업데이트**: 2026-08-05 · **담당**: 이강욱
-**노션**: 미반영 — 이 문서를 노션에 옮긴 뒤 상태를 `✅ 확정`으로 바꿀 것
+**노션**: 확인 필요 — 노션 링크 채워넣기. 검토 중 발견한 수정사항(아래 각 절 참고)을 노션에도 반영했는지 확인
 **범위**: 알림 REST API 4개(목록조회·삭제·이동대상조회·전체읽음처리). 생성 이벤트 인프라(`#27`)는 REST 엔드포인트가 없어 여기 없음
 
-> ⚠️ **이 문서는 노션에서 그대로 옮겨온 게 아니다.** `.ai/docs/domain/결재·알림/NOTI-V1.md`(GEN/VIW/ACT 요구사항)를 근거로 이강욱이 초안을 잡은 것이다.
-> 실제 구현 전에 **반드시 팀 리뷰 → 노션 반영 → 이 문서 상태를 `✅ 확정`으로 갱신**하는 절차를 거쳐야 한다(`.ai/api/README.md` 흐름 ①).
+> ✅ **노션 원본을 하나씩 받아 대조 완료 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
+> 검토 중 잡은 것: `category` 값 형식 확정(영문 접두어), 이동대상조회의 중복 Response Parameter 표 정리, 필드명 오차(`markedCount`) 등 — 노션에도 반영됐는지 재확인 필요.
 > 요구사항 근거: [`../docs/domain/결재·알림/NOTI-V1.md`](../docs/domain/결재·알림/NOTI-V1.md)
 
 ## 엔드포인트
@@ -56,6 +56,7 @@
 | `data.totalPages` | int | |
 
 **Success Example**
+
 ```json
 {
   "httpStatus": 200,
@@ -68,6 +69,7 @@
         "notificationType": "APPROVAL_REQUESTED",
         "title": "결재 요청",
         "message": "출장비 정산 결재 요청이 도착했습니다.",
+        "readAt": null,
         "createdAt": "2026-08-01T09:00:00"
       }
     ],
@@ -96,18 +98,16 @@
 
 **Request** — `notificationId`(Path, long, Y)
 
-**Response** — `204 No Content`, `data: null`
+**Response** — `204 No Content` (응답 본문 없음 — 204는 RFC 9110상 본문을 가질 수 없다)
 
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 204 | No Content | – | 삭제 성공 |
-| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
-| 403 | Forbidden | `NOTIFICATION_FORBIDDEN` | 다른 사용자의 알림 |
-| 404 | Not Found | `NOTIFICATION_NOT_FOUND` | 존재하지 않거나 이미 삭제됨(구분 안 함) |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 로그인이 필요합니다 |
+| 403 | Forbidden | `NOTIFICATION_FORBIDDEN` | 다른 사용자의 알림 삭제 시도 |
+| 404 | Not Found | `NOTIFICATION_NOT_FOUND` | 존재하지 않거나 이미 삭제된 알림 |
 
-**비즈니스 규칙**: 논리 삭제(`deleted_at`), 하드 삭제 아님(ACT-001) · 이미 삭제된 것과 존재하지 않는 것은 같은 404로 응답해 존재 여부를 노출하지 않음(ACT-003).
-
-⚠️ **확인 필요**: 타인 알림(403)과 이미 삭제/미존재(404)를 다른 코드로 낼지, 전부 404로 통일해 존재 자체를 숨길지 — `NOTI-V1.md` ACT-002/003 문구가 완전히 명확하지 않아 팀 확인 필요.
+**비즈니스 규칙**: 수신자 본인만 삭제 가능 · 논리 삭제(`deleted_at`), 하드 삭제 아님(ACT-001) · 이미 삭제된 알림 재삭제 요청은 404(멱등 처리, ACT-003).
 
 ---
 
@@ -119,37 +119,42 @@
 | 인증 필요 | Y · 본인 알림만 |
 | 요구사항 | VIW-006~008 · ACT-004 |
 
-**Request** — `notificationId`(Path, long, Y)
+**Request**
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|:---:|---|
+| `notificationId` | Path | long | Y | 이동 대상을 조회할 알림 구분 번호 |
 
 **Response**
 
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
-| `data.type` | String | 도메인 무관 타입. 예: `APPROVAL`. 매핑 없으면 `NONE`(에러 아님) |
-| `data.targetId` | long | 예: `approvalId`. `type=NONE`이면 `null` |
-| `data.extra` | Object | 도메인별 부가 정보. 결재면 `{revisionId}` |
+| `data.type` | String | 이동 대상 도메인 유형(`APPROVAL`/`ISSUE` 등 — 확장 가능한 문자열). `NONE`이면 이동 대상 없음 |
+| `data.targetId` | long | 이동 대상 구분 번호(도메인마다 의미 다름 — `APPROVAL`이면 `approvalId`). `type=NONE`이면 `null` |
+| `data.extra` | Object, nullable | 도메인별 부가 정보(선택). 결재면 `{revisionId}` |
 
-**Success Example**
+**Success Example — 도메인별 예시**
+
 ```json
-{
-  "httpStatus": 200,
-  "message": "조회 성공",
-  "data": {
-    "type": "APPROVAL",
-    "targetId": 7,
-    "extra": { "revisionId": 12 }
-  }
-}
+{ "httpStatus": 200, "message": "알림 이동 대상 조회 성공", "data": { "type": "APPROVAL", "targetId": 55, "extra": { "revisionId": 56 } } }
+```
+
+```json
+{ "httpStatus": 200, "message": "알림 이동 대상 조회 성공", "data": { "type": "ISSUE", "targetId": 12, "extra": null } }
+```
+
+```json
+{ "httpStatus": 200, "message": "알림 이동 대상 조회 성공", "data": { "type": "NONE", "targetId": null, "extra": null } }
 ```
 
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 200 | OK | – | 조회 성공(매핑 없어도 `type=NONE`으로 200) |
-| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
-| 403 | Forbidden | `NOTIFICATION_FORBIDDEN` | 다른 사용자의 알림 |
-| 404 | Not Found | `NOTIFICATION_NOT_FOUND` | 존재하지 않음 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 로그인이 필요합니다 |
+| 403 | Forbidden | `NOTIFICATION_FORBIDDEN` | 다른 사용자의 알림 조회 시도 |
+| 404 | Not Found | `NOTIFICATION_NOT_FOUND` | 알림을 찾을 수 없음(연결된 block 삭제 포함) |
 
-**비즈니스 규칙**: `notification.block_id` → `block.type`을 거쳐 판정(VIW-007), `block_id`가 없으면 `type=NONE` · 조회 성공 시 **자동으로 읽음 처리**됨(`read_at` 기록, ACT-004) · 원본 업무 페이지로 바로 가지 않고 결재관리 상세로만 이동(VIW-008, 프론트 라우팅 규칙이라 이 API 자체엔 영향 없음).
+**비즈니스 규칙**: 수신자 본인만 조회 가능 · **도메인 독립성** — 이 API는 알림 도메인 소유이며 특정 도메인에 종속되지 않는다. `type`은 개방형 값이고 결재는 그중 하나일 뿐이다(새 도메인 추가 시 이 API 자체는 수정 불필요, `INV-02`) · `notification.block_id` → `block.type`을 거쳐 판정(VIW-007), `block_id`가 없거나 아직 이동 로직이 없는 타입이면 `type=NONE`(에러 아님) · 조회 성공 시 **자동으로 읽음 처리**됨(`read_at` 기록, ACT-004) · 원본 업무 페이지로 바로 가지 않고 결재관리 상세로만 이동(VIW-008, 프론트 라우팅 규칙).
 
 ---
 
@@ -167,14 +172,20 @@
 
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
-| `data.processedCount` | int | `read_at`을 새로 기록한 알림 수 |
+| `data.markedCount` | int | 이번에 읽음 처리된 알림 개수 |
+
+**Success Example**
+
+```json
+{ "httpStatus": 200, "message": "전체 읽음 처리 성공", "data": { "markedCount": 5 } }
+```
 
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
 | 200 | OK | – | 처리 성공(대상 0건이어도 200) |
-| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 로그인이 필요합니다 |
 
-**비즈니스 규칙**: `read_at IS NULL`인 본인 알림 전체를 일괄 갱신(ACT-005) · 이미 읽은 알림은 건드리지 않음.
+**비즈니스 규칙**: 로그인 사용자의 `read_at IS NULL`인 알림 전체가 대상(ACT-005) · 대상 알림들의 `read_at`을 현재 시각으로 일괄 기록.
 
 ---
 
