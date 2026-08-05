@@ -34,7 +34,7 @@ public class ActivityLogEntity {
     @Column(name = "resource_id")
     private Long resourceId;
 
-    @Column(name = "resource_name", length = 255)
+    @Column(name = "resource_name", columnDefinition = "text")
     private String resourceName;
 
     @Column(name = "field", length = 100)

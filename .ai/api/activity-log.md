@@ -38,7 +38,7 @@ Activity Log는 Sprint1에서 BE가 완성된 자연어 문장을 만들지 않�
 | --- | --- | --- | --- |
 | `blockId` | Long | N | 해당 Block의 활동 기록만 조회 |
 | `cursor` | Long | N | 이전 응답의 `nextCursor` |
-| `size` | int | N | 조회 개수, 기본값 `20` |
+| `size` | int | N | 조회 개수, 기본값 `20`, 최대값 `100` |
 
 ```text
 GET /api/v1/steps/10/activity-logs
@@ -266,12 +266,10 @@ Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 �
 | 400 | `ACTIVITY_LOG_CURSOR_INVALID` | 잘못된 커서 |
 | 400 | `ACTIVITY_LOG_SIZE_INVALID` | 잘못된 조회 개수 |
 | 400 | `ACTIVITY_LOG_BLOCK_STEP_MISMATCH` | Block이 요청한 Step에 속하지 않음 |
-| 401 | `AUTH_TOKEN_EXPIRED` | 인증 토큰 만료 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `PROJECT_ACCESS_DENIED` | 프로젝트 접근 권한 없음 |
 | 404 | `STEP_NOT_FOUND` | Step이 존재하지 않음 |
 | 404 | `BLOCK_NOT_FOUND` | Block이 존재하지 않음 |
-
-> 인증 공통 구현이 `AUTH_UNAUTHENTICATED`를 사용 중이면 `AUTH_TOKEN_EXPIRED`와 통일 여부를 별도 확인한다.
 
 ---
 
@@ -313,7 +311,7 @@ Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 �
 | `action` | `CREATE`, `MODIFY`, `DELETE` |
 | `blockId` | 활동이 발생한 Block ID |
 | `resourceId` | Block 내부 데이터 ID. Block 자체 활동이면 `null` |
-| `resourceName` | Block 내부 데이터 표시명 스냅샷. Block 자체 활동 또는 표시명이 없으면 `null` |
+| `resourceName` | Block 내부 데이터 표시명 스냅샷. Block 자체 활동 또는 표시명이 없으면 `null`. DB에는 `TEXT`로 저장 |
 | `actorId` | 현재 인증 사용자의 사번 |
 | `changes` | 변경 필드와 변경 전·후 값 목록 |
 

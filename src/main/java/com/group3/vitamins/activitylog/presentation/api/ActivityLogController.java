@@ -38,7 +38,7 @@ public class ActivityLogController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "ACTIVITY_LOG_CURSOR_INVALID / ACTIVITY_LOG_SIZE_INVALID / ACTIVITY_LOG_BLOCK_STEP_MISMATCH"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-                    description = "AUTH_TOKEN_EXPIRED — 인증 토큰 만료"),
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "PROJECT_ACCESS_DENIED — 프로젝트 접근 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
@@ -55,7 +55,7 @@ public class ActivityLogController {
             @Parameter(description = "이전 응답의 nextCursor")
             @RequestParam(required = false) Long cursor,
 
-            @Parameter(description = "조회 개수, 기본값 20")
+            @Parameter(description = "조회 개수, 기본값 20, 최대 100")
             @RequestParam(required = false) Integer size,
 
             Authentication authentication

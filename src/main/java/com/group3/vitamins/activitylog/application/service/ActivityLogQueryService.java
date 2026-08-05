@@ -25,6 +25,7 @@ import java.util.Set;
 public class ActivityLogQueryService implements ActivityLogQueryUseCase {
 
     private static final int DEFAULT_SIZE = 20;
+    private static final int MAX_SIZE = 100;
     private static final Set<String> GLOBAL_ACCESS_ROLES = Set.of("ADMIN", "MASTER");
 
     private final ActivityLogQueryPort activityLogQueryPort;
@@ -60,7 +61,7 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
         if (size == null) {
             return DEFAULT_SIZE;
         }
-        if (size <= 0) {
+        if (size <= 0 || size > MAX_SIZE) {
             throw new ValidationException(ActivityLogErrorCode.ACTIVITY_LOG_SIZE_INVALID);
         }
         return size;
