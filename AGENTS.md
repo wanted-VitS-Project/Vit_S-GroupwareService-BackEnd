@@ -1,8 +1,8 @@
 # 그룹웨어 서비스 (3조) — AI 협업 지침
 
+**최종 업데이트**: 2026-08-04 (§1·§3 — `.ai/ARCHITECTURE.md` 신설 등록, 헥사고날 구조 확정)
 **최종 업데이트**: 2026-08-04 (§3 상태 게이트 완화 — 노션 동기화 확인을 구현 게이트에서 제거, 로컬 `.ai/docs` 마킹이 정본)
 **최종 업데이트**: 2026-08-03 (§9 완화 — 명시적 요청 시 커밋·푸시 실행 허용, PR·이슈는 계속 금지)
-**최종 업데이트**: 2026-07-28 (AI 문서 체계 초기 구축)
 **작성/관리**: 김동현 (DevOps)
 
 > 이 파일이 **메인 규칙 파일**이다. 루트의 `CLAUDE.md` 는 이 파일을 가리키는 얇은 포인터다.
@@ -24,6 +24,7 @@
 | **도메인 모델** | `.ai/DOMAIN.md` | 스테이지·스텝·블록·이슈 정의 + 확정 결정 |
 | **유스케이스** | `.ai/USECASE.md` | 공고→실적 전 과정 흐름 (UC-01~19) |
 | **API 규칙** | `.ai/API.md` | 명세 이탈 방지 규칙 + 공통 컨벤션 |
+| **아키텍처 컨벤션** | `.ai/ARCHITECTURE.md` | 헥사고날 계층 구조 · 패키지 네이밍 규칙 |
 | **API 명세 사본** | `.ai/api/{도메인}.md` | 노션 명세의 작업용 스냅샷 (도메인별) |
 | 협업 규칙 | `.ai/CONVENTION.md` | 브랜치·커밋·PR·이슈 규칙 |
 | 인프라 인벤토리 | `.ai/INFRA.md` | 서버·리소스 구조 (실제 값은 마스킹) |
@@ -65,12 +66,11 @@
 |------|-----------------|
 | **`.ai/DOMAIN.md`** | Entity · 테이블 · 마이그레이션 작성/수정 · 도메인 설계 판단 · 스테이지/스텝/블록/이슈가 관련된 모든 작업 |
 | **`.ai/API.md`** | Controller · Service · DTO · Repository 작성/수정 · 엔드포인트 추가/변경 · Request/Response 구조 변경 · 에러코드 추가/변경 · 사용자가 "API 만들어줘" 라고 할 때 |
+| **`.ai/ARCHITECTURE.md`** | 새 도메인 패키지 생성 · Controller/Service/Repository 등 레이어 구조 판단 · 패키지 위치 결정 |
 | **`.ai/CONVENTION.md`** | 브랜치 생성 · 커밋 메시지 작성 · PR/이슈 작성 · 브랜치 전략 판단 |
 | **`.ai/INFRA.md`** | 서버·리소스·배포 대상 관련 작업 · Docker/compose 수정 · 인프라 스크립트 작성 |
 | **`.ai/PIPELINE.md`** | `.github/workflows/` 수정 · CI/CD 잡 추가/변경 · 시크릿 참조 추가 |
 | **`.ai/docs/global/FLYWAY.md`** | Flyway SQL 작성/수정 · RDS 마이그레이션 판단 · seed 데이터 추가/변경 |
-| **`.ai/docs/global/PERSISTENCE.md`** | JPA/MyBatis 사용 기준 판단 · Repository/Mapper 작성/수정 · Mapper XML 작성/수정 |
-| **`.ai/docs/global/MYBATIS.md`** | MyBatis Mapper 인터페이스 작성/수정 · Mapper XML 작성/수정 · 동적 SQL 작성 |
 
 ### 🚨 API 는 프론트와의 계약이다
 

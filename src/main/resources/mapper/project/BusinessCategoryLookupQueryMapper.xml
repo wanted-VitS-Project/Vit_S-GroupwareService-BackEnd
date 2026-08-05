@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.infrastructure.adapter.BusinessCategoryLookupQueryMapper">
+
+    <select id="findByIds"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.BusinessCategoryRow">
+        SELECT business_category_id AS categoryId, name, code
+          FROM business_category
+         WHERE deleted_at IS NULL
+           AND business_category_id IN
+        <foreach collection="categoryIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>

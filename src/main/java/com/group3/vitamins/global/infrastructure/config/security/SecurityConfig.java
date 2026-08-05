@@ -3,6 +3,7 @@ package com.group3.vitamins.global.infrastructure.config.security;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.DispatcherType;
 import com.group3.vitamins.auth.infrastructure.web.PasswordResetGateFilter;
+import com.group3.vitamins.auth.infrastructure.web.TermsAgreementGateFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import lombok.extern.slf4j.Slf4j;
@@ -109,9 +110,19 @@ public class SecurityConfig {
         return new PasswordResetGateFilter(resolver);
     }
 
+    /**
+     * 최초 로그인 약관 동의 게이트 (`auth.md` §6-7). 비밀번호 게이트보다 <b>앞</b>에 선다 — 약관 → 비번 순서.
+     */
+    @Bean
+    public TermsAgreementGateFilter termsAgreementGateFilter(
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) {
+        return new TermsAgreementGateFilter(resolver);
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    SecurityContextRepository securityContextRepository,
+                                                   TermsAgreementGateFilter termsAgreementGateFilter,
                                                    PasswordResetGateFilter passwordResetGateFilter)
             throws Exception {
         http
@@ -151,8 +162,10 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
                 )
-                // 인가가 끝난 뒤에 건다 — 미인증 요청은 401 이 먼저 나가야 한다
-                .addFilterAfter(passwordResetGateFilter, AuthorizationFilter.class);
+                // 인가가 끝난 뒤에 건다 — 미인증 요청은 401 이 먼저 나가야 한다.
+                // 순서: AuthorizationFilter → 약관 게이트 → 비번 게이트 (약관 → 비번 강제, auth.md §6-7)
+                .addFilterAfter(termsAgreementGateFilter, AuthorizationFilter.class)
+                .addFilterAfter(passwordResetGateFilter, TermsAgreementGateFilter.class);
 
         return http.build();
     }

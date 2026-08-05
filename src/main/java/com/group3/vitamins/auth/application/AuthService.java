@@ -172,6 +172,20 @@ public class AuthService {
     }
 
     /**
+     * 약관 동의 — 최초 로그인 시 1회 (`.ai/api/auth.md` §5).
+     *
+     * <p>동의 시각을 기록해 약관 게이트를 해제한다. 재설정({@code resetPassword})은 이 값을 건드리지 않으므로
+     * 재로그인 시 약관을 다시 받지 않는다. 이미 동의한 계정이 다시 호출해도 시각만 갱신될 뿐 무해하다(멱등).
+     */
+    @Transactional
+    public void agreeTerms(String userId) {
+        AccountEntity account = accountRepository.findByUserId(userId)
+                .orElseThrow(() -> new UnauthorizedException(AuthErrorCode.AUTH_UNAUTHENTICATED));
+        account.agreeTerms(LocalDateTime.now(clock));
+        log.info("약관 동의 완료 — accountId={}", account.getAccountId());
+    }
+
+    /**
      * 명세: 잠금 응답의 {@code message} 에 해제 시각을 담는다. 코드는 그대로 둔다.
      *
      * <p>상태코드는 <b>423</b> 이다 — 비활성(403)과 달리 시간이 지나면 스스로 풀리므로 프론트 분기가 다르다.

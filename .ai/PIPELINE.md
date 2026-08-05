@@ -216,10 +216,10 @@ SHA 는 불변이라 이 위험이 사라진다.
 2. Swagger 어노테이션 누락 (`@Tag` / `@Operation` / `@ApiResponses` / `@Schema`)
 3. PUBLIC 저장소 민감 정보 노출
 4. Boot 3.5 ↔ Boot 4 아티팩트 혼용
-5. 계층 규칙 (헥사고날 전제 — 구조 확정 시 조정)
+5. 계층 규칙 (헥사고날 확정 — [ARCHITECTURE.md](ARCHITECTURE.md) 참고)
 
-> 📌 아키텍처가 헥사고날로 확정되면 `presentation/`·`application/`·`domain/`·`infrastructure/`
-> 규칙이 자동으로 동작한다. 다른 구조로 가면 해당 섹션만 교체한다.
+> 📌 아키텍처가 헥사고날로 확정됐다 (`.ai/ARCHITECTURE.md`, `businesscategory` 기준). `presentation/`·`application/`·`domain/`·`infrastructure/`
+> 규칙이 그 문서를 근거로 동작한다.
 
 ---
 

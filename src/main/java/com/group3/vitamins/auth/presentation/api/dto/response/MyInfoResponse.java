@@ -18,6 +18,9 @@ public record MyInfoResponse(
         @Schema(description = "전역 권한", example = "MEMBER")
         String role,
 
+        @Schema(description = "AGREED · REQUIRED (ADMIN 은 항상 AGREED)", example = "AGREED")
+        String termsStatus,
+
         @Schema(description = "NORMAL · RESET_REQUIRED", example = "NORMAL")
         String passwordStatus,
 
@@ -51,6 +54,7 @@ public record MyInfoResponse(
                 row.userId(),
                 row.name(),
                 row.role(),
+                row.termsStatus(),
                 row.passwordStatus(),
                 row.email(),
                 row.phone(),
