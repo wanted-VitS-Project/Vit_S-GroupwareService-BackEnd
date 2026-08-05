@@ -1,7 +1,7 @@
 # 텍스트 블록 API 명세
 
 **노션 원본**: 미확인 — 프론트가 보고 있는 것으로 추정되나 링크 확인 필요 (확인되는 대로 채워주세요)
-**최종 동기화**: 2026-08-05
+**최종 동기화**: 2026-08-05 (활동 로그 새 계약 반영 완료)
 **도메인 담당**: 정림
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -98,6 +98,7 @@
 
 ## 활동 로그 (Activity Log)
 
-- 본문 수정(MODIFY) 실 구현 완료 — 실제로 값이 바뀐 경우에만 발행, `resourceId=txtId`, 변경 필드 `content`.
+- **2026-08-05 새 계약(resourceName 포함) 반영 완료** — 용준님 활동 로그 헥사고날 구조 개선 PR 머지 후 develop 병합, `ActivityOccurredEvent.of` 6-파라미터 버전으로 전환.
+- 본문 수정(MODIFY) 실 구현 — 실제로 값이 바뀐 경우에만 발행. `resourceId=txtId`, `blockId`=공용 block ID, `resourceName=null`(텍스트 본문은 표시명으로 안 씀), 변경 필드 `content`.
 - 블록 자체의 생성/삭제 로그는 텍스트 도메인이 남기지 않는다 — Block 도메인 책임으로 결론 (§5.1, 어댑터 없는 블록 타입까지 커버해야 해서).
-- ⚠️ **활동 로그 담당(용준님) 쪽 계약이 다시 정리되는 중** — `ActivityOccurredEvent`에 `resourceName` 필드가 추가되는 등 구조가 바뀔 예정. **그 PR이 머지되면 이 문서와 `TextCommandService`의 발행 코드를 새 계약 기준으로 다시 반영해야 한다.** 지금 적힌 내용은 구 계약 기준.
+- 로컬 테스트로 `activity_log` 테이블에 `resourceId`/`blockId`/`field`/`before_value`/`after_value` 전부 정상 적재 확인 완료.

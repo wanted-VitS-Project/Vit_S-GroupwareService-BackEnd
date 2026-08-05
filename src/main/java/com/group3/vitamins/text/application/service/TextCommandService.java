@@ -49,11 +49,13 @@ public class TextCommandService implements TextCommandUseCase {
         log.info("텍스트 본문 수정 완료 - txtId={}", saved.getTxtId());
 
         // 활동 로그(본문 수정) — 실제로 값이 바뀐 경우에만 발행한다 (§5.4 텍스트 Block).
+        // 텍스트 본문은 표시명으로 쓰지 않으므로 resourceName은 null로 둔다.
         if (!Objects.equals(before.getContent(), saved.getContent())) {
             domainEventPublisher.publish(ActivityOccurredEvent.of(
                     ActivityLogAction.MODIFY,
                     saved.getBlockId(),
                     saved.getTxtId(),
+                    null,
                     command.userId(),
                     List.of(new ActivityFieldChange("content", before.getContent(), saved.getContent()))
             ));
