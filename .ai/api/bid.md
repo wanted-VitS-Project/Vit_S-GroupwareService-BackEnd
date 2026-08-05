@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-05 (입찰용 블록 미사용 정책 반영)
+**최종 동기화**: 2026-08-05 (A안 확정: 입찰용 블록·프로젝트 공고 스냅샷 미사용)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -28,19 +28,17 @@
 | 📝 초안 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
 | 📝 초안 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
 | 📝 초안 | 공고 프로젝트 전환 | POST | `/api/v1/bidding/notices/{noticeId}/projects` | `BIDDING` |
-| 📝 초안 | 프로젝트 공고 변경 비교 | GET | `/api/v1/projects/{projectId}/bid-notice/changes` | 프로젝트 접근 권한 |
-| 📝 초안 | 프로젝트 공고 스냅샷 반영 | PATCH | `/api/v1/projects/{projectId}/bid-notice-snapshot` | 프로젝트 편집 권한 |
 
 ---
 
-## 입찰 블록 미사용 정책
+## 입찰 공고 프로젝트 전환 정책
 
-입찰용 블록은 v1에서 사용하지 않는다.
-입찰 공고에서 프로젝트를 만들 때 `block.type='BID_NOTICE'` 블록을 생성하지 않는다.
+v1에서는 입찰용 블록과 프로젝트 공고 스냅샷을 사용하지 않는다.
+입찰 공고에서 프로젝트를 만들 때는 `project.bid_notice_id`만 저장한다.
 
 ```text
 bid_notice = 입찰 공고 원본
-project = 전환 시점의 공고 스냅샷 보유
+project = bid_notice_id 링크만 보유
 ```
 
 정책:
@@ -50,13 +48,15 @@ project = 전환 시점의 공고 스냅샷 보유
 | 블록 생성 | 생성하지 않는다 |
 | 수동 생성 | 제공하지 않는다 |
 | 프로젝트 연결 | `project.bid_notice_id`로 전환한 공고 원본과 연결한다 |
-| 입찰 상세 조회 | 입찰 공고 API 또는 프로젝트 공고 스냅샷 API에서 처리한다 |
+| 입찰 상세 조회 | 입찰 공고 API 또는 `project.bid_notice_id` 기준 `bid_notice` 조회로 처리한다 |
 | 공고 원본 수정 | 입찰 공고 API 정책을 따른다 |
-| 프로젝트 스냅샷 수정 | `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot`을 사용한다 |
+| 프로젝트 스냅샷 | 저장하지 않는다 |
+| 정정공고 변경 감지 | v1 범위 밖이다 |
 | 블록 제목·위치 수정 | 대상 없음 |
 | 블록 삭제 | 대상 없음 |
 
 입찰 블록 전용 API는 만들지 않는다.
+프로젝트 공고 변경 비교와 스냅샷 반영 API도 v1에서는 만들지 않는다.
 
 금지 API:
 
@@ -65,6 +65,8 @@ GET /api/v1/blocks/{blockId}/bid-notice
 PUT /api/v1/blocks/{blockId}/bid-notice
 PATCH /api/v1/blocks/{blockId}/bid-notice
 DELETE /api/v1/blocks/{blockId}/bid-notice
+GET /api/v1/projects/{projectId}/bid-notice/changes
+PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 ```
 
 ---
@@ -265,12 +267,11 @@ DELETE /api/v1/blocks/{blockId}/bid-notice
 5. 하나의 DB 트랜잭션 시작
 6. 프로젝트 생성
 7. `project.bid_notice_id` 저장
-8. 공고 스냅샷 필드 저장
-9. 인증된 전환 요청자를 `project_member`에 자동 등록
-10. 추가 `memberIds`를 `project_member`에 등록
-11. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
-12. 입찰용 블록은 생성하지 않음
-13. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
+8. 인증된 전환 요청자를 `project_member`에 자동 등록
+9. 추가 `memberIds`를 `project_member`에 등록
+10. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
+11. 입찰용 블록은 생성하지 않음
+12. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
 
 권한 정책:
 
@@ -285,7 +286,7 @@ DELETE /api/v1/blocks/{blockId}/bid-notice
 
 | 항목 | 규칙 |
 |------|------|
-| 원자성 | 프로젝트 생성부터 공고 스냅샷 저장까지 하나의 DB 트랜잭션 |
+| 원자성 | 프로젝트 생성부터 `project.bid_notice_id` 저장, 참여자 등록, 기본 단계 생성까지 하나의 DB 트랜잭션 |
 | 중간 실패 | 전체 롤백. 불완전한 프로젝트를 남기지 않음 |
 | 이미 전환된 공고 | 새 트랜잭션을 시작하지 않고 409 반환 |
 | 재시도 | 이전 요청이 롤백됐다면 재시도 가능. 이미 커밋됐다면 409 |
@@ -296,8 +297,8 @@ DELETE /api/v1/blocks/{blockId}/bid-notice
 |------|------|
 | 공고 하나당 프로젝트 | 1개만 생성 |
 | 중복 방지 | `UNIQUE(project.bid_notice_id)` |
-| 스냅샷 | 프로젝트 생성 당시 `noticeName`, `bidNoticeId`, `baseAmount`, `estimatedAmount`, `bidDeadlineAt`, `openingAt` 저장 |
-| 정정공고 | 프로젝트 스냅샷을 자동 덮어쓰지 않음 |
+| 스냅샷 | 저장하지 않음 |
+| 정정공고 | 변경 감지와 자동 반영은 v1 범위 밖 |
 
 입찰 블록 미사용 정책:
 
@@ -310,161 +311,34 @@ DELETE /api/v1/blocks/{blockId}/bid-notice
 | 원본 보호 | 프로젝트 전환·삭제가 `bid_notice` 원본을 삭제하거나 수정하지 않음 |
 | 중복 방지 | 같은 프로젝트 전환은 `UNIQUE(project.bid_notice_id)`로 1회만 허용 |
 
-스냅샷 저장 필드:
-
-| 프로젝트 스냅샷 필드 | 원본 공고 필드 |
-|---------------------|---------------|
-| `bidNoticeId` | `noticeId` |
-| `bidNoticeNameSnapshot` | `noticeName` |
-| `baseAmountSnapshot` | `baseAmount` |
-| `estimatedAmountSnapshot` | `estimatedAmount` |
-| `bidDeadlineAtSnapshot` | `bidDeadlineAt` |
-| `openingAtSnapshot` | `openingAt` |
-
 ---
 
-## 프로젝트 공고 변경 비교 `GET /api/v1/projects/{projectId}/bid-notice/changes`
+## v1 범위 밖 — 프로젝트 공고 변경 감지와 스냅샷 반영
 
-**상태**: 📝 초안
+v1에서는 프로젝트에 공고 스냅샷을 저장하지 않는다.
+따라서 현재 공고와 전환 당시 공고값을 비교하거나, 변경분을 프로젝트 스냅샷에 반영하는 API도 제공하지 않는다.
 
-프로젝트 스냅샷과 현재 최신 공고를 비교한다.
+범위 밖 API:
 
-**Response — `200`**
-
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `projectId` | Long | 프로젝트 ID |
-| `bidNoticeId` | Long | 원본 공고 ID |
-| `noticeChanged` | Boolean | 현재 공고와 스냅샷의 차이 여부 |
-| `snapshotVersion` | Long | 스냅샷 낙관적 락 버전 |
-| `changedFields` | Object[] | 변경된 필드 목록 |
-
-**changedFields**
-
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `fieldName` | String | 반영 가능한 필드명 |
-| `displayName` | String | 화면 표시명 |
-| `snapshotValue` | String | 프로젝트에 저장된 그때 값 |
-| `currentValue` | String | 최신 공고 값 |
-
-반영 가능한 `fieldName`은 `noticeName`, `baseAmount`, `estimatedAmount`, `bidDeadlineAt`, `openingAt` 으로 제한한다.
-
----
-
-## 프로젝트 공고 스냅샷 반영 `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot`
-
-**상태**: 📝 초안
-
-사용자가 선택한 최신 값만 프로젝트에 반영한다. 자동으로 프로젝트 스냅샷을 덮어쓰지 않는다.
-
-**Request**
-
-| 파라미터 | 타입 | 필수 | 설명 |
-|---------|------|------|------|
-| `snapshotVersion` | Long | Y | 사용자가 비교 화면에서 본 스냅샷 버전 |
-| `fields` | String[] | Y | 반영할 필드명 목록 |
-
-**Request 예시**
-
-```json
-{
-  "snapshotVersion": 3,
-  "fields": ["baseAmount", "bidDeadlineAt"]
-}
+```text
+GET /api/v1/projects/{projectId}/bid-notice/changes
+PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 ```
 
-**Response — `200`**
+추후 정정공고 변경 감지가 필요해지면 새 요구사항으로 아래를 함께 설계한다.
 
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `projectId` | Long | 프로젝트 ID |
-| `bidNoticeId` | Long | 원본 공고 ID |
-| `snapshotVersion` | Long | 반영 후 새 스냅샷 버전 |
-| `appliedFields` | String[] | 실제 반영된 필드 목록 |
-| `changeApplyHistoryId` | Long | 반영 이력 ID |
-
-충돌 및 오류:
-
-| 상태 | 상황 |
-|------|------|
-| 400 | `fields`가 비어 있거나 허용되지 않은 필드 포함 |
-| 403 | 프로젝트 편집 권한 없음 |
-| 404 | 프로젝트 또는 연결된 공고 없음 |
-| 409 | 요청의 `snapshotVersion`이 현재 버전과 다름 |
+| 항목 | 필요 작업 |
+|------|-----------|
+| 저장소 | 프로젝트 또는 별도 테이블에 공고 스냅샷 필드 추가 |
+| 전환 API | 같은 트랜잭션 안에서 공고 원본 조회 후 스냅샷 저장 |
+| 비교 API | 저장된 스냅샷과 최신 `bid_notice` 비교 |
+| 반영 API | 사용자가 승인한 필드만 스냅샷에 반영 |
 
 ---
 
 ## 프로젝트 입찰 블록 조회 API 폐기
 
-**상태**: 폐기
-
 v1에서는 입찰용 블록을 사용하지 않으므로 아래 API를 제공하지 않는다.
-
-```text
-GET /api/v1/blocks/{blockId}/bid-notice
-```
-
-입찰 상세와 프로젝트 전환 후 공고 정보는 아래 API로 처리한다.
-
-| 목적 | API |
-|------|-----|
-| 입찰 공고 원본 상세 조회 | `GET /api/v1/bidding/notices/{noticeId}` |
-| 프로젝트 전환 당시 스냅샷과 현재 공고 비교 | `GET /api/v1/projects/{projectId}/bid-notice/changes` |
-| 승인한 최신 공고값을 프로젝트 스냅샷에 반영 | `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot` |
-
-표시값:
-
-| 항목 | 설명 |
-|------|------|
-| 공고명 | 입찰 공고명 |
-| 공고일 | 공고일 |
-| 질의응답 마감 | `questionDeadlineAt` |
-| 제출 마감 | `bidDeadlineAt` |
-| 개찰일 | `openingAt` |
-| 발주처 | `noticeAgency` |
-| 기초금액 | `baseAmount` |
-| 계약 방식 | `contractMethod` |
-| 참가 자격 | `participationQualificationText` |
-| 지역 제한 | `regionLimitText` |
-| 업종 제한 | `businessLimitText` |
-| 공동수급 가능 여부 | `jointContractAllowed` |
-| 공동수급 원문 | `jointContractText` |
-| 참여사 수 | `participantCount` |
-| 진행 단계 | 프로젝트 상태 기반 |
-| 원본 공고 변경 여부 | `noticeChanged` |
-
-**notice**
-
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `noticeName` | String | 입찰 공고명 |
-| `announcedAt` | LocalDateTime | 공고일 |
-| `questionDeadlineAt` | LocalDateTime | 질의응답 마감 |
-| `bidDeadlineAt` | LocalDateTime | 제출 마감 |
-| `openingAt` | LocalDateTime | 개찰일 |
-| `noticeAgency` | String | 발주처 |
-| `baseAmount` | Decimal | 기초금액 |
-| `estimatedAmount` | Decimal | 추정가격 |
-| `contractMethod` | String | 계약 방식 |
-| `participationQualificationText` | String | 참가 자격 원문 |
-| `regionLimitText` | String | 지역 제한 원문 |
-| `businessLimitText` | String | 업종 제한 원문 |
-| `jointContractAllowed` | Boolean | 공동수급 가능 여부. 판별 불가면 `null` |
-| `jointContractText` | String | 공동수급 원문 |
-| `participantCount` | Integer | 참여사 수 |
-| `sourceUrl` | String | 원문 URL |
-
-**snapshot**
-
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `noticeName` | String | 전환 당시 공고명 |
-| `baseAmount` | Decimal | 전환 당시 기초금액 |
-| `estimatedAmount` | Decimal | 전환 당시 추정가격 |
-| `bidDeadlineAt` | LocalDateTime | 전환 당시 제출 마감 |
-| `openingAt` | LocalDateTime | 전환 당시 개찰일 |
-| `snapshotVersion` | Long | 스냅샷 낙관적 락 버전 |
 
 폐기 API:
 
@@ -475,5 +349,5 @@ PATCH /api/v1/blocks/{blockId}/bid-notice
 DELETE /api/v1/blocks/{blockId}/bid-notice
 ```
 
-프로젝트 안에서 공고를 다시 선택하거나 연결 해제하지 않는다.
+입찰 상세는 `GET /api/v1/bidding/notices/{noticeId}` 또는 프로젝트의 `bid_notice_id`로 조회한 `bid_notice` 원본을 표시한다.
 프로젝트 삭제·상태 변경이 필요하면 프로젝트 API 정책을 따르고, 이 경우에도 `bid_notice` 원본은 유지한다.
