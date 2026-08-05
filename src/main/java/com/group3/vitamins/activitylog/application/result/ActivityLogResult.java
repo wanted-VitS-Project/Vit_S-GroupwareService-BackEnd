@@ -29,7 +29,7 @@ public record ActivityLogResult(
                 result.beforeValue(),
                 result.afterValue(),
                 new Resource(result.resourceId(), result.resourceName()),
-                new Actor(result.actorUserId(), result.actorName(), result.profileImageUrl()),
+                new Actor(result.actorUserId(), result.actorName()),
                 new Block(result.blockId(), result.blockTitle(), result.blockType()),
                 result.createdAt()
         );
@@ -43,8 +43,7 @@ public record ActivityLogResult(
 
     public record Actor(
             String userId,
-            String name,
-            String profileImageUrl
+            String name
     ) {
     }
 

@@ -41,7 +41,6 @@
                al.after_value AS afterValue,
                al.user_id AS actorUserId,
                e.name AS actorName,
-               NULL AS profileImageUrl,
                b.block_id AS blockId,
                b.title AS blockTitle,
                b.type AS blockType,
