@@ -1,0 +1,12 @@
+package com.group3.vitamins.employee.presentation.api;
+
+/**
+ * 사원 API 성공 응답 메시지 상수 (`.ai/api/employee.md`).
+ */
+public final class EmployeeResponseMessage {
+
+    private EmployeeResponseMessage() {
+    }
+
+    public static final String SEARCH_SUCCESS = "사원 검색 성공";
+}
