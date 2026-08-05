@@ -1,5 +1,6 @@
-package com.group3.vitamins.department.presentation.api.dto.request;
+package com.group3.vitamins.department.presentation.api.request;
 
+import com.group3.vitamins.department.application.command.RenameDepartmentCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -13,4 +14,9 @@ public record UpdateDepartmentRequest(
         @Schema(description = "새 부서명. 최대 50자", example = "인사기획팀")
         String name
 ) {
+
+    /** 요청을 서비스 커맨드로 옮긴다. {@code departmentId} 는 경로 변수, {@code role} 은 세션에서 온다. */
+    public RenameDepartmentCommand toCommand(String role, Long departmentId) {
+        return new RenameDepartmentCommand(role, departmentId, name);
+    }
 }

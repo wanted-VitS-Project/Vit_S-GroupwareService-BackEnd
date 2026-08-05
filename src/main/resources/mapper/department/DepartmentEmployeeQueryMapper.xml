@@ -3,14 +3,14 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <!--
-  부서 조회 SQL. 쓰기는 JPA(DepartmentJpaRepository) 담당.
+  부서·사원 조인 조회 SQL. 쓰기·단건 조회는 JPA(DepartmentRepositoryAdapter) 담당.
   namespace = Mapper 인터페이스 전체 경로 · id = 메서드명 (팀 MyBatis 컨벤션).
 -->
-<mapper namespace="com.group3.vitamins.department.infrastructure.persistence.mapper.DepartmentMapper">
+<mapper namespace="com.group3.vitamins.department.infrastructure.adapter.DepartmentEmployeeQueryMapper">
 
     <!-- record 는 setter 가 없어 생성자 인자로 매핑한다 (인자 순서 = record 정의 순서) -->
-    <resultMap id="departmentTreeRow"
-               type="com.group3.vitamins.department.infrastructure.persistence.DepartmentTreeRow">
+    <resultMap id="departmentEmployeeCountRow"
+               type="com.group3.vitamins.department.application.result.DepartmentEmployeeCountRow">
         <constructor>
             <idArg column="department_id" javaType="java.lang.Long"/>
             <arg column="name" javaType="java.lang.String"/>
@@ -23,7 +23,7 @@
       전체 부서 + 직속 인원. LEFT JOIN 이라 사원 0명 부서도 남는다.
       인원 집계에서 시스템 계정·퇴사자 제외 (is_system=0 AND resigned_at IS NULL AND deleted_at IS NULL).
     -->
-    <select id="findAllWithDirectEmployeeCount" resultMap="departmentTreeRow">
+    <select id="findAllWithDirectEmployeeCount" resultMap="departmentEmployeeCountRow">
         SELECT d.department_id,
                d.name,
                d.parent_id,

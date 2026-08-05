@@ -1,5 +1,6 @@
-package com.group3.vitamins.department.presentation.api.dto.response;
+package com.group3.vitamins.department.presentation.api.response;
 
+import com.group3.vitamins.department.application.result.DepartmentTreeResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -32,4 +33,16 @@ public record DepartmentTreeResponse(
         @Schema(description = "하위 부서. 없으면 빈 배열")
         List<DepartmentTreeResponse> children
 ) {
+
+    /** 조회 결과 트리 노드를 응답 노드로 옮긴다 (children 재귀). */
+    public static DepartmentTreeResponse from(DepartmentTreeResult result) {
+        return new DepartmentTreeResponse(
+                result.departmentId(),
+                result.name(),
+                result.directEmployeeCount(),
+                result.totalEmployeeCount(),
+                result.children().stream()
+                        .map(DepartmentTreeResponse::from)
+                        .toList());
+    }
 }

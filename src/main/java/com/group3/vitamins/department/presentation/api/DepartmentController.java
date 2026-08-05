@@ -1,12 +1,13 @@
 package com.group3.vitamins.department.presentation.api;
 
-import com.group3.vitamins.department.application.DepartmentCommandService;
-import com.group3.vitamins.department.application.DepartmentQueryService;
-import com.group3.vitamins.department.presentation.api.dto.request.CreateDepartmentRequest;
-import com.group3.vitamins.department.presentation.api.dto.request.UpdateDepartmentRequest;
-import com.group3.vitamins.department.presentation.api.dto.response.DepartmentCreateResponse;
-import com.group3.vitamins.department.presentation.api.dto.response.DepartmentListResponse;
-import com.group3.vitamins.department.presentation.api.dto.response.DepartmentUpdateResponse;
+import com.group3.vitamins.department.application.command.DeleteDepartmentCommand;
+import com.group3.vitamins.department.application.usecase.DepartmentCommandUseCase;
+import com.group3.vitamins.department.application.usecase.DepartmentQueryUseCase;
+import com.group3.vitamins.department.presentation.api.request.CreateDepartmentRequest;
+import com.group3.vitamins.department.presentation.api.request.UpdateDepartmentRequest;
+import com.group3.vitamins.department.presentation.api.response.DepartmentCreateResponse;
+import com.group3.vitamins.department.presentation.api.response.DepartmentListResponse;
+import com.group3.vitamins.department.presentation.api.response.DepartmentUpdateResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -29,7 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 부서 관리 API — `.ai/api/department.md`.
  *
  * <p>목록 조회는 <b>전체 사용자</b>(인증만)이고, 생성·수정·삭제는 <b>ADMIN 전용</b>이다.
- * 인증(세션)은 Security 필터가 보고, ADMIN 판정은 서비스가 도메인 코드({@code ACC_ADMIN_REQUIRED})와 함께 한다.
+ * 인증(세션)은 Security 필터가 보고, ADMIN 판정은 {@code DepartmentAdminPolicy} 가 도메인 코드
+ * ({@code ACC_ADMIN_REQUIRED})와 함께 한다.
  */
 @Tag(name = "Department - 부서 관리", description = "부서 트리 조회(전체 사용자) / 생성·수정·삭제(ADMIN 전용, 담당: 김동현)")
 @RestController
@@ -39,8 +41,8 @@ public class DepartmentController {
 
     private static final String ROLE_PREFIX = "ROLE_";
 
-    private final DepartmentQueryService departmentQueryService;
-    private final DepartmentCommandService departmentCommandService;
+    private final DepartmentQueryUseCase departmentQueryUseCase;
+    private final DepartmentCommandUseCase departmentCommandUseCase;
 
     @Operation(summary = "부서 목록 조회",
             description = "전체 부서를 최대 2단 트리로 반환한다. 페이징 없음, 정렬은 생성 순(departmentId 오름차순). "
@@ -53,7 +55,8 @@ public class DepartmentController {
     })
     @GetMapping
     public ApiResponse<DepartmentListResponse> getDepartments() {
-        return ApiResponse.success("부서 목록 조회 성공", departmentQueryService.getDepartmentTree());
+        return ApiResponse.success(DepartmentResponseMessage.LIST_SUCCESS,
+                DepartmentListResponse.from(departmentQueryUseCase.getDepartmentTree()));
     }
 
     @Operation(summary = "부서 생성",
@@ -77,9 +80,9 @@ public class DepartmentController {
     @PostMapping
     public ApiResponse<DepartmentCreateResponse> createDepartment(Authentication authentication,
                                                                   @RequestBody CreateDepartmentRequest request) {
-        DepartmentCreateResponse result =
-                departmentCommandService.create(roleOf(authentication), request.name(), request.parentId());
-        return ApiResponse.created("부서가 생성되었습니다.", result);
+        DepartmentCreateResponse result = DepartmentCreateResponse.from(
+                departmentCommandUseCase.create(request.toCommand(roleOf(authentication))));
+        return ApiResponse.created(DepartmentResponseMessage.CREATED, result);
     }
 
     @Operation(summary = "부서명 수정",
@@ -102,9 +105,9 @@ public class DepartmentController {
     public ApiResponse<DepartmentUpdateResponse> updateDepartment(Authentication authentication,
                                                                   @PathVariable Long departmentId,
                                                                   @RequestBody UpdateDepartmentRequest request) {
-        DepartmentUpdateResponse result =
-                departmentCommandService.rename(roleOf(authentication), departmentId, request.name());
-        return ApiResponse.success("부서명이 수정되었습니다.", result);
+        DepartmentUpdateResponse result = DepartmentUpdateResponse.from(
+                departmentCommandUseCase.rename(request.toCommand(roleOf(authentication), departmentId)));
+        return ApiResponse.success(DepartmentResponseMessage.UPDATED, result);
     }
 
     @Operation(summary = "부서 삭제",
@@ -125,8 +128,8 @@ public class DepartmentController {
     @DeleteMapping("/{departmentId}")
     public ApiResponse<Void> deleteDepartment(Authentication authentication,
                                               @PathVariable Long departmentId) {
-        departmentCommandService.delete(roleOf(authentication), departmentId);
-        return ApiResponse.success("부서가 삭제되었습니다.");
+        departmentCommandUseCase.delete(new DeleteDepartmentCommand(roleOf(authentication), departmentId));
+        return ApiResponse.success(DepartmentResponseMessage.DELETED);
     }
 
     /**

@@ -1,5 +1,6 @@
-package com.group3.vitamins.department.presentation.api.dto.response;
+package com.group3.vitamins.department.presentation.api.response;
 
+import com.group3.vitamins.department.application.result.DepartmentResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -36,4 +37,15 @@ public record DepartmentCreateResponse(
         @Schema(description = "하위 포함 사원 수 (생성 직후 0)", example = "0")
         int totalEmployeeCount
 ) {
+
+    /** 생성 결과를 응답으로 옮긴다. */
+    public static DepartmentCreateResponse from(DepartmentResult result) {
+        return new DepartmentCreateResponse(
+                result.departmentId(),
+                result.name(),
+                result.parentId(),
+                result.parentName(),
+                result.directEmployeeCount(),
+                result.totalEmployeeCount());
+    }
 }
