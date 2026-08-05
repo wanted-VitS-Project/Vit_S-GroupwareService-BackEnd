@@ -8,7 +8,6 @@ public enum BlockType {
     CHECKLIST,
     PAYMENT_CONFIRM,
     TAX_INVOICE_VIEW,
-    PERFORMANCE_VIEW,
     APPROVAL,
     AI,
     BID_NOTICE;

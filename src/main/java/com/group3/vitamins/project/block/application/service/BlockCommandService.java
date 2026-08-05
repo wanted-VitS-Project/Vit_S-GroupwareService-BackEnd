@@ -1,17 +1,18 @@
 package com.group3.vitamins.project.block.application.service;
 
-import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
-import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
-import com.group3.vitamins.activitylog.domain.ActivityLogAction;
-import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.block.application.command.CreateBlockCommand;
+import com.group3.vitamins.project.block.application.command.DeleteBlockCommand;
+import com.group3.vitamins.project.block.application.command.UpdateBlockCommand;
+import com.group3.vitamins.project.block.application.command.UpdateBlockLayoutCommand;
 import com.group3.vitamins.project.block.application.port.BlockDetailPort;
+import com.group3.vitamins.project.block.application.result.BlockLayoutResult;
 import com.group3.vitamins.project.block.application.result.BlockOwner;
 import com.group3.vitamins.project.block.application.result.BlockResult;
+import com.group3.vitamins.project.block.application.result.BlockUpdateResult;
 import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
 import com.group3.vitamins.project.block.domain.exception.BlockErrorCode;
 import com.group3.vitamins.project.block.domain.model.Block;
@@ -24,8 +25,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -41,8 +46,8 @@ public class BlockCommandService implements BlockCommandUseCase {
     private final BlockRepository blockRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
+    private final BlockDeleteLockRegistry blockDeleteLockRegistry;
     private final StepAccessUseCase stepAccessUseCase;
-    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public BlockResult createBlock(CreateBlockCommand command) {
@@ -75,12 +80,132 @@ public class BlockCommandService implements BlockCommandUseCase {
 
         //2. 1)상세 테이블 조회, 2)행 추가, 3)TYPE ID 조회, 4) TYPE ID 삽입
         linkDetail(block, type, now);
-        publishBlockCreated(block, command.requesterUserId());
 
         return new BlockResult(
                 block.getBlockId(), block.getStepId(), step.projectId(), type.name(),
                 block.getTitle(), owner, block.getRowIndex(), block.getSortOrder(),
                 block.getColSpan(), block.getCreatedAt());
+    }
+
+    /**
+     * 블록 고유값(제목·담당자)만 바꾼다. 배치는 updateLayout, 타입은 생성 후 변경 불가다
+     * (상세 테이블이 달라진다).
+     */
+    @Override
+    public BlockUpdateResult updateBlock(UpdateBlockCommand command) {
+
+        //404 가 403 보다 먼저다 — 블록을 찾아야 stepId 를 알고 권한을 물을 수 있다
+        Block block = findBlock(command.blockId());
+        stepAccessUseCase.requireEditable(
+                block.getStepId(), command.requesterUserId(), command.role());
+
+        if (!command.titleProvided() && !command.ownerProvided()) {
+            throw new ValidationException(BlockErrorCode.BLOCK_UPDATE_FIELD_REQUIRED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        if (command.titleProvided()) {
+            validateTitle(command.title());
+            block.changeTitle(command.title(), now);
+        }
+
+        BlockOwner owner = null;
+        if (command.ownerProvided()) {
+            //null·공백을 보내면 해제, 없는 사번이면 404
+            owner = resolveOwner(command.owner());
+            block.changeOwner(owner == null ? null : owner.userId(), now);
+        }
+
+        Block saved = blockRepository.save(block);
+
+        //담당자를 안 건드렸으면 기존 담당자를 그대로 내려야 한다 — 이름은 관대하게 조회한다
+        return new BlockUpdateResult(saved.getBlockId(), saved.getTitle(),
+                command.ownerProvided() ? owner : describeOwner(saved.getOwner()),
+                saved.getUpdatedAt());
+    }
+
+    /**
+     * 드래그 결과를 한 트랜잭션에서 일괄 반영한다. 같은 행에 순서가 겹쳐도 허용한다 (BLK-004) —
+     * UNIQUE 를 걸지 않은 이유가 드래그 중간 상태다.
+     */
+    @Override
+    public List<BlockLayoutResult> updateLayout(UpdateBlockLayoutCommand command) {
+
+        //stepId 가 경로에 있어 여기선 권한이 먼저다
+        stepAccessUseCase.requireEditable(
+                command.stepId(), command.requesterUserId(), command.role());
+
+        List<UpdateBlockLayoutCommand.BlockLayout> layouts = command.layouts();
+        if (layouts == null || layouts.isEmpty()) {
+            throw new ValidationException(BlockErrorCode.BLOCK_LAYOUT_INVALID);
+        }
+        layouts.forEach(this::validateLayout);
+
+        List<Long> blockIds = layouts.stream()
+                .map(UpdateBlockLayoutCommand.BlockLayout::blockId)
+                .toList();
+
+        //중복 blockId 를 안 막으면 아래 개수 비교가 404 로 새는데, 실제 원인은 요청이 모순인 것이다
+        if (new HashSet<>(blockIds).size() != blockIds.size()) {
+            throw new ValidationException(BlockErrorCode.BLOCK_LAYOUT_INVALID);
+        }
+
+        Map<Long, Block> found = blockRepository.findAllByIds(blockIds).stream()
+                .collect(Collectors.toMap(Block::getBlockId, Function.identity()));
+
+        if (found.size() != blockIds.size()) {
+            throw new NotFoundException(BlockErrorCode.BLOCK_NOT_FOUND);
+        }
+        //남의 스텝 블록을 섞어 보내면 그 블록이 화면에서 사라진다
+        boolean otherStep = found.values().stream()
+                .anyMatch(block -> !block.getStepId().equals(command.stepId()));
+        if (otherStep) {
+            throw new ValidationException(BlockErrorCode.BLOCK_LAYOUT_INVALID);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<Block> moved = layouts.stream()
+                .map(layout -> relocate(found.get(layout.blockId()), layout, now))
+                .toList();
+
+        blockRepository.saveAll(moved);
+
+        return moved.stream()
+                .map(block -> new BlockLayoutResult(block.getBlockId(), block.getRowIndex(),
+                        block.getSortOrder(), block.getColSpan()))
+                .toList();
+    }
+
+    /** 잠금 4종을 확인한 뒤 블록과 상세 행을 같은 트랜잭션에서 논리 삭제한다. 하드 삭제는 없다 (INV-05). */
+    @Override
+    public void deleteBlock(DeleteBlockCommand command) {
+
+        Block block = findBlock(command.blockId());
+        stepAccessUseCase.requireEditable(
+                block.getStepId(), command.requesterUserId(), command.role());
+
+        if (blockDeleteLockRegistry.isLocked(
+                block.getType(), block.getBlockId(), block.getTypeId())) {
+            throw new ConflictException(BlockErrorCode.BLOCK_DELETE_LOCKED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // ⚠️ 상세를 먼저 지운다. 순서를 뒤집으면 block.deleted_at 이 유실된다 —
+        // 타입 도메인의 삭제가 @Modifying(clearAutomatically = true) 벌크 UPDATE 인데
+        // flushAutomatically 가 기본값(false) 이라, 앞서 save() 한 block 의 pending UPDATE 를
+        // flush 하지 않고 영속성 컨텍스트를 비워버린다. 커밋해도 block 은 안 지워지고
+        // 상세만 지워져 조회에는 그대로 뜨는 상태가 된다 (2026-08-05 런타임 검증으로 발견).
+        // 같은 트랜잭션이라 중간 상태는 밖에서 보이지 않는다 — BLK-007(판정 주인은 block.deleted_at)은
+        // 읽기 규칙이고 쓰기 순서 규칙이 아니다.
+        unlinkDetail(block, command.requesterUserId(), now);
+
+        block.delete(now);
+        blockRepository.save(block);
+
+        // 블록 삭제 활동 로그(§5.1)는 여기서 발행해야 하지만 활동기록 공통 컴포넌트(#43)가
+        // 아직 없다. 타입별 도메인에서 발행하면 어댑터 없는 타입(FILE·APPROVAL)이 영구 누락된다.
     }
 
     /**
@@ -105,14 +230,38 @@ public class BlockCommandService implements BlockCommandUseCase {
         blockRepository.save(block);
     }
 
-    private void publishBlockCreated(Block block, String actorId) {
-        domainEventPublisher.publish(ActivityOccurredEvent.of(
-                ActivityLogAction.CREATE,
-                block.getBlockId(),
-                null,
-                actorId,
-                List.of(new ActivityFieldChange(null, null, null))
-        ));
+    /**
+     * 상세 행도 같은 트랜잭션에서 논리 삭제한다. ⛔ 이벤트로 넘기지 않는다 — 상세는 block_id NOT NULL 이라
+     * 독립 생명주기가 없고, 유실되면 회수할 주체가 없다 (결과적 일관성이 아니라 그냥 유실이다).
+     * 어댑터가 없거나 상세 PK 가 없는 타입은 지울 것도 없다.
+     */
+    private void unlinkDetail(Block block, String requesterUserId, LocalDateTime now) {
+        if (block.getTypeId() == null) {
+            return;
+        }
+        blockDetailRegistry.find(block.getType())
+                .ifPresent(port -> port.deleteDetail(
+                        block.getTypeId(), requesterUserId, block.getTitle(), now));
+    }
+
+    private Block findBlock(Long blockId) {
+        return blockRepository.findById(blockId)
+                .orElseThrow(() -> new NotFoundException(BlockErrorCode.BLOCK_NOT_FOUND));
+    }
+
+    private Block relocate(Block block, UpdateBlockLayoutCommand.BlockLayout layout,
+                           LocalDateTime now) {
+        block.relocate(layout.rowIndex(), layout.sortOrder(), layout.colSpan(), now);
+        return block;
+    }
+
+    /** 배치 3필드는 전부 필수다. 누락을 통과시키면 블록이 조용히 0행 0열로 옮겨진다. */
+    private void validateLayout(UpdateBlockLayoutCommand.BlockLayout layout) {
+        if (layout.blockId() == null || layout.rowIndex() == null
+                || layout.sortOrder() == null || layout.colSpan() == null) {
+            throw new ValidationException(BlockErrorCode.BLOCK_LAYOUT_INVALID);
+        }
+        validateColSpan(layout.colSpan());
     }
 
     /** 타입 문자열을 검증한다. enum 밖이거나 사용자가 만들 수 없는 타입이면 400 이다. */
@@ -142,15 +291,20 @@ public class BlockCommandService implements BlockCommandUseCase {
         }
     }
 
-    /** 미지정이면 1 칸이다. 총 열 수가 3 으로 고정이라 범위를 넘으면 400 이다. */
+    /** 미지정이면 1 칸이다. 생성 전용 — 배치 변경은 필수라 validateColSpan 을 직접 쓴다. */
     private int resolveColSpan(Integer colSpan) {
         if (colSpan == null) {
             return DEFAULT_COL_SPAN;
         }
+        validateColSpan(colSpan);
+        return colSpan;
+    }
+
+    /** 총 열 수가 3 으로 고정이라 범위를 넘으면 400 이다 (BLK-003). */
+    private void validateColSpan(int colSpan) {
         if (colSpan < MIN_COL_SPAN || colSpan > MAX_COL_SPAN) {
             throw new ValidationException(BlockErrorCode.BLOCK_COL_SPAN_INVALID);
         }
-        return colSpan;
     }
 
     /** 입금확인·세금계산서 조회는 스텝당 1개다. 둘이면 어느 회차 것인지 알 수 없어진다. */
@@ -176,6 +330,17 @@ public class BlockCommandService implements BlockCommandUseCase {
             throw new NotFoundException(ProjectErrorCode.USER_NOT_FOUND);
         }
         return new BlockOwner(ownerUserId, name);
+    }
+
+    /**
+     * 응답에 담을 기존 담당자. 이름을 못 찾아도 사번만 담는다 — 퇴사자로 조회가 비었다고
+     * 제목 수정이 404 로 실패하면 안 된다 (블록 조회 API 와 같은 규칙).
+     */
+    private BlockOwner describeOwner(String ownerUserId) {
+        if (ownerUserId == null) {
+            return null;
+        }
+        return new BlockOwner(ownerUserId, employeeLookupPort.findNameByUserId(ownerUserId));
     }
 
     /** 미지정이면 맨 아래 행(max+1). 블록이 없으면 0 행부터다. */
