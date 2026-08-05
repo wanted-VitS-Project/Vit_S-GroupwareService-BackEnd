@@ -1,9 +1,10 @@
-# 🧩 블록 정보 — 10종 카탈로그
+``# 🧩 블록 정보 — 10종 카탈로그
 
 **최종 업데이트**
+- 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · §4 번호 당김(4-8~4-10 → 4-7~4-9) · DB 는 `V20260805170000` 로 ALTER
+- 2026-08-05 — 🩹 **`BID_NOTICE` 이중 정의 해소** — 상세 테이블 없는 구 §4-9 를 제거하고 `bid_notice_block` 모델 하나로 통일(§5 요약표 기준), **§4-10 번호 중복 정리**(AI → 4-9), AI 설명문 오배치 복구, 깨진 링크(`입찰관리/BID-V1.md`) 제거 · 엔드포인트 경로는 `api/bid.md` 단일 기준으로 위임 · `bid_notice_block` 테이블 부재 명시
 - 2026-08-05 — ⭐ **§2 타입별 상세 확장 가이드 신설** (담당자용 계약 10건 · 파일 위치 · 스켈레톤) · **쓰기는 JPA 위임 · 조회만 MyBatis** 확정 · 어댑터·매퍼·XML 을 **타입 담당자 패키지로 이관** · 규약 5줄의 `<discriminator>`·"이벤트 회수" 문구 정정
 - 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
-- 2026-08-04 — 입찰 공고 블록 `BID_NOTICE` 추가
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
@@ -31,7 +32,7 @@
 
 > ⚠️ **정합성은 전적으로 앱 책임이다.** FK 가 없어 DB 가 아무것도 막지 않는다.
 > 그래서 생성·삭제를 **한 트랜잭션에 묶는다** — 고아 행을 만들지 않는 것이 회수하는 것보다 싸다 (§1 규약 5 보강).
-
+>
 > ⛔ **MyBatis `<discriminator>` 로 10종을 한 쿼리에 담는 방식은 폐기했다 (2026-08-05).**
 > ① 1:N 타입(`CHECKLIST`·`FILE`·`IMAGE`)은 `<collection>` 이 필요해 **N+1** 이 된다 — "한 방" 이 애초에 성립하지 않는다
 > ② 미구현 타입(`bid_notice_block` 테이블 없음) 하나가 **조회 전체를 500** 낸다
@@ -59,7 +60,7 @@
 
 ### 2-1. 소유 경계
 
-```
+```text
 ┌─ project/block ─────────────────────── Block 도메인 소관 (고치지 마세요) ─┐
 │  application/port/BlockDetailPort.java          ★ 계약                   │
 │  application/result/BlockDetail.java            ★ 마커 인터페이스        │
@@ -216,7 +217,6 @@ public Long create(Long blockId) {
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
 | `IMAGE` · `APPROVAL` · `AI` | ❌ 미등록 | **NULL** | 어댑터 추가하면 살아난다 |
 | `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환 |
-| `PERFORMANCE_VIEW` | ❌ | **NULL** | 상세 테이블 없음 |
 | `TAX_INVOICE_VIEW` | ❌ | **NULL** | 행 존재 자체가 "연결됨" 신호 (TXL-008) — 빈 행을 만들면 안 된다 |
 | `BID_NOTICE` | — | — | 사용자 생성 금지 (`POST` 에서 400) |
 
@@ -341,22 +341,7 @@ public Long create(Long blockId) {
 
 ⛔ **어디에도 발행 기능을 넣지 마라.** 타입 이름이 `VIEW` 인 이유다. **발행은 홈택스에서 하고** 이 시스템은 CSV·API 로 수집해 조회만 한다.
 
-### 4-7. `PERFORMANCE_VIEW` — 실적 조회
-
-| 항목 | 값 |
-|------|-----|
-| 계열 | 도메인 |
-| 상세 테이블 | **없음** — 조회 전용이라 `block.type` 만으로 충분하다 (**`block.type_id` 는 NULL**) |
-| **역할** | 등재된 실적(분류 · 등재일 · 실적금액)을 프로젝트에서 조회 |
-| 권한 | 프로젝트 쪽 읽기 전용 |
-| 삭제 | 그냥 soft delete |
-| 템플릿 | 담김: 블록 껍데기만 |
-| 담당 | 동훈 |
-
-> 🚨 **읽을 데이터가 아직 없다.** 확정 ERD 에 **`performance` 테이블이 없다** → [`HANDOFF.md`](HANDOFF.md) T2.
-> **블록 타입만 남기고 구현은 그 결정 뒤에 한다.**
-
-### 4-8. `APPROVAL` — 결재 상신
+### 4-7. `APPROVAL` — 결재 상신
 
 | 항목 | 값 |
 |------|-----|
@@ -372,24 +357,7 @@ public Long create(Long blockId) {
 
 ⚠️ **`MASTER` 는 결재와 무관하다.** 최종 결재자는 `approval_line.sequence_no` **최댓값**이고 건마다 달라진다 ([`PERMISSION.md`](PERMISSION.md) §7-2).
 
-### 4-9. `BID_NOTICE` — 입찰 공고 조회
-
-| 항목 | 값 |
-|------|-----|
-| 계열 | 도메인 |
-| 상세 테이블 | 별도 상세 테이블 없음. `block → step → project → project.bid_notice_id` 경로로 조회 |
-| **역할** | 입찰 공고로 생성된 프로젝트 안에서 해당 공고의 상세 정보와 프로젝트 스냅샷 변경 여부를 보여준다 |
-| 권한 | 스텝 접근 권한 그대로 |
-| 삭제 | 블록만 soft delete. `bid_notice` 원본과 `project.bid_notice_id` 는 유지 |
-| 템플릿 | 담김: 블록 껍데기만 / 안 담김: 연결된 공고 데이터 |
-| 담당 | 정현 |
-| 상세 문서 | [`BID-V1.md`](../domain/입찰관리/BID-V1.md) · [`bid.md`](../../api/bid.md) |
-
-입찰 블록은 **조회 전용 진입점**이다. 공고 원본 수정은 입찰 공고 API가 담당하고, 프로젝트 스냅샷 반영은 `PATCH /api/v1/projects/{projectId}/bid-notice-snapshot` 이 담당한다.
-
-⛔ 입찰 블록 전용 수정/삭제 API를 만들지 않는다. 제목·위치·삭제는 공통 블록 API 정책을 따른다.
-
-### 4-10. `AI` — AI 검토 (비타메이트)
+### 4-8. `AI` — AI 검토 (비타메이트)
 
 | 항목 | 값 |
 |------|-----|
@@ -403,8 +371,9 @@ public Long create(Long blockId) {
 | 상세 문서 | 정현 소관 (문서 별도 관리) |
 
 > 공고 탭의 **AI 요약과는 다른 기능**이다. 그건 공고 영역 기능이고 이건 스텝 안의 문서 작업용이다 (UC-03).
+> 사용자는 채팅하는 것이 아니라 분석 기준 프롬프트를 입력하고, 시스템은 프로젝트 문서 청크를 검색해 분석 결과와 출처 문장을 남긴다.
 
-### 4-10. `BID_NOTICE` — 입찰 공고 ⭐ **신설 (2026-08-03)**
+### 4-9. `BID_NOTICE` — 입찰 공고 ⭐ **신설 (2026-08-03)**
 
 | 항목 | 값 |
 |------|-----|
@@ -418,14 +387,22 @@ public Long create(Long blockId) {
 | 삭제 | 그냥 soft delete (잠금 없음) |
 | 템플릿 | 담기지 않는다 — 공고에 종속된 블록이다 |
 | 담당 | 정현 |
-| 상세 문서 | 정현 소관 (문서 별도 관리) |
+| 상세 문서 | [`bid.md`](../../api/bid.md) (그 외는 정현 소관 · 별도 관리) |
 
 ⛔ **`bid_notice_id` 에 UNIQUE 를 걸지 않는다.** soft delete 라 지운 블록의 행이 재생성을 막는다.
 "공고 1건 = 블록 1개" 는 `uk_project_bid_notice` 와 앱(`BID-V1` INV-10)이 지킨다.
 
 ⚠️ **`bid_notice_id` 의 FK 는 유지한다.** 이건 다형성 대상이 아니라 **실제 테이블 참조**다 —
 `payment.block_id`·`notification.block_id` 와 같은 취급이다 (§1 규약 2·3 은 `block_id` 에만 적용).
-> 사용자는 채팅하는 것이 아니라 분석 기준 프롬프트를 입력하고, 시스템은 프로젝트 문서 청크를 검색해 분석 결과와 출처 문장을 남긴다.
+
+입찰 블록은 **조회 전용 진입점**이다. 공고 원본 수정도 프로젝트 스냅샷 반영도 블록이 하지 않는다 —
+경로·요청·응답은 [`bid.md`](../../api/bid.md) 가 단일 기준이다.
+⛔ **입찰 블록 전용 수정/삭제 API 를 만들지 않는다.** 제목·위치·삭제는 공통 블록 API 정책을 따른다.
+
+🚨 **`bid_notice_block` 테이블이 마이그레이션에 없다 (2026-08-05 확인 · 정현 통보 필요).**
+`V202608041109` 는 `block.type` enum 에 `BID_NOTICE` 값만 추가했다. 테이블이 생기기 전까지 이 타입은
+`type_id` 가 NULL 로 남고 조회 응답의 `detail` 도 `null` 이다 (§2-8).
+
 ---
 
 ## 5. 한눈에 보는 요약
@@ -438,19 +415,17 @@ public Long create(Long blockId) {
 | `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | ⚠️ 결재 대상일 때 | 김동현 | — |
 | `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | ⚠️ **입금 연결 시 (스텝까지)** | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
 | `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | ⚠️ **계산서 연결 시 (스텝까지)** | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
-| `PERFORMANCE_VIEW` | 실적 조회 | 도메인 | ⛔ **없음** (`type_id` **NULL**) | — | — | 동훈 | 🚨 T2 미결 |
 | `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ 진행 중일 때 | 이강욱 | — |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
 | **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
 **도메인 계열은 재무·공고 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
 
-⭐ **`type_id` 가 `NULL` 인 타입은 3종이다 (2026-08-05 정정 — 2종에서 늘었다)**
+⭐ **`type_id` 가 `NULL` 인 타입은 2종이다**
 
 | 타입 | NULL 인 이유 |
 |------|------------|
 | `FILE` | `block_file` 이 복합 PK(`block_id`+`file_id`) 라 가리킬 단일 PK 가 없다 |
-| `PERFORMANCE_VIEW` | 상세 테이블이 아예 없다 (T2 미결) |
 | **`TAX_INVOICE_VIEW`** ⭐ | `tax_invoice_confirm.tax_invoice_id` 가 **NOT NULL** 이라 **계산서가 연결되기 전에는 행을 만들 수 없다.** TXL-008 의 *"행이 없으면 `WAITING`"* 이 정확히 이 의미다 — **행 존재 자체가 "연결됨" 신호**이므로 컬럼을 nullable 로 바꾸면 그 의미가 깨진다 |
 
 ---
@@ -532,7 +507,7 @@ public Long create(Long blockId) {
 | `IMAGE` | 블록 껍데기만 | 내용 |
 | **`APPROVAL`** | **결재선** | 진행 상태 · 대상 지목 |
 | `PAYMENT_CONFIRM` | 블록 + 제목(`2차 정산`) | **연결된 입금** |
-| `TAX_INVOICE_VIEW` · `PERFORMANCE_VIEW` | 블록 껍데기만 | — |
+| `TAX_INVOICE_VIEW` | 블록 껍데기만 | — |
 | `AI` | 프롬프트 설정 | 실행 결과 |
 
 **체크리스트 항목과 결재선이 템플릿의 진짜 값어치다.** 껍데기만 복사하면 스텝 이름만 깔리는 셈이다.
