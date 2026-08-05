@@ -76,6 +76,16 @@ spring:
       "[mail.smtp.timeout]": 5000
       "[mail.smtp.writetimeout]": 5000
 
+  # 이미지 블록: 리사이즈는 서버가 받은 뒤에 한다 — 원본이 이 한도를 먼저 통과해야 리사이즈 코드까지
+  # 도달한다. 스크린샷 등 원본이 기본값(1MB/요청 10MB)을 쉽게 넘어서 넉넉히 올려둔다.
+  # max-request-size 는 한 번에 여러 장 첨부할 때의 합계 한도 — 20~30장 정도 한꺼번에 올려도
+  # 안 걸리게 넉넉히 잡는다 (완전 무제한은 안 함 — 개별 파일 20MB 한도와 별개로, 합계까지
+  # 없애면 파일 개수를 늘려서 사실상 무제한 업로드가 가능해져 메모리 부담이 그대로 남는다).
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 300MB
+
 server:
   servlet:
     session:
@@ -113,6 +123,7 @@ security:
 # 쓰기는 JPA, 권한 판정·목록 조회는 MyBatis. 같은 DataSource 라 트랜잭션은 공유된다.
 # ⚠️ 같은 트랜잭션에서 JPA 로 쓰고 MyBatis 로 읽으면 flush 전이라 안 보인다 — entityManager.flush() 필요.
 mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
 
