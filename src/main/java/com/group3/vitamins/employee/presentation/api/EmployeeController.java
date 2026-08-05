@@ -3,9 +3,12 @@ package com.group3.vitamins.employee.presentation.api;
 import com.group3.vitamins.employee.application.query.EmployeeListQuery;
 import com.group3.vitamins.employee.application.query.EmployeeSearchQuery;
 import com.group3.vitamins.employee.application.usecase.EmployeeAdminQueryUseCase;
+import com.group3.vitamins.employee.application.usecase.EmployeeCommandUseCase;
 import com.group3.vitamins.employee.application.usecase.EmployeeQueryUseCase;
+import com.group3.vitamins.employee.presentation.api.request.EmployeeRegisterRequest;
 import com.group3.vitamins.employee.presentation.api.response.EmployeeDetailResponse;
 import com.group3.vitamins.employee.presentation.api.response.EmployeePageResponse;
+import com.group3.vitamins.employee.presentation.api.response.EmployeeRegisterResponse;
 import com.group3.vitamins.employee.presentation.api.response.EmployeeSearchResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,17 +16,21 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Tag(name = "Employee - 사원", description = "사원 목록·상세·검색 — 담당: 김동현")
+@Tag(name = "Employee - 사원", description = "사원 목록·상세·검색·등록 — 담당: 김동현")
 @RestController
 @RequestMapping("/api/v1/employees")
 @RequiredArgsConstructor
@@ -33,6 +40,7 @@ public class EmployeeController {
 
     private final EmployeeQueryUseCase employeeQueryUseCase;
     private final EmployeeAdminQueryUseCase employeeAdminQueryUseCase;
+    private final EmployeeCommandUseCase employeeCommandUseCase;
 
     @Operation(summary = "사원 목록 조회 (ADMIN)",
             description = "인사관리용 사원 목록. 시스템 계정은 어떤 조건으로도 조회되지 않으며, 기본은 재직자만 내려간다. "
@@ -71,6 +79,36 @@ public class EmployeeController {
                         keyword, departmentId, role, status, resigned, page, size)));
 
         return ApiResponse.success(EmployeeResponseMessage.LIST_SUCCESS, data);
+    }
+
+    @Operation(summary = "사원 등록 (ADMIN)",
+            description = "사원을 등록하면 계정이 함께 발급된다(로그인 아이디 = 사번). 초기 비밀번호는 이메일로 발송되며, "
+                    + "이메일이 없어도 등록은 되지만 비밀번호를 전달할 수 없어 로그인하지 못한다. ADMIN 권한은 부여할 수 없다. "
+                    + "메일 발송이 실패해도 등록은 성공(201)이며 emailSent=false 로 내려간다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
+                    description = "등록 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "EMP_INVALID_REQUEST(필수값 누락/형식 오류) · EMP_ADMIN_ROLE_NOT_ALLOWED(role=ADMIN)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ACC_ADMIN_REQUIRED — ADMIN 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "EMP_DEPARTMENT_NOT_FOUND · EMP_JOB_POSITION_NOT_FOUND — 부서/직급 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "EMP_USER_ID_DUPLICATED — 이미 등록된 사번")
+    })
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping
+    public ApiResponse<EmployeeRegisterResponse> registerEmployee(
+            @RequestBody EmployeeRegisterRequest request,
+            Authentication authentication) {
+
+        EmployeeRegisterResponse data = EmployeeRegisterResponse.from(
+                employeeCommandUseCase.register(request.toCommand(currentRole(authentication))));
+
+        return ApiResponse.created(EmployeeResponseMessage.REGISTERED, data);
     }
 
     @Operation(summary = "사원 이름 검색 (결재선 지정용)",

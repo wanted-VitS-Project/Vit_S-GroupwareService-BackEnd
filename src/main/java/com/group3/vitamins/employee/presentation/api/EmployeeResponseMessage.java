@@ -11,4 +11,5 @@ public final class EmployeeResponseMessage {
     public static final String SEARCH_SUCCESS = "사원 검색 성공";
     public static final String LIST_SUCCESS = "사원 목록 조회 성공";
     public static final String DETAIL_SUCCESS = "사원 상세 조회 성공";
+    public static final String REGISTERED = "사원 등록 성공";
 }
