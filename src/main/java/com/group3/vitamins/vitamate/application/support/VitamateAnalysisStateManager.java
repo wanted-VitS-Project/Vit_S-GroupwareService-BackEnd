@@ -4,6 +4,7 @@ import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort;
 import com.group3.vitamins.vitamate.application.result.StartVitamateAnalysisResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -21,7 +22,8 @@ public class VitamateAnalysisStateManager {
     private final VitamateAnalysisStorePort analysisStore;
 
     // PENDING 분석 요청을 PROCESSING 상태로 선점한다.
-    @Transactional
+    // 요청 저장 커밋 이후에도 호출될 수 있어 항상 새 트랜잭션에서 상태를 바꾼다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<StartVitamateAnalysisResult> startProcessing(Long analysisId) {
         validateAnalysisId(analysisId);
 
@@ -64,7 +66,8 @@ public class VitamateAnalysisStateManager {
     }
 
     // 현재 워커 시도가 유효할 때 PROCESSING 분석을 FAILED로 마감한다.
-    @Transactional
+    // 큐 발행 실패처럼 기존 트랜잭션이 끝난 뒤 호출되는 경로를 고려해 새 트랜잭션을 사용한다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean failProcessing(Long analysisId, String attemptId, String errorMessage) {
         validateAnalysisId(analysisId);
         validateRequired(attemptId, "attemptId");
