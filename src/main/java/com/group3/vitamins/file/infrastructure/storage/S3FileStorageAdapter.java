@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -73,6 +74,20 @@ public class S3FileStorageAdapter implements FileStoragePort {
             return Optional.of(new StoredObject(res.contentLength()));
         } catch (NoSuchKeyException e) {
             return Optional.empty();
+        } catch (S3Exception e) {
+            // HEAD 는 본문이 없어 NoSuchKey 대신 404 S3Exception 으로 오는 경우가 있다.
+            if (e.statusCode() == 404) {
+                return Optional.empty();
+            }
+            throw e;
         }
+    }
+
+    @Override
+    public byte[] getObject(String storageKey) {
+        return s3Client.getObjectAsBytes(GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(storageKey)
+                .build()).asByteArray();
     }
 }

@@ -21,6 +21,9 @@ public interface FileStoragePort {
     /** 저장소에 객체가 실제로 있는지 확인한다(완료 통보 §2 검증). 없으면 empty, 있으면 크기를 담는다. */
     Optional<StoredObject> head(String storageKey);
 
+    /** 객체 바이트를 가져온다(§2 PDF 페이지 수 추출용 서버 다운로드). PDF 만 대상이라 크기가 제한적이다. */
+    byte[] getObject(String storageKey);
+
     /** presigned URL 과 만료 시각. */
     record PresignedUrl(String url, Instant expiresAt) {
     }

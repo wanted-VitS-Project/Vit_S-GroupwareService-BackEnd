@@ -1,11 +1,14 @@
 package com.group3.vitamins.file.application.service;
 
+import com.group3.vitamins.file.application.command.CompleteFileUploadCommand;
 import com.group3.vitamins.file.application.command.StartFileUploadCommand;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
 import com.group3.vitamins.file.application.port.FileQueryPort;
 import com.group3.vitamins.file.application.port.FileStoragePort;
+import com.group3.vitamins.file.application.port.PdfPageCounterPort;
 import com.group3.vitamins.file.application.port.UploaderLookupPort;
 import com.group3.vitamins.file.application.result.FileUploadStartResult;
+import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.usecase.FileUploadUseCase;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
 import com.group3.vitamins.file.domain.model.File;
@@ -22,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
@@ -51,13 +55,14 @@ public class FileUploadService implements FileUploadUseCase {
     private final FileQueryPort fileQueryPort;
     private final UploaderLookupPort uploaderLookupPort;
     private final FileStoragePort fileStoragePort;
+    private final PdfPageCounterPort pdfPageCounterPort;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
         Long stepId = blockCatalogPort.resolveFileBlockStepId(command.blockId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
 
-        Long projectId = requireEditableProjectId(stepId, command);
+        Long projectId = requireEditable(stepId, command.requesterUserId(), command.role()).projectId();
 
         validateInput(command);
         String extension = extractExtension(command.originalFileName());
@@ -106,12 +111,60 @@ public class FileUploadService implements FileUploadUseCase {
                 fileId, version.getFileVersionId(), versionNo, presigned.url(), presigned.expiresAt());
     }
 
-    /** 스텝 편집 권한 확인 후 프로젝트 ID 를 얻는다. 권한 실패는 파일 계약 코드로 변환한다. */
-    private Long requireEditableProjectId(Long stepId, StartFileUploadCommand command) {
+    @Override
+    public FileVersionDetailResult completeUpload(CompleteFileUploadCommand command) {
+        FileVersion version = fileVersionRepository.findById(command.fileVersionId())
+                .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_VERSION_NOT_FOUND));
+
+        if (version.isCompleted()) {
+            throw new ValidationException(FileErrorCode.FILE_ALREADY_COMPLETED);
+        }
+
+        Long blockId = fileQueryPort.findBlockIdByFileId(version.getFileId())
+                .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
+        Long stepId = blockCatalogPort.resolveFileBlockStepId(blockId)
+                .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
+        requireEditable(stepId, command.requesterUserId(), command.role());
+
+        FileStoragePort.StoredObject stored = fileStoragePort.head(version.getStorageKey())
+                .orElse(null);
+        if (stored == null) {
+            version.fail();
+            fileVersionRepository.save(version);
+            throw new ConflictException(FileErrorCode.FILE_OBJECT_NOT_FOUND);
+        }
+        if (stored.sizeBytes() != version.getSizeBytes()) {
+            throw new ConflictException(FileErrorCode.FILE_SIZE_MISMATCH);
+        }
+
+        Integer pageCount = null;
+        if (version.isPreviewable()) {
+            pageCount = pdfPageCounterPort
+                    .countPages(fileStoragePort.getObject(version.getStorageKey()))
+                    .orElse(null);
+        }
+
+        version.complete(stored.sizeBytes(), command.checksum(), pageCount, LocalDateTime.now());
+        FileVersion saved = fileVersionRepository.save(version);
+
+        File file = fileRepository.findById(saved.getFileId())
+                .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+
+        return toDetail(file, saved);
+    }
+
+    private FileVersionDetailResult toDetail(File file, FileVersion v) {
+        return new FileVersionDetailResult(
+                file.getFileId(), v.getFileVersionId(), v.getVersionNo(), file.getName(),
+                v.getOriginalFileName(), v.getExtension(), v.getSizeBytes(), v.getPageCount(),
+                v.getComment(), v.getUploaderName(), v.getUploaderDepartment(), v.getUploaderPosition(),
+                v.getCompletedAt());
+    }
+
+    /** 스텝 편집 권한을 확인하고 판정 결과를 돌려준다. 권한 실패는 파일 계약 코드로 변환한다. */
+    private StepAccessUseCase.StepAccessView requireEditable(Long stepId, String userId, String role) {
         try {
-            return stepAccessUseCase
-                    .requireEditable(stepId, command.requesterUserId(), command.role())
-                    .projectId();
+            return stepAccessUseCase.requireEditable(stepId, userId, role);
         } catch (ForbiddenException | NotFoundException e) {
             throw new ForbiddenException(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED);
         }

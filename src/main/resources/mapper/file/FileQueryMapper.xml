@@ -17,4 +17,12 @@
         )
     </select>
 
+    <!-- 문서가 연결된 블록 (파일 1 : 블록 1). 권한 판정 경로 fileId→block→step. -->
+    <select id="findBlockIdByFileId" resultType="long">
+        SELECT bf.block_id
+          FROM block_file bf
+         WHERE bf.file_id = #{fileId}
+         LIMIT 1
+    </select>
+
 </mapper>

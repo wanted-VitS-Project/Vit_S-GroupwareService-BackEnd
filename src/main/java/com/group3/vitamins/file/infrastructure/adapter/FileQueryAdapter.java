@@ -14,4 +14,9 @@ public class FileQueryAdapter implements FileQueryPort {
     public boolean existsActiveNameInBlock(Long blockId, String name) {
         return fileQueryMapper.existsActiveNameInBlock(blockId, name);
     }
+
+    @Override
+    public java.util.Optional<Long> findBlockIdByFileId(Long fileId) {
+        return java.util.Optional.ofNullable(fileQueryMapper.findBlockIdByFileId(fileId));
+    }
 }

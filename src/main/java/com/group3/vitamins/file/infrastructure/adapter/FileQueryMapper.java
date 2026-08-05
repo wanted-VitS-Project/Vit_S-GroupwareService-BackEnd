@@ -8,4 +8,6 @@ import org.apache.ibatis.annotations.Param;
 public interface FileQueryMapper {
 
     boolean existsActiveNameInBlock(@Param("blockId") Long blockId, @Param("name") String name);
+
+    Long findBlockIdByFileId(@Param("fileId") Long fileId);
 }

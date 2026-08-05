@@ -65,6 +65,8 @@ dependencies {
     // --- AWS ---
     implementation platform('software.amazon.awssdk:bom:2.50.2')
     implementation 'software.amazon.awssdk:s3'
+    // --- PDF (미리보기 페이지 수 추출 · 미리보기 5p 절단) ---
+    implementation 'org.apache.pdfbox:pdfbox:3.0.4'
 
     // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
