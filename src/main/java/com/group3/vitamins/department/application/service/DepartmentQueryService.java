@@ -1,9 +1,9 @@
-package com.group3.vitamins.department.application;
+package com.group3.vitamins.department.application.service;
 
-import com.group3.vitamins.department.infrastructure.persistence.DepartmentTreeRow;
-import com.group3.vitamins.department.infrastructure.persistence.mapper.DepartmentMapper;
-import com.group3.vitamins.department.presentation.api.dto.response.DepartmentListResponse;
-import com.group3.vitamins.department.presentation.api.dto.response.DepartmentTreeResponse;
+import com.group3.vitamins.department.application.port.DepartmentEmployeeQueryPort;
+import com.group3.vitamins.department.application.result.DepartmentEmployeeCountRow;
+import com.group3.vitamins.department.application.result.DepartmentTreeResult;
+import com.group3.vitamins.department.application.usecase.DepartmentQueryUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,50 +22,52 @@ import java.util.Map;
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-public class DepartmentQueryService {
+public class DepartmentQueryService implements DepartmentQueryUseCase {
 
-    private final DepartmentMapper departmentMapper;
+    private final DepartmentEmployeeQueryPort departmentEmployeeQueryPort;
 
     /**
      * 전체 부서를 최대 2단 트리로 조립해 반환한다.
      *
-     * <p>매퍼는 부서별 <b>직속</b> 인원만 센 평면 행을 준다. 여기서 최상위/하위로 나눠 조립하며
+     * <p>포트는 부서별 <b>직속</b> 인원만 센 평면 행을 준다. 여기서 최상위/하위로 나눠 조립하며
      * 상위의 {@code totalEmployeeCount} = 자기 직속 + 자식들 직속으로 계산한다 (계층이 2단이라 이걸로 충분).
-     * 정렬은 매퍼의 {@code department_id} 오름차순을 그대로 유지한다.
+     * 정렬은 포트의 {@code department_id} 오름차순을 그대로 유지한다.
      */
-    public DepartmentListResponse getDepartmentTree() {
-        List<DepartmentTreeRow> rows = departmentMapper.findAllWithDirectEmployeeCount();
+    @Override
+    public List<DepartmentTreeResult> getDepartmentTree() {
+        List<DepartmentEmployeeCountRow> rows = departmentEmployeeQueryPort.findAllWithDirectEmployeeCount();
 
         // parentId 별 자식 묶음. 원본이 department_id 오름차순이라 삽입 순서가 곧 정렬이다.
-        Map<Long, List<DepartmentTreeRow>> childrenByParent = new LinkedHashMap<>();
-        for (DepartmentTreeRow row : rows) {
+        Map<Long, List<DepartmentEmployeeCountRow>> childrenByParent = new LinkedHashMap<>();
+        for (DepartmentEmployeeCountRow row : rows) {
             if (row.parentId() != null) {
                 childrenByParent.computeIfAbsent(row.parentId(), key -> new ArrayList<>()).add(row);
             }
         }
 
-        List<DepartmentTreeResponse> content = new ArrayList<>();
-        for (DepartmentTreeRow row : rows) {
+        List<DepartmentTreeResult> content = new ArrayList<>();
+        for (DepartmentEmployeeCountRow row : rows) {
             if (row.parentId() != null) {
                 continue; // 최상위만 순회 — 자식은 아래에서 부모에 매단다
             }
-            List<DepartmentTreeRow> childRows = childrenByParent.getOrDefault(row.departmentId(), List.of());
+            List<DepartmentEmployeeCountRow> childRows =
+                    childrenByParent.getOrDefault(row.departmentId(), List.of());
 
-            List<DepartmentTreeResponse> children = new ArrayList<>();
+            List<DepartmentTreeResult> children = new ArrayList<>();
             int childrenTotal = 0;
-            for (DepartmentTreeRow child : childRows) {
+            for (DepartmentEmployeeCountRow child : childRows) {
                 // 하위 부서는 다시 자식을 갖지 않는다 (최대 2단) → children 은 빈 배열, total = 직속
-                children.add(new DepartmentTreeResponse(
+                children.add(new DepartmentTreeResult(
                         child.departmentId(), child.name(),
                         child.directEmployeeCount(), child.directEmployeeCount(), List.of()));
                 childrenTotal += child.directEmployeeCount();
             }
 
-            content.add(new DepartmentTreeResponse(
+            content.add(new DepartmentTreeResult(
                     row.departmentId(), row.name(),
                     row.directEmployeeCount(), row.directEmployeeCount() + childrenTotal, children));
         }
 
-        return new DepartmentListResponse(content);
+        return content;
     }
 }
