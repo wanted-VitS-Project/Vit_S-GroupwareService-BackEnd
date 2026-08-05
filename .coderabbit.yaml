@@ -2,9 +2,8 @@
 #
 # CodeRabbit AI 코드 리뷰 설정
 #
-# 📌 아키텍처는 미확정이지만 헥사고날로 갈 가능성이 높아 계층별 규칙을 미리 넣어뒀다.
-#    path_instructions 는 매칭되는 경로가 없으면 아무 동작도 하지 않으므로 넣어둬도 무해하다.
-#    다른 구조로 확정되면 "계층별" 섹션만 교체한다.
+# 📌 아키텍처는 헥사고날(포트&어댑터)로 확정됐다 — 기준 문서: .ai/ARCHITECTURE.md
+#    계층별 규칙은 그 문서의 패키지 구조·의존 방향을 따른다.
 #
 # 패키지 베이스: com.group3.vitamins
 
@@ -56,7 +55,7 @@ reviews:
         - Controller 가 Entity, Repository, JPA 구현체에 직접 의존하지 않는지 확인한다.
         - Controller 에 비즈니스 로직, 쿼리 조립이 들어가지 않았는지 확인한다.
 
-    # ══ 계층별 (헥사고날 전제 · 구조 확정 시 조정) ══════════════
+    # ══ 계층별 (헥사고날 확정 · .ai/ARCHITECTURE.md 기준) ══════════════
     - path: "src/main/java/**/presentation/**"
       instructions: |
         - Web 계층은 요청/응답 변환과 유스케이스 호출에 집중하는지 확인한다.

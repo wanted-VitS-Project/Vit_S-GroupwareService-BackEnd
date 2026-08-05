@@ -1,6 +1,7 @@
 # 🧩 블록 정보 — 10종 카탈로그
 
 **최종 업데이트**
+- 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
 - 2026-08-04 — 입찰 공고 블록 `BID_NOTICE` 추가
 - 2026-08-03 — **`BID_NOTICE` 신설 → 10종** · **다형성 양방향 ID 반영** · `block.project_id` 폐기 · 상세 테이블명·PK 정정
 - 2026-08-03 — 비타메이트 AI 상세 문서 연결 추가
@@ -31,6 +32,16 @@
 5. **생성은 3단계 한 트랜잭션** — ① `block` INSERT(`type_id=NULL`) → ② `{상세}` INSERT(`block_id`) → ③ `block` UPDATE `type_id`
 
 > ⚠️ **정합성은 전적으로 앱 책임이다.** FK 가 없어 DB 가 아무것도 막지 않는다. 고아 행은 이벤트로 회수한다.
+
+### ⭐ 규약 5 보강 (2026-08-05 확정)
+
+| 항목 | 확정 |
+|------|------|
+| **순서 고정** | ⛔ **뒤집을 수 없다.** 상세 테이블은 전부 `block_id NOT NULL` 이고 `block.type_id` 만 `NULL` 허용이다 — 스키마가 순서를 강제한다. 상세를 먼저 넣으려고 `block_id` 를 nullable 로 바꾸면 `UNIQUE(block_id)` 가 NULL 중복을 허용해 **고아 행과 생성 중 상태를 구분할 수 없게 된다** |
+| **②는 빈 행이다** | 내용은 **타입별 수정 API 가 나중에** 채운다. `TEXT` → `content = NULL` · `CHECKLIST` → `checklist_block` 만 만들고 항목 0개. 그래서 타입별 수정 API 는 **행이 이미 있다고 전제**한다(없으면 404) |
+| **삭제도 같은 트랜잭션** | ⛔ **이벤트로 처리하지 않는다.** 상세는 독립 생명주기가 없고(`block_id NOT NULL`), 삭제 판정 주인이 `block.deleted_at`(BLK-007)이다. 이벤트가 유실되면 상세 행을 **회수할 주체가 없다** — 결과적 일관성이 아니라 그냥 유실이다 |
+| **주인** | 상세 행 **생성·삭제는 Block 도메인 소관.** 타입 도메인은 **내용 수정만** 담당한다 |
+| **확장 방식** | Block 이 포트를 소유하고(소비자 소유 원칙) 타입별 어댑터가 생성·삭제·조회를 구현한다. **타입 추가 = 어댑터 파일 추가**이며 공용 파일을 고치지 않는다 (여러 담당자가 한 XML/클래스를 동시 편집하는 상황을 만들지 않는다) |
 
 **닫힌 enum 으로 가는 이유:**
 1. 도메인 블록(입금확인·결재)은 JSON 에 안 들어간다. 매칭·상태머신·권한 제약이 붙는다.
@@ -250,14 +261,21 @@
 | `CHECKLIST` | 체크리스트 | 콘텐츠 | `checklist_block` (`chk_block_id`) | `checklist` | — | 정림 | — |
 | `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | ⚠️ 결재 대상일 때 | 김동현 | — |
 | `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | ⚠️ **입금 연결 시 (스텝까지)** | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
-| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) | — | ⚠️ **계산서 연결 시 (스텝까지)** | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
+| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | ⚠️ **계산서 연결 시 (스텝까지)** | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
 | `PERFORMANCE_VIEW` | 실적 조회 | 도메인 | ⛔ **없음** (`type_id` **NULL**) | — | — | 동훈 | 🚨 T2 미결 |
 | `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ 진행 중일 때 | 이강욱 | — |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
 | **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
 **도메인 계열은 재무·공고 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
-**`type_id` 가 `NULL` 인 타입은 2종뿐** — `FILE`(복합 PK) · `PERFORMANCE_VIEW`(상세 없음).
+
+⭐ **`type_id` 가 `NULL` 인 타입은 3종이다 (2026-08-05 정정 — 2종에서 늘었다)**
+
+| 타입 | NULL 인 이유 |
+|------|------------|
+| `FILE` | `block_file` 이 복합 PK(`block_id`+`file_id`) 라 가리킬 단일 PK 가 없다 |
+| `PERFORMANCE_VIEW` | 상세 테이블이 아예 없다 (T2 미결) |
+| **`TAX_INVOICE_VIEW`** ⭐ | `tax_invoice_confirm.tax_invoice_id` 가 **NOT NULL** 이라 **계산서가 연결되기 전에는 행을 만들 수 없다.** TXL-008 의 *"행이 없으면 `WAITING`"* 이 정확히 이 의미다 — **행 존재 자체가 "연결됨" 신호**이므로 컬럼을 nullable 로 바꾸면 그 의미가 깨진다 |
 
 ---
 
