@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  사원 이름 검색 (결재선 지정용, employee.md §9). 사원·부서·직급 3테이블 조인 조회.
+  namespace = Mapper 인터페이스 전체 경로 · id = 메서드명 (팀 MyBatis 컨벤션).
+  컬럼 별칭 = EmployeeSearchRow 컴포넌트명이라 record 생성자로 자동 매핑된다(AuthQueryMapper 선례).
+-->
+<mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.EmployeeSearchQueryMapper">
+
+    <!--
+      결재자 후보. 시스템 계정·퇴사자·삭제 사원 제외 (is_system=0 · resigned_at IS NULL · deleted_at IS NULL).
+      부서·직급은 미배정일 수 있어 LEFT JOIN(동명이인 구분용 표시 필드, null 허용).
+    -->
+    <select id="searchByName"
+            resultType="com.group3.vitamins.employee.application.result.EmployeeSearchRow">
+        SELECT e.user_id AS userId,
+               e.name    AS name,
+               d.name    AS department,
+               jp.name   AS position
+          FROM employee e
+          LEFT JOIN department d     ON d.department_id = e.department_id
+          LEFT JOIN job_position jp  ON jp.job_position_id = e.job_position_id
+         WHERE e.is_system = 0
+           AND e.resigned_at IS NULL
+           AND e.deleted_at IS NULL
+           AND e.name LIKE CONCAT('%', #{name}, '%')
+         ORDER BY e.name ASC
+    </select>
+
+</mapper>
