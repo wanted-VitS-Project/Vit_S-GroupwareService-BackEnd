@@ -39,7 +39,7 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
         }
 
         eligibilityPolicy.assertBlockActiveOrThrow(command.chkBlockId());
-        eligibilityPolicy.assertEditPermission(command.chkBlockId(), command.userId());
+        eligibilityPolicy.assertEditPermission(command.chkBlockId(), command.userId(), command.role());
 
         ChecklistItem created = checklistRepository.create(command.chkBlockId(), command.content());
         int completedCount = checklistRepository.countCompletedActiveItems(command.chkBlockId());
@@ -77,7 +77,7 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
         }
 
         ChecklistItem before = eligibilityPolicy.getActiveItemOrThrow(command.chkId());
-        eligibilityPolicy.assertEditPermission(before.getChkBlockId(), command.userId());
+        eligibilityPolicy.assertEditPermission(before.getChkBlockId(), command.userId(), command.role());
 
         ChecklistItem updated = checklistRepository.updateFields(
                 command.chkId(), command.content(), command.changeStatusTo());
@@ -117,7 +117,7 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
         log.info("체크리스트 항목 삭제 요청 - chkId={}, userId={}", command.chkId(), command.userId());
 
         ChecklistItem before = eligibilityPolicy.getActiveItemOrThrow(command.chkId());
-        eligibilityPolicy.assertEditPermission(before.getChkBlockId(), command.userId());
+        eligibilityPolicy.assertEditPermission(before.getChkBlockId(), command.userId(), command.role());
 
         boolean deleted = checklistRepository.markDeleted(command.chkId(), LocalDateTime.now());
         if (!deleted) {

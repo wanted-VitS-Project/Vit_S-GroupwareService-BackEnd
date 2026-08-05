@@ -1,7 +1,7 @@
 # 체크리스트 블록 API 명세
 
 **노션 원본**: 미확인 — 사용자가 전달한 명세를 그대로 옮김 (확인되는 대로 링크 채워주세요)
-**최종 동기화**: 2026-08-04
+**최종 동기화**: 2026-08-05
 **도메인 담당**: 정림
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -11,8 +11,14 @@
 
 ## 개요
 
-블록 생성은 공용 블록 담당자(동훈님)가 처리한다. 블록 삭제는 텍스트 블록과 동일하게 이벤트로 처리되며,
-활동 로그 인프라 미비로 리스너는 주석 처리한다 (`ChecklistLifeCycleEventHandler`).
+블록 생성은 공용 블록 담당자(동훈님)가 처리한다 — Block 도메인이 생성 트랜잭션 안에서 `ChecklistHandlerService.create(blockId)`를 호출하면 체크리스트 도메인이 JPA로 빈 `checklist_block` 행을 만들어 PK를 돌려준다. 블록 일괄 조회도 체크리스트 도메인이 만든 MyBatis 어댑터(`checklist.infrastructure.blockdetail` 패키지)로 채워진다.
+
+블록 삭제는 **이벤트가 아니라 블록 삭제와 같은 트랜잭션에서의 동기 호출**로 확정됐다 (`BlockDetailPort.deleteDetail` → `ChecklistHandlerService.deleteByBlock`). 이전에 있던 `ChecklistLifeCycleEventHandler`(이벤트 리스너)는 죽은 코드라 삭제함 — 텍스트에서 먼저 정리한 것과 동일한 이유. 다만 **Block 도메인 쪽 삭제 API 자체가 아직 없어서** 실제로 호출되는 시점은 없다.
+
+**편집 권한(403) 검사, 2026-08-05 실 연동 완료** — 더 이상 항상 통과하는 스텁이 아니라, `BlockCatalogPort.hasEditPermission("CHECKLIST", chkBlockId, userId, role)`이 Step 도메인의 `StepAccessUseCase.requireEditable`을 재사용해서 실제로 판정한다. role은 `ChecklistController`가 `Authentication`에서 꺼내 Command→Service→Policy까지 전달한다. 로컬 테스트로 403(프로젝트 미참여 계정)까지 확인함.
+
+⚠️ **`BlockCatalogPort`/`CatalogBlockAdapter`는 텍스트 도메인 패키지에 있는 공용 포트라, 텍스트 브랜치에도 동일한 구현이 별도로 들어가 있다.** 텍스트 PR이 먼저 머지되면 이 브랜치에서 develop을 당겨서 정리(대부분 자동 병합될 것으로 예상, 안 되면 수동 정리)할 것.
+
 이 문서는 **체크리스트 항목(하위 데이터) CRUD** 3종만 다룬다.
 
 | 상태 | 기능 | METHOD | URL | 권한 |
@@ -216,6 +222,10 @@
 
 ## 범위 밖 (블록 자체 CRUD)
 
-- **블록 생성**: 공용 블록 담당자가 `block` + `checklist_block` 행을 함께 만든다. 이 도메인은 다루지 않는다.
-- **블록 삭제**: 텍스트 블록과 동일하게 Block 도메인이 이벤트를 발행하고, 이 도메인은 리스너로 받아 소속 항목을 정리한다.
-  활동 로그 인프라와 이벤트 타입이 아직 정해지지 않아 `ChecklistLifeCycleEventHandler` 는 주석 처리된 상태로 남겨둔다 (텍스트의 `TextLifeCycleEventHandler` 와 동일한 패턴).
+- **블록 생성**: 공용 블록 담당자가 `block` 행을 만들고, 체크리스트 도메인이 `checklist_block` 행을 만들어준다 (JPA, `ChecklistHandlerService.create`). 이 도메인 API로는 다루지 않는다.
+- **블록 삭제**: Block 도메인이 삭제 트랜잭션 안에서 `ChecklistHandlerService.deleteByBlock`을 동기 호출한다(이벤트 아님). Block 도메인 쪽 삭제 API 자체가 아직 없어 현재는 호출되지 않는다.
+
+## 활동 로그 (Activity Log)
+
+- **아직 미반영** — 생성·수정·삭제 전부 주석 처리 상태. 기존 주석은 실제 계약(`ActivityOccurredEvent.of`, `DomainEventPublisher`)과 안 맞는 죽은 코드라 그대로 주석 해제하면 컴파일 에러.
+- 활동 로그 담당(용준님) 쪽 계약이 다시 정리되는 중 (`resourceName` 필드 추가 등) — **그 PR 머지되면 텍스트에서 확립한 패턴(MODIFY는 필드 단위, 삭제 로그는 Block 도메인 책임) 그대로 반영 예정.**
