@@ -21,7 +21,12 @@ public record NotificationListResponse(
     public static NotificationListResponse from(NotificationPageResult result) {
         return new NotificationListResponse(
                 result.content().stream().map(NotificationResponse::from).toList(),
-                (int) result.totalElements(),
+                clampToInt(result.totalElements()),
                 result.totalPages());
+    }
+
+    /** API 명세상 totalElements 타입은 int 로 고정이라(`.ai/api/notification.md`), long→int 는 오버플로 대신 최댓값으로 자른다. */
+    private static int clampToInt(long value) {
+        return (int) Math.min(value, Integer.MAX_VALUE);
     }
 }
