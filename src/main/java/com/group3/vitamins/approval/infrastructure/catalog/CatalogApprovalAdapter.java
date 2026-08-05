@@ -3,12 +3,15 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalDocument;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
+import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalRevision;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.model.NewApprovalLine;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
+import com.group3.vitamins.approval.application.port.ApprovalLineDetailPort;
+import com.group3.vitamins.approval.application.result.ApprovalLineDetailView;
 import com.group3.vitamins.approval.infrastructure.persistence.ApprovalDocumentJpaEntity;
 import com.group3.vitamins.approval.infrastructure.persistence.ApprovalJpaEntity;
 import com.group3.vitamins.approval.infrastructure.persistence.ApprovalLineJpaEntity;
@@ -17,24 +20,33 @@ import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprova
 import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprovalLineRepository;
 import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprovalRepository;
 import com.group3.vitamins.approval.infrastructure.persistence.SpringDataApprovalRevisionRepository;
+import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper;
+import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLineDetailRow;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-/** {@code approval}·{@code approval_revision} 영속성 어댑터 (`text.infrastructure.catalog.CatalogTextAdapter`와 동일 구조) */
+/**
+ * {@code approval}·{@code approval_revision} 영속성 어댑터 (`text.infrastructure.catalog.CatalogTextAdapter`와 동일 구조).
+ *
+ * <p>{@link ApprovalLineDetailPort}도 함께 구현한다 — {@code approval_line}은 이 도메인 소유 테이블이라
+ * MyBatis 조인 조회({@code ApprovalQueryMapper})도 자기 영속성 어댑터가 맡는 게 자연스럽다(`MYBATIS.md`).
+ */
 @Repository
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-public class CatalogApprovalAdapter implements ApprovalRepository {
+public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineDetailPort {
 
     private final SpringDataApprovalRepository springDataApprovalRepository;
     private final SpringDataApprovalRevisionRepository springDataApprovalRevisionRepository;
     private final SpringDataApprovalLineRepository springDataApprovalLineRepository;
     private final SpringDataApprovalDocumentRepository springDataApprovalDocumentRepository;
+    private final ApprovalQueryMapper approvalQueryMapper;
 
     @Override
     @Transactional
@@ -72,6 +84,12 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
     }
 
     @Override
+    public Optional<ApprovalRevision> findLatestRevisionReadOnly(Long approvalId) {
+        return springDataApprovalRevisionRepository.findFirstByApprovalIdOrderByRevisionNoDesc(approvalId)
+                .map(this::toRevision);
+    }
+
+    @Override
     public List<ApprovalLine> findLinesByRevisionId(Long revisionId) {
         return springDataApprovalLineRepository.findByApprovalRevisionIdOrderBySequenceNo(revisionId).stream()
                 .map(this::toLine)
@@ -80,9 +98,34 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
 
     @Override
     public List<ApprovalDocument> findDocumentsByRevisionId(Long revisionId) {
-        return springDataApprovalDocumentRepository.findByApprovalRevisionIdAndDeletedAtIsNull(revisionId).stream()
+        return springDataApprovalDocumentRepository.findByApprovalRevisionId(revisionId).stream()
                 .map(this::toDocument)
                 .toList();
+    }
+
+    @Override
+    public Optional<ApprovalDocument> findDocumentById(Long documentId) {
+        return springDataApprovalDocumentRepository.findById(documentId).map(this::toDocument);
+    }
+
+    @Override
+    public boolean existsDocument(Long revisionId, Long fileVersionId) {
+        return springDataApprovalDocumentRepository
+                .existsByApprovalRevisionIdAndFileVersionId(revisionId, fileVersionId);
+    }
+
+    @Override
+    @Transactional
+    public ApprovalDocument addDocument(Long revisionId, Long fileVersionId) {
+        ApprovalDocumentJpaEntity saved = springDataApprovalDocumentRepository.save(
+                ApprovalDocumentJpaEntity.create(revisionId, fileVersionId));
+        return toDocument(saved);
+    }
+
+    @Override
+    @Transactional
+    public void deleteDocument(Long documentId) {
+        springDataApprovalDocumentRepository.deleteById(documentId);
     }
 
     @Override
@@ -130,6 +173,51 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
                 .toList();
     }
 
+    @Override
+    @Transactional
+    public ApprovalRevision markRevisionSubmitted(Long revisionId) {
+        springDataApprovalRevisionRepository.markSubmitted(revisionId, ApprovalStatus.IN_PROGRESS);
+        return springDataApprovalRevisionRepository.findById(revisionId)
+                .map(this::toRevision)
+                .orElseThrow(() -> new IllegalStateException("revision not found after submit: " + revisionId));
+    }
+
+    @Override
+    @Transactional
+    public void markApprovalInProgress(Long approvalId, int revisionNo) {
+        springDataApprovalRepository.markInProgress(approvalId, revisionNo, ApprovalStatus.IN_PROGRESS);
+    }
+
+    @Override
+    @Transactional
+    public List<ApprovalLine> activateLines(Long revisionId) {
+        springDataApprovalLineRepository.activateFirstAndWaitRest(
+                revisionId, ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
+        return findLinesByRevisionId(revisionId);
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteCascade(Long approvalId, LocalDateTime deletedAt) {
+        springDataApprovalDocumentRepository.deleteAllByApprovalId(approvalId);
+        springDataApprovalLineRepository.softDeleteByApprovalId(approvalId, deletedAt);
+        springDataApprovalRevisionRepository.softDeleteByApprovalId(approvalId, deletedAt);
+        springDataApprovalRepository.softDelete(approvalId, deletedAt);
+    }
+
+    @Override
+    public List<ApprovalLineDetailView> findLineDetails(Long revisionId) {
+        return approvalQueryMapper.findLineDetailsByRevisionId(revisionId).stream()
+                .map(this::toLineDetailView)
+                .toList();
+    }
+
+    private ApprovalLineDetailView toLineDetailView(ApprovalLineDetailRow row) {
+        return new ApprovalLineDetailView(row.lineId(), row.approverId(), row.approverName(),
+                row.jobPositionName(), row.approverDepartment(), row.sequenceNo(),
+                row.status(), row.opinion(), row.processedAt());
+    }
+
     private Approval toApproval(ApprovalJpaEntity entity) {
         return Approval.reconstruct(
                 entity.getApprovalId(), entity.getBlockId(), entity.getDrafterId(), entity.getStatus(),
@@ -155,6 +243,6 @@ public class CatalogApprovalAdapter implements ApprovalRepository {
     private ApprovalDocument toDocument(ApprovalDocumentJpaEntity entity) {
         return ApprovalDocument.reconstruct(
                 entity.getApprovalDocumentId(), entity.getApprovalRevisionId(), entity.getFileVersionId(),
-                entity.getCreatedAt(), entity.getDeletedAt());
+                entity.getCreatedAt());
     }
 }

@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 import java.util.function.Function;
 
-/** 회차(revision)를 편집하는 여러 엔드포인트(APR-002 등)가 공용으로 쓰는 존재·기안자·DRAFT 검증 */
+/** 회차(revision)를 다루는 여러 엔드포인트(APR-002·MGT-005 등)가 공용으로 쓰는 존재·기안자·DRAFT 검증 */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -38,9 +38,17 @@ public class ApprovalRevisionEligibilityPolicy {
         }
     }
 
-    /** 회차가 이 결재({@code approvalId}) 소속인지까지 확인한다 — 아니면 못 찾은 것과 동일하게 404 */
+    /**
+     * 회차가 이 결재({@code approvalId}) 소속인지까지 확인한다(아니면 못 찾은 것과 동일하게 404) —
+     * 상태 제약은 없다. MGT-005(회차 상세조회)처럼 DRAFT 가 아닌 회차도 봐야 하는 조회용.
+     */
+    public ApprovalRevision getRevisionOrThrow(Long approvalId, Long revisionId) {
+        return findOwnedRevision(approvalId, revisionId, approvalRepository::findRevisionById);
+    }
+
+    /** {@link #getRevisionOrThrow} + DRAFT 상태 확인(아니면 409) — 편집형 엔드포인트(APR-002 등)가 쓴다 */
     public ApprovalRevision getDraftRevisionOrThrow(Long approvalId, Long revisionId) {
-        return getDraftRevisionOrThrow(approvalId, revisionId, approvalRepository::findRevisionById);
+        return assertDraft(findOwnedRevision(approvalId, revisionId, approvalRepository::findRevisionById));
     }
 
     /**
@@ -48,22 +56,24 @@ public class ApprovalRevisionEligibilityPolicy {
      * 치환(APR-009)처럼 "확인 후 쓰기" 사이에 상신이 끼어들면 안 되는 경우에 쓴다.
      */
     public ApprovalRevision getDraftRevisionForUpdateOrThrow(Long approvalId, Long revisionId) {
-        return getDraftRevisionOrThrow(approvalId, revisionId, approvalRepository::findRevisionByIdForUpdate);
+        return assertDraft(findOwnedRevision(approvalId, revisionId, approvalRepository::findRevisionByIdForUpdate));
     }
 
-    private ApprovalRevision getDraftRevisionOrThrow(Long approvalId, Long revisionId,
-                                                       Function<Long, Optional<ApprovalRevision>> lookup) {
-        ApprovalRevision revision = lookup.apply(revisionId)
+    private ApprovalRevision assertDraft(ApprovalRevision revision) {
+        if (revision.getStatus() != ApprovalStatus.DRAFT) {
+            log.warn("DRAFT 아닌 회차 수정 시도 - revisionId={}, status={}", revision.getRevisionId(), revision.getStatus());
+            throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+        }
+        return revision;
+    }
+
+    private ApprovalRevision findOwnedRevision(Long approvalId, Long revisionId,
+                                                Function<Long, Optional<ApprovalRevision>> lookup) {
+        return lookup.apply(revisionId)
                 .filter(r -> r.getApprovalId().equals(approvalId))
                 .orElseThrow(() -> {
                     log.warn("회차 없음 - approvalId={}, revisionId={}", approvalId, revisionId);
                     return new NotFoundException(ApprovalErrorCode.APPROVAL_REVISION_NOT_FOUND);
                 });
-
-        if (revision.getStatus() != ApprovalStatus.DRAFT) {
-            log.warn("DRAFT 아닌 회차 수정 시도 - revisionId={}, status={}", revisionId, revision.getStatus());
-            throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
-        }
-        return revision;
     }
 }
