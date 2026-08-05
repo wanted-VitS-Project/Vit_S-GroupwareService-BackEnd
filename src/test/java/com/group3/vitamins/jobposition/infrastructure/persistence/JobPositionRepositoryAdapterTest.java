@@ -57,9 +57,11 @@ class JobPositionRepositoryAdapterTest {
         JobPosition saved = adapter.save(JobPosition.create("대리", 1));
         Long id = saved.getJobPositionId();
 
-        // employee 는 JPA 엔티티가 없어(검색 슬라이스는 MyBatis) FK 테이블을 직접 만들어 참조를 건다.
+        // employee 에는 이제 JPA 엔티티(EmployeeJpaEntity)가 있어 create-drop 이 FK 없는 테이블을 먼저 만든다.
+        // 이 테스트가 보려는 건 job_position→employee FK 위반이므로, 그 판을 버리고 FK 를 건 최소 테이블로 갈아끼운다.
+        em.createNativeQuery("DROP TABLE IF EXISTS employee").executeUpdate();
         em.createNativeQuery(
-                "CREATE TABLE IF NOT EXISTS employee ("
+                "CREATE TABLE employee ("
                         + "user_id VARCHAR(20) PRIMARY KEY, "
                         + "job_position_id BIGINT, "
                         + "CONSTRAINT fk_emp_jp FOREIGN KEY (job_position_id) "
