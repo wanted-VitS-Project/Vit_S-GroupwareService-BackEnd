@@ -22,6 +22,9 @@ import com.group3.vitamins.project.block.presentation.api.request.BlockCreateReq
 import com.group3.vitamins.project.block.presentation.api.response.BlockCreateResponse;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import com.group3.vitamins.project.block.application.result.BlockLayoutResult;
+import com.group3.vitamins.project.block.presentation.api.request.BlockLayoutUpdateRequest;
+import com.group3.vitamins.project.block.presentation.api.response.BlockLayoutListResponse;
 
 @Tag(name = "Block - 블록", description = "블록 조회 / 생성 / 배치 / 삭제 (담당: 동훈)")
 @RestController
@@ -93,5 +96,38 @@ public class StepBlockController {
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         BlockListResponse.from(blocks)));
+    }
+
+
+    @Operation(summary = "블록 배치 변경",
+            description = "드래그 결과를 한 트랜잭션에서 일괄 반영한다. 총 열 수는 3 고정이고, "
+                    + "같은 행에 순서가 겹쳐도 허용한다(드래그 중간 상태) — UNIQUE 를 걸지 않은 이유다. "
+                    + "다른 스텝의 블록이 섞이면 400 이다. 제목·담당자는 PATCH /api/v1/blocks/{blockId} 담당이다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "배치 변경 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "BLOCK_COL_SPAN_INVALID / BLOCK_LAYOUT_INVALID"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "STEP_NOT_FOUND / BLOCK_NOT_FOUND")
+    })
+    @PatchMapping("/layout")
+    public ResponseEntity<ApiResponse<BlockLayoutListResponse>> updateLayout(
+            @Parameter(description = "배치를 바꿀 스텝 ID")
+            @PathVariable Long stepId,
+            @RequestBody BlockLayoutUpdateRequest request,
+            Authentication authentication
+    ) {
+        List<BlockLayoutResult> results = blockCommandUseCase.updateLayout(
+                request.toCommand(stepId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        BlockLayoutListResponse.from(results)));
     }
 }
