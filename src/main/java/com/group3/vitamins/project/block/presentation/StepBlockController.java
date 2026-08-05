@@ -4,6 +4,7 @@ import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.block.application.query.BlockListQuery;
 import com.group3.vitamins.project.block.application.result.BlockSummary;
+import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
 import com.group3.vitamins.project.block.application.usecase.BlockQueryUseCase;
 import com.group3.vitamins.project.block.presentation.api.response.BlockListResponse;
 import com.group3.vitamins.project.presentation.api.ProjectResponseMessage;
@@ -14,12 +15,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import com.group3.vitamins.project.block.application.result.BlockResult;
+import com.group3.vitamins.project.block.presentation.api.request.BlockCreateRequest;
+import com.group3.vitamins.project.block.presentation.api.response.BlockCreateResponse;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(name = "Block - 블록", description = "블록 조회 / 생성 / 배치 / 삭제 (담당: 동훈)")
 @RestController
@@ -28,6 +30,42 @@ import java.util.List;
 public class StepBlockController {
 
     private final BlockQueryUseCase blockQueryUseCase;
+    private final BlockCommandUseCase blockCommandUseCase;
+
+    @Operation(summary = "블록 생성",
+            description = "스텝에 블록을 추가하고 타입별 상세 빈 행을 같은 트랜잭션에서 만든다. "
+                    + "제목·담당자는 생략할 수 있고 추가 직후 빈 카드 상태가 된다. "
+                    + "BID_NOTICE 는 공고 전환 API 만 생성하므로 보내면 400 이다. "
+                    + "PAYMENT_CONFIRM·TAX_INVOICE_VIEW 는 스텝당 1개만 허용된다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
+                    description = "생성 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "BLOCK_TYPE_INVALID / BLOCK_TITLE_TOO_LONG / BLOCK_COL_SPAN_INVALID"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "STEP_NOT_FOUND / USER_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "PAYMENT_CONFIRM_BLOCK_DUPLICATED / TAX_INVOICE_VIEW_BLOCK_DUPLICATED")
+    })
+    @PostMapping
+    public ResponseEntity<ApiResponse<BlockCreateResponse>> createBlock(
+            @Parameter(description = "블록을 추가할 스텝 ID")
+            @PathVariable Long stepId,
+            @RequestBody BlockCreateRequest request,
+            Authentication authentication
+    ) {
+        BlockResult result = blockCommandUseCase.createBlock(request.toCommand(
+                stepId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.status(201).body(
+                ApiResponse.created(ProjectResponseMessage.SUCCESS,
+                        BlockCreateResponse.from(result)));
+    }
+
 
     @Operation(summary = "스텝 블록 일괄 조회",
             description = "블록 골격과 타입별 상세를 한 응답에 담아 rowIndex → sortOrder 순으로 내린다. "
