@@ -92,7 +92,6 @@ Activity Object 1개는 `activity_log` 1행에 대응한다. 한 수정 이벤�
 | --- | --- | --- |
 | `userId` | String | 사용자 사번 |
 | `name` | String | 사용자 이름 |
-| `profileImageUrl` | String | 프로필 이미지 URL. 현재 employee 테이블에 컬럼이 없어 Sprint1에서는 `null` |
 
 ### Block Object
 
@@ -144,8 +143,7 @@ resource.name == null
         },
         "actor": {
           "userId": "EMP003",
-          "name": "이영희",
-          "profileImageUrl": null
+          "name": "이영희"
         },
         "block": {
           "blockId": 15,
@@ -168,8 +166,7 @@ resource.name == null
         },
         "actor": {
           "userId": "EMP005",
-          "name": "최수아",
-          "profileImageUrl": null
+          "name": "최수아"
         },
         "block": {
           "blockId": 18,
