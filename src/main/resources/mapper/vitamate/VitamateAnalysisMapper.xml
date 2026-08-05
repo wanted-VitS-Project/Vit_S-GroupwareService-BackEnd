@@ -62,4 +62,92 @@
         </foreach>
     </select>
 
+    <select id="findAccessibleAnalysis"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisRow">
+        SELECT
+            va.vitamate_analysis_id AS analysisId,
+            b.block_id AS blockId,
+            va.prompt AS prompt,
+            va.analysis_status AS analysisStatus,
+            va.result AS result,
+            va.error_message AS errorMessage,
+            va.request_hash AS requestHash,
+            va.created_at AS createdAt,
+            va.completed_at AS completedAt
+        FROM vitamate_analysis va
+                 JOIN vitamate_block vb
+                      ON vb.vitamate_block_id = va.vitamate_block_id
+                 JOIN block b
+                      ON b.block_id = vb.block_id
+                          AND b.type_id = vb.vitamate_block_id
+                 JOIN step s
+                      ON s.step_id = b.step_id
+        WHERE va.vitamate_analysis_id = #{analysisId}
+          AND b.type = 'AI'
+          AND va.deleted_at IS NULL
+          AND vb.deleted_at IS NULL
+          AND b.deleted_at IS NULL
+          AND (
+            EXISTS (
+                SELECT 1
+                FROM step_permission sp
+                WHERE sp.step_id = b.step_id
+                  AND sp.user_id = #{userId}
+                  AND sp.permission != 'NONE'
+            )
+                OR (
+                NOT EXISTS (
+                    SELECT 1
+                    FROM step_permission sp
+                    WHERE sp.step_id = b.step_id
+                      AND sp.user_id = #{userId}
+                )
+                    AND EXISTS (
+                    SELECT 1
+                    FROM project_member pm
+                    WHERE pm.project_id = s.project_id
+                      AND pm.user_id = #{userId}
+                      AND pm.permission != 'NONE'
+                )
+                )
+            )
+    </select>
+
+    <select id="findAnalysisDocuments"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisDocumentRow">
+        SELECT
+            vad.file_version_id AS fileVersionId,
+            f.name AS fileName
+        FROM vitamate_analysis_document vad
+                 JOIN file_version fv
+                      ON fv.file_version_id = vad.file_version_id
+                 JOIN `file` f
+                      ON f.file_id = fv.file_id
+        WHERE vad.vitamate_analysis_id = #{analysisId}
+          AND vad.deleted_at IS NULL
+          AND fv.deleted_at IS NULL
+          AND f.deleted_at IS NULL
+        ORDER BY vad.created_at ASC, vad.vitamate_analysis_document_id ASC
+    </select>
+
+    <select id="findAnalysisCitations"
+            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisCitationRow">
+        SELECT
+            vac.rank_order AS rankOrder,
+            vad.file_version_id AS fileVersionId,
+            vac.document_chunk_id AS documentChunkId,
+            dc.page_number AS pageNumber,
+            vac.excerpt AS excerpt
+        FROM vitamate_analysis_citation vac
+                 JOIN vitamate_analysis_document vad
+                      ON vad.vitamate_analysis_document_id = vac.vitamate_analysis_document_id
+                 JOIN document_chunk dc
+                      ON dc.document_chunk_id = vac.document_chunk_id
+        WHERE vac.vitamate_analysis_id = #{analysisId}
+          AND vac.deleted_at IS NULL
+          AND vad.deleted_at IS NULL
+          AND dc.deleted_at IS NULL
+        ORDER BY vac.rank_order ASC
+    </select>
+
 </mapper>

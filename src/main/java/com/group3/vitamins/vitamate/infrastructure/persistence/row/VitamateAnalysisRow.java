@@ -11,8 +11,11 @@ import java.time.LocalDateTime;
 public class VitamateAnalysisRow {
 
     private Long analysisId;
+    private Long blockId;
     private String prompt;
     private String analysisStatus;
+    private String result;
+    private String errorMessage;
     private String requestHash;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
