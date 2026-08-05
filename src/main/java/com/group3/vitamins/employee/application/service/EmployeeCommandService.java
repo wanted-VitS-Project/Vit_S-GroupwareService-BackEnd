@@ -2,16 +2,22 @@ package com.group3.vitamins.employee.application.service;
 
 import com.group3.vitamins.account.application.port.MailDeliveryException;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
+import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.employee.application.command.RegisterEmployeeCommand;
+import com.group3.vitamins.employee.application.command.ResignEmployeeCommand;
+import com.group3.vitamins.employee.application.command.UpdateEmployeeCommand;
 import com.group3.vitamins.employee.application.policy.EmployeeAdminPolicy;
+import com.group3.vitamins.employee.application.port.AccountDeactivationPort;
 import com.group3.vitamins.employee.application.port.EmployeeReferenceQueryPort;
 import com.group3.vitamins.employee.application.port.InitialPasswordMailPort;
 import com.group3.vitamins.employee.application.result.EmployeeRegisterResult;
+import com.group3.vitamins.employee.application.result.EmployeeResignResult;
 import com.group3.vitamins.employee.application.usecase.EmployeeCommandUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
@@ -19,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -49,6 +56,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private final TempPasswordGenerator tempPasswordGenerator;
     private final ThrottledPasswordEncoder passwordEncoder;
     private final InitialPasswordMailPort initialPasswordMailPort;
+    private final AccountDeactivationPort accountDeactivationPort;
 
     @Override
     public EmployeeRegisterResult register(RegisterEmployeeCommand command) {
@@ -105,6 +113,84 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
         log.info("사원 등록 - userId={} emailRegistered={} emailSent={}", userId, emailRegistered, emailSent);
         return new EmployeeRegisterResult(userId, name, emailRegistered, emailSent);
+    }
+
+    /**
+     * 사원 정보 수정 (`employee.md` §4). 전달한 필드만 병합해 UPDATE 한다. 해싱이 없어 메서드 전체를 트랜잭션으로
+     * 묶는다 — findById 로 얻은 엔티티가 관리 상태를 유지해 UPDATE 가 깔끔하다.
+     */
+    @Override
+    @Transactional
+    public void updateEmployee(UpdateEmployeeCommand command) {
+        employeeAdminPolicy.assertAdmin(command.actorRole());
+
+        if (command.hasNoFields()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+
+        Employee current = employeeRepository.findById(command.userId())
+                .orElseThrow(() -> new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND));
+        if (current.isSystem()) {
+            throw new ForbiddenException(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED);
+        }
+
+        // 전달한 필드만 새 값으로, 나머지는 현재값 유지. jobPositionId 는 명시적 null = 직급 미지정.
+        String name = current.getName();
+        if (command.nameProvided()) {
+            name = required(command.name()); // NOT NULL — 빈 값이면 EMP_INVALID_REQUEST
+        }
+        String phone = command.phoneProvided() ? normalize(command.phone()) : current.getPhone();
+        String email = command.emailProvided() ? normalize(command.email()) : current.getEmail();
+
+        Long departmentId = current.getDepartmentId();
+        if (command.departmentIdProvided()) {
+            departmentId = command.departmentId();
+            if (departmentId != null && !referenceQueryPort.departmentExists(departmentId)) {
+                throw new NotFoundException(EmployeeErrorCode.EMP_DEPARTMENT_NOT_FOUND);
+            }
+        }
+
+        Long jobPositionId = current.getJobPositionId();
+        if (command.jobPositionIdProvided()) {
+            jobPositionId = command.jobPositionId(); // null = 직급 미지정으로 변경
+            if (jobPositionId != null && !referenceQueryPort.jobPositionExists(jobPositionId)) {
+                throw new NotFoundException(EmployeeErrorCode.EMP_JOB_POSITION_NOT_FOUND);
+            }
+        }
+
+        LocalDate hiredAt = current.getHiredAt();
+        if (command.hiredAtProvided()) {
+            hiredAt = parseRequiredDate(command.hiredAt());
+        }
+
+        employeeRepository.update(current.withInfo(name, phone, email, departmentId, jobPositionId, hiredAt));
+        log.info("사원 수정 - userId={}", command.userId());
+    }
+
+    /**
+     * 퇴사 처리 (`employee.md` §5). 사원 정보는 지우지 않고 퇴사일만 기록하며, 계정을 함께 {@code INACTIVE} 로
+     * 바꾼다(별도 상태변경 API 를 호출하지 않는다). 두 쓰기가 한 트랜잭션이다.
+     */
+    @Override
+    @Transactional
+    public EmployeeResignResult resignEmployee(ResignEmployeeCommand command) {
+        employeeAdminPolicy.assertAdmin(command.actorRole());
+
+        Employee current = employeeRepository.findById(command.userId())
+                .orElseThrow(() -> new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND));
+        if (current.isSystem()) {
+            throw new ForbiddenException(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED);
+        }
+        if (current.isResigned()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_ALREADY_RESIGNED);
+        }
+        LocalDate resignedAt = parseRequiredDate(command.resignedAt());
+
+        employeeRepository.update(current.resigned(resignedAt));
+        accountDeactivationPort.deactivate(command.userId());
+
+        log.info("사원 퇴사 - userId={} resignedAt={}", command.userId(), resignedAt);
+        return new EmployeeResignResult(command.userId(), resignedAt.toString(), "INACTIVE");
     }
 
     /** ADMIN 은 부여 불가(전용 코드), 그 외 허용값이 아니면 형식 오류. */

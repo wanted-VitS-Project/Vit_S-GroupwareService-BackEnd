@@ -98,4 +98,20 @@ public class EmployeeJpaEntity implements Persistable<String> {
     void markNotNew() {
         this.isNew = false;
     }
+
+    /**
+     * 수정·퇴사 시 가변 필드를 갱신한다. 사번({@code userId})·시스템여부({@code system})는 바꾸지 않는다
+     * (사번은 PK 이자 모든 사람 참조 FK, 시스템여부는 이 경로로 안 바뀐다). 로드된 엔티티({@code isNew=false})를
+     * 대상으로 호출하므로 이후 {@code saveAndFlush} 는 UPDATE 로 나간다.
+     */
+    void apply(String name, Long departmentId, Long jobPositionId,
+               String email, String phone, LocalDate hiredAt, LocalDate resignedAt) {
+        this.name = name;
+        this.departmentId = departmentId;
+        this.jobPositionId = jobPositionId;
+        this.email = email;
+        this.phone = phone;
+        this.hiredAt = hiredAt;
+        this.resignedAt = resignedAt;
+    }
 }

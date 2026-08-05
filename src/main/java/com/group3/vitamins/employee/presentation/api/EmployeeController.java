@@ -1,18 +1,26 @@
 package com.group3.vitamins.employee.presentation.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.group3.vitamins.employee.application.command.UpdateEmployeeCommand;
 import com.group3.vitamins.employee.application.query.EmployeeListQuery;
 import com.group3.vitamins.employee.application.query.EmployeeSearchQuery;
 import com.group3.vitamins.employee.application.usecase.EmployeeAdminQueryUseCase;
 import com.group3.vitamins.employee.application.usecase.EmployeeCommandUseCase;
 import com.group3.vitamins.employee.application.usecase.EmployeeQueryUseCase;
+import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.presentation.api.request.EmployeeRegisterRequest;
+import com.group3.vitamins.employee.presentation.api.request.EmployeeResignRequest;
 import com.group3.vitamins.employee.presentation.api.response.EmployeeDetailResponse;
 import com.group3.vitamins.employee.presentation.api.response.EmployeePageResponse;
 import com.group3.vitamins.employee.presentation.api.response.EmployeeRegisterResponse;
+import com.group3.vitamins.employee.presentation.api.response.EmployeeResignResponse;
 import com.group3.vitamins.employee.presentation.api.response.EmployeeSearchResponse;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Tag(name = "Employee - 사원", description = "사원 목록·상세·검색·등록 — 담당: 김동현")
+@Tag(name = "Employee - 사원", description = "사원 목록·상세·검색·등록·수정·퇴사 — 담당: 김동현")
 @RestController
 @RequestMapping("/api/v1/employees")
 @RequiredArgsConstructor
@@ -162,6 +171,116 @@ public class EmployeeController {
 
         return ApiResponse.success(EmployeeResponseMessage.DETAIL_SUCCESS,
                 EmployeeDetailResponse.from(detail.employee(), detail.groups()));
+    }
+
+    @Operation(summary = "사원 정보 수정 (ADMIN)",
+            description = "전달한 필드만 수정한다. 사번·전역 권한은 이 API 로 바꾸지 않는다. jobPositionId 에 null 을 "
+                    + "보내면 직급이 미지정으로 바뀐다. 응답은 사원 상세와 같은 구조다. 시스템 계정은 수정할 수 없다.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            content = @Content(schema = @Schema(implementation = com.group3.vitamins.employee.presentation.api.request.EmployeeUpdateRequest.class)))
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "EMP_INVALID_REQUEST — 형식 오류 또는 수정할 필드 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ACC_ADMIN_REQUIRED / ACC_SYSTEM_ACCOUNT_NOT_ALLOWED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "EMP_NOT_FOUND · EMP_DEPARTMENT_NOT_FOUND · EMP_JOB_POSITION_NOT_FOUND")
+    })
+    @PatchMapping("/{userId}")
+    public ApiResponse<EmployeeDetailResponse> updateEmployee(
+            @Parameter(description = "수정할 사번")
+            @PathVariable String userId,
+            @RequestBody JsonNode requestBody,
+            Authentication authentication) {
+
+        String role = currentRole(authentication);
+        employeeCommandUseCase.updateEmployee(toUpdateCommand(userId, requestBody, role));
+
+        // 응답은 상세 구조 — 수정 커밋 후 조회 유스케이스로 다시 읽어 목록·상세와 같은 규칙으로 조립한다.
+        EmployeeAdminQueryUseCase.EmployeeDetail detail =
+                employeeAdminQueryUseCase.getEmployee(role, userId);
+        return ApiResponse.success(EmployeeResponseMessage.UPDATED,
+                EmployeeDetailResponse.from(detail.employee(), detail.groups()));
+    }
+
+    @Operation(summary = "퇴사 처리 (ADMIN)",
+            description = "사원 정보는 지우지 않고 퇴사일을 기록하며 계정을 함께 INACTIVE 로 바꾼다(별도 상태변경 API 불필요). "
+                    + "이미 퇴사한 사원은 400. 시스템 계정은 대상이 될 수 없다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "퇴사 처리 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "EMP_INVALID_REQUEST(형식 오류) · EMP_ALREADY_RESIGNED(이미 퇴사)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ACC_ADMIN_REQUIRED / ACC_SYSTEM_ACCOUNT_NOT_ALLOWED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "EMP_NOT_FOUND — 사원 없음")
+    })
+    @PatchMapping("/{userId}/resignation")
+    public ApiResponse<EmployeeResignResponse> resignEmployee(
+            @Parameter(description = "퇴사할 사번")
+            @PathVariable String userId,
+            @RequestBody EmployeeResignRequest request,
+            Authentication authentication) {
+
+        EmployeeResignResponse data = EmployeeResignResponse.from(
+                employeeCommandUseCase.resignEmployee(request.toCommand(currentRole(authentication), userId)));
+
+        return ApiResponse.success(EmployeeResponseMessage.RESIGNED, data);
+    }
+
+    /**
+     * raw JSON 에서 필드 존재 여부(생략 vs 값 전달)와 타입을 직접 판별해 커맨드로 옮긴다 (job-position 수정 선례).
+     *
+     * <p>{@code asText()}·{@code asLong()} 는 타입을 강제 변환하므로 명세와 다른 타입이 조용히 통과한다 —
+     * 문자열 필드에 숫자/불리언, 숫자 필드에 문자열이 오면 {@code EMP_INVALID_REQUEST}(400)로 막는다.
+     * {@code null} 값은 "전달됨"으로 취급한다 — jobPositionId 는 null 로 직급을 지울 수 있어야 하기 때문이다.
+     */
+    private UpdateEmployeeCommand toUpdateCommand(String userId, JsonNode body, String role) {
+        return new UpdateEmployeeCommand(
+                role, userId,
+                body.has("name"), textOrNull(body, "name"),
+                body.has("phone"), textOrNull(body, "phone"),
+                body.has("email"), textOrNull(body, "email"),
+                body.has("departmentId"), longOrNull(body, "departmentId"),
+                body.has("jobPositionId"), longOrNull(body, "jobPositionId"),
+                body.has("hiredAt"), textOrNull(body, "hiredAt"));
+    }
+
+    /** 전달됐다면 문자열이거나 null 이어야 한다. 그 외 타입이면 400. */
+    private String textOrNull(JsonNode body, String field) {
+        if (!body.has(field)) {
+            return null;
+        }
+        JsonNode node = body.get(field);
+        if (node.isNull()) {
+            return null;
+        }
+        if (!node.isTextual()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return node.asText();
+    }
+
+    /** 전달됐다면 정수이거나 null 이어야 한다. 그 외 타입이면 400. */
+    private Long longOrNull(JsonNode body, String field) {
+        if (!body.has(field)) {
+            return null;
+        }
+        JsonNode node = body.get(field);
+        if (node.isNull()) {
+            return null;
+        }
+        if (!node.isIntegralNumber()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return node.asLong();
     }
 
     /** 세션 권한(ROLE_ADMIN 형태)에서 전역 role 문자열을 꺼낸다. */

@@ -55,7 +55,8 @@ class EmployeeCommandServiceTest {
         passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
         service = new EmployeeCommandService(new EmployeeAdminPolicy(), employeeRepository,
-                referenceQueryPort, registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort);
+                referenceQueryPort, registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
+                Mockito.mock(com.group3.vitamins.employee.application.port.AccountDeactivationPort.class));
     }
 
     /** email 있는 정상 등록의 스텁 (해피패스 계열이 공유). */
