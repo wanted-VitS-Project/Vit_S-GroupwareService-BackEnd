@@ -1,6 +1,7 @@
 package com.group3.vitamins.text.presentation;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
+import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.text.application.command.UpdateTextContentCommand;
 import com.group3.vitamins.text.application.usecase.TextCommandUseCase;
 import com.group3.vitamins.text.application.usecase.TextCommandUseCase.UpdateTextContentView;
@@ -12,7 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,10 +49,11 @@ public class TextController {
             @Parameter(description = "수정할 텍스트 항목 ID", example = "1")
             @PathVariable Long txtId,
             @RequestBody TextUpdateRequest request,
-            @AuthenticationPrincipal String userId
+            Authentication authentication
     ) {
         UpdateTextContentView view = textCommandUseCase.updateContent(
-                new UpdateTextContentCommand(userId, txtId, request.content()));
+                new UpdateTextContentCommand(authentication.getName(), txtId, request.content(),
+                        RequesterRole.from(authentication)));
         UpdateTextContentResponse data =
                 new UpdateTextContentResponse(view.txtId(), view.content(), view.updatedAt());
 

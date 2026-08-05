@@ -42,18 +42,20 @@ public class TextCommandService implements TextCommandUseCase {
         }
 
         Text before = eligibilityPolicy.getActiveTextOrThrow(command.txtId());
-        eligibilityPolicy.assertEditPermission(command.txtId(), command.userId());
+        eligibilityPolicy.assertEditPermission(command.txtId(), command.userId(), command.role());
 
         Text saved = textRepository.updateContent(command.txtId(), command.content());
 
         log.info("텍스트 본문 수정 완료 - txtId={}", saved.getTxtId());
 
         // 활동 로그(본문 수정) — 실제로 값이 바뀐 경우에만 발행한다 (§5.4 텍스트 Block).
+        // 텍스트 본문은 표시명으로 쓰지 않으므로 resourceName은 null로 둔다.
         if (!Objects.equals(before.getContent(), saved.getContent())) {
             domainEventPublisher.publish(ActivityOccurredEvent.of(
                     ActivityLogAction.MODIFY,
                     saved.getBlockId(),
                     saved.getTxtId(),
+                    null,
                     command.userId(),
                     List.of(new ActivityFieldChange("content", before.getContent(), saved.getContent()))
             ));
