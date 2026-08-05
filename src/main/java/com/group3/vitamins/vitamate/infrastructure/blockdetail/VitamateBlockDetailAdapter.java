@@ -29,8 +29,8 @@ public class VitamateBlockDetailAdapter implements BlockDetailPort {
 
     // block 생성 트랜잭션 안에서 빈 vitamate_block 상세 행을 만든다.
     @Override
-    public Long createDetail(Long blockId, String userId) {
-        return vitamateBlockHandlerService.create(blockId, userId);
+    public Long createDetail(Long blockId) {
+        return vitamateBlockHandlerService.create(blockId);
     }
 
     // block 삭제 트랜잭션 안에서 vitamate_block 상세 행을 논리 삭제한다.

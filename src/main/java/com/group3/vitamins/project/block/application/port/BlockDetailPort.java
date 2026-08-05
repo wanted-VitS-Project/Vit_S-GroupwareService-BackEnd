@@ -21,7 +21,7 @@ public interface BlockDetailPort {
      * 상세 행이 없는 타입(FILE·PERFORMANCE_VIEW·TAX_INVOICE_VIEW)은 null 을 돌려주고
      * 호출자가 block.type_id 를 NULL 로 둔다.
      */
-    Long createDetail(Long blockId, String userId);
+    Long createDetail(Long blockId);
 
     /** 상세 행을 논리 삭제한다. 블록 삭제와 같은 트랜잭션에서 호출된다. */
     void deleteDetail(Long typeId, String userId, String blockTitle, LocalDateTime deletedAt);

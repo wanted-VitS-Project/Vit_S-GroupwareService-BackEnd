@@ -2,8 +2,8 @@
 
 **최종 업데이트**
 - 2026-08-05 — `AI` 블록 상세 어댑터 등록 완료 (`vitamate/infrastructure/blockdetail/`) · `detail` shape = `VitamateDetail(vitamateBlockId, welcomeMessage)`
-- 2026-08-05 — `BlockDetailPort.createDetail(blockId, userId)` 로 확장 · 타입별 상세 생성 로그에서 actorId 사용 가능
 - 2026-08-05 — ⭐ **§2 타입별 상세 확장 가이드 신설** (담당자용 계약 10건 · 파일 위치 · 스켈레톤) · **쓰기는 JPA 위임 · 조회만 MyBatis** 확정 · 어댑터·매퍼·XML 을 **타입 담당자 패키지로 이관** · 규약 5줄의 `<discriminator>`·"이벤트 회수" 문구 정정
+- 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
@@ -106,7 +106,7 @@ Block 도메인이 남의 컬럼명을 들고 있으면 **남의 스키마 변�
 | 2 | `{도메인}/infrastructure/blockdetail/{Xxx}DetailMapper.java` | MyBatis 인터페이스. `@Mapper`. **조회만** |
 | 3 | `{도메인}/infrastructure/blockdetail/{Xxx}DetailRow.java` | SELECT 결과 record |
 | 4 | `resources/mapper/{도메인}/{Xxx}DetailMapper.xml` | SQL. **namespace = 1번 인터페이스 FQN** |
-| 5 | 자기 도메인 리포지토리·서비스에 **`Long create(Long blockId, String userId)`** 추가 | 상세 빈 행 INSERT (JPA) · 생성 로그 actorId 전달 |
+| 5 | 자기 도메인 리포지토리·서비스에 **`Long create(Long blockId)`** 추가 | 상세 빈 행 INSERT (JPA) |
 
 **Block 담당자(동훈)에게 요청할 것**: `{Xxx}Detail` record 를 `block/application/result/` 에 추가 + API 명세에
 `detail` shape 등록. **필드 목록만 주면 된다.** (record 를 담당자 패키지로 넘기지 않는 이유 — 그건 스키마가 아니라
@@ -160,8 +160,8 @@ public class XxxBlockDetailAdapter implements BlockDetailPort {
 
     /** 빈 행을 만든다. INSERT 는 자기 도메인이 JPA 로 처리하고 PK 를 돌려준다. */
     @Override
-    public Long createDetail(Long blockId, String userId) {
-        return xxxHandlerService.create(blockId, userId);
+    public Long createDetail(Long blockId) {
+        return xxxHandlerService.create(blockId);
     }
 
     /** 블록 삭제와 같은 트랜잭션에서 호출된다. */

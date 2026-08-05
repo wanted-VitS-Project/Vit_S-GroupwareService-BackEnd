@@ -24,13 +24,11 @@ public class VitamateBlockHandlerService {
     private final VitamateBlockRepository vitamateBlockRepository;
     private final DomainEventPublisher domainEventPublisher;
 
-    // AI 블록 생성 시 빈 vitamate_block 행을 만들고 생성 로그를 남긴다.
-    public Long create(Long blockId, String userId) {
+    // AI 블록 생성 시 빈 vitamate_block 행을 만들고 PK를 반환한다.
+    public Long create(Long blockId) {
         Long vitamateBlockId = vitamateBlockRepository.create(blockId);
-        log.info("비타메이트 블록 상세 행 생성 - blockId={}, vitamateBlockId={}, userId={}",
-                blockId, vitamateBlockId, userId);
+        log.info("비타메이트 블록 상세 행 생성 - blockId={}, vitamateBlockId={}", blockId, vitamateBlockId);
 
-        publishBlockDetailEvent(ActivityLogAction.CREATE, blockId, vitamateBlockId, userId);
         return vitamateBlockId;
     }
 
@@ -58,7 +56,7 @@ public class VitamateBlockHandlerService {
         publishBlockDetailEvent(ActivityLogAction.DELETE, blockId, vitamateBlockId, userId);
     }
 
-    // AI 블록 상세 row의 생성·삭제는 변경 필드가 없으므로 null change 1개로 기록한다.
+    // AI 블록 상세 row의 삭제는 변경 필드가 없으므로 null change 1개로 기록한다.
     private void publishBlockDetailEvent(
             ActivityLogAction action,
             Long blockId,

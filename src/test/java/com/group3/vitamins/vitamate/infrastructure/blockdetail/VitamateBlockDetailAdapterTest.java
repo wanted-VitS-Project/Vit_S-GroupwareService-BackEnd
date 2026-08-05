@@ -49,9 +49,9 @@ class VitamateBlockDetailAdapterTest {
         @Test
         @DisplayName("AI 블록 상세 생성은 handler service에 위임한다")
         void delegatesCreateDetail() {
-            when(vitamateBlockHandlerService.create(BLOCK_ID, USER_ID)).thenReturn(VITAMATE_BLOCK_ID);
+            when(vitamateBlockHandlerService.create(BLOCK_ID)).thenReturn(VITAMATE_BLOCK_ID);
 
-            Long typeId = adapter.createDetail(BLOCK_ID, USER_ID);
+            Long typeId = adapter.createDetail(BLOCK_ID);
 
             assertThat(typeId).isEqualTo(VITAMATE_BLOCK_ID);
         }
