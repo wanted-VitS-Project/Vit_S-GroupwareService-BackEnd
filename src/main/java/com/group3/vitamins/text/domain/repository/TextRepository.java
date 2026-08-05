@@ -14,6 +14,12 @@ import java.util.Optional;
  */
 public interface TextRepository {
 
+    /**
+     * 본문이 빈 상세 행을 만들고 그 PK 를 돌려준다. 블록 생성 트랜잭션에서 Block 도메인이 호출한다.
+     * 생성 시점 판단은 Block 도메인이 하고, 실제 INSERT 는 이 도메인이 한다.
+     */
+    Long create(Long blockId);
+
     Text updateContent(Long txtId, String content);
 
     /**

@@ -1,6 +1,7 @@
 package com.group3.vitamins.checklist.infrastructure.catalog;
 
 import com.group3.vitamins.checklist.domain.repository.ChecklistBlockRepository;
+import com.group3.vitamins.checklist.infrastructure.persistence.ChecklistBlockJpaEntity;
 import com.group3.vitamins.checklist.infrastructure.persistence.SpringDataChecklistBlockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -18,6 +19,14 @@ import java.time.LocalDateTime;
 public class CatalogChecklistBlockAdapter implements ChecklistBlockRepository {
 
     private final SpringDataChecklistBlockRepository springDataChecklistBlockRepository;
+
+    @Override
+    @Transactional
+    public Long create(Long blockId) {
+        // IDENTITY 라 save() 시점에 INSERT 가 나가고 PK 가 채워져 돌아온다 — 되찾기 조회가 필요없다.
+        return springDataChecklistBlockRepository
+                .save(new ChecklistBlockJpaEntity(blockId)).getChkBlockId();
+    }
 
     @Override
     @Transactional

@@ -1,4 +1,4 @@
-package com.group3.vitamins.project.block.presentation;
+package com.group3.vitamins.project.block.presentation.api;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
@@ -58,7 +58,7 @@ public class StepBlockController {
             @RequestBody BlockCreateRequest request,
             Authentication authentication
     ) {
-        BlockResult result = blockCommandUseCase.createBlock(request.toCommand(
+        BlockResult result = blockCommandUseCase.createBlock( request.toCommand(
                 stepId, authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.status(201).body(

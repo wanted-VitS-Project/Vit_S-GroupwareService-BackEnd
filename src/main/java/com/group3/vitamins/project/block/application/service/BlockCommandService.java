@@ -40,24 +40,34 @@ public class BlockCommandService implements BlockCommandUseCase {
 
     @Override
     public BlockResult createBlock(CreateBlockCommand command) {
+
+        //권한 검증
         StepAccessUseCase.StepAccessView step = stepAccessUseCase.requireEditable(
                 command.stepId(), command.requesterUserId(), command.role());
 
+        //값 검증
         BlockType type = resolveType(command.type());
         validateTitle(command.title());
-        int colSpan = resolveColSpan(command.colSpan());
         checkSinglePerStep(command.stepId(), type);
-        BlockOwner owner = resolveOwner(command.owner());
 
+        //열 검증
+        int colSpan = resolveColSpan(command.colSpan());
         int rowIndex = resolveRowIndex(command.stepId(), command.rowIndex());
         int sortOrder = resolveSortOrder(command.stepId(), rowIndex, command.sortOrder());
 
+        //사번 검증, 이름 삽입
+        BlockOwner owner = resolveOwner(command.owner());
+
+        //만든 시간 삽입
         LocalDateTime now = LocalDateTime.now();
+
+        //1. 블록 TABLE 생성, BLOCK PK 생성
         Block block = blockRepository.save(Block.create(
                 command.stepId(), type, command.title(),
                 owner == null ? null : owner.userId(),
                 rowIndex, sortOrder, colSpan, command.requesterUserId(), now));
 
+        //2. 1)상세 테이블 조회, 2)행 추가, 3)TYPE ID 조회, 4) TYPE ID 삽입
         linkDetail(block, type, now);
 
         return new BlockResult(
@@ -83,6 +93,8 @@ public class BlockCommandService implements BlockCommandUseCase {
         }
 
         block.linkTypeId(typeId, now);
+
+
         blockRepository.save(block);
     }
 

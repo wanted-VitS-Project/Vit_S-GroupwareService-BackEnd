@@ -17,6 +17,13 @@ public class TextHandlerService {
 
     private final TextRepository textRepository;
 
+    /** 블록 생성 시 본문이 빈 상세 행을 만든다. 내용 채우기는 TextCommandService 소관이다. */
+    public Long create(Long blockId) {
+        Long txtId = textRepository.create(blockId);
+        log.info("텍스트 블록 상세 행 생성 - blockId={}, txtId={}", blockId, txtId);
+        return txtId;
+    }
+
     public void delete(Long txtId, String userId, String blockTitle, LocalDateTime deletedAt) {
         log.info("텍스트 블록 삭제(이벤트 수신) - txtId={}, userId={}", txtId, userId);
 
