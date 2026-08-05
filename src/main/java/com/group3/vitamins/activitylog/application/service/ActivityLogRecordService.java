@@ -1,5 +1,6 @@
-package com.group3.vitamins.activitylog.application;
+package com.group3.vitamins.activitylog.application.service;
 
+import com.group3.vitamins.activitylog.application.port.ActivityLogRecordPort;
 import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -8,12 +9,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class ActivityLogWriter {
+public class ActivityLogRecordService {
 
-    private final ActivityLogRecorder activityLogRecorder;
+    private final ActivityLogRecordPort activityLogRecordPort;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void write(ActivityOccurredEvent event) {
-        activityLogRecorder.record(event);
+        activityLogRecordPort.record(event);
     }
 }
