@@ -1,5 +1,9 @@
 package com.group3.vitamins.project.block.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -20,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -37,6 +42,7 @@ public class BlockCommandService implements BlockCommandUseCase {
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
     private final StepAccessUseCase stepAccessUseCase;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public BlockResult createBlock(CreateBlockCommand command) {
@@ -68,7 +74,8 @@ public class BlockCommandService implements BlockCommandUseCase {
                 rowIndex, sortOrder, colSpan, command.requesterUserId(), now));
 
         //2. 1)상세 테이블 조회, 2)행 추가, 3)TYPE ID 조회, 4) TYPE ID 삽입
-        linkDetail(block, type, command.requesterUserId(), now);
+        linkDetail(block, type, now);
+        publishBlockCreated(block, command.requesterUserId());
 
         return new BlockResult(
                 block.getBlockId(), block.getStepId(), step.projectId(), type.name(),
@@ -80,13 +87,13 @@ public class BlockCommandService implements BlockCommandUseCase {
      * 상세 빈 행을 만들고 type_id 를 연결한다 (3단계 중 ②③).
      * 담당 어댑터가 없는 타입(FILE·PERFORMANCE_VIEW·TAX_INVOICE_VIEW)은 type_id 를 NULL 로 둔다.
      */
-    private void linkDetail(Block block, BlockType type, String userId, LocalDateTime now) {
+    private void linkDetail(Block block, BlockType type, LocalDateTime now) {
         Optional<BlockDetailPort> port = blockDetailRegistry.find(type);
         if (port.isEmpty()) {
             return;
         }
 
-        Long typeId = port.get().createDetail(block.getBlockId(), userId);
+        Long typeId = port.get().createDetail(block.getBlockId());
         if (typeId == null) {
             throw new IllegalStateException(
                     "상세 행을 만들었는데 PK 를 찾지 못했다 - type=" + type + ", blockId=" + block.getBlockId());
@@ -96,6 +103,16 @@ public class BlockCommandService implements BlockCommandUseCase {
 
 
         blockRepository.save(block);
+    }
+
+    private void publishBlockCreated(Block block, String actorId) {
+        domainEventPublisher.publish(ActivityOccurredEvent.of(
+                ActivityLogAction.CREATE,
+                block.getBlockId(),
+                null,
+                actorId,
+                List.of(new ActivityFieldChange(null, null, null))
+        ));
     }
 
     /** 타입 문자열을 검증한다. enum 밖이거나 사용자가 만들 수 없는 타입이면 400 이다. */

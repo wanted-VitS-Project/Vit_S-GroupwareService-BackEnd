@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.approval.infrastructure.blockdetail.ApprovalDetailMapper">
+
+    <select id="findLatestRevisions"
+            resultType="com.group3.vitamins.approval.infrastructure.blockdetail.ApprovalRevisionRow">
+        SELECT r.approval_id           AS approvalId,
+               r.approval_revision_id  AS revisionId,
+               r.revision_no           AS revisionNo,
+               r.status                AS status
+        FROM approval_revision r
+        WHERE r.approval_id IN
+        <foreach item="id" collection="approvalIds" open="(" separator="," close=")">#{id}</foreach>
+        AND r.revision_no = (
+            SELECT MAX(r2.revision_no)
+            FROM approval_revision r2
+            WHERE r2.approval_id = r.approval_id
+        )
+    </select>
+
+    <select id="findLinesByRevisionIds"
+            resultType="com.group3.vitamins.approval.infrastructure.blockdetail.ApprovalLineRow">
+        SELECT approval_revision_id AS revisionId,
+               status               AS status
+        FROM approval_line
+        WHERE approval_revision_id IN
+        <foreach item="id" collection="revisionIds" open="(" separator="," close=")">#{id}</foreach>
+        AND deleted_at IS NULL
+    </select>
+
+</mapper>

@@ -10,6 +10,7 @@ public record ActivityOccurredEvent(
         ActivityLogAction action,
         Long blockId,
         Long resourceId,
+        String resourceName,
         String actorId,
         List<ActivityFieldChange> changes
 ) implements DomainEvent {
@@ -34,9 +35,20 @@ public record ActivityOccurredEvent(
             ActivityLogAction action,
             Long blockId,
             Long resourceId,
+            String resourceName,
             String actorId,
             List<ActivityFieldChange> changes
     ) {
-        return new ActivityOccurredEvent(action, blockId, resourceId, actorId, changes);
+        return new ActivityOccurredEvent(action, blockId, resourceId, resourceName, actorId, changes);
+    }
+
+    public static ActivityOccurredEvent of(
+            ActivityLogAction action,
+            Long blockId,
+            Long resourceId,
+            String actorId,
+            List<ActivityFieldChange> changes
+    ) {
+        return new ActivityOccurredEvent(action, blockId, resourceId, null, actorId, changes);
     }
 }

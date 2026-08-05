@@ -33,7 +33,9 @@ public class DepartmentJpaEntity {
     @Column(name = "department_id")
     private Long departmentId;
 
-    @Column(name = "name", nullable = false, length = 50)
+    // unique=true 로 DB 의 uk_department_name 을 엔티티에도 명시한다. validate 는 UNIQUE 를 검사하지
+    // 않으므로 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨 중복 저장(수정 경로 포함)이 실제로 막힌다.
+    @Column(name = "name", nullable = false, length = 50, unique = true)
     private String name;
 
     /** 상위 부서. {@code null} 이면 최상위 */

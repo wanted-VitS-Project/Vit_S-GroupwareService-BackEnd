@@ -18,15 +18,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ApprovalErrorCode implements ErrorCode {
 
-    // --- 1. 결재 블록 생성 (API 명세 요구사항: APR-001 · APR-001-1 · BND-001) ---
-
-    /** APR-001 — block 이 없으면 404 */
-    BLOCK_NOT_FOUND("BLOCK_NOT_FOUND", "블록을 찾을 수 없습니다."),
-    /** APR-001 — {@code block.type != APPROVAL} 이면 400 */
-    BLOCK_TYPE_MISMATCH("BLOCK_TYPE_MISMATCH", "결재 블록이 아닙니다."),
-    /** BND-001(API 명세 1번 요구사항) · {@code PERMISSION.md} §6 프로젝트 진입 판정 — {@code APR-V1.md} 개별 항목 없음 */
-    APPROVAL_NOT_PROJECT_MEMBER("APPROVAL_NOT_PROJECT_MEMBER", "프로젝트 참여자가 아닙니다."),
-
     // --- 3. 결재 제목·내용 수정 (API 명세 요구사항: APR-002) — 이후 회차 편집형 엔드포인트에서도 공용 ---
 
     /** API 명세 3번 상태코드 표 — {@code APR-V1.md} 개별 항목 없음(결재 자체가 없는 경우) */
@@ -50,7 +41,35 @@ public enum ApprovalErrorCode implements ErrorCode {
     // --- 8. 재상신 회차 생성 (API 명세 요구사항: SUB-005~009) ---
 
     /** SUB-005 — {@code approval.status != REJECTED} 면 409 */
-    APPROVAL_NOT_REJECTED("APPROVAL_NOT_REJECTED", "반려된 결재만 재상신 회차를 만들 수 있습니다.");
+    APPROVAL_NOT_REJECTED("APPROVAL_NOT_REJECTED", "반려된 결재만 재상신 회차를 만들 수 있습니다."),
+
+    // --- 4·5. 결재 문서 추가·제거 (API 명세 요구사항: APR-005~007) ---
+
+    /** APR-005 — 연결하려는 file_version 이 없으면 404 */
+    FILE_VERSION_NOT_FOUND("FILE_VERSION_NOT_FOUND", "존재하지 않는 파일 버전입니다."),
+    /** APR-005 — {@code file_version.upload_status != COMPLETED} 면 409 */
+    FILE_VERSION_NOT_READY("FILE_VERSION_NOT_READY", "업로드가 완료되지 않은 파일입니다."),
+    /** APR-006 — 동일 회차에 동일 file_version_id 중복 연결 시 409(DB UNIQUE 대신 애플리케이션 검증) */
+    DOCUMENT_ALREADY_LINKED("DOCUMENT_ALREADY_LINKED", "이미 연결된 파일입니다."),
+    /** API 명세 5번 상태코드 표 — {@code APR-V1.md} 개별 항목 없음(문서가 없거나 다른 회차 소속인 경우) */
+    APPROVAL_DOCUMENT_NOT_FOUND("APPROVAL_DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
+
+    // --- 7. 결재 상신 (API 명세 요구사항: SUB-001~004) ---
+
+    /** SUB-001 — 제목·내용 중 하나라도 비어 있으면 400 */
+    APPROVAL_CONTENT_REQUIRED("APPROVAL_CONTENT_REQUIRED", "제목과 내용을 모두 입력해야 합니다."),
+    /** SUB-001 — 문서 0건이면 400 */
+    APPROVAL_DOCUMENT_REQUIRED("APPROVAL_DOCUMENT_REQUIRED", "결재 문서를 최소 1건 첨부해야 합니다."),
+
+    // --- 2. 결재 회차 상세조회 (API 명세 요구사항: MGT-005) ---
+
+    /** MGT-005 — 차례 안 온 결재자(WAITING)이거나 관련 없는 사용자의 조회 시 403 */
+    APPROVAL_LINE_NOT_VIEWABLE("APPROVAL_LINE_NOT_VIEWABLE", "조회 권한이 없습니다."),
+
+    // --- 블록 삭제 잠금 (APR-001-2 · INV-09) — ApprovalBlockDetailAdapter.deleteDetail() 전용 ---
+
+    /** 진행 중(IN_PROGRESS)인 결재가 붙은 블록은 삭제할 수 없다 — 블록팀의 삭제 트랜잭션을 여기서 막는다 */
+    APPROVAL_IN_PROGRESS("APPROVAL_IN_PROGRESS", "진행 중인 결재가 있어 블록을 삭제할 수 없습니다.");
 
     private final String code;
     private final String message;
