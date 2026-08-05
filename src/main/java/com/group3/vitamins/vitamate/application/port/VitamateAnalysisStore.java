@@ -18,6 +18,14 @@ public interface VitamateAnalysisStore {
     // 분석 요청과 선택된 파일 버전들을 연결해 저장한다.
     void saveAnalysisDocuments(Long analysisId, List<Long> fileVersionIds);
 
+    boolean markProcessing(Long analysisId, String attemptId, LocalDateTime startedAt, LocalDateTime leaseExpiresAt);
+
+    boolean markCompleted(Long analysisId, String attemptId, String result, LocalDateTime completedAt);
+
+    boolean markFailedFromProcessing(Long analysisId, String attemptId, String errorMessage, LocalDateTime failedAt);
+
+    boolean markFailedFromPending(Long analysisId, String errorMessage, LocalDateTime failedAt);
+
     record NewAnalysis(
             Long vitamateBlockId,
             String requestedBy,
