@@ -29,7 +29,8 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
         return blockRepository.findById(blockId)
                 .flatMap(block -> stepRepository.findById(block.getStepId())
                         .map(step -> new BlockSummary(
-                                block.getBlockId(), block.getType().name(), step.getProjectId())));
+                                block.getBlockId(), block.getType().name(),
+                                step.getProjectId(), block.getCreatedBy())));
     }
 
     /** 참여자 행이 있으면(권한 레벨 무관) member로 본다 — APR-012는 EDITOR까지 요구하지 않는다 */

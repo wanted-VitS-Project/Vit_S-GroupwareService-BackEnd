@@ -36,7 +36,7 @@
 
 | 파라미터 | 위치 | 타입 | 필수 | 설명 |
 |---|---|---|:---:|---|
-| `category` | Query | String | N | 결재/이슈/댓글/시스템 등 카테고리 필터(미지정 시 전체). ⚠️ 실제 값 형식(`APPROVAL` 같은 영문 접두어 추정) 확인 필요 |
+| `category` | Query | String | N | 카테고리 필터(미지정 시 전체). `notification_type` 접두어를 그대로 받는다(예: `category=APPROVAL`) — 한글 라벨 아님. 표시는 프론트가 매핑 |
 | `isRead` | Query | Boolean | N | `true`/`false` — 안 읽음만 보려면 `false` |
 | `page` | Query | int | N | 페이지 번호(기본 0) |
 | `size` | Query | int | N | 페이지 크기(기본 10) |
