@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.issue.infrastructure.adapter.IssueQueryMapper">
+
+    <select id="findBlockStep"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueBlockStepRow">
+        SELECT b.block_id AS blockId,
+               b.step_id AS stepId
+          FROM block b
+         WHERE b.block_id = #{blockId}
+           AND b.deleted_at IS NULL
+    </select>
+
+    <select id="findIssues"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueRow">
+        SELECT i.issue_id AS issueId,
+               i.step_id AS stepId,
+               i.title AS title,
+               i.content AS content,
+               CASE i.status
+                    WHEN 'TO_DO' THEN 'TODO'
+                    ELSE i.status
+               END AS status,
+               i.priority AS priority,
+               i.due_date AS dueDate,
+               i.finish_day AS completedAt
+          FROM issue i
+         WHERE i.step_id = #{stepId}
+           AND i.deleted_at IS NULL
+           <if test="blockId != null">
+           AND EXISTS (
+               SELECT 1
+                 FROM issue_block ib
+                WHERE ib.issue_id = i.issue_id
+                  AND ib.block_id = #{blockId}
+           )
+           </if>
+         ORDER BY i.issue_id DESC
+    </select>
+
+    <select id="findAssignees"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueAssigneeRow">
+        SELECT ia.issue_id AS issueId,
+               e.user_id AS userId,
+               e.name AS name
+          FROM issue_assign ia
+          JOIN employee e
+            ON e.user_id = ia.user_id
+         WHERE ia.issue_id IN
+        <foreach item="issueId" collection="issueIds" open="(" separator="," close=")">
+            #{issueId}
+        </foreach>
+         ORDER BY ia.issue_id DESC, ia.issue_assign_id ASC
+    </select>
+
+    <select id="findRelatedBlocks"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueRelatedBlockRow">
+        SELECT ib.issue_id AS issueId,
+               b.block_id AS blockId,
+               b.title AS title,
+               b.type AS type
+          FROM issue_block ib
+          JOIN block b
+            ON b.block_id = ib.block_id
+           AND b.deleted_at IS NULL
+         WHERE ib.issue_id IN
+        <foreach item="issueId" collection="issueIds" open="(" separator="," close=")">
+            #{issueId}
+        </foreach>
+         ORDER BY ib.issue_id DESC, ib.issue_block_id ASC
+    </select>
+
+</mapper>

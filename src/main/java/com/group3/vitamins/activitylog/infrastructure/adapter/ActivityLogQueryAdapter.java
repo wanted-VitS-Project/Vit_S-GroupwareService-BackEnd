@@ -46,7 +46,6 @@ public class ActivityLogQueryAdapter implements ActivityLogQueryPort {
                 row.afterValue(),
                 row.actorUserId(),
                 row.actorName(),
-                row.profileImageUrl(),
                 row.blockId(),
                 row.blockTitle(),
                 row.blockType(),

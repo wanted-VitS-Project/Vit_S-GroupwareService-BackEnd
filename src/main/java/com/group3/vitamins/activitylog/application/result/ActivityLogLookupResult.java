@@ -12,7 +12,6 @@ public record ActivityLogLookupResult(
         String afterValue,
         String actorUserId,
         String actorName,
-        String profileImageUrl,
         Long blockId,
         String blockTitle,
         String blockType,

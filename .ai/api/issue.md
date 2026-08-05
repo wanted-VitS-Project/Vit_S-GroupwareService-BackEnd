@@ -1,18 +1,17 @@
 # 🧩 Issue API
 
-**상태**: `📝 초안` — 노션 미반영. 구현 금지 (`../API.md` §0·§1)
-**최종 업데이트**: 2026-08-04 · **담당**: 김용준
-**노션**: 미반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
+**상태**: `✅ 확정`
+**최종 업데이트**: 2026-08-06 · **담당**: 김용준
+**노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
-> 📝 **레포 설계 초안이다.** 팀 리뷰와 노션 반영이 끝난 뒤 상태를 `✅ 확정`으로 변경해야 구현할 수 있다.
-> 확정 이후에는 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
+> ✅ **프론트 연동 계약으로 확정된 명세다.** 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
 
 ## 엔드포인트
 
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
-| Step 이슈 목록 조회 | GET | `/api/v1/steps/{stepId}/issues` | 스텝 접근 권한 |
+| 스텝별 이슈 목록 조회 | GET | `/api/v1/steps/{stepId}/issues` | 프로젝트 참여자 |
 | 이슈 생성 | POST | `/api/v1/steps/{stepId}/issues` | 스텝 EDITOR |
 | 이슈 상세 조회 | GET | `/api/v1/issues/{issueId}` | 스텝 접근 권한 |
 | 이슈 부분 수정 | PATCH | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
@@ -74,29 +73,40 @@
 
 ---
 
-## 1. Step 이슈 목록 조회
+## 1. 스텝별 이슈 목록 조회
 
 | 항목 | 내용 |
 |---|---|
 | Method · URL | `GET /api/v1/steps/{stepId}/issues` |
-| 인증 필요 | Y · 스텝 접근 권한 |
+| 인증 필요 | Y · 프로젝트 참여자 |
 | 요구사항 | ISS-005 · ISS-006 · USC-ISS-001 · USC-ISS-002 |
+
+현재 Step에 등록된 이슈 목록을 조회한다.
+
+`blockId`가 전달되면 해당 Step에서 특정 Block과 연결된 이슈만 반환한다. 이슈 보드의 상태·담당자·Block·우선순위·제목 검색 및 마감일 정렬은 FE에서 처리한다.
 
 **Path Parameter**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `stepId` | Long | Y | 이슈를 조회할 Step 번호 |
+| `stepId` | Long | Y | 이슈를 조회할 Step ID |
 
-**Request Parameter**
+**Query Parameter**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `blockId` | Long | N | 전달 시 해당 Block과 연결된 이슈만 조회 |
+| `blockId` | Long | N | 해당 Block과 연결된 이슈만 조회 |
+
+```bash
+GET /api/v1/steps/10/issues
+GET /api/v1/steps/10/issues?blockId=15
+```
 
 ⛔ **페이징이 없다.** Step에 등록된 삭제되지 않은 이슈 전체를 반환한다.
 
-⛔ 상태·담당자·관련 Block·우선순위 필터, 제목 검색, 마감일 정렬은 FE에서 처리한다.
+⛔ `status`, `assigneeId`, `priority`, `title`, 정렬 조건은 Query Parameter로 전달하지 않는다.
+
+⛔ 상태·담당자·Block·우선순위 필터, 제목 검색, 마감일 정렬은 FE에서 처리한다.
 
 ⛔ `blockId`는 Block 상세 화면에서 관련 이슈만 조회할 때 사용한다. 요청 Block은 `stepId`와 같은 Step에 속해야 한다.
 
@@ -104,27 +114,120 @@
 
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
-| `data.content[].issueId` | Long | 이슈 번호 |
-| `data.content[].title` | String | 이슈 제목 |
-| `data.content[].status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
-| `data.content[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
-| `data.content[].dueDate` | String | 마감 일시. `null` 허용 |
-| `data.content[].assignees[].userId` | String | 담당자 사번 |
-| `data.content[].assignees[].name` | String | 담당자 이름 |
-| `data.content[].relatedBlocks[].blockId` | Long | 관련 Block 번호 |
-| `data.content[].relatedBlocks[].title` | String | 관련 Block명 |
-| `data.content[].relatedBlocks[].type` | String | Block 타입 |
+| `data.issues` | List | 조회된 이슈 목록 |
+| `data.issues[].issueId` | Long | 이슈 ID |
+| `data.issues[].title` | String | 이슈 제목 |
+| `data.issues[].status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
+| `data.issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
+| `data.issues[].dueDate` | LocalDate | 마감일. 미지정 시 `null` |
+| `data.issues[].assignees` | List | 담당자 목록 |
+| `data.issues[].assignees[].userId` | String | 담당자 사번 |
+| `data.issues[].assignees[].name` | String | 담당자 이름 |
+| `data.issues[].relatedBlocks` | List | 연결된 Block 목록 |
+| `data.issues[].relatedBlocks[].blockId` | Long | Block ID |
+| `data.issues[].relatedBlocks[].title` | String | Block 제목 |
+| `data.issues[].relatedBlocks[].type` | String | Block 유형 |
 
-> 조회 결과가 없으면 `200`과 빈 `data.content`를 반환한다.
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이슈 목록 조회 성공",
+  "data": {
+    "issues": [
+      {
+        "issueId": 101,
+        "title": "경쟁사 제안서 벤치마킹",
+        "status": "TODO",
+        "priority": "HIGH",
+        "dueDate": "2026-07-25",
+        "assignees": [
+          {
+            "userId": "EMP001",
+            "name": "김용준"
+          }
+        ],
+        "relatedBlocks": [
+          {
+            "blockId": 15,
+            "title": "제안서 작성 체크리스트",
+            "type": "CHECKLIST"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+조회 결과가 없으면 `200 OK`와 빈 배열을 반환한다.
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이슈 목록 조회 성공",
+  "data": {
+    "issues": []
+  }
+}
+```
+
+### FE 처리 흐름
+
+**이슈 보드**
+
+```text
+Step 진입
+→ 전체 이슈 조회
+→ status 기준으로 칸반 칼럼 분류
+→ 담당자·Block·우선순위·제목 필터링
+→ dueDate 기준 정렬
+```
+
+| 화면 기능 | FE 처리 기준 |
+|---|---|
+| 상태 필터 | `status` |
+| 담당자 필터 | `assignees.userId` |
+| Block 필터 | `relatedBlocks.blockId` |
+| 우선순위 필터 | `priority` |
+| 검색 | `title`만 검색 |
+| 정렬 | `dueDate` 기준, `null`은 마지막 |
+
+필터 선택지는 별도 API를 사용한다.
+
+```bash
+GET /api/v1/projects/{projectId}/members
+GET /api/v1/steps/{stepId}/blocks
+```
+
+**Block 연결 이슈 팝업**
+
+```text
+Block의 연결 이슈 버튼 선택
+→ blockId를 포함하여 API 호출
+→ 해당 Block과 연결된 이슈 표시
+→ 상태별 개수는 반환 목록으로 FE가 계산
+```
+
+### BE 처리 흐름
+
+```text
+Step 존재 및 접근 권한 확인
+→ blockId 전달 시 Block 존재 여부 확인
+→ Block이 요청한 Step에 속하는지 검증
+→ 삭제되지 않은 이슈 조회
+→ 담당자 및 연결 Block과 함께 반환
+```
 
 | 코드 | code | 설명 |
 |---|---|---|
-| 200 | – | 조회 성공 |
-| 400 | `ISS_BLOCK_STEP_MISMATCH` | `blockId`가 요청 Step에 속하지 않음 |
+| 200 | – | 이슈 목록 조회 성공 |
+| 400 | `ISS_BLOCK_STEP_MISMATCH` | Block이 요청한 Step에 속하지 않음 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
-| 403 | `ISS_ACCESS_PERMISSION_REQUIRED` | Step 열람 권한 없음 |
-| 404 | `ISS_STEP_NOT_FOUND` | Step 없음 또는 논리 삭제됨 |
-| 404 | `ISS_BLOCK_NOT_FOUND` | 필터 Block 없음 또는 논리 삭제됨 |
+| 403 | `PROJECT_ACCESS_DENIED` | 프로젝트 접근 권한 없음 |
+| 404 | `STEP_NOT_FOUND` | Step이 존재하지 않음 |
+| 404 | `BLOCK_NOT_FOUND` | Block이 존재하지 않음 |
 
 ---
 
