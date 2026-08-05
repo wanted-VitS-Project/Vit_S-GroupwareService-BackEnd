@@ -1,4 +1,4 @@
-package com.group3.vitamins.account.application;
+package com.group3.vitamins.account.application.service;
 
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
@@ -17,7 +17,7 @@ import java.util.Map;
  * <p>🚨 <b>해싱은 이 트랜잭션 밖에서 끝낸 뒤</b> 인코딩된 값만 넘겨받는다. 64MB Argon2 해시 N 회를
  * 트랜잭션 안에서 돌리면 그동안 DB 커넥션을 쥐고 있어 커넥션 풀이 마른다 (STATE `🔐 인증·보안` 참고).
  *
- * <p>오케스트레이션({@link AccountPasswordResetService})과 <b>별도 빈</b>이어야 한다 —
+ * <p>오케스트레이션({@code AccountPasswordResetService})과 <b>별도 빈</b>이어야 한다 —
  * 같은 빈 안에서 호출하면 프록시를 안 거쳐 {@code @Transactional} 이 무시된다(자기 호출).
  */
 @Component

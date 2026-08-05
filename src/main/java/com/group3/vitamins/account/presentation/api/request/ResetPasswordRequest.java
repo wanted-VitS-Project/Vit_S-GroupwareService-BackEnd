@@ -1,5 +1,6 @@
-package com.group3.vitamins.account.presentation.api.dto.request;
+package com.group3.vitamins.account.presentation.api.request;
 
+import com.group3.vitamins.account.application.command.ResetPasswordsCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -14,4 +15,9 @@ public record ResetPasswordRequest(
         @Schema(description = "대상 사번 목록 (1개 이상)", example = "[\"EMP001\", \"EMP002\"]")
         List<String> userIds
 ) {
+
+    /** 요청을 서비스 커맨드로 옮긴다. 요청자 권한은 세션에서 온다. */
+    public ResetPasswordsCommand toCommand(String actorRole) {
+        return new ResetPasswordsCommand(actorRole, userIds);
+    }
 }

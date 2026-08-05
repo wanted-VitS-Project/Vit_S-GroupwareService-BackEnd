@@ -1,10 +1,11 @@
-package com.group3.vitamins.account.infrastructure.persistence;
+package com.group3.vitamins.account.application.result;
 
 /**
  * 계정 관리 대상 사원의 검증·표시용 스냅샷.
  *
- * <p>{@code account} 와 {@code employee} 를 조인한 조회 결과다. 쓰기는 {@link AccountEntity}(JPA)가 맡고,
- * 이 행은 <b>판정과 응답 표시</b>(이름·이메일)에만 쓴다.
+ * <p>{@code account} 와 {@code employee} 를 조인한 조회 결과다
+ * ({@link com.group3.vitamins.account.application.port.AccountQueryPort} 의 반환 타입).
+ * 쓰기는 {@code AccountEntity}(JPA)가 맡고, 이 행은 <b>판정과 응답 표시</b>(이름·이메일)에만 쓴다.
  *
  * @param userId   사번
  * @param name     이름 (재설정 실패 목록 표시용)

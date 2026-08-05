@@ -1,14 +1,17 @@
-package com.group3.vitamins.account.application;
+package com.group3.vitamins.account.application.service;
 
+import com.group3.vitamins.account.application.command.ResetPasswordsCommand;
+import com.group3.vitamins.account.application.policy.AccountAdminPolicy;
+import com.group3.vitamins.account.application.port.AccountQueryPort;
+import com.group3.vitamins.account.application.result.AccountTargetRow;
+import com.group3.vitamins.account.application.result.PasswordResetFailureResult;
+import com.group3.vitamins.account.application.result.PasswordResetResult;
+import com.group3.vitamins.account.application.usecase.AccountPasswordResetUseCase;
 import com.group3.vitamins.account.domain.PasswordResetFailureReason;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.account.infrastructure.mail.MailDeliveryException;
 import com.group3.vitamins.account.infrastructure.mail.PasswordResetMailSender;
-import com.group3.vitamins.account.infrastructure.persistence.AccountQueryMapper;
-import com.group3.vitamins.account.infrastructure.persistence.AccountTargetRow;
-import com.group3.vitamins.account.presentation.api.dto.response.PasswordResetFailure;
-import com.group3.vitamins.account.presentation.api.dto.response.PasswordResetResponse;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -40,22 +43,20 @@ import java.util.Objects;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AccountPasswordResetService {
+public class AccountPasswordResetService implements AccountPasswordResetUseCase {
 
-    private static final String ADMIN = "ADMIN";
-
-    private final AccountQueryMapper accountQueryMapper;
+    private final AccountQueryPort accountQueryPort;
     private final AccountPasswordUpdater accountPasswordUpdater;
     private final ThrottledPasswordEncoder passwordEncoder;
     private final TempPasswordGenerator tempPasswordGenerator;
     private final PasswordResetMailSender mailSender;
+    private final AccountAdminPolicy accountAdminPolicy;
 
-    public PasswordResetResponse resetPasswords(String currentUserRole, List<String> userIds) {
-        if (!ADMIN.equals(currentUserRole)) {
-            throw new ForbiddenException(AccountErrorCode.ACC_ADMIN_REQUIRED);
-        }
+    @Override
+    public PasswordResetResult resetPasswords(ResetPasswordsCommand command) {
+        accountAdminPolicy.assertAdmin(command.actorRole());
 
-        List<String> distinctUserIds = distinct(userIds);
+        List<String> distinctUserIds = distinct(command.userIds());
         if (distinctUserIds.isEmpty()) {
             throw new ValidationException(AccountErrorCode.ACC_INVALID_REQUEST);
         }
@@ -78,7 +79,7 @@ public class AccountPasswordResetService {
         }
 
         // ── 4 메일 발송(커밋 후) ──
-        List<PasswordResetFailure> failures = new ArrayList<>();
+        List<PasswordResetFailureResult> failures = new ArrayList<>();
         int successCount = 0;
         for (AccountTargetRow target : withEmail) {
             try {
@@ -86,18 +87,18 @@ public class AccountPasswordResetService {
                 successCount++;
             } catch (MailDeliveryException e) {
                 // 비밀번호는 이미 바뀌었다 → passwordChanged=true. 반드시 재시도해야 한다.
-                failures.add(PasswordResetFailure.of(
+                failures.add(new PasswordResetFailureResult(
                         target.userId(), target.name(), PasswordResetFailureReason.MAIL_SEND_FAILED));
             }
         }
         for (AccountTargetRow target : withoutEmail) {
-            failures.add(PasswordResetFailure.of(
+            failures.add(new PasswordResetFailureResult(
                     target.userId(), target.name(), PasswordResetFailureReason.EMAIL_NOT_REGISTERED));
         }
 
         log.info("비밀번호 재설정 — 요청={} 성공={} 실패={}",
                 distinctUserIds.size(), successCount, failures.size());
-        return new PasswordResetResponse(
+        return new PasswordResetResult(
                 distinctUserIds.size(), successCount, failures.size(), failures);
     }
 
@@ -107,11 +108,11 @@ public class AccountPasswordResetService {
      * <p>존재하지 않는 사번은 화면 목록에서 선택하므로 올 수 없는 값이고, 부분 처리하면 원인을 숨긴다.
      */
     private List<AccountTargetRow> validateTargets(List<String> distinctUserIds) {
-        List<AccountTargetRow> targets = accountQueryMapper.findTargets(distinctUserIds);
+        List<AccountTargetRow> targets = accountQueryPort.findTargets(distinctUserIds);
         if (targets.size() != distinctUserIds.size()) {
             throw new NotFoundException(AccountErrorCode.ACC_NOT_FOUND);
         }
-        boolean containsAdmin = targets.stream().anyMatch(t -> ADMIN.equals(t.role()));
+        boolean containsAdmin = targets.stream().anyMatch(t -> "ADMIN".equals(t.role()));
         if (containsAdmin) {
             throw new ForbiddenException(AccountErrorCode.ACC_ADMIN_ACCOUNT_NOT_ALLOWED);
         }

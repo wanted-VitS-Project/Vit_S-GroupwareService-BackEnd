@@ -1,5 +1,6 @@
-package com.group3.vitamins.account.infrastructure.persistence;
+package com.group3.vitamins.account.infrastructure.adapter;
 
+import com.group3.vitamins.account.application.result.AccountTargetRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -10,10 +11,11 @@ import java.util.Optional;
 /**
  * 계정 관리(ADMIN) 화면용 조회. <b>account 와 employee 를 가로지르므로</b> MyBatis 를 쓴다.
  *
- * <p>쓰기는 {@link AccountEntity}(JPA)가 담당한다. 역할을 섞지 마라.
+ * <p>쓰기는 {@code AccountEntity}(JPA)가 담당한다. 역할을 섞지 마라.
  *
  * <p>⛔ SQL 은 애노테이션이 아니라 XML 에 둔다 (팀 MyBatis 컨벤션) —
  * {@code src/main/resources/mapper/account/AccountQueryMapper.xml}.
+ * XML 의 {@code namespace} 는 이 인터페이스 전체 경로다.
  */
 @Mapper
 public interface AccountQueryMapper {

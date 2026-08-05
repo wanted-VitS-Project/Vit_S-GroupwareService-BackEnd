@@ -1,4 +1,4 @@
-package com.group3.vitamins.account.presentation.api.dto.response;
+package com.group3.vitamins.account.presentation.api.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 

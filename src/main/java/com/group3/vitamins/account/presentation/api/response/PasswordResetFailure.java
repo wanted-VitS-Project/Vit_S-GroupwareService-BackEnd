@@ -1,12 +1,12 @@
-package com.group3.vitamins.account.presentation.api.dto.response;
+package com.group3.vitamins.account.presentation.api.response;
 
-import com.group3.vitamins.account.domain.PasswordResetFailureReason;
+import com.group3.vitamins.account.application.result.PasswordResetFailureResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * 비밀번호 재설정 실패 1건 (`.ai/api/account.md` §3 — {@code data.failures[]}).
  *
- * <p>프레젠테이션 DTO 는 영속 조회 모델을 알지 않는다 — 값은 서비스가 넣어준다.
+ * <p>도메인 실패 사유를 문자열과 {@code passwordChanged} 로 펼쳐 프론트에 내려준다.
  */
 public record PasswordResetFailure(
         @Schema(description = "사번", example = "EMP003")
@@ -19,7 +19,12 @@ public record PasswordResetFailure(
         boolean passwordChanged
 ) {
 
-    public static PasswordResetFailure of(String userId, String name, PasswordResetFailureReason reason) {
-        return new PasswordResetFailure(userId, name, reason.name(), reason.isPasswordChanged());
+    /** application 결과를 응답 항목으로 옮긴다. */
+    public static PasswordResetFailure from(PasswordResetFailureResult result) {
+        return new PasswordResetFailure(
+                result.userId(),
+                result.name(),
+                result.reason().name(),
+                result.reason().isPasswordChanged());
     }
 }

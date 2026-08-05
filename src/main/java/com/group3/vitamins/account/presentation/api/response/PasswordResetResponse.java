@@ -1,5 +1,6 @@
-package com.group3.vitamins.account.presentation.api.dto.response;
+package com.group3.vitamins.account.presentation.api.response;
 
+import com.group3.vitamins.account.application.result.PasswordResetResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -19,4 +20,15 @@ public record PasswordResetResponse(
         @Schema(description = "실패 목록")
         List<PasswordResetFailure> failures
 ) {
+
+    /** application 결과를 응답으로 옮긴다. */
+    public static PasswordResetResponse from(PasswordResetResult result) {
+        return new PasswordResetResponse(
+                result.requestedCount(),
+                result.successCount(),
+                result.failedCount(),
+                result.failures().stream()
+                        .map(PasswordResetFailure::from)
+                        .toList());
+    }
 }

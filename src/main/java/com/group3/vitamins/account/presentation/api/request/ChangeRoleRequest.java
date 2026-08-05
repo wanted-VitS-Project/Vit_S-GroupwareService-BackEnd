@@ -1,5 +1,6 @@
-package com.group3.vitamins.account.presentation.api.dto.request;
+package com.group3.vitamins.account.presentation.api.request;
 
+import com.group3.vitamins.account.application.command.ChangeRoleCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -12,4 +13,9 @@ public record ChangeRoleRequest(
         @Schema(description = "부여할 전역 권한", allowableValues = {"MASTER", "MEMBER"}, example = "MASTER")
         String role
 ) {
+
+    /** 요청을 서비스 커맨드로 옮긴다. 요청자·대상 식별자는 세션·경로에서 온다. */
+    public ChangeRoleCommand toCommand(String actorUserId, String actorRole, String targetUserId) {
+        return new ChangeRoleCommand(actorUserId, actorRole, targetUserId, role);
+    }
 }
