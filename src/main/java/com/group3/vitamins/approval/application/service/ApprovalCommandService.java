@@ -238,7 +238,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         ApprovalDocument saved = approvalRepository.addDocument(command.revisionId(), command.fileVersionId());
 
         String documentLabel = file.fileName() != null ? file.fileName() : String.valueOf(file.fileVersionId());
-        publishActivity(ActivityLogAction.CREATE, approval.getBlockId(), file.fileVersionId(),
+        publishActivity(ActivityLogAction.CREATE, approval.getBlockId(), saved.getDocumentId(),
                 resourceName(documentLabel), command.requesterId(),
                 List.of(new ActivityFieldChange(null, null, null)));
 
@@ -263,7 +263,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 ? fileVersion.fileName() : String.valueOf(document.getFileVersionId());
         approvalRepository.deleteDocument(command.documentId());
 
-        publishActivity(ActivityLogAction.DELETE, approval.getBlockId(), document.getFileVersionId(),
+        publishActivity(ActivityLogAction.DELETE, approval.getBlockId(), document.getDocumentId(),
                 resourceName(documentLabel), command.requesterId(),
                 List.of(new ActivityFieldChange(null, null, null)));
 
