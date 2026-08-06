@@ -121,6 +121,12 @@ public class CatalogImageAdapter implements ImageRepository {
         return springDataImageRepository.restore(imgId, imgBlockId, orderIndex);
     }
 
+    @Override
+    @Transactional
+    public int hardDelete(Long imgId) {
+        return springDataImageRepository.hardDelete(imgId);
+    }
+
     private static final Pageable TOP_1 = PageRequest.of(0, 1);
 
     private Optional<ImageItem> firstOf(List<ImageJpaEntity> entities) {

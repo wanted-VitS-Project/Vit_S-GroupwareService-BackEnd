@@ -5,6 +5,7 @@ import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.image.application.command.CreateImageItemsCommand;
 import com.group3.vitamins.image.application.command.DeleteImageItemCommand;
+import com.group3.vitamins.image.application.command.PurgeImageItemsCommand;
 import com.group3.vitamins.image.application.command.RestoreImageItemsCommand;
 import com.group3.vitamins.image.application.command.UpdateImageItemsCommand;
 import com.group3.vitamins.image.application.policy.ImageEligibilityPolicy;
@@ -279,25 +280,24 @@ public class ImageCommandService implements ImageCommandUseCase {
             }
         }
 
-        // 이미지가 속한 블록별로(=스텝별로) 블록이 살아있는지·편집 권한이 있는지 확인한다 — 여러 블록에
-        // 걸친 요청일 수 있다. 블록이 이미 삭제된 경우(예: 블록 자체 삭제로 항목이 일괄 삭제된 뒤 휴지통
-        // 조회엔 여전히 나옴) hasEditPermission이 대상을 못 찾아 그냥 false를 반환하므로, 권한 확인보다
-        // 먼저 블록 생존 여부를 확인해야 "편집 권한이 없다"는 오해의 소지가 있는 메시지 대신 "삭제된
-        // 블록이라 복구할 수 없다"는 걸 명확히 알려줄 수 있다 (사용자가 실제 테스트로 발견 — 2026-08-06).
-        // 이 순서(존재 확인 → 권한 확인)는 텍스트·체크리스트 도메인의 기존 서비스도 동일하게 쓰는
-        // 패턴이라 이 도메인만 바꾸지 않는다 — 권한 없는 사용자에게 존재 여부가 먼저 드러나는 트레이드오프는
-        // 팀 전체가 공유하는 기존 컨벤션으로 두고, 필요하면 나중에 전체 도메인 단위로 재검토한다.
+        // 이미지가 속한 블록별로(=스텝별로) 편집 권한부터 확인하고, 그다음 블록 생존 여부를 확인한다.
+        // assertEditPermissionEvenIfBlockDeleted는 블록이 삭제돼 있어도 그 블록이 속했던 스텝을 직접
+        // 찾아 정확한 권한 판정을 하므로(§ImageEligibilityPolicy 참고), 권한이 없는 사용자는 블록
+        // 상태와 무관하게 항상 403만 보고 "블록이 삭제됐다"는 정보 자체를 알 수 없다. 권한이 있는
+        // 사용자만 다음 단계(블록 생존 여부)까지 도달해서, 블록이 삭제된 경우 정확한 사유(IMG-009)를
+        // 안내받는다 (2026-08-06, 순서 재정리).
         Set<Long> imgBlockIds = foundByImgId.values().stream()
                 .map(ImageItem::getImgBlockId)
                 .collect(Collectors.toSet());
         for (Long imgBlockId : imgBlockIds) {
+            eligibilityPolicy.assertEditPermissionEvenIfBlockDeleted(imgBlockId, command.userId(), command.role());
             eligibilityPolicy.assertBlockActiveForRestoreOrThrow(imgBlockId);
-            eligibilityPolicy.assertEditPermission(imgBlockId, command.userId(), command.role());
         }
 
         // 복구된 이미지는 각 블록의 현재 활성 목록 맨 뒤에 붙는다(원래 순서 복원이 아님) — 요청에 여러
         // 블록이 섞여 있어도, 같은 블록끼리는 요청에 나열된 순서 그대로 이어 붙인다.
         Map<Long, Integer> nextOrderIndexByBlock = new HashMap<>();
+        Map<Long, Long> blockIdByImgBlockId = new HashMap<>();
         List<RestoredImageView> resultViews = new ArrayList<>(imgIds.size());
 
         for (Long imgId : imgIds) {
@@ -313,11 +313,89 @@ public class ImageCommandService implements ImageCommandUseCase {
                 throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
             }
 
+            // 활동 로그(§5.3 이미지 — 휴지통 복원) — develop 병합으로 ActivityLogAction.RESTORE가
+            // 생기기 전까지는 보류했던 부분(`.ai/api/image.md` 참고). 생성·삭제와 동일하게 changes는
+            // 전부 null인 항목 하나만 담아 보낸다.
+            Long blockId = blockIdByImgBlockId.computeIfAbsent(imgBlockId, imageBlockRepository::getBlockId);
+            domainEventPublisher.publish(ActivityOccurredEvent.of(
+                    ActivityLogAction.RESTORE,
+                    blockId,
+                    imgId,
+                    item.getOriginalName(),
+                    command.userId(),
+                    List.of(new ActivityFieldChange(null, null, null))
+            ));
+
             resultViews.add(new RestoredImageView(imgBlockId, imgId, item.getOriginalName(), orderIndex));
         }
 
         log.info("이미지 항목 복구 완료 - count={}", resultViews.size());
 
         return new RestoreImageItemsView(resultViews);
+    }
+
+    @Override
+    public void purge(PurgeImageItemsCommand command) {
+        log.info("이미지 영구 삭제 요청 - userId={}, imgIds={}", command.userId(), command.imgIds());
+
+        List<Long> imgIds = command.imgIds();
+        Set<Long> uniqueIds = new HashSet<>(imgIds);
+        if (imgIds.isEmpty() || uniqueIds.size() != imgIds.size()) {
+            log.warn("영구 삭제 요청 목록이 유효하지 않음 - imgIds={}", imgIds);
+            throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
+        }
+
+        Map<Long, ImageItem> foundByImgId = imageRepository.findAllByImgIds(imgIds).stream()
+                .collect(Collectors.toMap(ImageItem::getImgId, item -> item));
+
+        // 완전 삭제는 휴지통(소프트 삭제된) 항목만 대상이다 — 복구 API의 대상 판정과 대칭.
+        for (Long imgId : uniqueIds) {
+            ImageItem item = foundByImgId.get(imgId);
+            if (item == null || item.getDeletedAt() == null) {
+                log.warn("영구 삭제 대상 아님(존재하지 않거나 아직 삭제 안 됨) - imgId={}", imgId);
+                throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+            }
+        }
+
+        // 이미지가 속한 블록별로(=스텝별로) 편집 권한을 확인한다. 완전 삭제는 블록이 이미 삭제된
+        // 이미지(§복구 API의 IMG-009 상황)도 대상이 될 수 있는데, 블록이 살아있어야만 판정 가능한
+        // assertEditPermission 대신 assertEditPermissionEvenIfBlockDeleted를 써서 블록 삭제 여부와
+        // 무관하게 정확한 편집 권한을 판정한다 (§ImageEligibilityPolicy 참고).
+        Set<Long> imgBlockIds = foundByImgId.values().stream()
+                .map(ImageItem::getImgBlockId)
+                .collect(Collectors.toSet());
+        for (Long imgBlockId : imgBlockIds) {
+            eligibilityPolicy.assertEditPermissionEvenIfBlockDeleted(imgBlockId, command.userId(), command.role());
+        }
+
+        Map<Long, Long> blockIdByImgBlockId = new HashMap<>();
+
+        for (Long imgId : uniqueIds) {
+            ImageItem item = foundByImgId.get(imgId);
+            Long imgBlockId = item.getImgBlockId();
+
+            // S3 객체를 먼저 지우고 DB 행을 지운다 — S3 삭제가 실패하면 예외가 트랜잭션을 롤백시켜
+            // DB에는 아무 변화도 없다(둘 다 성공 또는 둘 다 실패, 부분 상태를 안 남기려는 의도).
+            imageStoragePort.delete(item.getImageUrl());
+
+            int deleted = imageRepository.hardDelete(imgId);
+            if (deleted == 0) {
+                // 검증~삭제 사이에 동시에 복구되거나 이미 삭제된 경우(레이스).
+                log.warn("이미지 항목 완전 삭제 경합 발생 - imgId={}", imgId);
+                throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+            }
+
+            Long blockId = blockIdByImgBlockId.computeIfAbsent(imgBlockId, imageBlockRepository::getBlockId);
+            domainEventPublisher.publish(ActivityOccurredEvent.of(
+                    ActivityLogAction.PURGE,
+                    blockId,
+                    imgId,
+                    item.getOriginalName(),
+                    command.userId(),
+                    List.of(new ActivityFieldChange(null, null, null))
+            ));
+        }
+
+        log.info("이미지 완전 삭제 완료 - count={}", uniqueIds.size());
     }
 }

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -79,6 +80,12 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         return s3Client.getObjectAsBytes(
                 GetObjectRequest.builder().bucket(bucket).key(storageKey).build()
         ).asByteArray();
+    }
+
+    @Override
+    public void delete(String storageKey) {
+        s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(storageKey).build());
+        log.info("이미지 완전 삭제(S3 객체 제거) 완료 - key={}", storageKey);
     }
 
     @Override

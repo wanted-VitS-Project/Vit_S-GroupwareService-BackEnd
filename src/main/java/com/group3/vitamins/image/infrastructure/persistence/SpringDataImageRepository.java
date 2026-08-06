@@ -74,4 +74,9 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
     @Query("UPDATE ImageJpaEntity i SET i.deletedAt = NULL, i.orderIndex = :orderIndex, i.updatedAt = CURRENT_TIMESTAMP "
             + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NOT NULL")
     int restore(@Param("imgId") Long imgId, @Param("imgBlockId") Long imgBlockId, @Param("orderIndex") int orderIndex);
+
+    /** 소프트 삭제된(휴지통) 항목만 대상으로 하는 조건부 하드 삭제. */
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM ImageJpaEntity i WHERE i.imgId = :imgId AND i.deletedAt IS NOT NULL")
+    int hardDelete(@Param("imgId") Long imgId);
 }

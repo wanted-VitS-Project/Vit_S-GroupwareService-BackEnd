@@ -21,4 +21,11 @@
         ORDER BY i.deleted_at DESC
     </select>
 
+    <select id="findStepIdByImgBlockId" resultType="java.lang.Long">
+        SELECT b.step_id
+        FROM image_block ib
+        JOIN block b ON b.block_id = ib.block_id
+        WHERE ib.img_block_id = #{imgBlockId}
+    </select>
+
 </mapper>

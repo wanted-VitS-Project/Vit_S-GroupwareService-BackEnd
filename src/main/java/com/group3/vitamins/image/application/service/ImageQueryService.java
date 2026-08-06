@@ -6,10 +6,12 @@ import com.group3.vitamins.image.application.port.ImageStoragePort;
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
 import com.group3.vitamins.image.application.query.GetImageItemQuery;
 import com.group3.vitamins.image.application.query.GetImageTrashQuery;
+import com.group3.vitamins.image.application.query.GetProjectImagesQuery;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase;
 import com.group3.vitamins.image.domain.exception.ImageErrorCode;
 import com.group3.vitamins.image.domain.model.ImageItem;
 import com.group3.vitamins.image.domain.repository.ImageRepository;
+import com.group3.vitamins.image.infrastructure.gallery.ImageGalleryMapper;
 import com.group3.vitamins.image.infrastructure.trash.ImageTrashMapper;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +52,7 @@ public class ImageQueryService implements ImageQueryUseCase {
     private final ImageRepository imageRepository;
     private final ImageStoragePort imageStoragePort;
     private final ImageTrashMapper imageTrashMapper;
+    private final ImageGalleryMapper imageGalleryMapper;
     private final ProjectAccessUseCase projectAccessUseCase;
 
     @Override
@@ -198,5 +201,28 @@ public class ImageQueryService implements ImageQueryUseCase {
         log.info("이미지 휴지통 조회 완료 - projectId={}, count={}", query.projectId(), trashed.size());
 
         return trashed;
+    }
+
+    /**
+     * 프로젝트 이미지 모아보기 — 프로젝트에 속한 활성 이미지 전체를 생성일 최신순으로 돌려준다.
+     * 휴지통 조회와 동일한 이유로 스텝 단위가 아니라 {@link ProjectAccessUseCase}로 프로젝트 접근
+     * 권한만 확인한다. 정렬 기준(최신순)은 명세에 없어 트래시 조회와 동일하게 구현 시 임의 결정.
+     */
+    @Override
+    public List<ProjectImageView> getProjectImages(GetProjectImagesQuery query) {
+        log.info("프로젝트 이미지 모아보기 조회 요청 - projectId={}, userId={}", query.projectId(), query.userId());
+
+        projectAccessUseCase.requireAccess(query.projectId(), query.userId(), query.role());
+
+        List<ProjectImageView> images = imageGalleryMapper.findActiveByProjectId(query.projectId()).stream()
+                .map(row -> new ProjectImageView(
+                        row.imgBlockId(), row.imgId(), row.originalName(),
+                        imageStoragePort.presignViewUrl(row.imageUrl()),
+                        row.caption(), row.createdAt()))
+                .toList();
+
+        log.info("프로젝트 이미지 모아보기 조회 완료 - projectId={}, count={}", query.projectId(), images.size());
+
+        return images;
     }
 }

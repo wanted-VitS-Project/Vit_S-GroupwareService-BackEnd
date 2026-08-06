@@ -28,6 +28,9 @@ public interface ImageStoragePort {
     /** 확장자에 대응하는 Content-Type. 다운로드 응답 헤더용. */
     String contentTypeOf(String extension);
 
+    /** 완전 삭제(하드 삭제) 전용 — 저장소에서 실제 객체를 지운다. 되돌릴 수 없다. */
+    void delete(String storageKey);
+
     record UploadedImage(String storageKey, long sizeBytes) {
     }
 }

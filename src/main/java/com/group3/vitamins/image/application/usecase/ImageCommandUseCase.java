@@ -2,6 +2,7 @@ package com.group3.vitamins.image.application.usecase;
 
 import com.group3.vitamins.image.application.command.CreateImageItemsCommand;
 import com.group3.vitamins.image.application.command.DeleteImageItemCommand;
+import com.group3.vitamins.image.application.command.PurgeImageItemsCommand;
 import com.group3.vitamins.image.application.command.RestoreImageItemsCommand;
 import com.group3.vitamins.image.application.command.UpdateImageItemsCommand;
 
@@ -64,4 +65,7 @@ public interface ImageCommandUseCase {
             int orderIndex
     ) {
     }
+
+    //이미지 완전 삭제(하드 삭제) — 휴지통에 있는 항목만 대상, DB 행 + S3 객체 모두 제거
+    void purge(PurgeImageItemsCommand command);
 }

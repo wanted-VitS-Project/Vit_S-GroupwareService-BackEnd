@@ -72,4 +72,12 @@ public interface ImageRepository {
      * @return 실제로 복구된 행 수(0 또는 1)
      */
     int restore(Long imgId, Long imgBlockId, int orderIndex);
+
+    /**
+     * 완전 삭제(하드 삭제) — 행 자체를 지운다. 되돌릴 수 없다. 소프트 삭제된(휴지통) 항목만 대상으로
+     * 조건부 DELETE로 원자 처리한다 — 대상이 활성 상태거나 존재하지 않으면 0건.
+     *
+     * @return 실제로 삭제된 행 수(0 또는 1)
+     */
+    int hardDelete(Long imgId);
 }

@@ -2,6 +2,7 @@ package com.group3.vitamins.image.presentation;
 
 import com.group3.vitamins.image.application.command.CreateImageItemsCommand;
 import com.group3.vitamins.image.application.command.DeleteImageItemCommand;
+import com.group3.vitamins.image.application.command.PurgeImageItemsCommand;
 import com.group3.vitamins.image.application.command.RestoreImageItemsCommand;
 import com.group3.vitamins.image.application.command.UpdateImageItemsCommand;
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
@@ -15,6 +16,7 @@ import com.group3.vitamins.image.application.usecase.ImageQueryUseCase;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageDownloadView;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageItemView;
 import com.group3.vitamins.image.presentation.api.request.ImageItemCreateRequest;
+import com.group3.vitamins.image.presentation.api.request.ImageItemPurgeRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemRestoreRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemUpdateRequest;
 import com.group3.vitamins.image.presentation.api.response.CreateImageItemsResponse;
@@ -251,7 +253,7 @@ public class ImageController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이미지 복구 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청한 이미지 목록이 유효하지 않습니다. (IMG-005)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "편집 권한이 없습니다. (IMG-002) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
+                    description = "편집 권한이 없습니다. (IMG-002, 블록이 삭제된 이미지는 STEP_EDIT_DENIED로 나갈 수 있음) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "존재하지 않는 항목입니다. (IMG-006) / 상위 블록이 삭제되어 하위 항목을 복구할 수 없습니다. (IMG-009)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
@@ -272,6 +274,28 @@ public class ImageController {
                 .toList();
 
         return ResponseEntity.ok(ApiResponse.success("이미지 복구 성공", new RestoreImageItemsResponse(images)));
+    }
+
+    @Operation(summary = "이미지 영구 삭제", description = "휴지통에 있는(소프트 삭제된) 이미지를 영구(하드 삭제) 삭제한다. "
+            + "DB 행과 S3 객체가 모두 제거되며 되돌릴 수 없다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이미지 영구 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청한 이미지 목록이 유효하지 않습니다. (IMG-005)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (IMG-002, 블록이 삭제된 이미지는 STEP_EDIT_DENIED로 나갈 수 있음) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 항목입니다. (IMG-006, 휴지통에 없는 이미지 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "COMMON_INTERNAL_ERROR — 서버 내부 오류입니다.")
+    })
+    @DeleteMapping("/items/hard")
+    public ResponseEntity<ApiResponse<Void>> purgeItems(
+            @RequestBody ImageItemPurgeRequest request,
+            Authentication authentication
+    ) {
+        imageCommandUseCase.purge(new PurgeImageItemsCommand(authentication.getName(), request.imgIds(),
+                RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("이미지 영구 삭제 성공"));
     }
 
     private List<String> parseCaptions(String requestJson) {

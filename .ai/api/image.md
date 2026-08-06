@@ -23,6 +23,8 @@
 | ✅ 확정 | 이미지 항목 수정 | PATCH | `/api/v1/blocks/images/items/{imgBlockId}` | 편집 권한 보유자 |
 | ✅ 확정 | 이미지 항목 삭제 | DELETE | `/api/v1/blocks/images/items/{imgId}` | 편집 권한 보유자 |
 | ✅ 확정 | 이미지 복구 | PATCH | `/api/v1/blocks/images/items/restore` | 편집 권한 보유자(이미지별 소속 블록 기준) |
+| ✅ 확정 | 이미지 영구 삭제 | DELETE | `/api/v1/blocks/images/items/hard` | 편집 권한 보유자(이미지별 소속 블록 기준) |
+| ✅ 확정 | 프로젝트 이미지 모아보기 | GET | `/api/v1/projects/{projectId}/images` | 프로젝트 접근 권한 보유자 |
 
 > ⚠️ 이미지는 **두 가지 방법으로 삭제**된다 — 수정 API에서 배열 누락(§수정 API) 또는 이 단건 삭제 API. 둘 다 소프트 삭제만 하고 S3는 지우지 않는 동일한 원칙을 따른다 (아래 삭제 API 참고).
 
@@ -153,6 +155,67 @@
 > - `IMG-016`(401)·`IMG-017`(500)은 다른 API와 동일 이유로 공통 코드로 대체.
 >
 > **구현 메모**: 저장소(S3)에서 실제 파일 바이트를 읽어와야 해서 `ImageStoragePort`에 `download`/`contentTypeOf` 메서드를 추가했다(기존엔 업로드·presign URL 발급만 있었음). 블록 전체 다운로드는 원본 파일명이 겹치는 경우(같은 이름으로 여러 번 업로드) zip 엔트리 이름 충돌을 막기 위해 `{imgId}_{원본파일명}`으로 구분한다. zip은 이미지 개수만큼 S3에서 순차로 읽어 메모리에서 조립한다 — 이미지 개수가 아주 많아지면(수백 장) 메모리·응답 시간 부담이 커질 수 있어, 필요해지면 스트리밍 방식으로 바꾸는 걸 검토할 것.
+
+---
+
+### 프로젝트 이미지 모아보기 `GET /api/v1/projects/{projectId}/images`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `projectId` | Long | 이미지를 모아볼 프로젝트 ID |
+
+**Request Body**: 없음
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.images` | List<Object> | 프로젝트 내 전체(활성) 이미지 목록 |
+| `data.images[].imgBlockId` | Long | 속한 블록 ID |
+| `data.images[].imgId` | Long | 이미지 ID |
+| `data.images[].originalName` | String | 원본 파일명 |
+| `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
+| `data.images[].caption` | String | 이미지 캡션 |
+| `data.images[].createdAt` | LocalDateTime | 생성일 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "프로젝트 이미지 모아보기 조회 성공",
+  "data": {
+    "images": [
+      { "imgId": 10, "imgBlockId": 3, "originalName": "회의사진.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "createdAt": "2026-08-01T10:00:00" },
+      { "imgId": 15, "imgBlockId": 5, "originalName": "화이트보드.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "createdAt": "2026-08-02T14:00:00" }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "프로젝트 이미지 모아보기 조회 성공" |
+| 403 | Forbidden | `PROJECT_ACCESS_DENIED` | "프로젝트에 접근할 권한이 없습니다." (프로젝트 도메인 공통 코드) |
+| 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
+| 404 | Not Found | `PROJECT_NOT_FOUND` | "프로젝트를 찾을 수 없습니다." (프로젝트 도메인 공통 코드) |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
+
+> 🔄 **원 명세와의 차이 (2026-08-06, 구현 시 정리)** — 휴지통 조회 API와 완전히 동일한 이유로 동일하게 처리했다.
+> - **권한 검증 방식** — 원 명세는 403을 `IMG-002`(편집 권한 코드, "편집 권한이 없습니다")로 뒀지만 실제 메시지는 "접근 권한이 없습니다"라 코드-문구가 안 맞았고, 애초에 이 API는 프로젝트 전체(여러 스텝에 걸침) 조회라 스텝 단위 권한 체크가 불가능하다. 휴지통 조회와 동일하게 `ProjectAccessUseCase.requireAccess(projectId, userId, role)`로 판정 — 403은 `PROJECT_ACCESS_DENIED`, 404(프로젝트 없음)는 `PROJECT_NOT_FOUND`(둘 다 프로젝트 도메인 공통 코드, IMG 코드 아님).
+> - **정렬 기준(생성일 최신순)은 명세에 없어 임의로 정함** — 휴지통 조회가 삭제일 최신순인 것과 통일했다.
+>
+> **구현 메모** — 휴지통 조회와 조인 체인은 동일(`image → image_block → block → step`, `step.project_id`로 필터)하고 삭제 필터 방향만 반대다(`deleted_at IS NULL` — 활성 이미지만). 관심사가 달라 `ImageGalleryMapper`로 별도 파일 분리, `ImageTrashController`는 이 API 추가로 `ImageProjectController`로 이름을 바꿨다(프로젝트 단위 이미지 API 2종을 함께 담음).
 
 ---
 
@@ -483,17 +546,78 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 > - 원 명세엔 400 코드가 비어 있었음 — 수정 API(IMG-005, 동일 문구)를 그대로 재사용. 새 코드를 만들지 않는 기존 원칙 그대로 적용.
 > - 403(`IMG-002`)·404(`IMG-006`)도 각각 생성/삭제 API에서 이미 만든 코드를 재사용 — 새 코드 없음.
 > - `imgIds`가 비어있거나 중복 imgId가 섞이면 `400 IMG-005`(순서 계산이 깨지는 문제라 수정 API와 동일한 이유). 존재하지 않는 imgId 또는 **이미 활성 상태(삭제 안 된)인 imgId**는 구분하지 않고 전부 `404 IMG-006`으로 거부한다 — 사용자와 확인.
-> - **404 `IMG-009`(신규)는 원 명세에 없던 케이스, 사용자가 실제 테스트로 발견해서 추가함(2026-08-06)** — 휴지통 조회는 `image → image_block → block → step` 조인에서 상위(블록·이미지 블록)의 삭제 여부를 걸러내지 않아서, **블록 자체가 삭제된 뒤에도 그 블록에 속했던 이미지는 계속 휴지통에 조회된다**(의도된 동작 — 완전 삭제 전까지는 존재를 알 수 있어야 함). 이런 이미지를 복구 시도하면 블록이 없어 되돌릴 자리가 없다. 처음엔 기존 `IMG-003`("존재하지 않는 블록입니다")을 재사용하려 했으나, 그 코드는 "블록이 애초에 없음"(생성·수정 API)용이라 "있었는데 삭제됨"과 뉘앙스가 달라 헷갈릴 수 있어 새 코드로 분리했다.
-> - **에러 확인 순서는 텍스트·체크리스트 도메인이 이미 쓰고 있는 기존 패턴 그대로 유지한다** — ①이미지 존재/삭제 상태(`IMG-006`) → ②블록 생존 여부(`IMG-009`) → ③편집 권한(`IMG-002`), 순서로 확인한다. 이 순서는 "권한 없는 사용자도 imgId를 넣어보면 그 이미지·블록의 존재/삭제 상태를 권한 확인 전에 알 수 있다"는 정보 노출 여지가 있지만(사용자와 논의), **텍스트(`TextCommandService.updateContent`)·체크리스트(`ChecklistCommandService.update`/`delete`) 전부 이미 동일한 순서를 쓰고 있어서**, 이미지 도메인만 순서를 바꾸는 대신 기존 컨벤션을 따르기로 했다. 도메인 전체를 아우르는 재검토가 필요하면 팀 단위로 별도 논의할 것(`.ai/local/STATE.md` 백로그 참고).
-> - 블록 생존 여부(`IMG-009`)는 권한 확인보다 반드시 먼저 확인해야 한다 — 공유 `BlockCatalogPort.hasEditPermission`이 삭제된 블록에 대해선 실제 편집 권한자든 아니든 무조건 `false`만 반환해서(공유 `block` 테이블 조회 자체가 `deleted_at IS NULL` 필터), 권한 확인만으로는 "진짜 권한 없음"과 "블록이 삭제됨"을 구분할 방법이 없다. 이 구분은 이미지 도메인 자체 테이블(`image_block.deleted_at`)로 독립적으로 판단 가능해서 공유 Block 도메인 코드를 안 건드리고 해결했다.
+> - **404 `IMG-009`(신규)는 원 명세에 없던 케이스, 사용자가 실제 테스트로 발견해서 추가함(2026-08-06)** — 휴지통 조회는 `image → image_block → block → step` 조인에서 상위(블록·이미지 블록)의 삭제 여부를 걸러내지 않아서, **블록 자체가 삭제된 뒤에도 그 블록에 속했던 이미지는 계속 휴지통에 조회된다**(의도된 동작 — 영구 삭제 전까지는 존재를 알 수 있어야 함). 이런 이미지를 복구 시도하면 블록이 없어 되돌릴 자리가 없다. 처음엔 기존 `IMG-003`("존재하지 않는 블록입니다")을 재사용하려 했으나, 그 코드는 "블록이 애초에 없음"(생성·수정 API)용이라 "있었는데 삭제됨"과 뉘앙스가 달라 헷갈릴 수 있어 새 코드로 분리했다.
+> - **에러 확인 순서 (2026-08-06 최종)** — ①이미지 존재/삭제 상태(`IMG-006`) → ②편집 권한(`IMG-002`, 블록 삭제 여부와 무관하게 정확히 판정) → ③블록 생존 여부(`IMG-009`). ①이 권한 확인보다 먼저인 건 텍스트·체크리스트 도메인의 기존 패턴(`TextCommandService.updateContent`, `ChecklistCommandService.update`/`delete`)과 동일하게 맞춘 것 — 이미지 하나만 바꾸지 않기로 함(`.ai/local/STATE.md` 백로그 참고). 그런데 ②·③ 순서는 처음 구현과 반대로 바꿨다 — 아래 참고.
+> - **권한 확인이 블록 생존 여부보다 먼저다 (순서 변경, 2026-08-06)** — 처음엔 "블록 생존 확인 → 권한 확인" 순서였는데, 이러면 그 블록에 아무 권한도 없는 사용자도 imgId를 넣어보면 "블록이 삭제됐다"는 정보를 권한 확인 전에 알 수 있다는 문제가 있었다(사용자 지적). `ImageEligibilityPolicy.assertEditPermissionEvenIfBlockDeleted`를 새로 만들어 **블록이 삭제돼 있어도 정확한 편집 권한을 판정**할 수 있게 되면서 순서를 뒤집을 수 있었다 — 블록이 살아있으면 평소처럼 공유 `BlockCatalogPort.hasEditPermission`을 쓰고, 죽어있으면 그 블록이 속했던 stepId를 이미지 도메인이 직접 찾아(`image_block→block`, 삭제 여부 무시하고 조회 — `ImageTrashMapper.findStepIdByImgBlockId`) 이미 존재하는 `StepAccessUseCase.requireEditable`로 넘긴다(실제 권한 판정 로직은 그대로 Step 도메인이 소유, 이미지 도메인은 ID만 찾아서 넘길 뿐). 그 결과 권한이 없는 사용자는 블록 상태와 무관하게 항상 `IMG-002`만 보고, 권한이 있는 사용자만 블록 삭제 여부(`IMG-009`)까지 도달한다.
+> - ⚠️ **위 대체 경로를 타면 403/404 코드가 `IMG-002`가 아니라 Step 도메인 코드(`STEP_EDIT_DENIED`/`STEP_NOT_FOUND`)로 나갈 수 있다** — `StepAccessUseCase.requireEditable`이 직접 던지는 예외라 이미지 도메인 코드로 감싸지 않았다. 극히 드문 경로(블록이 삭제된 이미지에 대한 권한 판정)에서만 발생한다.
+> - ⚠️ **임시 우회다** — `ImageTrashMapper.findStepIdByImgBlockId`는 공유 Block 도메인(동훈님)에 "삭제된 블록도 포함해서 stepId를 찾는" 정식 포트가 없어서 이미지 도메인이 직접 `block` 테이블을 조회하는 우회다. 정식 포트가 생기면 그걸로 교체할 것 — 지금은 요청하지 않기로 함(2026-08-06 결정).
 >
 > ⚠️ **`imgId` 별로 소속된 블록(=스텝) 기준으로 블록 생존 여부와 편집 권한을 각각 확인한다** — 요청 하나에 여러 블록의 이미지가 섞여 올 수 있다. 한 블록이라도 (블록이 삭제됐거나) 권한이 없으면 전체 요청을 거부한다(부분 복구 없음).
 >
-> ⚠️ **블록까지 삭제되어 복구가 불가능한 이미지는 결국 완전 삭제(하드 삭제)로만 정리할 수 있다** — 하드 삭제 정책 자체는 아직 팀 결정 대기 상태라(§미확정 참고) 이번엔 복구 API의 에러 처리만 정리하고, 하드 삭제 기능은 그 정책이 정해지면 별도로 구현한다.
+> ⚠️ **블록까지 삭제되어 복구가 불가능한 이미지는 결국 영구 삭제(하드 삭제)로만 정리할 수 있다** — 하드 삭제 정책 자체는 아직 팀 결정 대기 상태라(§미확정 참고) 이번엔 복구 API의 에러 처리만 정리하고, 하드 삭제 기능은 그 정책이 정해지면 별도로 구현한다.
 >
 > ⚠️ **복구 후 순서는 "원래 있던 자리"가 아니라 그 블록의 현재 활성 목록 맨 뒤에 순서대로 이어 붙인다** (Success Example 참고 — `imgBlockId=3`인 두 이미지가 요청 순서 그대로 6, 7번을 받음). 원래 orderIndex를 기억해뒀다가 되돌리는 방식은 그 사이 다른 이미지가 그 자리를 차지했을 수 있어 채택하지 않았다.
 >
-> ⚠️ **활동 로그 보류** — `.ai/api/activity-log.md`엔 `CREATE`/`MODIFY`/`DELETE` 세 액션만 정의돼 있고 복구에 대응하는 액션이 없다. 담당자(김용준)에게 문의했고 아직 결론이 안 나서, **이번 구현에는 활동 로그를 남기지 않는다.** 액션 타입이 정해지면 이 API에도 반영할 것 (`.ai/local/STATE.md` 백로그 참고).
+> ✅ **활동 로그 반영 완료 (2026-08-06)** — 파일 휴지통 대응으로 `ActivityLogAction.RESTORE`가 추가되면서(#206) 이미지 도메인도 그대로 사용하기 시작했다. 이미지 하나 복구당 `RESTORE` 로그 한 건, `resourceName`엔 원본 파일명, `changes`는 생성·삭제와 동일하게 전부 null인 항목 하나.
+
+---
+
+### 이미지 영구 삭제 `DELETE /api/v1/blocks/images/items/hard`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `imgIds` | List<Long> | Y | 영구 삭제할 이미지 ID 목록(휴지통에 있는 것만) |
+
+**Request Example**
+
+```json
+{
+  "imgIds": [10, 15, 22]
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data` | Object | 항상 `null` |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이미지 영구 삭제 성공",
+  "data": null
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "이미지 영구 삭제 성공" |
+| 400 | Bad Request | `IMG-005` | "요청한 이미지 목록이 유효하지 않습니다." |
+| 403 | Forbidden | `IMG-002` | "편집 권한이 없습니다." |
+| 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
+| 404 | Not Found | `IMG-006` | "존재하지 않는 항목입니다." (휴지통에 없는 이미지 포함) |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
+
+> 🔄 **원 명세와의 차이 (2026-08-06, 구현 시 정리)** — 전부 기존 코드 재사용, 새 코드 없음. 400 원래 공란 → `IMG-005`(복구 API와 동일 문구), 403·404는 각각 `IMG-002`·`IMG-006` 그대로. 단, 블록이 삭제된 이미지를 영구 삭제할 때는 403이 `IMG-002`가 아니라 Step 도메인 코드(`STEP_EDIT_DENIED`)로 나갈 수 있다 — 아래 참고.
+>
+> **구현 메모** — S3 객체를 먼저 지우고 DB 행을 지운다(둘 다 같은 트랜잭션 — S3 삭제가 실패하면 예외로 트랜잭션 자체가 롤백돼 DB엔 아무 변화도 없다). 대상 판정은 복구 API와 정반대 대칭: **이미 휴지통(소프트 삭제)에 있는 이미지만** 영구 삭제 가능, 아직 삭제 안 된(활성) imgId나 존재하지 않는 imgId는 전부 `404 IMG-006`.
+>
+> ✅ **블록까지 삭제된 휴지통 이미지도 영구 삭제 가능 (2026-08-06 해결)** — 처음엔 복구 API(`IMG-009`)와 같은 이유로 이것도 막혀 있었다(공유 `BlockCatalogPort.hasEditPermission`이 삭제된 블록에 대해 권한 유무와 무관하게 항상 false 반환). 근데 복구와 달리 영구 삭제는 "블록이 없어도 동작 자체는 가능해야 하는" 기능이라 이 제약을 그대로 받아들일 수 없었다 — `ImageEligibilityPolicy.assertEditPermissionEvenIfBlockDeleted`를 새로 만들어, 블록이 죽어있으면 그 블록이 속했던 stepId를 이미지 도메인이 직접 찾아(`ImageTrashMapper.findStepIdByImgBlockId`, block의 삭제 여부 무시) 이미 존재하는 `StepAccessUseCase.requireEditable`로 넘기는 방식으로 해결했다(실제 권한 판정 로직은 그대로 Step 도메인 소유, 새로 만든 권한 로직 없음). §복구 API 콜아웃에 같은 메서드에 대한 상세 설명 있음.
+>
+> ⚠️ **임시 우회다** — 위 방식은 공유 Block 도메인(동훈님)에 "삭제된 블록도 포함해서 stepId를 찾는" 정식 포트가 없어서 이미지 도메인이 직접 `block` 테이블을 조회하는 우회다. 정식 포트가 생기면 그걸로 교체할 것 — 지금은 요청하지 않기로 함(2026-08-06 결정, `.ai/local/STATE.md` 백로그 참고).
 
 ---
 

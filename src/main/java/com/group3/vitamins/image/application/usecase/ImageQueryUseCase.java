@@ -3,6 +3,7 @@ package com.group3.vitamins.image.application.usecase;
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
 import com.group3.vitamins.image.application.query.GetImageItemQuery;
 import com.group3.vitamins.image.application.query.GetImageTrashQuery;
+import com.group3.vitamins.image.application.query.GetProjectImagesQuery;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,6 +42,19 @@ public interface ImageQueryUseCase {
             String imageUrl,
             String caption,
             LocalDateTime deletedAt
+    ) {
+    }
+
+    //프로젝트 이미지 모아보기 — 프로젝트에 속한 활성 이미지 전체(여러 스텝·블록에 걸침)
+    List<ProjectImageView> getProjectImages(GetProjectImagesQuery query);
+
+    record ProjectImageView(
+            Long imgBlockId,
+            Long imgId,
+            String originalName,
+            String imageUrl,
+            String caption,
+            LocalDateTime createdAt
     ) {
     }
 }
