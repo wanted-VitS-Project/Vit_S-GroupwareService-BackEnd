@@ -304,7 +304,7 @@ Step 존재 및 접근 권한 확인
 | `data.status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
 | `data.priority` | String | `LOW` · `MEDIUM` · `HIGH` |
 | `data.dueDate` | String | 사용자 지정 마감 일시. `null` 허용 |
-| `data.completedAt` | String | `DONE` 완료 시각. 완료 상태가 아니면 `null` |
+| `data.completedAt` | LocalDateTime | `DONE` 완료 시각. 완료 상태가 아니면 `null` |
 | `data.assignees[].userId` | String | 담당자 사번 |
 | `data.assignees[].name` | String | 담당자 이름 |
 | `data.relatedBlocks[].blockId` | Long | 관련 Block 번호 |
@@ -399,13 +399,30 @@ null   → 400
 |---|---|---|
 | `data.issueId` | Long | 이슈 번호 |
 | `data.status` | String | 변경 후 상태 |
-| `data.completedAt` | String | 변경 후 완료 시각. `null` 허용 |
+| `data.completedAt` | LocalDateTime | 변경 후 완료 시각. `null` 허용 |
+| `data.updatedAt` | LocalDateTime | 최종 수정 일시 |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이슈 상태 변경 성공",
+  "data": {
+    "issueId": 101,
+    "status": "DONE",
+    "completedAt": "2026-08-02T22:46:00",
+    "updatedAt": "2026-08-02T22:46:00"
+  }
+}
+```
 
 > 칸반 Drag & Drop 실패 시 FE가 카드를 기존 칼럼으로 복구한다. 같은 칼럼 안의 카드 순서는 저장하지 않는다.
 
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 변경 성공 또는 동일 상태 멱등 처리 |
+| 400 | `ISS_STATUS_REQUIRED` | 상태가 전달되지 않음 |
 | 400 | `ISS_INVALID_STATUS` | 허용하지 않는 상태값 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
