@@ -10,6 +10,8 @@ import com.group3.vitamins.file.application.result.DownloadUrlResult;
 import com.group3.vitamins.file.application.result.FilePreviewResult;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
+import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
+import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
 import com.group3.vitamins.file.application.service.FileQueryService;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
@@ -20,6 +22,9 @@ import com.group3.vitamins.file.domain.repository.FileRepository;
 import com.group3.vitamins.file.domain.repository.FileVersionRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.domain.model.MemberPermission;
 import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +65,7 @@ class FileQueryServiceTest {
     private StepAccessUseCase stepAccessUseCase;
     private FileStoragePort fileStoragePort;
     private PdfPreviewPort pdfPreviewPort;
+    private ProjectAccessUseCase projectAccessUseCase;
     private FileQueryService service;
 
     @BeforeEach
@@ -71,9 +77,11 @@ class FileQueryServiceTest {
         stepAccessUseCase = Mockito.mock(StepAccessUseCase.class);
         fileStoragePort = Mockito.mock(FileStoragePort.class);
         pdfPreviewPort = Mockito.mock(PdfPreviewPort.class);
+        projectAccessUseCase = Mockito.mock(ProjectAccessUseCase.class);
         service = new FileQueryService(
                 fileVersionRepository, fileRepository, fileQueryPort,
-                blockCatalogPort, stepAccessUseCase, fileStoragePort, pdfPreviewPort);
+                blockCatalogPort, stepAccessUseCase, fileStoragePort, pdfPreviewPort,
+                projectAccessUseCase);
     }
 
     // ---- 헬퍼 ---------------------------------------------------------------
@@ -327,6 +335,78 @@ class FileQueryServiceTest {
 
             assertThatThrownBy(() -> service.getPreview(FILE_VERSION_ID, USER, ROLE))
                     .satisfies(hasCode(FileErrorCode.FILE_PREVIEW_FAILED));
+        }
+    }
+
+    @Nested
+    @DisplayName("§11 프로젝트 파일 버전 목록 (#138)")
+    class ProjectFileVersions {
+
+        private ProjectFileVersionProjection projection(Long fileId, String name, Long versionId,
+                                                        int versionNo, String ext, String indexStatus) {
+            return new ProjectFileVersionProjection(
+                    fileId, name, versionId, versionNo, name + "_v" + versionNo + "." + ext, ext,
+                    5000L, 42, LocalDateTime.now(), indexStatus);
+        }
+
+        @Test
+        @DisplayName("파일별 최대 차수만 latest=true, previewable·indexStatus 는 그대로 전달한다")
+        void computesLatestAndDerivedFields() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenReturn(MemberPermission.VIEWER);
+            // 파일 31: v2(pdf,COMPLETED)·v1(pdf,PENDING) / 파일 32: v1(docx,PROCESSING)
+            when(fileQueryPort.findProjectFileVersions(PROJECT_ID)).thenReturn(List.of(
+                    projection(31L, "제안서", 75L, 2, "pdf", "COMPLETED"),
+                    projection(31L, "제안서", 74L, 1, "pdf", "PENDING"),
+                    projection(32L, "계약서", 90L, 1, "docx", "PROCESSING")));
+
+            List<ProjectFileVersionResult> result = service.getProjectFileVersions(PROJECT_ID, USER, ROLE);
+
+            assertThat(result).hasSize(3);
+            // 파일 31 의 v2 만 latest
+            assertThat(result.get(0).versionNo()).isEqualTo(2);
+            assertThat(result.get(0).latest()).isTrue();
+            assertThat(result.get(0).previewable()).isTrue();
+            assertThat(result.get(0).indexStatus()).isEqualTo("COMPLETED");
+            assertThat(result.get(1).versionNo()).isEqualTo(1);
+            assertThat(result.get(1).latest()).isFalse();
+            // 파일 32 의 유일한 버전은 latest, docx 라 previewable=false
+            assertThat(result.get(2).fileId()).isEqualTo(32L);
+            assertThat(result.get(2).latest()).isTrue();
+            assertThat(result.get(2).previewable()).isFalse();
+            assertThat(result.get(2).indexStatus()).isEqualTo("PROCESSING");
+        }
+
+        @Test
+        @DisplayName("결과가 없으면 빈 목록을 돌려준다")
+        void emptyList() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenReturn(MemberPermission.VIEWER);
+            when(fileQueryPort.findProjectFileVersions(PROJECT_ID)).thenReturn(List.of());
+
+            assertThat(service.getProjectFileVersions(PROJECT_ID, USER, ROLE)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("프로젝트 접근 권한이 없으면(403) FILE_ACCESS_PERMISSION_REQUIRED 로 변환한다")
+        void noAccessConverted() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(ProjectErrorCode.PROJECT_ACCESS_DENIED));
+
+            assertThatThrownBy(() -> service.getProjectFileVersions(PROJECT_ID, USER, ROLE))
+                    .satisfies(hasCode(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+            verify(fileQueryPort, never()).findProjectFileVersions(any());
+        }
+
+        @Test
+        @DisplayName("프로젝트가 없으면(404) PROJECT_NOT_FOUND 를 그대로 전파한다 (변환하지 않는다)")
+        void projectNotFoundPropagated() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenThrow(new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+
+            assertThatThrownBy(() -> service.getProjectFileVersions(PROJECT_ID, USER, ROLE))
+                    .satisfies(hasCode(ProjectErrorCode.PROJECT_NOT_FOUND));
+            verify(fileQueryPort, never()).findProjectFileVersions(any());
         }
     }
 }

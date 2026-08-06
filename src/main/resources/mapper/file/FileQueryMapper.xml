@@ -95,4 +95,32 @@
          ORDER BY bf.linked_at ASC, f.file_id ASC
     </select>
 
+    <!-- 프로젝트 파일 버전 목록(§11, #138) — 비타메이트 분석 선택용. 프로젝트 전체 문서의 완료 버전(과거 버전 포함). -->
+    <!-- 블록이 삭제돼 고아가 된 파일도 포함(파일은 프로젝트 소속). 휴지통 문서(file.deleted_at)는 제외. -->
+    <!-- file_index 는 LEFT JOIN — 인덱스 행이 없거나 소프트삭제됐으면 COALESCE 로 'PENDING' 을 내린다(쓰기는 AI 담당). -->
+    <select id="findProjectFileVersions"
+            resultType="com.group3.vitamins.file.application.result.ProjectFileVersionProjection">
+        SELECT f.file_id                                  AS fileId,
+               f.name                                     AS name,
+               fv.file_version_id                         AS fileVersionId,
+               fv.version_no                              AS versionNo,
+               fv.original_file_name                      AS originalFileName,
+               fv.extension                               AS extension,
+               fv.size_bytes                              AS sizeBytes,
+               fv.page_count                              AS pageCount,
+               fv.completed_at                            AS completedAt,
+               COALESCE(fi.index_status, 'PENDING')       AS indexStatus
+          FROM file f
+          JOIN file_version fv
+                ON fv.file_id = f.file_id
+               AND fv.upload_status = 'COMPLETED'
+               AND fv.deleted_at IS NULL
+          LEFT JOIN file_index fi
+                ON fi.file_version_id = fv.file_version_id
+               AND fi.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NULL
+         ORDER BY f.file_id ASC, fv.version_no DESC
+    </select>
+
 </mapper>
