@@ -15,6 +15,9 @@ public interface VitamateAnalysisReaderPort {
     // Python worker가 처리할 PROCESSING 분석 작업 입력을 조회한다.
     Optional<VitamateAnalysisJobDetail> findProcessingAnalysisJob(Long analysisId, String attemptId);
 
+    // 비타메이트 블록에 속한 분석 실행 이력 목록을 지정한 개수까지만 조회합니다.
+    List<VitamateAnalysisHistory> findBlockAnalysisHistories(Long vitamateBlockId, int limit);
+
     record VitamateAnalysisDetail(
             Long analysisId,
             Long blockId,
@@ -71,6 +74,15 @@ public interface VitamateAnalysisReaderPort {
             String chromaId,
             Integer pageNumber,
             String excerpt
+    ) {
+    }
+
+    record VitamateAnalysisHistory(
+            Long analysisId,
+            String prompt,
+            String analysisStatus,
+            LocalDateTime createdAt,
+            LocalDateTime completedAt
     ) {
     }
 }

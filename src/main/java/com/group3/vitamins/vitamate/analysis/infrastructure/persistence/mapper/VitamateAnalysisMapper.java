@@ -1,12 +1,6 @@
 package com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper;
 
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateBlockContextRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisCitationRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisDocumentRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobChunkRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisRow;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -51,4 +45,11 @@ public interface VitamateAnalysisMapper {
 
     // Python worker 분석 작업의 문서별 후보 청크 목록을 조회한다.
     List<VitamateAnalysisJobChunkRow> findAnalysisJobChunks(@Param("analysisId") Long analysisId);
+
+    // 비타메이트 블록 ID를 기준으로 분석 실행 이력 목록을 지정한 개수까지만 조회합니다.
+    List<VitamateAnalysisHistoryRow> findBlockAnalysisHistories(
+            @Param("vitamateBlockId") Long vitamateBlockId,
+            @Param("limit") int limit
+    );
 }
+

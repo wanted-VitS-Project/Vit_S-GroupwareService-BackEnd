@@ -303,7 +303,7 @@ Step 존재 및 접근 권한 확인
 | `data.content` | String | 내용. `null` 허용 |
 | `data.status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
 | `data.priority` | String | `LOW` · `MEDIUM` · `HIGH` |
-| `data.dueDate` | String | 사용자 지정 마감 일시. `null` 허용 |
+| `data.dueDate` | LocalDate | 마감일. 미지정 시 `null` |
 | `data.completedAt` | LocalDateTime | `DONE` 완료 시각. 완료 상태가 아니면 `null` |
 | `data.assignees[].userId` | String | 담당자 사번 |
 | `data.assignees[].name` | String | 담당자 이름 |

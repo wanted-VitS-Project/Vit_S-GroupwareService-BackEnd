@@ -3,9 +3,13 @@ package com.group3.vitamins.issue.presentation.api;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
+import com.group3.vitamins.issue.application.query.IssueDetailQuery;
+import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.result.IssueStatusResult;
 import com.group3.vitamins.issue.application.usecase.IssueCommandUseCase;
+import com.group3.vitamins.issue.application.usecase.IssueQueryUseCase;
 import com.group3.vitamins.issue.presentation.api.request.IssueStatusChangeRequest;
+import com.group3.vitamins.issue.presentation.api.response.IssueDetailResponse;
 import com.group3.vitamins.issue.presentation.api.response.IssueStatusChangeResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -15,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,6 +33,39 @@ import org.springframework.web.bind.annotation.RestController;
 public class IssueManagementController {
 
     private final IssueCommandUseCase issueCommandUseCase;
+    private final IssueQueryUseCase issueQueryUseCase;
+
+    @Operation(
+            summary = "이슈 상세 조회",
+            description = "선택한 이슈의 상세 정보와 담당자, 연결된 Block을 조회한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이슈 상세 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ISS_ACCESS_PERMISSION_REQUIRED — 소속 Step 열람 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "ISS_NOT_FOUND — Issue 없음 또는 논리 삭제됨")
+    })
+    @GetMapping("/{issueId}")
+    public ResponseEntity<ApiResponse<IssueDetailResponse>> getIssue(
+            @Parameter(description = "조회할 이슈 ID")
+            @PathVariable Long issueId,
+            Authentication authentication
+    ) {
+        IssueResult result = issueQueryUseCase.getIssue(new IssueDetailQuery(
+                issueId,
+                authentication.getName(),
+                RequesterRole.from(authentication)
+        ));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.DETAIL_SUCCESS,
+                IssueDetailResponse.from(result)
+        ));
+    }
 
     @Operation(
             summary = "이슈 상태 변경",
