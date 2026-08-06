@@ -41,6 +41,20 @@ class VitamateFileIndexCallbackServiceTest {
     class SaveCallback {
 
         @Test
+        @DisplayName("saves PENDING status")
+        void savesPendingStatus() {
+            when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(FileIndexStatus.PENDING), eq(null), any()))
+                    .thenReturn(FileIndexStatus.PENDING);
+
+            VitamateFileIndexCallbackResult result = callbackService.handle(command("PENDING", null));
+
+            assertThat(result.accepted()).isTrue();
+            assertThat(result.indexStatus()).isEqualTo("PENDING");
+            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(FileIndexStatus.PENDING), eq(null), any());
+        }
+
+        @Test
         @DisplayName("saves PROCESSING status")
         void savesProcessingStatus() {
             when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
@@ -103,12 +117,6 @@ class VitamateFileIndexCallbackServiceTest {
     class ValidateInput {
 
         @Test
-        @DisplayName("rejects PENDING status from Python callback")
-        void rejectsPendingStatus() {
-            assertInvalid(command("PENDING", null));
-        }
-
-        @Test
         @DisplayName("rejects unknown status")
         void rejectsUnknownStatus() {
             assertInvalid(command("DONE", null));
@@ -127,9 +135,27 @@ class VitamateFileIndexCallbackServiceTest {
         }
 
         @Test
+        @DisplayName("rejects errorMessage for PENDING status")
+        void rejectsErrorMessageForPendingStatus() {
+            assertInvalid(command("PENDING", "should be empty"));
+        }
+
+        @Test
         @DisplayName("rejects missing fileVersionId before store access")
         void rejectsMissingFileVersionId() {
             assertInvalid(new HandleVitamateFileIndexCallbackCommand(null, "PROCESSING", null));
+        }
+
+        @Test
+        @DisplayName("rejects zero fileVersionId before store access")
+        void rejectsZeroFileVersionId() {
+            assertInvalid(new HandleVitamateFileIndexCallbackCommand(0L, "PROCESSING", null));
+        }
+
+        @Test
+        @DisplayName("rejects negative fileVersionId before store access")
+        void rejectsNegativeFileVersionId() {
+            assertInvalid(new HandleVitamateFileIndexCallbackCommand(-1L, "PROCESSING", null));
         }
 
         private void assertInvalid(HandleVitamateFileIndexCallbackCommand command) {

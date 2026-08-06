@@ -2,14 +2,14 @@ package com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.adapte
 
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort;
 import com.group3.vitamins.vitamate.fileindex.domain.model.FileIndexStatus;
-import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.entity.FileIndexEntity;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-// file_index 테이블에 인덱싱 상태를 저장하는 Adapter
+// Adapter that persists Vitamate file indexing status in file_index.
 @Component
 @RequiredArgsConstructor
 public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStorePort {
@@ -18,21 +18,31 @@ public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStoreP
 
     @Override
     public boolean existsFileVersion(Long fileVersionId) {
-        // native query의 boolean 변환 흔들림을 피하기 위해 count 기준으로 존재 여부를 판단한다.
+        // Uses count because native boolean conversion differs by database dialect.
         return fileIndexJpaRepository.countActiveFileVersion(fileVersionId) > 0;
     }
 
     @Override
+    @Transactional
     public FileIndexStatus upsertStatus(
             Long fileVersionId,
             FileIndexStatus indexStatus,
             String errorMessage,
             LocalDateTime now
     ) {
-        FileIndexEntity entity = fileIndexJpaRepository.findById(fileVersionId)
-                .orElseGet(() -> new FileIndexEntity(fileVersionId, now));
+        LocalDateTime indexedAt = indexStatus == FileIndexStatus.COMPLETED ? now : null;
+        String normalizedErrorMessage = indexStatus == FileIndexStatus.FAILED ? errorMessage : null;
 
-        entity.changeStatus(indexStatus, errorMessage, now);
-        return fileIndexJpaRepository.save(entity).getIndexStatus();
+        fileIndexJpaRepository.upsertStatus(
+                fileVersionId,
+                indexStatus.name(),
+                normalizedErrorMessage,
+                indexedAt,
+                now
+        );
+
+        return fileIndexJpaRepository.findById(fileVersionId)
+                .orElseThrow(() -> new IllegalStateException("file_index upsert failed"))
+                .getIndexStatus();
     }
 }

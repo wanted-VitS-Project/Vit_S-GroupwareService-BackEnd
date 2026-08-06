@@ -272,10 +272,11 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | 인증 방식 | Python worker 전용 내부 서비스 토큰 |
 | Header | `X-Vitamate-Worker-Token` |
 | 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
 | 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
 | 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
-| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -403,10 +404,11 @@ Python worker가 분석 처리 결과를 Spring Boot에 전달하는 내부 API�
 | 인증 방식 | Python worker 전용 내부 서비스 토큰 |
 | Header | `X-Vitamate-Worker-Token` |
 | 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
 | 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
 | 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
-| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -537,8 +539,9 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 | 인증 방식 | Python worker 전용 내부 서비스 토큰 |
 | Header | `X-Vitamate-Worker-Token` |
 | 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
 | 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
-| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -551,14 +554,14 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
-| `indexStatus` | String | `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
+| `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
 | `errorMessage` | String | 실패 사유. `FAILED`일 때 필수 |
 
 저장 상태값:
 
 | 상태 | 의미 |
 |------|------|
-| `PENDING` | 아직 인덱싱 전. Spring Boot의 기본 상태이며 Python callback으로 보내지 않는다 |
+| `PENDING` | 아직 인덱싱 전 또는 재대기 상태. Spring Boot 기본값이며 Python callback으로도 저장할 수 있다 |
 | `PROCESSING` | Python worker가 인덱싱 처리 중 |
 | `COMPLETED` | 인덱싱 완료. 비타메이트 분석 선택 가능 |
 | `FAILED` | 인덱싱 실패. 분석 선택 불가 |
@@ -567,6 +570,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 
 | `indexStatus` | `index_error_message` | `indexed_at` |
 |---------------|-----------------------|--------------|
+| `PENDING` | `null` | `null` |
 | `PROCESSING` | `null` | `null` |
 | `COMPLETED` | `null` | 현재 시각 |
 | `FAILED` | 실패 사유 저장 | `null` |
@@ -577,9 +581,9 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 |------|------|
 | 생성/갱신 | `fileVersionId` 기준으로 `file_index`가 없으면 생성하고, 있으면 갱신한다 |
 | 중복 callback | 같은 `fileVersionId`로 여러 번 호출되어도 중복 row를 만들지 않는다 |
-| 상태 검증 | `PROCESSING`, `COMPLETED`, `FAILED` 외 값은 400 |
+| 상태 검증 | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 외 값은 400 |
 | 실패 메시지 | `FAILED`인데 `errorMessage`가 비어 있으면 400 |
-| 완료 메시지 | `COMPLETED` 또는 `PROCESSING`이면 기존 `index_error_message`를 제거한다 |
+| 완료 메시지 | `PENDING`, `PROCESSING`, `COMPLETED`이면 기존 `index_error_message`를 제거한다 |
 | 로그 | `fileVersionId`, `indexStatus`만 남기고 문서 원문, storage key, worker token은 남기지 않는다 |
 
 **Request 예시 — 처리 중**

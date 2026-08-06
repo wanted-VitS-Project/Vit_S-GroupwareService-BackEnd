@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-// Python worker의 파일 인덱싱 상태 callback을 검증하고 저장한다.
+// Validates and stores file indexing status callbacks from the Python worker.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -42,7 +42,7 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
                 LocalDateTime.now()
         );
 
-        log.info("비타메이트 파일 인덱싱 상태 저장 - fileVersionId={}, indexStatus={}",
+        log.info("Vitamate file index status saved - fileVersionId={}, indexStatus={}",
                 command.fileVersionId(), savedStatus);
 
         return new VitamateFileIndexCallbackResult(
@@ -53,7 +53,7 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         );
     }
 
-    // callback command의 필수값을 검증한다.
+    // Checks required callback fields before touching the store.
     private void validateCommand(HandleVitamateFileIndexCallbackCommand command) {
         if (command == null
                 || command.fileVersionId() == null
@@ -64,7 +64,7 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         }
     }
 
-    // 문자열 상태값을 enum으로 변환한다.
+    // Converts the raw callback status into the domain enum.
     private FileIndexStatus parseStatus(String rawStatus) {
         try {
             return FileIndexStatus.valueOf(rawStatus);
@@ -73,18 +73,14 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         }
     }
 
-    // 상태별 errorMessage 규칙을 검증한다.
+    // Enforces state-specific errorMessage rules.
     private void validateStatusRule(FileIndexStatus status, String errorMessage) {
-        if (status == FileIndexStatus.PENDING) {
-            throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
-        }
-
         if (status == FileIndexStatus.FAILED
                 && (errorMessage == null || errorMessage.isBlank())) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
 
-        if ((status == FileIndexStatus.PROCESSING || status == FileIndexStatus.COMPLETED)
+        if (status != FileIndexStatus.FAILED
                 && errorMessage != null
                 && !errorMessage.isBlank()) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);

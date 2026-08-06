@@ -13,8 +13,17 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(JpaVitamateFileIndexStoreAdapter.class)
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("JpaVitamateFileIndexStoreAdapter")
 class JpaVitamateFileIndexStoreAdapterTest {
 
@@ -47,6 +57,8 @@ class JpaVitamateFileIndexStoreAdapterTest {
 
     @BeforeEach
     void setUp() {
+        jdbcTemplate.update("DELETE FROM file_index");
+        jdbcTemplate.update("DELETE FROM file_version");
         insertFileVersion(ACTIVE_FILE_VERSION_ID, null);
         insertFileVersion(DELETED_FILE_VERSION_ID, NOW);
     }
@@ -72,6 +84,18 @@ class JpaVitamateFileIndexStoreAdapterTest {
     @Nested
     @DisplayName("file_index status upsert")
     class UpsertStatus {
+
+        @Test
+        @DisplayName("inserts PENDING status when row does not exist")
+        void insertsPendingStatus() {
+            FileIndexStatus saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.PENDING, null, NOW);
+
+            FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
+            assertThat(saved).isEqualTo(FileIndexStatus.PENDING);
+            assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.PENDING);
+            assertThat(entity.getIndexErrorMessage()).isNull();
+            assertThat(entity.getIndexedAt()).isNull();
+        }
 
         @Test
         @DisplayName("inserts PROCESSING status when row does not exist")
@@ -111,6 +135,38 @@ class JpaVitamateFileIndexStoreAdapterTest {
             assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.FAILED);
             assertThat(entity.getIndexErrorMessage()).isEqualTo("extract failed");
             assertThat(entity.getIndexedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("handles concurrent first callbacks without duplicate row failure")
+        void handlesConcurrentFirstCallbacks() throws Exception {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            Callable<FileIndexStatus> callback = () -> {
+                ready.countDown();
+                start.await(3, TimeUnit.SECONDS);
+                return adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.PROCESSING, null, NOW);
+            };
+
+            try {
+                List<Future<FileIndexStatus>> futures = List.of(
+                        executor.submit(callback),
+                        executor.submit(callback)
+                );
+
+                assertThat(ready.await(3, TimeUnit.SECONDS)).isTrue();
+                start.countDown();
+
+                assertThat(futures.get(0).get(5, TimeUnit.SECONDS)).isEqualTo(FileIndexStatus.PROCESSING);
+                assertThat(futures.get(1).get(5, TimeUnit.SECONDS)).isEqualTo(FileIndexStatus.PROCESSING);
+
+                FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
+                assertThat(repository.count()).isEqualTo(1);
+                assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.PROCESSING);
+            } finally {
+                executor.shutdownNow();
+            }
         }
     }
 
