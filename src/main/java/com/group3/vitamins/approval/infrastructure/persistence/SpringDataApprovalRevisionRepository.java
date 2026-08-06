@@ -9,9 +9,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface SpringDataApprovalRevisionRepository extends JpaRepository<ApprovalRevisionJpaEntity, Long> {
+
+    /** MGT-007 — 이력 조회. 회차 번호 오름차순 */
+    List<ApprovalRevisionJpaEntity> findByApprovalIdOrderByRevisionNoAsc(Long approvalId);
 
     /**
      * SUB-005~008 — 재상신 대상(REJECTED)인지, 이미 준비된 DRAFT 회차가 있는지 판단하는 데 쓰는 최신 회차.
@@ -58,6 +62,12 @@ public interface SpringDataApprovalRevisionRepository extends JpaRepository<Appr
     @Query("UPDATE ApprovalRevisionJpaEntity r SET r.status = :inProgress, r.submittedAt = CURRENT_TIMESTAMP, "
             + "r.updatedAt = CURRENT_TIMESTAMP WHERE r.approvalRevisionId = :revisionId")
     void markSubmitted(@Param("revisionId") Long revisionId, @Param("inProgress") ApprovalStatus inProgress);
+
+    /** PRC-002/PRC-007 — 마지막 결재선 처리 시 회차를 최종 상태로 종료(`COMPLETED`/`REJECTED`) */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalRevisionJpaEntity r SET r.status = :finalStatus, r.finishedAt = CURRENT_TIMESTAMP, "
+            + "r.updatedAt = CURRENT_TIMESTAMP WHERE r.approvalRevisionId = :revisionId")
+    void finalizeRevision(@Param("revisionId") Long revisionId, @Param("finalStatus") ApprovalStatus finalStatus);
 
     /** 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) — 이 결재의 회차 전부를 논리 삭제한다 */
     @Modifying(clearAutomatically = true)

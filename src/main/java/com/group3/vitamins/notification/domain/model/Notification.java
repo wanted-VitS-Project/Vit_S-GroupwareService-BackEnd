@@ -47,20 +47,11 @@ public class Notification {
         return this.userId.equals(userId);
     }
 
-    public boolean isDeleted() {
-        return deletedAt != null;
-    }
-
     /** ACT-004 — 이미 읽었으면 시각을 덮어쓰지 않는다(최초 읽음 시각 보존). */
     public void markRead(LocalDateTime now) {
         if (readAt == null) {
             this.readAt = now;
         }
-    }
-
-    /** ACT-001 — 논리 삭제. */
-    public void delete(LocalDateTime now) {
-        this.deletedAt = now;
     }
 
     public Long getNotificationId() { return notificationId; }
