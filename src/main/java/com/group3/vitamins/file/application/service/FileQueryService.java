@@ -199,7 +199,8 @@ public class FileQueryService implements FileQueryUseCase {
     private Long resolveStepId(Long fileId) {
         Long blockId = fileQueryPort.findBlockIdByFileId(fileId)
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
-        return blockCatalogPort.resolveFileBlockStepId(blockId)
+        // 결재 블록에 매달린 파일도 버전/다운로드/미리보기가 되어야 하므로 attachable(FILE|APPROVAL) 로 해석한다.
+        return blockCatalogPort.resolveAttachableBlockStepId(blockId)
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
     }
 

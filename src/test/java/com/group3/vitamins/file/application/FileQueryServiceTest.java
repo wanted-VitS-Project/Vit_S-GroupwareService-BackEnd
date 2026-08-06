@@ -106,7 +106,7 @@ class FileQueryServiceTest {
         when(fileVersionRepository.findById(FILE_VERSION_ID)).thenReturn(Optional.of(v));
         when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
         when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
-        when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+        when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
         when(stepAccessUseCase.requireAccess(STEP_ID, USER, ROLE))
                 .thenReturn(new StepAccessUseCase.StepAccessView(STEP_ID, PROJECT_ID, permission));
     }
@@ -171,7 +171,7 @@ class FileQueryServiceTest {
                     .thenReturn(Optional.of(version(1, UploadStatus.COMPLETED, "pdf")));
             when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
             when(stepAccessUseCase.requireAccess(STEP_ID, USER, ROLE))
                     .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
 
@@ -225,7 +225,7 @@ class FileQueryServiceTest {
         void listsHistory() {
             when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
             when(stepAccessUseCase.requireAccess(STEP_ID, USER, ROLE))
                     .thenReturn(new StepAccessUseCase.StepAccessView(STEP_ID, PROJECT_ID, MemberPermission.VIEWER));
             when(fileQueryPort.findCompletedVersions(FILE_ID))

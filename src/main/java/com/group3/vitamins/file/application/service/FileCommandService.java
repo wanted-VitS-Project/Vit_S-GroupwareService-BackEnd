@@ -97,7 +97,8 @@ public class FileCommandService implements FileCommandUseCase {
     private void requireEditable(Long fileId, String userId, String role) {
         Long blockId = fileQueryPort.findBlockIdByFileId(fileId)
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
-        Long stepId = blockCatalogPort.resolveFileBlockStepId(blockId)
+        // 결재 블록에 매달린 파일도 이름수정·휴지통 이동이 되어야 하므로 attachable(FILE|APPROVAL) 로 해석한다.
+        Long stepId = blockCatalogPort.resolveAttachableBlockStepId(blockId)
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
         try {
             stepAccessUseCase.requireEditable(stepId, userId, role);
