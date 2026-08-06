@@ -22,20 +22,15 @@ public class IssueQueryAdapter implements IssueQueryPort {
     }
 
     @Override
+    public Optional<IssueResult> findIssue(Long issueId) {
+        return issueQueryMapper.findIssue(issueId)
+                .map(this::toResultWithoutRelations);
+    }
+
+    @Override
     public List<IssueResult> findIssues(Long stepId, Long blockId) {
         return issueQueryMapper.findIssues(stepId, blockId).stream()
-                .map(row -> new IssueResult(
-                        row.issueId(),
-                        row.stepId(),
-                        row.title(),
-                        row.content(),
-                        row.status(),
-                        row.priority(),
-                        row.dueDate(),
-                        row.completedAt(),
-                        List.of(),
-                        List.of()
-                ))
+                .map(this::toResultWithoutRelations)
                 .toList();
     }
 
@@ -66,5 +61,20 @@ public class IssueQueryAdapter implements IssueQueryPort {
                         row.type()
                 ))
                 .toList();
+    }
+
+    private IssueResult toResultWithoutRelations(IssueRow row) {
+        return new IssueResult(
+                row.issueId(),
+                row.stepId(),
+                row.title(),
+                row.content(),
+                row.status(),
+                row.priority(),
+                row.dueDate(),
+                row.completedAt(),
+                List.of(),
+                List.of()
+        );
     }
 }

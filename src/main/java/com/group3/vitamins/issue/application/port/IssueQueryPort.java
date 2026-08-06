@@ -10,6 +10,8 @@ public interface IssueQueryPort {
 
     Optional<BlockStepResult> findBlockStep(Long blockId);
 
+    Optional<IssueResult> findIssue(Long issueId);
+
     List<IssueResult> findIssues(Long stepId, Long blockId);
 
     List<AssigneeResult> findAssignees(Collection<Long> issueIds);
