@@ -177,6 +177,7 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
 
         return new ApprovalDetailResult(revision.getRevisionId(), revision.getRevisionNo(),
                 revision.getTitle(), revision.getContent(), approval.getDrafterId(), drafter.name(),
+                drafter.department(), drafter.position(),
                 revision.getStatus().name(), documents, lineViews, blockOrigin);
     }
 

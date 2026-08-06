@@ -24,6 +24,12 @@ public record ApprovalDetailResponse(
         @Schema(description = "기안자 이름(라이브 조회)", example = "이강욱")
         String drafterName,
 
+        @Schema(description = "기안자 부서(라이브 조회)", example = "기술본부 / 개발팀")
+        String drafterDepartment,
+
+        @Schema(description = "기안자 직책(라이브 조회)", example = "과장")
+        String drafterPosition,
+
         @Schema(description = "회차 상태", example = "IN_PROGRESS")
         String status,
 
@@ -62,6 +68,7 @@ public record ApprovalDetailResponse(
                 detail.blockOrigin().blockId(), detail.blockOrigin().stepId(), detail.blockOrigin().projectId());
 
         return new ApprovalDetailResponse(detail.revisionId(), detail.revisionNo(), detail.title(), detail.content(),
-                detail.drafterId(), detail.drafterName(), detail.status(), documents, lines, blockOrigin);
+                detail.drafterId(), detail.drafterName(), detail.drafterDepartment(), detail.drafterPosition(),
+                detail.status(), documents, lines, blockOrigin);
     }
 }

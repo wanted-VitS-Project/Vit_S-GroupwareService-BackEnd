@@ -10,6 +10,8 @@ public record ApprovalDetailResult(
         String content,
         String drafterId,
         String drafterName,
+        String drafterDepartment,
+        String drafterPosition,
         String status,
         List<ApprovalDocumentView> documents,
         List<ApprovalLineDetailView> lines,

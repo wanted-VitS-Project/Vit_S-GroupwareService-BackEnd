@@ -336,6 +336,9 @@
 > `approverPosition`/`approverDepartment`/`order`/`status`/`opinion`/`processedAt`)를 그대로 재사용하는 것으로 판단해
 > 반영했다(전달자 확인: "조회 권한은 1번과 동일" + "data = 1번 조회 응답 + drafter 정보 + blockOrigin"). **실제 프론트 요구와
 > 다르면 알려달라 — 세부 필드는 추정치다.**
+> ⚠️ **2026-08-06 추가 정정** — Figma 화면 검토 중 발견: "data = 1번 조회 응답 + drafter 정보"라고 해놓고
+> `drafterDepartment`/`drafterPosition`을 Response 표에 안 옮겼었음(1번엔 이미 있는 필드). 화면에 기안자
+> 부서·직책이 실제로 표시돼 있어 아래 표에 추가함.
 
 **Request**
 
@@ -351,7 +354,7 @@
 | `data.revisionNo` | int | 현재 회차 번호 |
 | `data.title` / `content` | String | 결재 제목·내용 |
 | `data.drafterId` | **String** | 기안자 구분 번호(사번) |
-| `data.drafterName` | String | 기안자 이름(라이브 조회) |
+| `data.drafterName` / `drafterDepartment` / `drafterPosition` | String | 기안자 이름·부서·직책(라이브 조회) |
 | `data.status` | String | 회차 상태 |
 | `data.documents[]` | Array | 1번과 동일 구조(추정, 위 참고) |
 | `data.lines[]` | Array | 1번과 동일 구조(추정, 위 참고) |
