@@ -55,6 +55,18 @@ public class Issue {
                 createdBy, createdAt, updatedAt, completedAt, deletedAt);
     }
 
+    public void delete(LocalDateTime now) {
+        this.deletedAt = now;
+    }
+
+    public void changeStatus(IssueStatus nextStatus, LocalDateTime now) {
+        if (this.status == nextStatus) {
+            return;
+        }
+        this.status = nextStatus;
+        this.completedAt = nextStatus == IssueStatus.DONE ? now : null;
+    }
+
     public Long getIssueId() { return issueId; }
     public Long getStepId() { return stepId; }
     public String getTitle() { return title; }

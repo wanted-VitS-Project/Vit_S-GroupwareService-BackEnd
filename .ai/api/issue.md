@@ -304,7 +304,7 @@ Step 존재 및 접근 권한 확인
 | `data.status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
 | `data.priority` | String | `LOW` · `MEDIUM` · `HIGH` |
 | `data.dueDate` | String | 사용자 지정 마감 일시. `null` 허용 |
-| `data.completedAt` | String | `DONE` 완료 시각. 완료 상태가 아니면 `null` |
+| `data.completedAt` | LocalDateTime | `DONE` 완료 시각. 완료 상태가 아니면 `null` |
 | `data.assignees[].userId` | String | 담당자 사번 |
 | `data.assignees[].name` | String | 담당자 이름 |
 | `data.relatedBlocks[].blockId` | Long | 관련 Block 번호 |
@@ -399,13 +399,30 @@ null   → 400
 |---|---|---|
 | `data.issueId` | Long | 이슈 번호 |
 | `data.status` | String | 변경 후 상태 |
-| `data.completedAt` | String | 변경 후 완료 시각. `null` 허용 |
+| `data.completedAt` | LocalDateTime | 변경 후 완료 시각. `null` 허용 |
+| `data.updatedAt` | LocalDateTime | 최종 수정 일시 |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이슈 상태 변경 성공",
+  "data": {
+    "issueId": 101,
+    "status": "DONE",
+    "completedAt": "2026-08-02T22:46:00",
+    "updatedAt": "2026-08-02T22:46:00"
+  }
+}
+```
 
 > 칸반 Drag & Drop 실패 시 FE가 카드를 기존 칼럼으로 복구한다. 같은 칼럼 안의 카드 순서는 저장하지 않는다.
 
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 변경 성공 또는 동일 상태 멱등 처리 |
+| 400 | `ISS_STATUS_REQUIRED` | 상태가 전달되지 않음 |
 | 400 | `ISS_INVALID_STATUS` | 허용하지 않는 상태값 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
@@ -421,7 +438,32 @@ null   → 400
 | 인증 필요 | Y · 스텝 EDITOR |
 | 요구사항 | ISS-010 · IBL-005 · USC-ISS-012·013 · USC-ASN-007 · USC-IBL-009 |
 
+이슈를 논리 삭제하고, 담당자 및 관련 Block 연결 정보를 함께 제거한다.
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `issueId` | Long | Y | 삭제할 이슈 ID |
+
+**Query Parameter** — 없음
+
+**Request Body** — 없음
+
+### 처리 기준
+
+```text
+Issue 존재 및 삭제 여부 확인
+→ Issue의 stepId 기준 스텝 EDITOR 권한 확인
+→ issue.deleted_at = 현재 시각
+→ issue_assign 관계 삭제
+→ issue_block 관계 삭제
+→ 200 OK 반환
+```
+
 ⛔ `issue.deleted_at`에 현재 시각을 기록하는 논리 삭제다.
+
+⛔ 삭제된 이슈는 목록·상세·집계 조회에서 제외한다.
 
 ⛔ 같은 트랜잭션에서 `issue_assign`, `issue_block` 관계 행을 제거한다.
 
@@ -429,11 +471,39 @@ null   → 400
 
 ⛔ Issue 삭제는 Activity Log에 기록하지 않는다.
 
-`data`는 `null`이다.
+⛔ 이미 삭제된 이슈는 존재하지 않는 이슈와 동일하게 처리한다.
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data` | Object | `null` |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이슈 삭제 성공",
+  "data": null
+}
+```
+
+### FE 처리 흐름
+
+```text
+삭제 버튼 선택
+→ 사용자 확인
+→ 삭제 API 호출
+→ 성공 시 보드에서 해당 이슈 제거
+→ 상세 화면 닫기
+```
 
 | 코드 | code | 설명 |
 |---|---|---|
-| 200 | – | 삭제 성공 |
+| 200 | – | 이슈 삭제 성공 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 이미 논리 삭제됨 |

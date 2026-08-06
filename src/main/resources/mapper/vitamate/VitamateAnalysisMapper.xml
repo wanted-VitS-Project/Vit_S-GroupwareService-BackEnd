@@ -3,10 +3,10 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.group3.vitamins.vitamate.infrastructure.persistence.mapper.VitamateAnalysisMapper">
+<mapper namespace="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper.VitamateAnalysisMapper">
 
     <select id="findAccessibleVitamateBlock"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateBlockContextRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateBlockContextRow">
         SELECT
             b.block_id AS blockId,
             vb.vitamate_block_id AS vitamateBlockId,
@@ -64,7 +64,7 @@
     </select>
 
     <select id="findAccessibleAnalysis"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisRow">
         SELECT
             va.vitamate_analysis_id AS analysisId,
             b.block_id AS blockId,
@@ -115,7 +115,7 @@
     </select>
 
     <select id="findAnalysisDocuments"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisDocumentRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisDocumentRow">
         SELECT
             vad.file_version_id AS fileVersionId,
             f.name AS fileName
@@ -132,7 +132,7 @@
     </select>
 
     <select id="findAnalysisCitations"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisCitationRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisCitationRow">
         SELECT
             vac.rank_order AS rankOrder,
             vad.file_version_id AS fileVersionId,
@@ -152,7 +152,7 @@
     </select>
 
     <select id="findProcessingAnalysisJob"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobRow">
         SELECT
             va.vitamate_analysis_id AS analysisId,
             va.processing_attempt_id AS attemptId,
@@ -178,7 +178,7 @@
     </select>
 
     <select id="findAnalysisJobDocuments"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow">
         SELECT
             vad.file_version_id AS fileVersionId,
             f.name AS fileName
@@ -195,7 +195,7 @@
     </select>
 
     <select id="findAnalysisJobChunks"
-            resultType="com.group3.vitamins.vitamate.infrastructure.persistence.row.VitamateAnalysisJobChunkRow">
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobChunkRow">
         SELECT
             dc.file_version_id AS fileVersionId,
             dc.document_chunk_id AS documentChunkId,

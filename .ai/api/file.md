@@ -1,6 +1,6 @@
 # 📎 File · FileVersion API
 
-**최종 업데이트**: 2026-08-04 · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
+**최종 업데이트**: 2026-08-06 (§1 업로드 대상에 결재(APPROVAL) 블록 추가 · §3 목록은 FILE 전용 명시) · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
@@ -20,13 +20,14 @@
 | 영구삭제(§7) 차단 범위 | 결재(`approval_document`) **+ AI 분석(`vitamate_analysis_document`)** 참조까지. `file_index`·`document_chunk` 는 파생이라 함께 정리 |
 | `file_index.index_status` | **Spring DB 정본 · Python callback 으로 갱신** · 값 `PENDING·PROCESSING·COMPLETED·FAILED` |
 | §11 버전목록 스코프 | **프로젝트 전체** — 경로 `GET /projects/{projectId}/file-versions` (블록 단위 폐기) |
+| 업로드 대상 블록(§1) | **`FILE` + `APPROVAL`** — 결재 블록 드롭존도 공용 파일 API 재사용. `block_file`+`approval_document` **이중 링크**. **단 §3 목록은 `FILE` 전용**(결재 파일은 결재 상세에서 조회) |
 
 **블록 생명주기 분리 (A안 확정 · `../docs/global/BLOCK.md` §4-4 근거)** — 블록 삭제는 파일을 건드리지 않는다. 파일은 `file.project_id` 소속으로 살아남고, 조회는 `block.deleted_at IS NULL` 로 거른다. 블록 삭제 후 남은 파일 접근은 §11(프로젝트 전체 보기)로 회수한다. `block_file` 은 hard delete(파일 영구삭제 시 `ON DELETE CASCADE`).
 
 **착수 범위 (2026-08-06 · CRUD 우선)**
 
-- ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동
-- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기) · **파일 버전 목록(비타메이트, #138)** (AI 경계·프로젝트 스코프)
+- ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동 · **파일 버전 목록(비타메이트, #138) 읽기 구현 완료** — 프로젝트 스코프(`/projects/{projectId}/file-versions`) · `file_index` LEFT JOIN
+- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기). **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
 
 ## 엔드포인트
 
@@ -50,7 +51,7 @@
 | **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
 | 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
 | 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
-| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/blocks/{blockId}/file-versions` | 스텝 접근 권한 |
+| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/projects/{projectId}/file-versions` | 프로젝트 접근 권한 |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
 
@@ -147,12 +148,13 @@
 ⛔ **파일 자체는 이 API 로 올리지 않는다.** 응답의 `uploadUrl` 로 클라이언트가 저장소에 직접 PUT 한 뒤 완료 통보를 호출한다.
 ⛔ **동명 문서가 있으면 `409` 로 거부한다.** 사용자가 확인하면 `allowDuplicateName: true` 로 다시 호출한다 (`FILE-009`).
 ⭐ **`uploadUrl` 만료 = 10분** (2026-08-06 확정).
+⭐ **업로드 대상 블록 = `FILE` 또는 `APPROVAL`** (2026-08-06 확정). 결재 블록의 드롭존에 올린 파일도 이 API 로 받는다 — 결재 도메인은 자체 업로드 API 를 두지 않고 공용 파일 API 를 재사용한다. 결재 블록에 올리면 파일이 `block_file` 로 그 블록에 매달리고(FILE 블록과 동일), 이후 프론트가 결재 첨부 API(`POST /approvals/{id}/revisions/{revId}/documents`)로 `fileVersionId` 를 넘겨 `approval_document` 링크를 추가한다 → **`block_file` + `approval_document` 이중 링크**(팀 합의). 권한·삭제잠금(§5)·버전 조회는 FILE 블록과 완전히 같은 `블록→스텝` 경로를 탄다. 그 외 타입 블록은 `FILE_BLOCK_NOT_FOUND`.
 
 **Request Body**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `blockId` | Long | Y | 파일을 붙일 블록 |
+| `blockId` | Long | Y | 파일을 붙일 블록 (`FILE` 또는 `APPROVAL` 타입) |
 | `originalFileName` | String | Y | 원본 파일명 (확장자 포함) |
 | `sizeBytes` | Long | Y | 50MB 이하 |
 | `mimeType` | String | N | MIME 타입 |
@@ -171,7 +173,7 @@
 | 400 | `FILE_EXTENSION_BLOCKED` | 실행 파일 확장자 (`FILE-008`) |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `FILE_EDIT_PERMISSION_REQUIRED` | 스텝 편집 권한 없음 |
-| 404 | `FILE_BLOCK_NOT_FOUND` | 블록이 없거나 **soft delete 된 상태** (`block.deleted_at IS NOT NULL`) |
+| 404 | `FILE_BLOCK_NOT_FOUND` | 블록이 없거나 **soft delete** 됨 (`block.deleted_at IS NOT NULL`) 또는 **`FILE`·`APPROVAL` 이 아닌 타입** |
 | 404 | `FILE_NOT_FOUND` | `fileId` 로 지정한 문서 없음 |
 | 409 | `FILE_NAME_DUPLICATED` | 동명 문서 존재. `allowDuplicateName: true` 로 재요청 |
 
@@ -219,6 +221,7 @@
 ⛔ **완료된 버전이 하나도 없는 문서는 목록에 없다.** 업로드 실패로 버전이 0개인 문서가 빈 항목으로 뜨는 것을 막는다 (`FILE-002`).
 ⛔ **정렬은 블록 연결일 오름차순이다.** 파일 순서 변경 기능이 없다.
 ⛔ **블록이 soft delete 됐으면 `404` 다.** `block.deleted_at IS NULL` 을 확인한다 — FK `CASCADE` 는 발동하지 않는다.
+⛔ **이 목록은 `FILE` 블록 전용이다.** 결재 블록에 매달린 파일(§1)은 여기서 조회하지 않는다 — 결재 파일은 결재 상세 화면(`approval_document`)에서 본다. `APPROVAL` 블록으로 호출하면 `FILE_BLOCK_NOT_FOUND`. (업로드·다운로드·버전조회는 결재 블록도 받지만 이 목록만 FILE 로 좁힌다.)
 
 **Response**
 
@@ -522,8 +525,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| Method · URL | `GET /api/v1/blocks/{blockId}/file-versions` |
-| 인증 필요 | Y · 스텝 접근 권한 (열람 이상) |
+| Method · URL | `GET /api/v1/projects/{projectId}/file-versions` |
+| 인증 필요 | Y · 프로젝트 접근 권한 (열람 이상) |
 | 요구사항 | VER-013 · USC-VER (비타메이트 결합) |
 | 요청 출처 | AI/비타메이트 — 분석 요청 화면에서 **분석 대상 파일 버전을 선택**. 분석은 `fileVersionId` 목록 기준으로 저장·수행 |
 
@@ -533,7 +536,7 @@
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `blockId` (path) | Long | Y | 분석 선택 대상 블록 |
+| `projectId` (path) | Long | Y | 분석 선택 대상 프로젝트 |
 
 **Response**
 
@@ -548,13 +551,14 @@
 | `data[].extension` | String | 확장자 |
 | `data[].sizeBytes` | long | 바이트 크기 |
 | `data[].pageCount` | int | 페이지 수 (`null` 허용) |
-| `data[].previewable` | boolean | 미리보기 가능 여부 |
+| `data[].previewable` | boolean | 미리보기 가능 여부 (**확장자 PDF 기준**) |
 | `data[].completedAt` | String | 업로드 완료 시각 |
 | `data[].indexStatus` | String | 인덱싱 상태 (`embeddingStatus`) — `file_index` 출처 |
 
 **정책**
 - ⛔ **업로드 완료된 버전만**(`upload_status = COMPLETED`) 반환한다.
-- ⛔ **휴지통 파일은 기본 제외**(`deleted_at IS NULL`).
+- ⛔ **휴지통 파일은 기본 제외**(`file.deleted_at IS NULL`).
+- ✅ **프로젝트 전체 범위** — 특정 블록이 아니라 프로젝트에 속한 모든 문서(`file.project_id`)의 버전을 본다. **블록이 삭제돼 고아가 된 파일도 포함**된다(파일은 프로젝트 소속).
 - ✅ **과거 버전도 목록에 포함**한다 (같은 파일의 이전 버전도 선택 가능).
 - 인덱싱 상태가 `COMPLETED` 인 버전만 프론트에서 **선택 가능**하게 처리한다 (목록에는 다 내려주되 프론트가 비활성화).
 
@@ -562,9 +566,11 @@
 |---|---|---|
 | 200 | – | 조회 성공 (없으면 빈 배열) |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
-| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 스텝 접근 권한 없음 |
-| 404 | `FILE_BLOCK_NOT_FOUND` | 블록 없음/삭제됨 |
+| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
+| 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |
 
-> 🔴 **AI 팀 합의 필요** — `indexStatus`(`embeddingStatus`)는 `file_index`·`document_chunk`(**AI 담당 테이블**)에서 온다.
-> 내 file 도메인이 조인해 내려줄지, AI 서버가 별도로 붙일지 **경계·enum 값 확정 필요**.
-> 🟠 경로 스코프(블록 단위)와 `previewable` 판정 기준(PDF 여부 등)은 잠정값 — 분석 선택 UI 확정 시 조정.
+> 🟢 **경로 스코프 = 프로젝트 확정 · 읽기 구현 완료** (2026-08-06 · #138). 권한은 파일 단위가 아니라 프로젝트 단위 —
+> 공용 **`ProjectAccessUseCase.requireAccess(projectId, userId, role)`** 를 재사용한다(스텝 리소스가 `StepAccessUseCase` 를 쓰는 것과 동형).
+> `indexStatus`(`embeddingStatus`)는 `file_index`(**AI 담당 테이블**)에서 오며, **file 도메인이 `file_index` 를 LEFT JOIN 해 내려준다** — 인덱스 행이 없으면 `COALESCE` 로 `PENDING`.
+> ⛔ **쓰기(`index_status` 갱신)는 file 도메인이 하지 않는다 — AI 도메인 별도 이슈**(배정현 확인). 읽기만 여기 소관.
+> `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 은 **확장자 기준(PDF 여부)으로 확정** 판정한다 — §1 상단 규칙과 동일(page_count 추출 성공 여부는 무관).
