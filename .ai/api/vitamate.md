@@ -1,7 +1,7 @@
 # 비타메이트 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-05 (Queue + callback 비동기 분석 계약 반영)
+**최종 동기화**: 2026-08-06 (파일 인덱싱 소스 조회 및 document_chunk 저장 내부 API 계약 추가)
 **도메인 담당**: 정현
 
 > 이 파일이 비타메이트 API 계약 기준이다. 임의 변경 금지.
@@ -18,6 +18,8 @@
 | ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
 | ✅ 확정 | Python 분석 작업 조회 | GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | 내부 서버 |
 | ✅ 확정 | Python 분석 결과 콜백 | POST | `/internal/v1/vitamate/analyses/{analysisId}/callback` | 내부 서버 |
+| ✅ 확정 | 파일 인덱싱 소스 조회 | GET | `/internal/v1/vitamate/file-versions/{fileVersionId}/index-source` | 내부 서버 |
+| ✅ 확정 | 문서 청크 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks` | 내부 서버 |
 | ✅ 확정 | 파일 인덱싱 상태 콜백 | POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | 내부 서버 |
 
 ---
@@ -528,6 +530,187 @@ callback null 규칙:
 ```
 
 > 내부 API와 큐 메시지는 피그마 화면 댓글에 달지 않고 백엔드 API 문서 또는 시퀀스 다이어그램에만 기록한다.
+
+---
+
+## 파일 인덱싱 소스 조회 `GET /internal/v1/vitamate/file-versions/{fileVersionId}/index-source`
+
+**상태**: ✅ 확정
+
+Python worker가 파일 버전의 텍스트 추출을 위해 다운로드 정보와 파일 메타데이터를 조회하는 내부 API다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 텍스트 추출 대상 파일 버전 ID |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 파일 버전 ID |
+| `fileId` | Long | 파일 ID |
+| `projectId` | Long | 파일이 속한 프로젝트 ID |
+| `originalFileName` | String | 원본 파일명 |
+| `extension` | String | 확장자 |
+| `mimeType` | String | MIME 타입 |
+| `sizeBytes` | Long | 파일 크기 |
+| `storageKey` | String | 저장소 객체 키. 응답에는 필요 시에만 포함하고 로그에는 남기지 않는다 |
+| `downloadUrl` | String | Python worker가 파일을 다운로드할 URL |
+
+조회 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 `file_version`이 없으면 404 |
+| 업로드 상태 | 업로드 완료 상태의 파일 버전만 조회 가능 |
+| 삭제 상태 | 삭제된 파일 또는 파일 버전은 조회하지 않는다 |
+| 다운로드 URL | local/dev/prod 저장소 정책에 맞게 발급한다. dev/prod에서는 공개 URL이 아니라 제한된 다운로드 URL을 사용한다 |
+| 로그 | `fileVersionId`, `extension`, `sizeBytes` 정도만 남기고 원문, storage key, worker token은 남기지 않는다 |
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 다운로드 정보를 이용해 텍스트 추출을 진행한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | `fileVersionId` 형식 오류. ack하고 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전이 없음. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+**Response 예시**
+
+```json
+{
+  "fileVersionId": 101,
+  "fileId": 31,
+  "projectId": 10,
+  "originalFileName": "스마트시티_제안요청서.pdf",
+  "extension": "pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 6081740,
+  "storageKey": "projects/10/files/31/versions/101.pdf",
+  "downloadUrl": "https://example.com/presigned-download-url"
+}
+```
+
+---
+
+## 문서 청크 저장 `POST /internal/v1/vitamate/file-versions/{fileVersionId}/chunks`
+
+**상태**: ✅ 확정
+
+Python worker가 파일에서 추출한 텍스트를 `document_chunk` 단위로 분리한 뒤 Spring Boot에 저장하는 내부 API다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 청크 저장 대상 파일 버전 ID |
+
+**Request**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `chunks` | Object[] | 저장할 문서 청크 목록 |
+| `chunks[].chunkIndex` | Integer | 파일 버전 내 청크 순서. 0부터 시작 |
+| `chunks[].pageNumber` | Integer | 페이지 번호. 알 수 없으면 `null` |
+| `chunks[].sectionTitle` | String | 섹션 제목. 알 수 없으면 `null` |
+| `chunks[].startOffset` | Integer | 원문 시작 위치. 알 수 없으면 `null` |
+| `chunks[].endOffset` | Integer | 원문 종료 위치. 알 수 없으면 `null` |
+| `chunks[].tokenCount` | Integer | 추정 토큰 수. 알 수 없으면 `null` |
+| `chunks[].excerpt` | String | 청크 본문. `document_chunk.excerpt`에 저장하며 1000자 이하 |
+
+저장 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 `file_version`이 없으면 404 |
+| 저장 방식 | 같은 `fileVersionId`의 기존 `document_chunk`는 제거하고 새 청크 목록으로 전체 재저장한다 |
+| 청크 목록 | `chunks`가 비어 있으면 400 |
+| 청크 순서 | `chunkIndex`는 0 이상이며 같은 요청 안에서 중복될 수 없다 |
+| 청크 본문 | `excerpt`는 빈 값일 수 없고 1000자를 초과할 수 없다 |
+| 임베딩 상태 | 현재 단계에서는 청크 저장 시 `embedding_status = 'PENDING'`으로 저장한다 |
+| Chroma 연동 | 실제 벡터DB 연동 전까지 `chroma_id`, `embedding_model`은 `null`일 수 있다 |
+| 트랜잭션 | 기존 청크 삭제와 새 청크 저장은 하나의 트랜잭션에서 처리한다 |
+| 로그 | `fileVersionId`, 저장 청크 수만 남기고 문서 원문, storage key, worker token은 남기지 않는다 |
+
+**Request 예시**
+
+```json
+{
+  "chunks": [
+    {
+      "chunkIndex": 0,
+      "pageNumber": 1,
+      "sectionTitle": "제안 개요",
+      "startOffset": 0,
+      "endOffset": 920,
+      "tokenCount": 310,
+      "excerpt": "스마트시티 통합 관제 플랫폼 구축을 위해 실시간 데이터 수집과 분석 기능이 필요하다."
+    }
+  ]
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 청크 저장 성공. 이후 파일 인덱싱 상태를 `COMPLETED`로 callback한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 요청 형식 또는 청크 검증 실패. 파일 인덱싱 상태를 `FAILED`로 callback한다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전이 없음. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 파일 버전 ID |
+| `savedChunkCount` | Integer | 저장된 청크 수 |
+
+**Response 예시**
+
+```json
+{
+  "fileVersionId": 101,
+  "savedChunkCount": 12
+}
+```
 
 ---
 
