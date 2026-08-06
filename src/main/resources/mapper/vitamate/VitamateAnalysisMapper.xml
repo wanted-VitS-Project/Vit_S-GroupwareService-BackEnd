@@ -215,4 +215,19 @@
         ORDER BY vad.created_at ASC, vad.vitamate_analysis_document_id ASC, dc.chunk_index ASC
     </select>
 
+    <select id="findBlockAnalysisHistories"
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisHistoryRow">
+        SELECT
+            va.vitamate_analysis_id AS analysisId,
+            va.prompt AS prompt,
+            va.analysis_status AS analysisStatus,
+            va.created_at AS createdAt,
+            va.completed_at AS completedAt
+        FROM vitamate_analysis va
+        WHERE va.vitamate_block_id = #{vitamateBlockId}
+          AND va.deleted_at IS NULL
+        ORDER BY va.created_at DESC, va.vitamate_analysis_id DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>
