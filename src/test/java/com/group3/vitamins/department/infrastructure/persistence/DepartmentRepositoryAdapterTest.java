@@ -21,13 +21,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 의 {@code try/catch} <b>밖</b>(커밋 시점)에서 터져 500 이 된다. 어댑터가 {@code saveAndFlush} 로 즉시 실행해야
  * 서비스가 그 위반을 명세의 {@code DEPT_NAME_DUPLICATED}(409)로 변환할 수 있다 (참고: job-position #120·4f7d917).
  *
- * <p>⚠️ 2026-08-06 형제 유니크로 완화됐다. 복합 유니크는 <b>같은 부모 아래 자식</b>만 막으므로 이 테스트는
- * 부모 아래 자식 부서로 검증한다. 최상위(부모 없음)는 MySQL/H2 가 {@code NULL} parent 를 UNIQUE 로 안 막아
- * DB 가 아닌 서비스(app 레벨)가 막는다 → {@link DepartmentCommandServiceTest} 담당.
+ * <p>⚠️ 2026-08-06 형제 유니크로 완화됐다. 복합 유니크는 생성 열 {@code parent_key = COALESCE(parent_id, 0)}
+ * 에 걸려, <b>자식(같은 부모)뿐 아니라 최상위(부모 없음 → 0 공유) 동명까지 DB 가 막는다.</b> 그래서 이 테스트는
+ * 자식 케이스와 최상위 케이스를 모두 검증한다. 상위가 다르면 같은 이름은 허용돼야 한다.
  *
  * <p>DB 는 H2(MySQL 모드). MySQL 전용 Flyway 는 끄고 스키마는 엔티티에서 만든다({@code ddl-auto=create-drop}) —
  * 보는 건 스키마 정합성이 아니라 <b>제약 위반이 동기적으로 발생하는지</b>다. 그래서 {@code DepartmentJpaEntity}
- * 에 {@code (parent_id, name)} 복합 유니크가 있어야 이 테스트가 성립한다.
+ * 의 {@code parent_key} 생성 열 + {@code (parent_key, name)} 복합 유니크가 있어야 이 테스트가 성립한다.
  */
 @DataJpaTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:dept-adapter;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -67,6 +67,27 @@ class DepartmentRepositoryAdapterTest {
         adapter.save(Department.create("개발팀", parent.getDepartmentId()));
 
         assertThatThrownBy(() -> adapter.save(Department.create("개발팀", parent.getDepartmentId())))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("최상위(부모 없음)끼리 이름이 겹치면 저장(saveAndFlush) 시점에 즉시 터진다 — parent_key=0 공유")
+    void duplicateRootNameOnCreateThrowsSynchronously() {
+        adapter.save(Department.create("본부", null));
+
+        assertThatThrownBy(() -> adapter.save(Department.create("본부", null)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("수정(rename)으로 최상위 다른 부서와 이름이 겹치면 저장(saveAndFlush) 시점에 즉시 터진다")
+    void duplicateRootNameOnRenameThrowsSynchronously() {
+        adapter.save(Department.create("경영지원본부", null));
+        Department other = adapter.save(Department.create("기술본부", null));
+
+        Department renamed = Department.restore(other.getDepartmentId(), "경영지원본부", null);
+
+        assertThatThrownBy(() -> adapter.save(renamed))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

@@ -8,9 +8,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.GeneratedColumn;
 
 /**
  * 부서 JPA 엔티티. 팀 ERD 의 {@code department} 테이블 (이미 존재 — 새 마이그레이션 없음).
@@ -24,14 +24,14 @@ import lombok.NoArgsConstructor;
  */
 @Entity
 @Table(name = "department",
-        // (parent_id, name) 복합 유니크 = DB 의 uk_department_parent_name 을 엔티티에도 명시한다(2026-08-06).
+        // (parent_key, name) 복합 유니크 = DB 의 uk_department_parent_name 을 엔티티에도 명시한다(2026-08-06).
         // validate 는 UNIQUE 를 검사하지 않아 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨
-        // "같은 부모 아래 동명"(=자식 부서 중복)이 실제로 막힌다. ⚠️ MySQL/H2 모두 parent_id 가 NULL 인
-        // 행끼리는 UNIQUE 로 안 막으므로 최상위 동명은 서비스가 app 레벨로 막는다(DepartmentCommandService).
+        // 같은 상위 부서 안 동명이 실제로 막힌다. parent_key(=COALESCE(parent_id,0)) 를 쓰는 이유 —
+        // MySQL/H2 는 parent_id 가 NULL 인 행끼리 UNIQUE 로 안 막아 최상위 동명이 새므로, NULL 을 0 으로
+        // 정규화해 최상위(0 공유)까지 DB 가 막게 한다.
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_department_parent_name", columnNames = {"parent_id", "name"}))
+                name = "uk_department_parent_name", columnNames = {"parent_key", "name"}))
 @Getter
-@AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DepartmentJpaEntity {
 
@@ -46,4 +46,19 @@ public class DepartmentJpaEntity {
     /** 상위 부서. {@code null} 이면 최상위 */
     @Column(name = "parent_id")
     private Long parentId;
+
+    /**
+     * 유니크용 상위키. DB 생성 열 {@code COALESCE(parent_id, 0)} — 최상위(부모 없음)는 0 을 공유해
+     * 최상위 동명까지 복합 유니크가 막는다. 앱이 쓰지 않는 읽기 전용 파생 값이라 도메인 객체엔 없다.
+     * {@code @GeneratedColumn} 이 create-drop 스키마에도 이 생성 열을 만들어 테스트에서 제약이 성립한다.
+     */
+    @GeneratedColumn("COALESCE(parent_id, 0)")
+    @Column(name = "parent_key", insertable = false, updatable = false)
+    private Long parentKey;
+
+    public DepartmentJpaEntity(Long departmentId, String name, Long parentId) {
+        this.departmentId = departmentId;
+        this.name = name;
+        this.parentId = parentId;
+    }
 }

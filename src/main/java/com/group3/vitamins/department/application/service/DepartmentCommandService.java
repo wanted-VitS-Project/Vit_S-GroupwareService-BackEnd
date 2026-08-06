@@ -46,8 +46,8 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
      *
      * <p>{@code parentId} 유무로 최상위/하위가 갈린다. 하위 부서를 상위로 지정하면 계층이 3단이 되므로
      * {@code DEPT_MAX_DEPTH_EXCEEDED}(409) 로 막는다. 부서명은 <b>같은 상위 부서 안에서만</b> 유니크하다
-     * (2026-08-06). 하위 부서 동명은 DB {@code uk_department_parent_name} 이, 최상위 동명은 MySQL 이
-     * {@code NULL} parent 를 UNIQUE 로 안 막으므로 아래 app 레벨 검사가 막는다.
+     * (2026-08-06). DB 복합 유니크 {@code uk_department_parent_name(parent_key, name)} 이 자식·최상위를
+     * 모두 막고(최상위는 {@code parent_key=COALESCE(parent_id,0)=0} 공유), 아래 app 검사는 친절한 선처리다.
      */
     @Override
     public DepartmentResult create(CreateDepartmentCommand command) {
@@ -71,9 +71,9 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
-        // 검사 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. 하위 부서는 uk_department_parent_name 이
-        // 최종 방어선이라 그 위반을 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
-        // (최상위는 parent_id NULL 이라 이 DB 제약이 안 잡으므로 위 app 검사가 유일한 방어선 — ADMIN 저빈도라 허용.)
+        // 검사 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_parent_name(parent_key, name)
+        // 이 최종 방어선이라 그 위반을 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
+        // parent_key = COALESCE(parent_id, 0) 라 최상위(0 공유)·자식 모두 DB 가 막는다(위 app 검사는 친절한 선처리).
         // 부모 행을 위에서 잠갔으므로 이 시점의 제약 위반은 부서명 유니크뿐이다(FK 위반 불가) → 매핑이 결정적.
         // save 구현이 saveAndFlush 라 위반을 즉시 감지한다.
         Department saved;
