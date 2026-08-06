@@ -548,7 +548,7 @@
 | `data[].extension` | String | 확장자 |
 | `data[].sizeBytes` | long | 바이트 크기 |
 | `data[].pageCount` | int | 페이지 수 (`null` 허용) |
-| `data[].previewable` | boolean | 미리보기 가능 여부 |
+| `data[].previewable` | boolean | 미리보기 가능 여부 (**확장자 PDF 기준**) |
 | `data[].completedAt` | String | 업로드 완료 시각 |
 | `data[].indexStatus` | String | 인덱싱 상태 (`embeddingStatus`) — `file_index` 출처 |
 
@@ -570,4 +570,4 @@
 > 공용 **`ProjectAccessUseCase.requireAccess(projectId, userId, role)`** 를 재사용한다(스텝 리소스가 `StepAccessUseCase` 를 쓰는 것과 동형).
 > `indexStatus`(`embeddingStatus`)는 `file_index`(**AI 담당 테이블**)에서 오며, **file 도메인이 `file_index` 를 LEFT JOIN 해 내려준다** — 인덱스 행이 없으면 `COALESCE` 로 `PENDING`.
 > ⛔ **쓰기(`index_status` 갱신)는 file 도메인이 하지 않는다 — AI 도메인 별도 이슈**(배정현 확인). 읽기만 여기 소관.
-> `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 판정(PDF 여부)은 잠정.
+> `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 은 **확장자 기준(PDF 여부)으로 확정** 판정한다 — §1 상단 규칙과 동일(page_count 추출 성공 여부는 무관).
