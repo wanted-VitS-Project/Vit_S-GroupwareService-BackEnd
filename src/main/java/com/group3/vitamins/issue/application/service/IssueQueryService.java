@@ -4,6 +4,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.port.IssueQueryPort;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
+import com.group3.vitamins.issue.application.query.IssueDetailQuery;
 import com.group3.vitamins.issue.application.query.IssueListQuery;
 import com.group3.vitamins.issue.application.result.IssueListResult;
 import com.group3.vitamins.issue.application.result.IssueResult;
@@ -49,6 +50,23 @@ public class IssueQueryService implements IssueQueryUseCase {
         return new IssueListResult(issues.stream()
                 .map(issue -> withRelations(issue, assigneesByIssueId, blocksByIssueId))
                 .toList());
+    }
+
+    @Override
+    public IssueResult getIssue(IssueDetailQuery query) {
+        IssueResult issue = issueQueryPort.findIssue(query.issueId())
+                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+
+        issueStepAccessPort.requireIssueAccess(issue.stepId(), query.requesterUserId(), query.role());
+
+        Map<Long, List<IssueQueryPort.AssigneeResult>> assigneesByIssueId =
+                issueQueryPort.findAssignees(List.of(issue.issueId())).stream()
+                        .collect(Collectors.groupingBy(IssueQueryPort.AssigneeResult::issueId));
+        Map<Long, List<IssueQueryPort.RelatedBlockResult>> blocksByIssueId =
+                issueQueryPort.findRelatedBlocks(List.of(issue.issueId())).stream()
+                        .collect(Collectors.groupingBy(IssueQueryPort.RelatedBlockResult::issueId));
+
+        return withRelations(issue, assigneesByIssueId, blocksByIssueId);
     }
 
     private void validateBlockFilter(Long stepId, Long blockId) {

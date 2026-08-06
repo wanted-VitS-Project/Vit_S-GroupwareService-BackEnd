@@ -3,6 +3,7 @@ package com.group3.vitamins.issue.presentation.api.response;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -27,8 +28,8 @@ public record IssueDetailResponse(
         @Schema(description = "LOW · MEDIUM · HIGH", example = "HIGH")
         String priority,
 
-        @Schema(description = "사용자 지정 마감 일시. null 허용", example = "2026-08-07T18:00:00")
-        LocalDateTime dueDate,
+        @Schema(description = "마감일. 미지정 시 null", example = "2026-08-05")
+        LocalDate dueDate,
 
         @Schema(description = "DONE 완료 시각. 완료 상태가 아니면 null")
         LocalDateTime completedAt,
@@ -48,7 +49,7 @@ public record IssueDetailResponse(
                 result.content(),
                 result.status(),
                 result.priority(),
-                result.dueDate(),
+                result.dueDate() == null ? null : result.dueDate().toLocalDate(),
                 result.completedAt(),
                 result.assignees().stream()
                         .map(assignee -> new AssigneeResponse(
