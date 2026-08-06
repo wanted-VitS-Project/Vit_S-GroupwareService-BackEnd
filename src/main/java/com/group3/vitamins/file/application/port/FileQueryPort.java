@@ -2,6 +2,7 @@ package com.group3.vitamins.file.application.port;
 
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
+import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,4 +34,11 @@ public interface FileQueryPort {
 
     /** 블록의 파일 목록(§3) — 문서별 최신 완료 버전 + 버전 수. deleted=true 면 휴지통, false 면 재직 문서. 연결일 오름차순. */
     List<BlockFileProjection> findBlockFiles(Long blockId, boolean deleted);
+
+    /**
+     * 프로젝트 파일 버전 목록(§11, #138) — 프로젝트에 속한 모든 문서의 완료 버전(과거 버전 포함, 고아 파일 포함, 휴지통 제외).
+     * file_index 를 LEFT JOIN 해 indexStatus 를 함께 내려주며, 인덱스 행이 없거나 소프트 삭제된(deleted_at) 경우 'PENDING'.
+     * 정렬은 파일(file_id) 오름차순 · 같은 파일 안에서는 차수(version_no) 내림차순(최신 버전 먼저).
+     */
+    List<ProjectFileVersionProjection> findProjectFileVersions(Long projectId);
 }
