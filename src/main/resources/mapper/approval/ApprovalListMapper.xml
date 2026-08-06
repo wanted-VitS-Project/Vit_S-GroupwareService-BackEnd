@@ -83,7 +83,7 @@
         LEFT JOIN employee capp
             ON capp.user_id = ca.user_id
         <include refid="whereClause"/>
-        ORDER BY a.created_at DESC
+        ORDER BY a.created_at DESC, a.approval_id DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 

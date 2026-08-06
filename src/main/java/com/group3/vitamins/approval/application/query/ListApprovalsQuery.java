@@ -26,13 +26,16 @@ public record ListApprovalsQuery(
         scope = (scope == null || scope.isBlank()) ? DEFAULT_SCOPE : scope.trim().toLowerCase();
         status = (status == null || status.isBlank()) ? null : status.trim();
         keyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
-        if (page < 0) {
-            page = 0;
-        }
         if (size <= 0) {
             size = DEFAULT_SIZE;
         } else if (size > MAX_SIZE) {
             size = MAX_SIZE;
+        }
+        // offset(= page * size) 계산 시 int 오버플로 방지. size 를 먼저 확정한 뒤 그 값 기준으로 page 상한을 둔다.
+        if (page < 0) {
+            page = 0;
+        } else if (page > Integer.MAX_VALUE / size) {
+            page = Integer.MAX_VALUE / size;
         }
     }
 }
