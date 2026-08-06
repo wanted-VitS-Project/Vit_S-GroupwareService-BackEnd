@@ -26,7 +26,7 @@
 **착수 범위 (2026-08-06 · CRUD 우선)**
 
 - ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동
-- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기) · **파일 버전 목록(비타메이트, #138)** (AI 경계·프로젝트 스코프)
+- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기) · **파일 버전 목록(비타메이트, #138)** — 스코프=**프로젝트 확정**(경로 `/projects/{projectId}/file-versions`), **AI 경계(index_status) 확정 대기**
 
 ## 엔드포인트
 
@@ -50,7 +50,7 @@
 | **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
 | 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
 | 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
-| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/blocks/{blockId}/file-versions` | 스텝 접근 권한 |
+| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/projects/{projectId}/file-versions` | 프로젝트 접근 권한 |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
 
@@ -522,8 +522,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| Method · URL | `GET /api/v1/blocks/{blockId}/file-versions` |
-| 인증 필요 | Y · 스텝 접근 권한 (열람 이상) |
+| Method · URL | `GET /api/v1/projects/{projectId}/file-versions` |
+| 인증 필요 | Y · 프로젝트 접근 권한 (열람 이상) |
 | 요구사항 | VER-013 · USC-VER (비타메이트 결합) |
 | 요청 출처 | AI/비타메이트 — 분석 요청 화면에서 **분석 대상 파일 버전을 선택**. 분석은 `fileVersionId` 목록 기준으로 저장·수행 |
 
@@ -533,7 +533,7 @@
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `blockId` (path) | Long | Y | 분석 선택 대상 블록 |
+| `projectId` (path) | Long | Y | 분석 선택 대상 프로젝트 |
 
 **Response**
 
@@ -554,7 +554,8 @@
 
 **정책**
 - ⛔ **업로드 완료된 버전만**(`upload_status = COMPLETED`) 반환한다.
-- ⛔ **휴지통 파일은 기본 제외**(`deleted_at IS NULL`).
+- ⛔ **휴지통 파일은 기본 제외**(`file.deleted_at IS NULL`).
+- ✅ **프로젝트 전체 범위** — 특정 블록이 아니라 프로젝트에 속한 모든 문서(`file.project_id`)의 버전을 본다. **블록이 삭제돼 고아가 된 파일도 포함**된다(파일은 프로젝트 소속).
 - ✅ **과거 버전도 목록에 포함**한다 (같은 파일의 이전 버전도 선택 가능).
 - 인덱싱 상태가 `COMPLETED` 인 버전만 프론트에서 **선택 가능**하게 처리한다 (목록에는 다 내려주되 프론트가 비활성화).
 
@@ -562,9 +563,11 @@
 |---|---|---|
 | 200 | – | 조회 성공 (없으면 빈 배열) |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
-| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 스텝 접근 권한 없음 |
-| 404 | `FILE_BLOCK_NOT_FOUND` | 블록 없음/삭제됨 |
+| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
+| 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |
 
-> 🔴 **AI 팀 합의 필요** — `indexStatus`(`embeddingStatus`)는 `file_index`·`document_chunk`(**AI 담당 테이블**)에서 온다.
-> 내 file 도메인이 조인해 내려줄지, AI 서버가 별도로 붙일지 **경계·enum 값 확정 필요**.
-> 🟠 경로 스코프(블록 단위)와 `previewable` 판정 기준(PDF 여부 등)은 잠정값 — 분석 선택 UI 확정 시 조정.
+> 🟢 **경로 스코프 = 프로젝트 확정** (2026-08-06). 권한은 파일 단위가 아니라 프로젝트 단위 —
+> 공용 **`ProjectAccessUseCase.requireAccess(projectId, userId, role)`** 를 재사용한다(스텝 리소스가 `StepAccessUseCase` 를 쓰는 것과 동형).
+> 🔴 **AI 경계 확정 대기** — `indexStatus`(`embeddingStatus`)는 `file_index`·`document_chunk`(**AI 담당 테이블**)에서 온다.
+> 읽기는 file 도메인이 `file_index` 를 LEFT JOIN 해 내려주고, **쓰기(갱신)는 AI Python callback** 으로 가르는 방향 — 배정현 확정 후 착수.
+> `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 판정(PDF 여부)은 잠정.
