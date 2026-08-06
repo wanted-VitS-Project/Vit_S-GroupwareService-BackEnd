@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
@@ -150,6 +152,11 @@ public class ImageEligibilityPolicy {
      * 검증해야 한다 — 처음엔 이 검증을 업로드 어댑터(S3ImageStorageAdapter) 안에 파일마다 두어서,
      * 뒤쪽 파일이 위장 파일로 걸리면 앞서 이미 올라간 파일들이 S3에 고아 객체로 남는 문제가 있었다
      * (2026-08-06, 사용자가 직접 테스트로 발견 — 원래 설계 원칙을 어긴 것이었다).
+     *
+     * <p>매직 바이트는 파일 맨 앞 몇 바이트만 봐서, "헤더는 진짜인데 본문이 잘렸거나 깨진" 파일은
+     * 못 잡는다. jpg/png/gif는 JDK 표준 {@code ImageIO}로 실제 디코딩까지 한 번 더 확인한다(2026-08-06,
+     * 코드 리뷰로 발견). webp는 JDK에 내장 디코더가 없어서(외부 라이브러리 추가가 필요) 매직 바이트
+     * 검사만 유지한다 — 알려진 제한사항, `.ai/local/STATE.md` 백로그 참고.
      */
     public void assertActualImageContentOrThrow(MultipartFile file, String extension) {
         byte[] content;
@@ -162,6 +169,19 @@ public class ImageEligibilityPolicy {
             log.warn("파일 내용이 확장자와 일치하지 않음(위장 업로드 의심) - originalFilename={}, extension={}",
                     file.getOriginalFilename(), extension);
             throw new ValidationException(ImageErrorCode.UNSUPPORTED_FILE_TYPE);
+        }
+        if (!"webp".equals(extension) && !isDecodableImage(content)) {
+            log.warn("이미지 헤더는 맞지만 실제 디코딩 실패(손상/위장 의심) - originalFilename={}, extension={}",
+                    file.getOriginalFilename(), extension);
+            throw new ValidationException(ImageErrorCode.UNSUPPORTED_FILE_TYPE);
+        }
+    }
+
+    private boolean isDecodableImage(byte[] content) {
+        try {
+            return ImageIO.read(new ByteArrayInputStream(content)) != null;
+        } catch (IOException e) {
+            return false;
         }
     }
 
