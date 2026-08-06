@@ -6,6 +6,28 @@
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 > 파일을 `프로젝트` Domain 에 둔 이유 — 파일은 블록에 붙고 권한도 스텝을 따른다. `Block`·`IssueBlock` 과 같은 계열이다.
 
+## ⭐ 확정 반영 (2026-08-06) — 팀 합의 완료
+
+이전 "미확정"·논의 항목의 확정 결과다. 프론트/AI/결재와 공유 대상.
+
+| 항목 | 확정 |
+|---|---|
+| presigned 만료 | **업로드 10분 · 다운로드 5분** (§1·§9). 미리보기(§10)는 서버 스트리밍이라 URL·만료 개념 없음 |
+| 미완료 업로드 정리 | **12시간** 후 정리 (배치 + S3 Lifecycle) |
+| 버전 배지 | **v1 부터 항상 표시** (이전 "versionCount=1 이면 숨김" 규칙 폐기) |
+| `previewable` 판정 | **확장자만**(pdf 여부). page_count 추출 성공 여부는 보지 않는다 |
+| 미리보기 미지원 파일 | 계약 변경 없음 — §10 이 `FILE_PREVIEW_NOT_SUPPORTED`, FE 가 "미지원 파일" 안내 |
+| 영구삭제(§7) 차단 범위 | 결재(`approval_document`) **+ AI 분석(`vitamate_analysis_document`)** 참조까지. `file_index`·`document_chunk` 는 파생이라 함께 정리 |
+| `file_index.index_status` | **Spring DB 정본 · Python callback 으로 갱신** · 값 `PENDING·PROCESSING·COMPLETED·FAILED` |
+| §11 버전목록 스코프 | **프로젝트 전체** — 경로 `GET /projects/{projectId}/file-versions` (블록 단위 폐기) |
+
+**블록 생명주기 분리 (A안 확정 · `../docs/global/BLOCK.md` §4-4 근거)** — 블록 삭제는 파일을 건드리지 않는다. 파일은 `file.project_id` 소속으로 살아남고, 조회는 `block.deleted_at IS NULL` 로 거른다. 블록 삭제 후 남은 파일 접근은 §11(프로젝트 전체 보기)로 회수한다. `block_file` 은 hard delete(파일 영구삭제 시 `ON DELETE CASCADE`).
+
+**착수 범위 (2026-08-06 · CRUD 우선)**
+
+- ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동 · **파일 버전 목록(비타메이트, #138) 읽기 구현 완료** — 프로젝트 스코프(`/projects/{projectId}/file-versions`) · `file_index` LEFT JOIN
+- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기). **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
+
 ## 엔드포인트
 
 ### File (7)
@@ -28,7 +50,7 @@
 | **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
 | 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
 | 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
-| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/blocks/{blockId}/file-versions` | 스텝 접근 권한 |
+| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/projects/{projectId}/file-versions` | 프로젝트 접근 권한 |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
 
@@ -124,7 +146,7 @@
 ⛔ **새 문서와 새 버전이 같은 API 다.** `fileId` 를 주면 그 문서의 새 버전, 주지 않으면 새 문서(버전 1)다. 검증·presigned 발급·완료 통보 흐름이 완전히 같다.
 ⛔ **파일 자체는 이 API 로 올리지 않는다.** 응답의 `uploadUrl` 로 클라이언트가 저장소에 직접 PUT 한 뒤 완료 통보를 호출한다.
 ⛔ **동명 문서가 있으면 `409` 로 거부한다.** 사용자가 확인하면 `allowDuplicateName: true` 로 다시 호출한다 (`FILE-009`).
-⛔ **`uploadUrl` 만료 시간 미확정.**
+⭐ **`uploadUrl` 만료 = 10분** (2026-08-06 확정).
 
 **Request Body**
 
@@ -208,7 +230,7 @@
 | `data.content[].name` | String | 문서 표시명 (`NOT NULL`) |
 | `data.content[].latestVersionId` | Long | 최신 버전 번호 |
 | `data.content[].latestVersionNo` | int | 최신 버전 차수 |
-| `data.content[].versionCount` | int | 전체 버전 수. **`1` 이면 화면에 버전 배지를 표시하지 않는다** |
+| `data.content[].versionCount` | int | 전체 버전 수. **버전 배지는 `v1` 부터 항상 표시** (2026-08-06 변경) |
 | `data.content[].originalFileName` | String | 최신 버전 원본 파일명 |
 | `data.content[].extension` | String | 확장자. 아이콘·배지에 쓴다 |
 | `data.content[].sizeBytes` | Long | 최신 버전 크기 |
@@ -440,7 +462,7 @@
 ⛔ **파일 바이너리를 반환하지 않는다.** 저장소 다운로드 URL 을 발급하고 클라이언트가 직접 받는다. 서버를 거치지 않아 대역폭과 메모리를 쓰지 않는다.
 ⛔ **최신 버전과 과거 버전이 같은 API 다** (`VER-011` · `VER-012`).
 ⛔ **열람 권한이면 다운로드까지 된다.** 미리보기만 허용하고 다운로드를 막는 안은 백로그 (`FILE-014`).
-⛔ **다운로드 URL 만료 시간 미확정.**
+⭐ **다운로드 URL 만료 = 5분** (2026-08-06 확정).
 
 **Response** — `fileVersionId` · `originalFileName` · `sizeBytes` · `downloadUrl` · `expiresAt`
 
@@ -486,9 +508,9 @@
 
 ## 미확정
 
-- [ ] presigned 업로드·다운로드 URL 만료 시간
-- [ ] 미완료 업로드 정리 주기 (잠정 24시간)
-- [ ] `activity_log` 기록 방식 — `파일이 업로드됨` 도메인 이벤트를 발행하고 Workspace 가 구독하는 안 제시. 팀 합의 필요
+- [x] ~~presigned 업로드·다운로드 URL 만료 시간~~ → 확정: 업로드 10분 · 다운로드 5분 (2026-08-06)
+- [x] ~~미완료 업로드 정리 주기~~ → 확정: **12시간** (2026-08-06)
+- [x] ~~`activity_log` 기록 방식~~ → 확정: 공용 이벤트 계약(`ActivityOccurredEvent`) 발행 · `@TransactionalEventListener(BEFORE_COMMIT)` 같은 트랜잭션 (`ARCHITECTURE.md` §2-3 · `activitylog` 선례). 업로드=CREATE·수정=MODIFY·삭제=DELETE, `blockId` 필수 전달
 
 ## 화면 미확보
 
@@ -500,8 +522,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| Method · URL | `GET /api/v1/blocks/{blockId}/file-versions` |
-| 인증 필요 | Y · 스텝 접근 권한 (열람 이상) |
+| Method · URL | `GET /api/v1/projects/{projectId}/file-versions` |
+| 인증 필요 | Y · 프로젝트 접근 권한 (열람 이상) |
 | 요구사항 | VER-013 · USC-VER (비타메이트 결합) |
 | 요청 출처 | AI/비타메이트 — 분석 요청 화면에서 **분석 대상 파일 버전을 선택**. 분석은 `fileVersionId` 목록 기준으로 저장·수행 |
 
@@ -511,7 +533,7 @@
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `blockId` (path) | Long | Y | 분석 선택 대상 블록 |
+| `projectId` (path) | Long | Y | 분석 선택 대상 프로젝트 |
 
 **Response**
 
@@ -526,13 +548,14 @@
 | `data[].extension` | String | 확장자 |
 | `data[].sizeBytes` | long | 바이트 크기 |
 | `data[].pageCount` | int | 페이지 수 (`null` 허용) |
-| `data[].previewable` | boolean | 미리보기 가능 여부 |
+| `data[].previewable` | boolean | 미리보기 가능 여부 (**확장자 PDF 기준**) |
 | `data[].completedAt` | String | 업로드 완료 시각 |
 | `data[].indexStatus` | String | 인덱싱 상태 (`embeddingStatus`) — `file_index` 출처 |
 
 **정책**
 - ⛔ **업로드 완료된 버전만**(`upload_status = COMPLETED`) 반환한다.
-- ⛔ **휴지통 파일은 기본 제외**(`deleted_at IS NULL`).
+- ⛔ **휴지통 파일은 기본 제외**(`file.deleted_at IS NULL`).
+- ✅ **프로젝트 전체 범위** — 특정 블록이 아니라 프로젝트에 속한 모든 문서(`file.project_id`)의 버전을 본다. **블록이 삭제돼 고아가 된 파일도 포함**된다(파일은 프로젝트 소속).
 - ✅ **과거 버전도 목록에 포함**한다 (같은 파일의 이전 버전도 선택 가능).
 - 인덱싱 상태가 `COMPLETED` 인 버전만 프론트에서 **선택 가능**하게 처리한다 (목록에는 다 내려주되 프론트가 비활성화).
 
@@ -540,9 +563,11 @@
 |---|---|---|
 | 200 | – | 조회 성공 (없으면 빈 배열) |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
-| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 스텝 접근 권한 없음 |
-| 404 | `FILE_BLOCK_NOT_FOUND` | 블록 없음/삭제됨 |
+| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
+| 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |
 
-> 🔴 **AI 팀 합의 필요** — `indexStatus`(`embeddingStatus`)는 `file_index`·`document_chunk`(**AI 담당 테이블**)에서 온다.
-> 내 file 도메인이 조인해 내려줄지, AI 서버가 별도로 붙일지 **경계·enum 값 확정 필요**.
-> 🟠 경로 스코프(블록 단위)와 `previewable` 판정 기준(PDF 여부 등)은 잠정값 — 분석 선택 UI 확정 시 조정.
+> 🟢 **경로 스코프 = 프로젝트 확정 · 읽기 구현 완료** (2026-08-06 · #138). 권한은 파일 단위가 아니라 프로젝트 단위 —
+> 공용 **`ProjectAccessUseCase.requireAccess(projectId, userId, role)`** 를 재사용한다(스텝 리소스가 `StepAccessUseCase` 를 쓰는 것과 동형).
+> `indexStatus`(`embeddingStatus`)는 `file_index`(**AI 담당 테이블**)에서 오며, **file 도메인이 `file_index` 를 LEFT JOIN 해 내려준다** — 인덱스 행이 없으면 `COALESCE` 로 `PENDING`.
+> ⛔ **쓰기(`index_status` 갱신)는 file 도메인이 하지 않는다 — AI 도메인 별도 이슈**(배정현 확인). 읽기만 여기 소관.
+> `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 은 **확장자 기준(PDF 여부)으로 확정** 판정한다 — §1 상단 규칙과 동일(page_count 추출 성공 여부는 무관).

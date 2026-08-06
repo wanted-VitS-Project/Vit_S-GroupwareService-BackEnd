@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "issue")
 @Getter
+@AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IssueEntity {
 
@@ -64,28 +66,6 @@ public class IssueEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
-
-    public static IssueEntity create(
-            Long stepId,
-            String title,
-            String content,
-            LocalDateTime dueDate,
-            IssueStatus status,
-            IssuePriority priority,
-            String createdBy,
-            LocalDateTime now
-    ) {
-        IssueEntity issue = new IssueEntity();
-        issue.stepId = stepId;
-        issue.title = title;
-        issue.content = content;
-        issue.dueDate = dueDate;
-        issue.status = status == null ? IssueStatus.TO_DO : status;
-        issue.priority = priority;
-        issue.createdBy = createdBy;
-        issue.finishDay = issue.status == IssueStatus.DONE ? now : null;
-        return issue;
-    }
 
     public boolean isDeleted() {
         return deletedAt != null;

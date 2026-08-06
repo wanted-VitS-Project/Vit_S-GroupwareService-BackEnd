@@ -1,6 +1,7 @@
 # ActivityLog API
 
 **상태**: md 명세 기준 계약 (`../API.md` §0·§1)
+**최종 업데이트**: 2026-08-06 (파일 휴지통 복원·영구삭제 액션 `RESTORE`·`PURGE` 추가 — 별도 휴지통 로그 화면 없이 기존 Step/Block 활동 기록에 함께 노출) · **담당**: 김용준
 **최종 업데이트**: 2026-08-05 (API 명세 양식 정리 · field 단위 저장 반영) · **담당**: 김용준
 **Domain**: `프로젝트` · SUB-Domain `ActivityLog`
 
@@ -68,7 +69,7 @@ Activity Object 1개는 `activity_log` 1행에 대응한다. 한 수정 이벤�
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | `activityLogId` | Long | 활동 기록 ID |
-| `action` | String | `CREATE`, `MODIFY`, `DELETE` |
+| `action` | String | `CREATE`, `MODIFY`, `DELETE`, `RESTORE`, `PURGE`. `RESTORE`·`PURGE`는 파일 휴지통 복원·영구삭제 전용 |
 | `targetType` | String | `BLOCK`, `RESOURCE` |
 | `displayName` | String | FE 단순 표시용 이름. `resource.name`이 있으면 그 값, 없으면 `block.title` |
 | `fieldName` | String | 수정 필드, 해당하지 않으면 `null` |
@@ -92,7 +93,6 @@ Activity Object 1개는 `activity_log` 1행에 대응한다. 한 수정 이벤�
 | --- | --- | --- |
 | `userId` | String | 사용자 사번 |
 | `name` | String | 사용자 이름 |
-| `profileImageUrl` | String | 프로필 이미지 URL. 현재 employee 테이블에 컬럼이 없어 Sprint1에서는 `null` |
 
 ### Block Object
 
@@ -144,8 +144,7 @@ resource.name == null
         },
         "actor": {
           "userId": "EMP003",
-          "name": "이영희",
-          "profileImageUrl": null
+          "name": "이영희"
         },
         "block": {
           "blockId": 15,
@@ -168,8 +167,7 @@ resource.name == null
         },
         "actor": {
           "userId": "EMP005",
-          "name": "최수아",
-          "profileImageUrl": null
+          "name": "최수아"
         },
         "block": {
           "blockId": 18,
@@ -254,7 +252,7 @@ Step 및 접근 권한 확인
 → 수행자·Block·Resource 스냅샷 정보와 함께 반환
 ```
 
-DB의 `create`, `modify`, `delete` 값은 API 응답에서 각각 `CREATE`, `MODIFY`, `DELETE`로 매핑한다.
+DB의 `create`, `modify`, `delete`, `restore`, `purge` 값은 API 응답에서 각각 `CREATE`, `MODIFY`, `DELETE`, `RESTORE`, `PURGE`로 매핑한다.
 
 Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 조회 대상에 포함하지 않는다.
 
@@ -308,7 +306,7 @@ Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 �
 
 | 항목 | 설명 |
 | --- | --- |
-| `action` | `CREATE`, `MODIFY`, `DELETE` |
+| `action` | `CREATE`, `MODIFY`, `DELETE`, `RESTORE`, `PURGE`. 뒤 2개는 파일 휴지통 복원·영구삭제 전용이며 다른 도메인은 발행하지 않는다 |
 | `blockId` | 활동이 발생한 Block ID |
 | `resourceId` | Block 내부 데이터 ID. Block 자체 활동이면 `null` |
 | `resourceName` | Block 내부 데이터 표시명 스냅샷. Block 자체 활동 또는 표시명이 없으면 `null`. DB에는 `TEXT`로 저장 |
@@ -457,6 +455,27 @@ Block 위치, 크기, 정렬 순서 변경은 현재 로그 수집 대상에서 
 | --- | --- | --- | --- | --- |
 | 파일 업로드 | `CREATE` | 파일 또는 파일 버전 ID | 업로드된 파일명 | null change 1개 |
 | 파일명 수정 | `MODIFY` | 수정 대상 파일 또는 버전 ID | 파일명 | `fileName` 변경 전·후 값 |
-| 파일 삭제 | `DELETE` | 파일 또는 파일 버전 ID | 삭제 전 파일명 | null change 1개 |
+| 파일 삭제(휴지통 이동) | `DELETE` | 파일 또는 파일 버전 ID | 삭제 전 파일명 | null change 1개 |
+| 휴지통에서 복원 | `RESTORE` | 파일 또는 파일 버전 ID | 복원된 파일명 | null change 1개 |
+| 휴지통에서 영구 삭제 | `PURGE` | 파일 또는 파일 버전 ID | 삭제 전 파일명 | null change 1개 |
 
-파일명 수정 대상이 파일 엔티티인지 파일 버전 엔티티인지는 실제 API 설계 기준을 따른다. 한 기능 안에서는 동일한 `resourceId` 기준을 일관되게 사용한다.
+파일명 수정 대상이 파일 엔티티인지 파일 버전 엔티티인지는 실제 API 설계 기준을 따른다. 한 기능 안에서는 동일한 `resourceId` 기준을 일관되게 사용한다. `DELETE`(휴지통 이동)·`RESTORE`·`PURGE`도 같은 `resourceId` 기준을 따른다.
+
+⛔ **별도 "휴지통 활동 로그" 화면·API는 만들지 않는다.** `RESTORE`·`PURGE`도 다른 활동과 동일하게 Step 활동 기록(`GET /api/v1/steps/{stepId}/activity-logs`)·Block 활동 로그 팝업에 섞여서 시간순으로 노출된다. FE는 `action` 값으로 문구만 다르게 조립한다 (2026-08-06 결정).
+
+### 결재
+
+결재 Block 자체의 생성·삭제는 부모 Block 활동으로 대표하며 결재 도메인에서 중복 기록하지 않는다.
+
+| 활동 | Action | `resourceId` | `resourceName` | 기록 정보 |
+| --- | --- | --- | --- | --- |
+| 회차 제목·내용 수정 | `MODIFY` | 결재 회차 ID | 수정 후 결재 제목 | 실제 변경된 `title`, `content`의 변경 전·후 값 |
+| 결재 문서 추가 | `CREATE` | 파일 버전 ID | 파일명 | null change 1개 |
+| 결재 문서 제거 | `DELETE` | 파일 버전 ID | 제거 전 파일명 | null change 1개 |
+| 결재선 등록·수정 | `MODIFY` | 결재 회차 ID | 결재 제목 | `lines` 변경 전·후 값 |
+| 결재 상신 | `MODIFY` | 결재 회차 ID | 결재 제목 | `status` 변경 전·후 값 |
+| 재상신 회차 생성 | `CREATE` | 새 결재 회차 ID | 결재 제목 | null change 1개 |
+
+결재선 `lines` 값은 결재 순서대로 정렬한 결재자 사번을 쉼표로 연결한다. 결재자별 행을 따로 만들지 않으며, 사번과 순서가 모두 같으면 로그를 남기지 않는다.
+
+상신에 따라 자동으로 바뀌는 결재 전체 상태와 각 결재선 상태는 별도 로그로 중복 기록하지 않는다.

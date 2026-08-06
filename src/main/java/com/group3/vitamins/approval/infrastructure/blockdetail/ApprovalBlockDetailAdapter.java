@@ -67,7 +67,7 @@ public class ApprovalBlockDetailAdapter implements BlockDetailPort {
                     .count();
             details.put(revision.approvalId(), new ApprovalDetail(
                     revision.approvalId(), revision.revisionId(), revision.revisionNo(),
-                    revision.status(), lines.size(), approvedCount));
+                    revision.status(), revision.title(), revision.content(), lines.size(), approvedCount));
         }
         return details;
     }
