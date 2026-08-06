@@ -5,6 +5,7 @@ import com.group3.vitamins.project.block.application.port.BlockDetailPort;
 import com.group3.vitamins.project.block.application.port.BlockIssueStatLookupPort;
 import com.group3.vitamins.project.block.application.query.BlockListQuery;
 import com.group3.vitamins.project.block.application.result.BlockDetail;
+import com.group3.vitamins.project.block.application.result.BlockOption;
 import com.group3.vitamins.project.block.application.result.BlockOwner;
 import com.group3.vitamins.project.block.application.result.BlockSummary;
 import com.group3.vitamins.project.block.domain.model.Block;
@@ -55,6 +56,17 @@ public class BlockQueryService implements BlockQueryUseCase {
 
         return blocks.stream()
                 .map(block -> toSummary(block, issueStats, names, details))
+                .toList();
+    }
+
+    /** 선택 후보 조회. 상세 어댑터·이슈 집계·담당자 조회를 하지 않아 쿼리 1개로 끝난다. */
+    @Override
+    public List<BlockOption> getBlockOptions(BlockListQuery query) {
+        stepAccessUseCase.requireAccess(query.stepId(), query.requesterUserId(), query.role());
+
+        return blockRepository.findByStepId(query.stepId()).stream()
+                .map(block -> new BlockOption(
+                        block.getBlockId(), block.getType().name(), block.getTitle()))
                 .toList();
     }
 
