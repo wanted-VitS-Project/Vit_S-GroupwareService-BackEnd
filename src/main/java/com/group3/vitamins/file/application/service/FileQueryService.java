@@ -10,6 +10,8 @@ import com.group3.vitamins.file.application.result.DownloadUrlResult;
 import com.group3.vitamins.file.application.result.FilePreviewResult;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
+import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
+import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
 import com.group3.vitamins.file.application.usecase.FileQueryUseCase;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
@@ -21,6 +23,7 @@ import com.group3.vitamins.file.domain.repository.FileVersionRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.domain.model.MemberPermission;
 import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +31,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * 파일 조회 서비스 (#134). 읽기 전용이며 스텝 접근 권한(VIEWER 이상)을 따른다.
+ * 파일 조회 서비스 (#134 조회 5종 + #138 버전목록). 읽기 전용이며 §1~§5·§8~§11 은 스텝 접근 권한을,
+ * 버전 목록(§11, #138)은 프로젝트 접근 권한을 따른다(둘 다 VIEWER 이상).
  * 권한 실패는 파일 계약 코드({@code FILE_ACCESS_PERMISSION_REQUIRED})로 변환한다.
  */
 @Service
@@ -45,6 +51,7 @@ public class FileQueryService implements FileQueryUseCase {
     private final StepAccessUseCase stepAccessUseCase;
     private final FileStoragePort fileStoragePort;
     private final PdfPreviewPort pdfPreviewPort;
+    private final ProjectAccessUseCase projectAccessUseCase;
 
     /** 미리보기 최대 페이지 수 (§10). */
     private static final int MAX_PREVIEW_PAGES = 5;
@@ -150,6 +157,27 @@ public class FileQueryService implements FileQueryUseCase {
         }
     }
 
+    @Override
+    public List<ProjectFileVersionResult> getProjectFileVersions(Long projectId, String requesterUserId, String role) {
+        requireProjectAccess(projectId, requesterUserId, role);
+
+        List<ProjectFileVersionProjection> rows = fileQueryPort.findProjectFileVersions(projectId);
+        // 파일별 최대 완료 차수 — latest 판정용. 정렬에 의존하지 않고 집계로 구한다.
+        Map<Long, Integer> maxVersionNoByFile = rows.stream()
+                .collect(Collectors.toMap(
+                        ProjectFileVersionProjection::fileId,
+                        ProjectFileVersionProjection::versionNo,
+                        Integer::max));
+
+        return rows.stream()
+                .map(p -> new ProjectFileVersionResult(
+                        p.fileId(), p.name(), p.fileVersionId(), p.versionNo(),
+                        p.versionNo() == maxVersionNoByFile.get(p.fileId()),
+                        p.originalFileName(), p.extension(), p.sizeBytes(), p.pageCount(),
+                        isPreviewable(p.extension()), p.completedAt(), p.indexStatus()))
+                .toList();
+    }
+
     private boolean isPreviewable(String extension) {
         return "pdf".equalsIgnoreCase(extension);
     }
@@ -180,6 +208,18 @@ public class FileQueryService implements FileQueryUseCase {
         try {
             return stepAccessUseCase.requireAccess(stepId, userId, role);
         } catch (ForbiddenException | NotFoundException e) {
+            throw new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED, e);
+        }
+    }
+
+    /**
+     * 프로젝트 열람 권한(VIEWER 이상)을 확인한다(§11, #138). 권한 없음(403)만 파일 계약 코드로 변환하고,
+     * 프로젝트 없음(404 {@code PROJECT_NOT_FOUND})은 그대로 통과시킨다 — file.md 계약이 두 코드를 다르게 요구한다.
+     */
+    private void requireProjectAccess(Long projectId, String userId, String role) {
+        try {
+            projectAccessUseCase.requireAccess(projectId, userId, role);
+        } catch (ForbiddenException e) {
             throw new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED, e);
         }
     }

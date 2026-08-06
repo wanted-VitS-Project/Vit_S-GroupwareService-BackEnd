@@ -28,6 +28,13 @@ logs/
 .DS_Store
 Thumbs.db
 
+### iCloud 중복본 차단 (⚠️ 실수 커밋 방지) ###
+# iCloud Drive 동기화 충돌 시 "이름 2.확장자" · "이름 2/" 형태의 복제본이 생긴다.
+# 과거 `FileQueryMapper 2.xml` 같은 중복 매퍼가 커밋돼 MyBatis 네임스페이스 충돌로 기동 실패했다(#132).
+# ⚠️ 정상 파일이 "이름 2.ext" 로 매칭되면 무시되니, 그럴 땐 `git add -f <파일>` 로 강제 추가한다.
+* 2.*
+* 2/
+
 ### Gradle / Spring ###
 HELP.md
 .gradle
