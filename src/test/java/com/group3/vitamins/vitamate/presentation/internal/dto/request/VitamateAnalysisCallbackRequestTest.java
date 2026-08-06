@@ -1,5 +1,6 @@
 package com.group3.vitamins.vitamate.presentation.internal.dto.request;
 
+import com.group3.vitamins.vitamate.analysis.presentation.internal.dto.request.VitamateAnalysisCallbackRequest;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.DisplayName;
