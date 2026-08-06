@@ -4,13 +4,7 @@ import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisRe
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateBlockReaderPort;
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateFileReaderPort;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper.VitamateAnalysisMapper;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisCitationRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisDocumentRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobChunkRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisRow;
-import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateBlockContextRow;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -67,6 +61,25 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                         mapper.findAnalysisJobDocuments(analysisId),
                         mapper.findAnalysisJobChunks(analysisId)
                 ));
+    }
+
+    // 비타메이트 블록에 속한 분석 실행 이력 목록을 조회합니다.
+    @Override
+    public List<VitamateAnalysisHistory> findBlockAnalysisHistories(Long vitamateBlockId) {
+        return mapper.findBlockAnalysisHistories(vitamateBlockId).stream()
+                .map(this::toAnalysisHistory)
+                .toList();
+    }
+
+    // MyBatis Row를 application reader port의 이력 값으로 변환합니다.
+    private VitamateAnalysisHistory toAnalysisHistory(VitamateAnalysisHistoryRow row) {
+        return new VitamateAnalysisHistory(
+                row.getAnalysisId(),
+                row.getPrompt(),
+                row.getAnalysisStatus(),
+                row.getCreatedAt(),
+                row.getCompletedAt()
+        );
     }
 
     // MyBatis Row 객체를 application 포트의 컨텍스트 값으로 변환한다.

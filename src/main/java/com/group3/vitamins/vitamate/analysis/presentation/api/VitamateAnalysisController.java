@@ -3,12 +3,16 @@ package com.group3.vitamins.vitamate.analysis.presentation.api;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.vitamate.analysis.application.command.CreateVitamateAnalysisCommand;
 import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateAnalysisQuery;
+import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateBlockAnalysisHistoryQuery;
 import com.group3.vitamins.vitamate.analysis.application.result.CreateVitamateAnalysisResult;
 import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisDetailResult;
+import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisHistoryResult;
 import com.group3.vitamins.vitamate.analysis.application.usecase.CreateVitamateAnalysisUseCase;
 import com.group3.vitamins.vitamate.analysis.application.usecase.GetVitamateAnalysisUseCase;
+import com.group3.vitamins.vitamate.analysis.application.usecase.GetVitamateBlockAnalysisHistoryUseCase;
 import com.group3.vitamins.vitamate.analysis.presentation.api.dto.request.CreateVitamateAnalysisRequest;
 import com.group3.vitamins.vitamate.analysis.presentation.api.dto.response.CreateVitamateAnalysisResponse;
+import com.group3.vitamins.vitamate.analysis.presentation.api.dto.response.VitamateAnalysisHistoryResponse;
 import com.group3.vitamins.vitamate.analysis.presentation.api.dto.response.VitamateAnalysisResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -29,6 +33,7 @@ public class VitamateAnalysisController {
 
     private final CreateVitamateAnalysisUseCase createUseCase;
     private final GetVitamateAnalysisUseCase getAnalysisUseCase;
+    private final GetVitamateBlockAnalysisHistoryUseCase getHistoryUseCase;
 
     @Operation(summary = "문서 분석 요청", description = "선택한 문서 버전과 프롬프트를 기준으로 AI 분석을 요청한다.")
     @ApiResponses({
@@ -86,6 +91,33 @@ public class VitamateAnalysisController {
                 200,
                 "비타메이트 분석 조회 성공",
                 VitamateAnalysisResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "블록별 분석 실행 이력 조회",
+            description = "비타메이트 블록에서 실행된 분석 요청 이력을 최신순으로 조회한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "분석 실행 이력 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "VITAMATE_INVALID_REQUEST — 잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_BLOCK_NOT_FOUND — 비타메이트 블록 없음 또는 접근 불가")
+    })
+    @GetMapping("/blocks/{blockId}/vitamate/analyses")
+    // 비타메이트 블록에 연결된 분석 실행 이력 목록을 조회합니다.
+    public ResponseEntity<ApiResponse<VitamateAnalysisHistoryResponse>> getAnalysisHistories(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long blockId
+    ) {
+        VitamateAnalysisHistoryResult result = getHistoryUseCase.handle(
+                new GetVitamateBlockAnalysisHistoryQuery(blockId, userId)
+        );
+
+        return ResponseEntity.ok(ApiResponse.of(
+                200,
+                "비타메이트 분석 실행 이력 조회 성공",
+                VitamateAnalysisHistoryResponse.from(result)
         ));
     }
 }
