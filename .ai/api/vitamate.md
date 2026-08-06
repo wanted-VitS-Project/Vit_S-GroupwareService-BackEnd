@@ -18,6 +18,7 @@
 | ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
 | ✅ 확정 | Python 분석 작업 조회 | GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | 내부 서버 |
 | ✅ 확정 | Python 분석 결과 콜백 | POST | `/internal/v1/vitamate/analyses/{analysisId}/callback` | 내부 서버 |
+| ✅ 확정 | 파일 인덱싱 상태 콜백 | POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | 내부 서버 |
 
 ---
 
@@ -271,10 +272,11 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | 인증 방식 | Python worker 전용 내부 서비스 토큰 |
 | Header | `X-Vitamate-Worker-Token` |
 | 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
 | 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
 | 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
-| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -402,10 +404,11 @@ Python worker가 분석 처리 결과를 Spring Boot에 전달하는 내부 API�
 | 인증 방식 | Python worker 전용 내부 서비스 토큰 |
 | Header | `X-Vitamate-Worker-Token` |
 | 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
 | 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
 | 회전 방식 | 배포 환경 Secret 교체 후 Spring Boot와 Python worker를 순차 재배포한다 |
 | 네트워크 | 퍼블릭 인터넷 직접 노출 금지. 같은 VPC/보안 그룹 또는 내부 네트워크로 제한 |
-| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않는다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
 | 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
 
 **Path Parameter**
@@ -517,3 +520,126 @@ callback null 규칙:
 ```
 
 > 내부 API와 큐 메시지는 피그마 화면 댓글에 달지 않고 백엔드 API 문서 또는 시퀀스 다이어그램에만 기록한다.
+
+---
+
+## 파일 인덱싱 상태 콜백 `POST /internal/v1/vitamate/file-indexes/{fileVersionId}/callback`
+
+**상태**: ✅ 확정
+
+Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 내부 API다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 인덱싱 상태를 갱신할 파일 버전 ID |
+
+**Request**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
+| `errorMessage` | String | 실패 사유. `FAILED`일 때 필수 |
+
+저장 상태값:
+
+| 상태 | 의미 |
+|------|------|
+| `PENDING` | 아직 인덱싱 전 또는 재대기 상태. Spring Boot 기본값이며 Python callback으로도 저장할 수 있다 |
+| `PROCESSING` | Python worker가 인덱싱 처리 중 |
+| `COMPLETED` | 인덱싱 완료. 비타메이트 분석 선택 가능 |
+| `FAILED` | 인덱싱 실패. 분석 선택 불가 |
+
+상태별 저장 규칙:
+
+| `indexStatus` | `index_error_message` | `indexed_at` |
+|---------------|-----------------------|--------------|
+| `PENDING` | `null` | `null` |
+| `PROCESSING` | `null` | `null` |
+| `COMPLETED` | `null` | 현재 시각 |
+| `FAILED` | 실패 사유 저장 | `null` |
+
+저장 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 생성/갱신 | `fileVersionId` 기준으로 `file_index`가 없으면 생성하고, 있으면 갱신한다 |
+| 중복 callback | 같은 `fileVersionId`로 여러 번 호출되어도 중복 row를 만들지 않는다 |
+| 상태 검증 | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 외 값은 400 |
+| 실패 메시지 | `FAILED`인데 `errorMessage`가 비어 있으면 400 |
+| 완료 메시지 | `PENDING`, `PROCESSING`, `COMPLETED`이면 기존 `index_error_message`를 제거한다 |
+| 로그 | `fileVersionId`, `indexStatus`만 남기고 문서 원문, storage key, worker token은 남기지 않는다 |
+
+**Request 예시 — 처리 중**
+
+```json
+{
+  "indexStatus": "PROCESSING",
+  "errorMessage": null
+}
+```
+
+**Request 예시 — 완료**
+
+```json
+{
+  "indexStatus": "COMPLETED",
+  "errorMessage": null
+}
+```
+
+**Request 예시 — 실패**
+
+```json
+{
+  "indexStatus": "FAILED",
+  "errorMessage": "PDF 텍스트 추출에 실패했습니다."
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 상태 저장 성공. ack한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 상태값 또는 상태별 null 규칙 위반. 로그를 남기고 ack 후 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전이 없음. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `accepted` | Boolean | 상태 저장 여부 |
+| `fileVersionId` | Long | 파일 버전 ID |
+| `indexStatus` | String | 저장된 인덱싱 상태 |
+| `reason` | String | `accepted=false`일 때 무시 사유 |
+
+**Response 예시**
+
+```json
+{
+  "accepted": true,
+  "fileVersionId": 101,
+  "indexStatus": "COMPLETED",
+  "reason": null
+}
+```
