@@ -14,8 +14,8 @@ public interface FileQueryPort {
 
     /**
      * 블록 안에 같은 표시명의 <b>완료된</b> 문서가 있는지(§1 동명 확인).
-     * 완료(COMPLETED) 버전을 가진 문서만 센다 — §3 목록(완료본만 표시)과 정합.
-     * 완료 전에 만들어져 버려진 file row(UPLOADING/FAILED)는 이름을 막지 않는다.
+     * <b>삭제되지 않은</b> 완료(COMPLETED) 버전을 가진 문서만 센다 — §3 목록(완료본만 표시)과 정합.
+     * 완료 전에 만들어져 버려진 file row(UPLOADING/FAILED)나 삭제된 버전(fv.deleted_at)은 이름을 막지 않는다.
      */
     boolean existsActiveNameInBlock(Long blockId, String name);
 
