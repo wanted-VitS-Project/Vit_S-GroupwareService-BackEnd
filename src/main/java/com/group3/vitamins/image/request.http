@@ -3,7 +3,7 @@ POST localhost:8080/api/v1/auth/login
 Content-Type: application/json
 
 {
-    "userId": "EMP003",
+    "userId": "EMP001",
     "password": ""
 }
 
@@ -57,7 +57,7 @@ GET localhost:8080/api/v1/steps/15/blocks
 
 ### 이미지 항목 생성 — ⚠️ 멀티파트 + 한글 파일명은 .http에서 바운더리가 깨지는 문제가 있었음(8/4).
 ### Swagger UI(http://localhost:8080/swagger-ui/index.html)에서 POST /api/v1/blocks/images/{imgBlockId}/items 로 실행할 것.
-### imgBlockId는 0-4에서 확인한 값. files는 여러 장 선택 가능, request 파트는 { "captions": ["...", ""] } (files와 개수 동일해야 함, 생략하면 전부 "").
+### imgBlockId는 0-4에서 확인한 값. files는 여러 장 선택 가능(21장 이상이면 400 IMG-010 확인 — 2026-08-06 추가), request 파트는 { "captions": ["...", ""] } (files와 개수 동일해야 함, 생략하면 전부 "").
 
 ### 이미지 항목 조회 (다음/이전) — URL의 1을 imgBlockId, 2를 currentOrderIndex로 교체할 것.
 ### direction=next일 때 마지막 이미지에서 호출하면 orderIndex=1(첫 이미지)로 순환하는지,
@@ -91,13 +91,13 @@ Content-Type: application/json
 }
 
 ### 이미지 항목 삭제 (단건) — imgId를 실제 삭제할 이미지 ID로 교체할 것
-DELETE localhost:8080/api/v1/blocks/images/items/4
+DELETE localhost:8080/api/v1/blocks/images/items/6
 
 ### 블록 삭제 (동훈님 담당, 공용 API) — URL의 1을 0-3 응답의 blockId로 교체할 것.
 ### ⚠️ imgBlockId(0-4에서 확인한 값)가 아니라 공용 block 테이블 PK다. 성공하면
 ### image_block.deleted_at, 그 블록에 속한 image 항목 전부의 deleted_at이 같이 찍혀야 하고
 ### activity_log에는 이미지 쪽에서 로그가 안 남아야 한다(§5.1, Block 도메인 책임).
-DELETE localhost:8080/api/v1/blocks/16
+DELETE localhost:8080/api/v1/blocks/18
 
 ### 프로젝트 이미지 모아보기 — URL의 1을 0-1 응답의 projectId로 교체할 것.
 ### 여러 스텝·블록에 걸친 활성 이미지가 생성일 최신순으로 다 보이는지 확인할 것 (삭제된 건 안 보여야 함).
@@ -117,7 +117,7 @@ PATCH localhost:8080/api/v1/blocks/images/items/restore
 Content-Type: application/json
 
 {
-    "imgIds": [4]
+    "imgIds": [7]
 }
 
 ### 이미지 완전 삭제(하드 삭제) — imgIds를 휴지통 조회에서 확인한 삭제된 imgId들로 교체할 것.
@@ -129,5 +129,5 @@ DELETE localhost:8080/api/v1/blocks/images/items/hard
 Content-Type: application/json
 
 {
-    "imgIds": [3]
+    "imgIds": [7]
 }

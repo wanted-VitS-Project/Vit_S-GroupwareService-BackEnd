@@ -171,13 +171,29 @@ public class ImageQueryService implements ImageQueryUseCase {
 
     /** 같은 이름으로 여러 번 업로드된 경우 zip 안에서 항목이 서로 덮어써지는 걸 막는다. */
     private String uniqueEntryName(ImageItem item, Set<String> usedNames) {
-        String name = item.getOriginalName();
+        String name = sanitizeEntryName(item.getOriginalName());
         if (usedNames.add(name)) {
             return name;
         }
         String disambiguated = item.getImgId() + "_" + name;
         usedNames.add(disambiguated);
         return disambiguated;
+    }
+
+    /**
+     * zip 엔트리명은 압축 해제 시 실제 파일 경로로 쓰인다 — 업로드 파일명(사용자 입력, DB에 원본 그대로
+     * 저장됨)에 경로 구분자나 `..`가 들어있으면 취약한 압축 해제 도구에서 대상 경로 밖에 파일을
+     * 쓸 수 있다(zip slip / Path Traversal). 경로 조작에 쓰일 수 있는 문자를 전부 제거한다.
+     */
+    private String sanitizeEntryName(String originalName) {
+        if (originalName == null || originalName.isBlank()) {
+            return "image";
+        }
+        String sanitized = originalName
+                .replaceAll("[\\\\/]", "_")
+                .replace("..", "_")
+                .replaceAll("[\\x00-\\x1f]", "");
+        return sanitized.isBlank() ? "image" : sanitized;
     }
 
     /**

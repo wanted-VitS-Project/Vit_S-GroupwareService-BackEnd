@@ -1,6 +1,8 @@
 package com.group3.vitamins.image.infrastructure.storage;
 
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.image.application.port.ImageStoragePort;
+import com.group3.vitamins.image.domain.exception.ImageErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
@@ -20,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,7 +50,9 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
 
     @Override
     public UploadedImage upload(Long imgBlockId, MultipartFile file, String extension) {
-        byte[] body = prepareBody(file, extension);
+        byte[] original = readAllBytes(file);
+        assertActualImageContentOrThrow(original, extension, file.getOriginalFilename());
+        byte[] body = prepareBody(file, extension, original);
         String key = "images/" + imgBlockId + "/" + UUID.randomUUID() + "." + extension;
 
         s3Client.putObject(
@@ -99,12 +104,12 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         };
     }
 
-    private byte[] prepareBody(MultipartFile file, String extension) {
-        if (NON_RESIZABLE_EXTENSIONS.contains(extension) || file.getSize() <= RESIZE_THRESHOLD_BYTES) {
-            return readAllBytes(file);
+    private byte[] prepareBody(MultipartFile file, String extension, byte[] original) {
+        if (NON_RESIZABLE_EXTENSIONS.contains(extension) || original.length <= RESIZE_THRESHOLD_BYTES) {
+            return original;
         }
 
-        try (InputStream input = file.getInputStream()) {
+        try (InputStream input = new ByteArrayInputStream(original)) {
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             Thumbnails.of(input)
                     .size(MAX_DIMENSION_PX, MAX_DIMENSION_PX)
@@ -114,8 +119,9 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
             return output.toByteArray();
         } catch (IOException e) {
             // 리사이즈 실패(손상된 이미지 등)는 원본 그대로 올린다 — 업로드 자체를 막을 이유는 아니다.
+            // 어차피 assertActualImageContentOrThrow를 이미 통과한 뒤라 콘텐츠 자체는 진짜 이미지다.
             log.warn("이미지 리사이즈 실패, 원본으로 업로드 - originalFilename={}", file.getOriginalFilename(), e);
-            return readAllBytes(file);
+            return original;
         }
     }
 
@@ -125,6 +131,46 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         } catch (IOException e) {
             throw new UncheckedImageReadException(e);
         }
+    }
+
+    /**
+     * 확장자(파일명 기준, 사용자가 임의로 붙일 수 있음)가 아니라 실제 바이트 내용이 그 확장자가
+     * 맞는 이미지 포맷인지 매직 바이트로 확인한다. 확장자만 검사하면 HTML·스크립트 파일도 이름만
+     * `.png`/`.gif`로 바꿔서 그대로 통과·저장될 수 있다(위장 업로드).
+     */
+    private void assertActualImageContentOrThrow(byte[] content, String extension, String originalFilename) {
+        if (!matchesSignature(content, extension)) {
+            log.warn("파일 내용이 확장자와 일치하지 않음(위장 업로드 의심) - originalFilename={}, extension={}",
+                    originalFilename, extension);
+            throw new ValidationException(ImageErrorCode.UNSUPPORTED_FILE_TYPE);
+        }
+    }
+
+    private boolean matchesSignature(byte[] content, String extension) {
+        return switch (extension) {
+            case "jpg", "jpeg" -> startsWith(content, 0xFF, 0xD8, 0xFF);
+            case "png" -> startsWith(content, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+            // "GIF87a" 또는 "GIF89a"
+            case "gif" -> startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
+                    || startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
+            // RIFF 컨테이너(offset 0) + WEBP(offset 8)
+            case "webp" -> startsWith(content, 0x52, 0x49, 0x46, 0x46)
+                    && content.length >= 12
+                    && startsWith(Arrays.copyOfRange(content, 8, 12), 0x57, 0x45, 0x42, 0x50);
+            default -> false;
+        };
+    }
+
+    private boolean startsWith(byte[] content, int... signature) {
+        if (content.length < signature.length) {
+            return false;
+        }
+        for (int i = 0; i < signature.length; i++) {
+            if ((content[i] & 0xFF) != signature[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static class UncheckedImageReadException extends RuntimeException {

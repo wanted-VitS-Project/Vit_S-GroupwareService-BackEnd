@@ -1,10 +1,10 @@
 package com.group3.vitamins.image.application.policy;
 
+import com.group3.vitamins.image.application.port.ImageStepLookupPort;
 import com.group3.vitamins.image.domain.exception.ImageErrorCode;
 import com.group3.vitamins.image.domain.model.ImageItem;
 import com.group3.vitamins.image.domain.repository.ImageBlockRepository;
 import com.group3.vitamins.image.domain.repository.ImageRepository;
-import com.group3.vitamins.image.infrastructure.trash.ImageTrashMapper;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -29,7 +29,7 @@ public class ImageEligibilityPolicy {
     private final BlockCatalogPort blockCatalogPort;
     private final ImageBlockRepository imageBlockRepository;
     private final ImageRepository imageRepository;
-    private final ImageTrashMapper imageTrashMapper;
+    private final ImageStepLookupPort imageStepLookupPort;
     private final StepAccessUseCase stepAccessUseCase;
 
     public void assertBlockActiveOrThrow(Long imgBlockId) {
@@ -81,15 +81,17 @@ public class ImageEligibilityPolicy {
      * 복구·완전 삭제 전용 — 블록이 삭제돼 있어도 정확한 편집 권한 판정을 한다. 블록이 살아있으면
      * 평소처럼 {@link #assertEditPermission}(공유 {@code BlockCatalogPort}, 실패 시 IMG-002)을 쓴다.
      * 블록이 삭제돼 있으면 {@code BlockCatalogPort.hasEditPermission}이 대상을 못 찾아 권한 유무와
-     * 무관하게 항상 false만 반환하므로(§생성·수정 API와 동일 포트), 그 경로를 안 타고 이 블록이
-     * 속했던 stepId를 직접 찾아(image_block→block, 삭제 여부 무시) 그대로 존재하는
+     * 무관하게 항상 false만 반환하므로(§생성·수정 API와 동일 포트), 그 경로를 안 타고 {@link ImageStepLookupPort}
+     * 로 이 블록이 속했던 stepId를 직접 찾아(image_block→block, 삭제 여부 무시) 그대로 존재하는
      * {@code StepAccessUseCase.requireEditable}로 판정한다 — 실제 권한 규칙은 여전히 Step 도메인이
      * 소유한다, 여기선 ID만 찾는다.
      *
-     * <p>⚠️ Block 도메인(동훈님)에 "삭제된 블록도 포함해서 stepId를 찾는" 정식 포트가 생기면 그걸로
-     * 교체할 것 — 지금은 이미지 도메인 단독으로 처리하려고 둔 임시 우회다 (2026-08-06 결정,
-     * `.ai/api/image.md` 참고). 실패 시 코드는 IMG-002가 아니라 Step 도메인 코드
-     * (`STEP_EDIT_DENIED`/`STEP_NOT_FOUND`)로 나간다 — 원 명세와의 차이.
+     * <p>⚠️ {@code ImageStepLookupPort} 구현체는 이미지 도메인 소유다(동훈님께 요청하는 게 아님) — Block
+     * 도메인에 "삭제된 블록도 포함해서 stepId를 찾는" 정식 포트가 생기면 이 포트의 구현체만 교체하면 된다
+     * (2026-08-06 결정, `.ai/api/image.md` 참고).
+     *
+     * <p>{@code StepAccessUseCase}가 던지는 예외(Step 도메인 코드 `STEP_EDIT_DENIED`/`STEP_NOT_FOUND`)는
+     * 이미지 API 계약 밖의 코드라 그대로 노출하지 않고 이미지 도메인 코드(IMG-002)로 감싼다.
      */
     public void assertEditPermissionEvenIfBlockDeleted(Long imgBlockId, String userId, String role) {
         if (imageBlockRepository.existsActive(imgBlockId)) {
@@ -97,12 +99,17 @@ public class ImageEligibilityPolicy {
             return;
         }
 
-        Long stepId = imageTrashMapper.findStepIdByImgBlockId(imgBlockId)
+        Long stepId = imageStepLookupPort.findStepIdByImgBlockId(imgBlockId)
                 .orElseThrow(() -> new IllegalStateException(
                         "image_block이 가리키는 block 행을 찾을 수 없습니다 — 데이터 정합성 문제: " + imgBlockId));
 
         log.info("블록 삭제된 이미지 - 스텝 편집 권한으로 대체 판정 - imgBlockId={}, stepId={}", imgBlockId, stepId);
-        stepAccessUseCase.requireEditable(stepId, userId, role);
+        try {
+            stepAccessUseCase.requireEditable(stepId, userId, role);
+        } catch (NotFoundException | ForbiddenException e) {
+            log.warn("블록 삭제된 이미지 - 스텝 편집 권한 없음 - imgBlockId={}, stepId={}", imgBlockId, stepId);
+            throw new ForbiddenException(ImageErrorCode.FORBIDDEN);
+        }
     }
 
     /** 이미지 항목 조회(GET)는 편집 권한이 아니라 접근(VIEWER 이상) 권한만 있으면 된다. */

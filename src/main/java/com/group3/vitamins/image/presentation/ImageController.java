@@ -15,6 +15,7 @@ import com.group3.vitamins.image.application.usecase.ImageCommandUseCase.UpdateI
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageDownloadView;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageItemView;
+import com.group3.vitamins.image.domain.exception.ImageErrorCode;
 import com.group3.vitamins.image.presentation.api.request.ImageItemCreateRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemPurgeRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemRestoreRequest;
@@ -28,6 +29,7 @@ import com.group3.vitamins.image.presentation.api.response.UpdateImageItemsRespo
 import com.group3.vitamins.image.presentation.api.response.UpdatedImageOrderResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import io.swagger.v3.oas.annotations.Operation;
@@ -141,6 +143,9 @@ public class ImageController {
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(view.contentType()))
+                // 브라우저가 Content-Type을 무시하고 내용을 추측(MIME sniffing)해서 실행 가능한
+                // 콘텐츠로 잘못 해석하는 걸 막는다 — 업로드 검증을 통과한 파일이어도 방어적으로 둔다.
+                .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + asciiFallbackName + "\"; filename*=UTF-8''" + encodedFileName)
                 .body(view.content());
@@ -150,7 +155,8 @@ public class ImageController {
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "이미지 항목 생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "지원하지 않는 파일 형식입니다. (IMG-001) / 이미지 개수와 캡션 개수가 일치하지 않습니다. (IMG-004)"),
+                    description = "지원하지 않는 파일 형식입니다. (IMG-001) / 이미지 개수와 캡션 개수가 일치하지 않습니다. (IMG-004) / "
+                            + "한 번에 업로드할 수 있는 파일 개수를 초과했습니다. (IMG-010, 최대 20장)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (IMG-002) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (IMG-003)"),
@@ -211,6 +217,9 @@ public class ImageController {
             @RequestBody ImageItemUpdateRequest request,
             Authentication authentication
     ) {
+        if (request.images() == null) {
+            throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
+        }
         List<UpdateImageItemsCommand.Entry> entries = request.images().stream()
                 .map(entry -> new UpdateImageItemsCommand.Entry(entry.imgId(), entry.caption()))
                 .toList();

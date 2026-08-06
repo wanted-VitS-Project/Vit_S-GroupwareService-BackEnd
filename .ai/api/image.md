@@ -129,7 +129,7 @@
 
 **Response**: JSON이 아니라 파일 바이너리를 응답 바디에 직접 담아 내려준다.
 
-```
+```text
 단건: Content-Type: image/jpeg 등, Content-Disposition: attachment; filename="원본파일명.jpg"
 전체: Content-Type: application/zip, Content-Disposition: attachment; filename="블록명.zip"
 ```
@@ -308,7 +308,7 @@
 
 **Request Example**
 
-```
+```text
 Content-Type: multipart/form-data
 
 files: [image1.jpg, image2.jpg, image3.jpg]
@@ -367,6 +367,7 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 | 201 | Created | — | "이미지 항목 생성 성공" |
 | 400 | Bad Request | `IMG-001` | "지원하지 않는 파일 형식입니다." |
 | 400 | Bad Request | `IMG-004` | "이미지 개수와 캡션 개수가 일치하지 않습니다." |
+| 400 | Bad Request | `IMG-010` | "한 번에 업로드할 수 있는 파일 개수를 초과했습니다." |
 | 403 | Forbidden | `IMG-002` | "편집 권한이 없습니다." |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `IMG-003` | "존재하지 않는 블록입니다." |
@@ -375,6 +376,8 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 
 > 🔄 **원 명세와의 차이 — 사용자 확인 후 반영 (2026-08-04)**
 > - `IMG-016`(401)·`IMG-017`(500) → 체크리스트·텍스트와 동일 이유로 실제로 던지지 않는 도메인 401/500은 만들지 않고 전 도메인 공통 코드(`AUTH_UNAUTHENTICATED`/`COMMON_INTERNAL_ERROR`)로 대체.
+>
+> ⚠️ **`IMG-010`(파일 개수 상한, 2026-08-06 추가)** — 명세엔 없던 검증, 코드 리뷰(CodeRabbit)로 발견한 성능 이슈 대응. 이 API는 요청 하나가 파일마다 순차적으로 S3 업로드(느린 I/O)를 하는 동안 DB 트랜잭션(블록 활성 확인용 비관적 락 포함)을 계속 잡고 있다 — 파일이 많을수록 커넥션을 그만큼 오래 붙잡아서, 동시에 여러 사용자가 대량 업로드하면 DB 커넥션 풀이 고갈될 위험이 있다. S3 업로드를 트랜잭션 밖으로 완전히 빼는 게 정석이지만 리팩터 범위가 커서(재테스트 필요), 최악의 경우를 유한하게 만드는 가벼운 방어로 **한 요청당 파일 20장 상한**만 걸었다. 완전한 해결(트랜잭션 분리)은 백로그(`.ai/local/STATE.md`)로 남김.
 > - 나머지 도메인 코드(원본 `IMG-008`·`IMG-010`·`IMG-015`)는 실제로 던지는 순서대로 `IMG-001`부터 재번호.
 > - 성공 코드 `IMG-005`는 에러가 아니므로 코드 없이 기록(체크리스트 `CHK` 표기 방식과 동일).
 

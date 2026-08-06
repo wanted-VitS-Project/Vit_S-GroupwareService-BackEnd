@@ -51,8 +51,12 @@ public class ImageBlockDetailAdapter implements BlockDetailPort {
             return Map.of();
         }
 
+        // order_index는 (img_block_id, order_index) 유일성이 DB로 강제되지 않아, 같은 블록 안에서
+        // 최솟값이 동률이면 SQL이 두 행을 같이 돌려줄 수 있다 — imgId가 더 작은 쪽으로 결정적으로
+        // 골라서 Collectors.toMap의 "Duplicate key" 예외(블록 카드 목록 전체 500)를 막는다.
         Map<Long, ImageDetailRow> firstByBlock = imageDetailMapper.findFirstImagesByImgBlockIds(typeIds).stream()
-                .collect(Collectors.toMap(ImageDetailRow::imgBlockId, row -> row));
+                .collect(Collectors.toMap(ImageDetailRow::imgBlockId, row -> row,
+                        (a, b) -> a.imgId() <= b.imgId() ? a : b));
 
         Map<Long, BlockDetail> details = new HashMap<>();
         for (Long imgBlockId : typeIds) {

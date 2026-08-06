@@ -23,6 +23,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -54,15 +56,25 @@ public class ImageCommandService implements ImageCommandUseCase {
     private final ImageStoragePort imageStoragePort;
     private final DomainEventPublisher domainEventPublisher;
 
+    // 한 번의 요청 안에서 S3 업로드를 몇 번이나 반복하며 트랜잭션(비관적 락 포함)을 붙잡고 있을지의
+    // 최악값을 유한하게 만든다 — 개수 자체는 명세에 없어 구현 시 임의 결정 (.ai/api/image.md 참고).
+    private static final int MAX_FILES_PER_REQUEST = 20;
+
     @Override
     public CreateImageItemsView create(CreateImageItemsCommand command) {
         log.info("이미지 항목 생성 요청 - imgBlockId={}, userId={}, fileCount={}",
                 command.imgBlockId(), command.userId(), command.files().size());
 
+        List<MultipartFile> files = command.files();
+        if (files.size() > MAX_FILES_PER_REQUEST) {
+            log.warn("이미지 생성 요청 파일 개수 초과 - imgBlockId={}, fileCount={}",
+                    command.imgBlockId(), files.size());
+            throw new ValidationException(ImageErrorCode.TOO_MANY_FILES);
+        }
+
         eligibilityPolicy.assertBlockActiveOrThrow(command.imgBlockId());
         eligibilityPolicy.assertEditPermission(command.imgBlockId(), command.userId(), command.role());
 
-        List<MultipartFile> files = command.files();
         List<String> captions = command.captions();
 
         // captions 를 아예 안 보내는 건 허용(전부 "" 처리)하지만, 보냈는데 개수가 안 맞으면
@@ -174,7 +186,13 @@ public class ImageCommandService implements ImageCommandUseCase {
         toDeleteIds.removeAll(requestedIds);
         LocalDateTime deletedAt = LocalDateTime.now();
         for (Long imgId : toDeleteIds) {
-            imageRepository.markDeleted(imgId, command.imgBlockId(), deletedAt);
+            int deleted = imageRepository.markDeleted(imgId, command.imgBlockId(), deletedAt);
+            if (deleted == 0) {
+                // 조회~삭제 사이에 동시에 삭제된 경우(레이스). 이미 삭제됐으니 다시 지울 필요도,
+                // 이번 호출이 지웠다는 로그를 남길 이유도 없다.
+                log.warn("이미지 항목 삭제 경합 발생(수정 API 배열 누락 처리) - imgId={}", imgId);
+                continue;
+            }
             domainEventPublisher.publish(ActivityOccurredEvent.of(
                     ActivityLogAction.DELETE,
                     blockId,
@@ -212,7 +230,14 @@ public class ImageCommandService implements ImageCommandUseCase {
                         String.valueOf(before.getOrderIndex()), String.valueOf(newOrderIndex)));
             }
             if (!changes.isEmpty()) {
-                imageRepository.updateCaptionAndOrder(entry.imgId(), command.imgBlockId(), newCaption, newOrderIndex);
+                int updated = imageRepository.updateCaptionAndOrder(
+                        entry.imgId(), command.imgBlockId(), newCaption, newOrderIndex);
+                if (updated == 0) {
+                    // 조회~수정 사이에 동시에 삭제된 경우(레이스). 안 바뀐 걸 바뀌었다고 응답하거나
+                    // 일어나지 않은 변경을 활동 로그에 남기면 안 된다.
+                    log.warn("이미지 항목 수정 경합 발생 - imgId={}", entry.imgId());
+                    throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+                }
                 domainEventPublisher.publish(ActivityOccurredEvent.of(
                         ActivityLogAction.MODIFY, blockId, entry.imgId(), before.getOriginalName(),
                         command.userId(), changes));
@@ -261,11 +286,11 @@ public class ImageCommandService implements ImageCommandUseCase {
         log.info("이미지 항목 복구 요청 - userId={}, imgIds={}", command.userId(), command.imgIds());
 
         List<Long> imgIds = command.imgIds();
-        Set<Long> uniqueIds = new HashSet<>(imgIds);
-        if (imgIds.isEmpty() || uniqueIds.size() != imgIds.size()) {
+        if (imgIds == null || imgIds.isEmpty() || new HashSet<>(imgIds).size() != imgIds.size()) {
             log.warn("복구 요청 목록이 유효하지 않음 - imgIds={}", imgIds);
             throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
         }
+        Set<Long> uniqueIds = new HashSet<>(imgIds);
 
         Map<Long, ImageItem> foundByImgId = imageRepository.findAllByImgIds(imgIds).stream()
                 .collect(Collectors.toMap(ImageItem::getImgId, item -> item));
@@ -339,11 +364,11 @@ public class ImageCommandService implements ImageCommandUseCase {
         log.info("이미지 영구 삭제 요청 - userId={}, imgIds={}", command.userId(), command.imgIds());
 
         List<Long> imgIds = command.imgIds();
-        Set<Long> uniqueIds = new HashSet<>(imgIds);
-        if (imgIds.isEmpty() || uniqueIds.size() != imgIds.size()) {
+        if (imgIds == null || imgIds.isEmpty() || new HashSet<>(imgIds).size() != imgIds.size()) {
             log.warn("영구 삭제 요청 목록이 유효하지 않음 - imgIds={}", imgIds);
             throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
         }
+        Set<Long> uniqueIds = new HashSet<>(imgIds);
 
         Map<Long, ImageItem> foundByImgId = imageRepository.findAllByImgIds(imgIds).stream()
                 .collect(Collectors.toMap(ImageItem::getImgId, item -> item));
@@ -369,14 +394,13 @@ public class ImageCommandService implements ImageCommandUseCase {
         }
 
         Map<Long, Long> blockIdByImgBlockId = new HashMap<>();
+        List<String> storageKeysToDelete = new ArrayList<>(uniqueIds.size());
 
+        // DB 행을 먼저 전부 지운다 — S3는 아직 안 건드린다. 배치 중간에 어떤 imgId가 레이스로 실패하면
+        // 여기서 예외가 나서 트랜잭션이 롤백되는데, 이 시점까진 S3에 손도 안 댔으니 되돌릴 것도 없다.
         for (Long imgId : uniqueIds) {
             ImageItem item = foundByImgId.get(imgId);
             Long imgBlockId = item.getImgBlockId();
-
-            // S3 객체를 먼저 지우고 DB 행을 지운다 — S3 삭제가 실패하면 예외가 트랜잭션을 롤백시켜
-            // DB에는 아무 변화도 없다(둘 다 성공 또는 둘 다 실패, 부분 상태를 안 남기려는 의도).
-            imageStoragePort.delete(item.getImageUrl());
 
             int deleted = imageRepository.hardDelete(imgId);
             if (deleted == 0) {
@@ -384,6 +408,7 @@ public class ImageCommandService implements ImageCommandUseCase {
                 log.warn("이미지 항목 완전 삭제 경합 발생 - imgId={}", imgId);
                 throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
             }
+            storageKeysToDelete.add(item.getImageUrl());
 
             Long blockId = blockIdByImgBlockId.computeIfAbsent(imgBlockId, imageBlockRepository::getBlockId);
             domainEventPublisher.publish(ActivityOccurredEvent.of(
@@ -395,6 +420,24 @@ public class ImageCommandService implements ImageCommandUseCase {
                     List.of(new ActivityFieldChange(null, null, null))
             ));
         }
+
+        // S3 객체는 DB 트랜잭션이 실제로 커밋된 뒤에만 지운다. 이전엔 항목마다 "S3 지우고 → DB 지우고"를
+        // 반복했는데, 배치 중 다른 imgId가 나중에 실패해서 트랜잭션 전체가 롤백되면 이미 지운 S3 객체는
+        // 되돌릴 수 없어서 "DB엔 있는데 실제 파일은 없는" 상태가 남는 문제가 있었다(2026-08-06, 코드
+        // 리뷰로 발견). 커밋 후 S3 삭제가 실패해도 DB는 이미 확정된 상태라 고아 S3 객체만 남을 뿐 —
+        // 정합성은 안 깨지고, 나중에 정리 배치로 치울 수 있다(§하드 삭제 정책 백로그).
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                for (String storageKey : storageKeysToDelete) {
+                    try {
+                        imageStoragePort.delete(storageKey);
+                    } catch (RuntimeException e) {
+                        log.error("영구 삭제 커밋 후 S3 객체 삭제 실패 - storageKey={}", storageKey, e);
+                    }
+                }
+            }
+        });
 
         log.info("이미지 완전 삭제 완료 - count={}", uniqueIds.size());
     }
