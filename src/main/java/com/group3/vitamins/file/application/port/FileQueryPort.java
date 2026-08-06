@@ -33,7 +33,8 @@ public interface FileQueryPort {
 
     /**
      * 프로젝트 파일 버전 목록(§11, #138) — 프로젝트에 속한 모든 문서의 완료 버전(과거 버전 포함, 고아 파일 포함, 휴지통 제외).
-     * file_index 를 LEFT JOIN 해 indexStatus 를 함께 내려주며, 인덱스 행이 없으면 'PENDING'. 파일·차수 내림차순.
+     * file_index 를 LEFT JOIN 해 indexStatus 를 함께 내려주며, 인덱스 행이 없으면 'PENDING'.
+     * 정렬은 파일(file_id) 오름차순 · 같은 파일 안에서는 차수(version_no) 내림차순(최신 버전 먼저).
      */
     List<ProjectFileVersionProjection> findProjectFileVersions(Long projectId);
 }

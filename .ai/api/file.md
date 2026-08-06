@@ -25,8 +25,8 @@
 
 **착수 범위 (2026-08-06 · CRUD 우선)**
 
-- ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동
-- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기) · **파일 버전 목록(비타메이트, #138)** — 스코프=**프로젝트 확정**(경로 `/projects/{projectId}/file-versions`), **AI 경계(index_status) 확정 대기**
+- ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동 · **파일 버전 목록(비타메이트, #138) 읽기 구현 완료** — 프로젝트 스코프(`/projects/{projectId}/file-versions`) · `file_index` LEFT JOIN
+- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기). **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
 
 ## 엔드포인트
 
@@ -566,8 +566,8 @@
 | 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
 | 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |
 
-> 🟢 **경로 스코프 = 프로젝트 확정** (2026-08-06). 권한은 파일 단위가 아니라 프로젝트 단위 —
+> 🟢 **경로 스코프 = 프로젝트 확정 · 읽기 구현 완료** (2026-08-06 · #138). 권한은 파일 단위가 아니라 프로젝트 단위 —
 > 공용 **`ProjectAccessUseCase.requireAccess(projectId, userId, role)`** 를 재사용한다(스텝 리소스가 `StepAccessUseCase` 를 쓰는 것과 동형).
-> 🔴 **AI 경계 확정 대기** — `indexStatus`(`embeddingStatus`)는 `file_index`·`document_chunk`(**AI 담당 테이블**)에서 온다.
-> 읽기는 file 도메인이 `file_index` 를 LEFT JOIN 해 내려주고, **쓰기(갱신)는 AI Python callback** 으로 가르는 방향 — 배정현 확정 후 착수.
+> `indexStatus`(`embeddingStatus`)는 `file_index`(**AI 담당 테이블**)에서 오며, **file 도메인이 `file_index` 를 LEFT JOIN 해 내려준다** — 인덱스 행이 없으면 `COALESCE` 로 `PENDING`.
+> ⛔ **쓰기(`index_status` 갱신)는 file 도메인이 하지 않는다 — AI 도메인 별도 이슈**(배정현 확인). 읽기만 여기 소관.
 > `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 판정(PDF 여부)은 잠정.
