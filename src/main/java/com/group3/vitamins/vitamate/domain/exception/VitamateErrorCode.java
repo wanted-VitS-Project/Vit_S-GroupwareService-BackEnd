@@ -15,6 +15,7 @@ public enum VitamateErrorCode implements ErrorCode {
     VITAMATE_ANALYSIS_NOT_FOUND("VITAMATE_ANALYSIS_NOT_FOUND", "AI 분석 이력이 존재하지 않습니다."),
     VITAMATE_BLOCK_NOT_FOUND("VITAMATE_BLOCK_NOT_FOUND", "비타메이트 블록이 존재하지 않습니다."),
     VITAMATE_FILE_VERSION_INVALID("VITAMATE_FILE_VERSION_INVALID", "분석할 수 없는 문서 버전입니다."),
+    VITAMATE_FILE_VERSION_NOT_FOUND("VITAMATE_FILE_VERSION_NOT_FOUND", "파일 버전이 존재하지 않습니다."),
     VITAMATE_IDEMPOTENCY_CONFLICT("VITAMATE_IDEMPOTENCY_CONFLICT", "같은 요청 키로 다른 분석 요청이 들어왔습니다.");
 
     private final String code;
