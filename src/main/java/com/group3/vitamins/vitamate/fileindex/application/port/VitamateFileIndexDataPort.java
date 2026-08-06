@@ -11,5 +11,7 @@ public interface VitamateFileIndexDataPort {
 
     Optional<VitamateFileIndexSourceResult> findIndexSource(Long fileVersionId);
 
+    boolean existsIndexableFileVersionForUpdate(Long fileVersionId);
+
     int replaceChunks(Long fileVersionId, List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks);
 }

@@ -24,6 +24,7 @@ public class VitamateDocumentChunkSaveService implements SaveVitamateDocumentChu
 
     private static final int MAX_EXCERPT_LENGTH = 1000;
     private static final int MAX_SECTION_TITLE_LENGTH = 255;
+    private static final int MAX_CHUNK_COUNT = 500;
 
     private final VitamateFileIndexDataPort fileIndexDataPort;
 
@@ -31,7 +32,7 @@ public class VitamateDocumentChunkSaveService implements SaveVitamateDocumentChu
     public SaveVitamateDocumentChunksResult handle(SaveVitamateDocumentChunksCommand command) {
         validateCommand(command);
 
-        if (fileIndexDataPort.findIndexSource(command.fileVersionId()).isEmpty()) {
+        if (!fileIndexDataPort.existsIndexableFileVersionForUpdate(command.fileVersionId())) {
             throw new NotFoundException(VitamateErrorCode.VITAMATE_FILE_VERSION_NOT_FOUND);
         }
 
@@ -49,7 +50,8 @@ public class VitamateDocumentChunkSaveService implements SaveVitamateDocumentChu
                 || command.fileVersionId() == null
                 || command.fileVersionId() <= 0
                 || command.chunks() == null
-                || command.chunks().isEmpty()) {
+                || command.chunks().isEmpty()
+                || command.chunks().size() > MAX_CHUNK_COUNT) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
 

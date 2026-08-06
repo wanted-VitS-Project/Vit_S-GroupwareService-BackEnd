@@ -7,6 +7,7 @@ import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.reposito
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -25,6 +26,7 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
     private final SpringDataFileRepository fileRepository;
     private final DocumentChunkJpaRepository documentChunkRepository;
     private final FileStoragePort fileStoragePort;
+    private final EntityManager entityManager;
 
     @Override
     public Optional<VitamateFileIndexSourceResult> findIndexSource(Long fileVersionId) {
@@ -51,6 +53,24 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
                                     presigned.url()
                             );
                         }));
+    }
+
+    @Override
+    public boolean existsIndexableFileVersionForUpdate(Long fileVersionId) {
+        return !entityManager.createNativeQuery("""
+                        SELECT fv.file_version_id
+                          FROM file_version fv
+                               JOIN `file` f ON f.file_id = fv.file_id
+                         WHERE fv.file_version_id = :fileVersionId
+                           AND fv.upload_status = :uploadStatus
+                           AND fv.deleted_at IS NULL
+                           AND f.deleted_at IS NULL
+                         FOR UPDATE
+                        """)
+                .setParameter("fileVersionId", fileVersionId)
+                .setParameter("uploadStatus", COMPLETED_UPLOAD_STATUS)
+                .getResultList()
+                .isEmpty();
     }
 
     @Override

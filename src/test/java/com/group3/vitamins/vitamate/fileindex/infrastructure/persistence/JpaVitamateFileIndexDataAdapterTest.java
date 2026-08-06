@@ -7,6 +7,7 @@ import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.reposito
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.adapter.JpaVitamateFileIndexDataAdapter;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,6 +24,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @DataJpaTest(properties = {
@@ -55,6 +57,9 @@ class JpaVitamateFileIndexDataAdapterTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private FileStoragePort fileStoragePort;
     private JpaVitamateFileIndexDataAdapter adapter;
 
@@ -65,7 +70,8 @@ class JpaVitamateFileIndexDataAdapterTest {
                 fileVersionRepository,
                 fileRepository,
                 documentChunkRepository,
-                fileStoragePort
+                fileStoragePort,
+                entityManager
         );
 
         jdbcTemplate.update("DELETE FROM document_chunk");
@@ -119,6 +125,26 @@ class JpaVitamateFileIndexDataAdapterTest {
     @Nested
     @DisplayName("document chunk replace")
     class ReplaceChunks {
+
+        @Test
+        @DisplayName("checks indexable file version with DB lock without presigned url")
+        void checksIndexableFileVersionWithoutPresignedUrl() {
+            boolean exists = adapter.existsIndexableFileVersionForUpdate(FILE_VERSION_ID);
+
+            assertThat(exists).isTrue();
+            verifyNoInteractions(fileStoragePort);
+        }
+
+        @Test
+        @DisplayName("returns false when file version is not indexable")
+        void returnsFalseWhenFileVersionIsNotIndexable() {
+            insertFileVersion(900002L, FILE_ID, "UPLOADING", null);
+
+            boolean exists = adapter.existsIndexableFileVersionForUpdate(900002L);
+
+            assertThat(exists).isFalse();
+            verifyNoInteractions(fileStoragePort);
+        }
 
         @Test
         @DisplayName("upserts existing chunk without changing document_chunk_id")

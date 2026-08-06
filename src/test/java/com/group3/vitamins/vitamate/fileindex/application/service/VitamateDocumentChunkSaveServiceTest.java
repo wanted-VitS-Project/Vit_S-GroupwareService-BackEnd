@@ -7,15 +7,13 @@ import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDo
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
 import com.group3.vitamins.vitamate.fileindex.application.result.SaveVitamateDocumentChunksResult;
-import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Optional;
-
+import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
@@ -48,14 +46,14 @@ class VitamateDocumentChunkSaveServiceTest {
         @DisplayName("saves extracted chunks after file version check")
         void savesExtractedChunks() {
             SaveVitamateDocumentChunksCommand command = command(List.of(chunk(0, "첫 번째 청크")));
-            when(fileIndexDataPort.findIndexSource(FILE_VERSION_ID)).thenReturn(Optional.of(sourceResult()));
+            when(fileIndexDataPort.existsIndexableFileVersionForUpdate(FILE_VERSION_ID)).thenReturn(true);
             when(fileIndexDataPort.replaceChunks(eq(FILE_VERSION_ID), eq(command.chunks()))).thenReturn(1);
 
             SaveVitamateDocumentChunksResult result = saveService.handle(command);
 
             assertThat(result.fileVersionId()).isEqualTo(FILE_VERSION_ID);
             assertThat(result.savedChunkCount()).isEqualTo(1);
-            verify(fileIndexDataPort).findIndexSource(FILE_VERSION_ID);
+            verify(fileIndexDataPort).existsIndexableFileVersionForUpdate(FILE_VERSION_ID);
             verify(fileIndexDataPort).replaceChunks(FILE_VERSION_ID, command.chunks());
         }
 
@@ -63,7 +61,7 @@ class VitamateDocumentChunkSaveServiceTest {
         @DisplayName("throws not found when file version source is missing")
         void throwsNotFoundWhenFileVersionSourceIsMissing() {
             SaveVitamateDocumentChunksCommand command = command(List.of(chunk(0, "첫 번째 청크")));
-            when(fileIndexDataPort.findIndexSource(FILE_VERSION_ID)).thenReturn(Optional.empty());
+            when(fileIndexDataPort.existsIndexableFileVersionForUpdate(FILE_VERSION_ID)).thenReturn(false);
 
             assertThatThrownBy(() -> saveService.handle(command))
                     .isInstanceOf(NotFoundException.class)
@@ -118,6 +116,16 @@ class VitamateDocumentChunkSaveServiceTest {
         }
 
         @Test
+        @DisplayName("rejects too many chunks")
+        void rejectsTooManyChunks() {
+            List<ChunkCommand> chunks = IntStream.rangeClosed(0, 500)
+                    .mapToObj(index -> chunk(index, "청크 " + index))
+                    .toList();
+
+            assertInvalid(command(chunks));
+        }
+
+        @Test
         @DisplayName("rejects invalid offset range")
         void rejectsInvalidOffsetRange() {
             assertInvalid(command(List.of(new ChunkCommand(
@@ -159,18 +167,4 @@ class VitamateDocumentChunkSaveServiceTest {
         );
     }
 
-    // 파일 버전 존재 검증에 사용할 인덱싱 소스 결과를 만든다.
-    private VitamateFileIndexSourceResult sourceResult() {
-        return new VitamateFileIndexSourceResult(
-                FILE_VERSION_ID,
-                900001L,
-                900001L,
-                "proposal.pdf",
-                "pdf",
-                "application/pdf",
-                1024L,
-                "local/vitamate/proposal.pdf",
-                "https://example.com/download"
-        );
-    }
 }

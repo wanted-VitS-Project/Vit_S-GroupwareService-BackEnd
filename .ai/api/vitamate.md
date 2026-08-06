@@ -657,14 +657,17 @@ Python worker가 파일에서 추출한 텍스트를 `document_chunk` 단위로 
 
 | 항목 | 규칙 |
 |------|------|
-| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 `file_version`이 없으면 404 |
-| 저장 방식 | 같은 `fileVersionId`의 기존 `document_chunk`는 제거하고 새 청크 목록으로 전체 재저장한다 |
+| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 완료·미삭제 `file_version` 또는 미삭제 `file`이 없으면 404 |
+| 저장 방식 | `fileVersionId + chunkIndex` 기준 upsert로 저장하며 기존 `document_chunk_id`는 유지한다 |
+| 누락 청크 처리 | 기존 활성 청크 중 요청에 포함되지 않은 `chunkIndex`는 soft delete한다 |
+| 삭제 해제 | soft-deleted 청크의 `chunkIndex`가 다시 전달되면 값을 갱신하고 `deleted_at`을 `null`로 해제한다 |
 | 청크 목록 | `chunks`가 비어 있으면 400 |
+| 청크 개수 | 한 요청에 최대 500개까지 허용한다 |
 | 청크 순서 | `chunkIndex`는 0 이상이며 같은 요청 안에서 중복될 수 없다 |
 | 청크 본문 | `excerpt`는 빈 값일 수 없고 1000자를 초과할 수 없다 |
 | 임베딩 상태 | 현재 단계에서는 청크 저장 시 `embedding_status = 'PENDING'`으로 저장한다 |
 | Chroma 연동 | 실제 벡터DB 연동 전까지 `chroma_id`, `embedding_model`은 `null`일 수 있다 |
-| 트랜잭션 | 기존 청크 삭제와 새 청크 저장은 하나의 트랜잭션에서 처리한다 |
+| 트랜잭션 | 파일 버전 행을 잠근 뒤 누락 청크 soft delete와 청크 upsert를 하나의 트랜잭션에서 처리한다 |
 | 로그 | `fileVersionId`, 저장 청크 수만 남기고 문서 원문, storage key, worker token은 남기지 않는다 |
 
 **Request 예시**
