@@ -18,7 +18,7 @@ public class BlockDeleteLockRegistry {
      * FILE 블록은 파일 도메인이 아니라 결재 도메인이 잠그므로 한 타입에 둘이 붙을 수 있다.
      *
      * <p>구현체가 0개여도 스프링이 빈 리스트를 주입한다 (BlockDeleteLockRegistryWiringTest 로 확인).
-     * 잠금 어댑터는 아직 하나도 없고, 그 상태가 정 상 동작이다 — 모든 타입이 잠금 없이 삭제된다.
+     * 잠금 어댑터는 아직 하나도 없고, 그 상태가 정상 동작이다 — 모든 타입이 잠금 없이 삭제된다.
      */
     public BlockDeleteLockRegistry(List<BlockDeleteLockPort> ports) {
         this.ports = ports.stream()
