@@ -1,7 +1,7 @@
 package com.group3.vitamins.vitamate.analysis.application.service;
 
-import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.vitamate.analysis.application.command.CreateVitamateAnalysisCommand;
 import com.group3.vitamins.vitamate.analysis.application.command.DispatchVitamateAnalysisJobCommand;
@@ -13,7 +13,7 @@ import com.group3.vitamins.vitamate.analysis.application.result.CreateVitamateAn
 import com.group3.vitamins.vitamate.analysis.application.support.VitamateRequestHashGenerator;
 import com.group3.vitamins.vitamate.analysis.application.usecase.CreateVitamateAnalysisUseCase;
 import com.group3.vitamins.vitamate.analysis.application.usecase.DispatchVitamateAnalysisJobUseCase;
-import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
-// 비타메이트 분석 요청 생성 흐름을 처리하는 서비스
+// Creates Vitamate analysis requests and schedules worker dispatch after commit.
 @Service
 @RequiredArgsConstructor
 public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseCase {
@@ -38,7 +38,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
     private final VitamateRequestHashGenerator requestHashGenerator;
     private final DispatchVitamateAnalysisJobUseCase dispatchUseCase;
 
-    // 분석 요청 생성 전체 흐름을 조율한다.
+    // Coordinates validation, idempotency, persistence, and queue dispatch.
     @Override
     @Transactional(propagation = Propagation.REQUIRED)
     public CreateVitamateAnalysisResult handle(CreateVitamateAnalysisCommand command) {
@@ -91,13 +91,12 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
 
         analysisStore.saveAnalysisDocuments(result.analysisId(), command.fileVersionIds());
 
-        // DB 커밋이 끝난 뒤 Python worker가 조회할 큐 메시지를 발행한다.
         dispatchAfterCommit(result.analysisId());
 
         return result;
     }
 
-    // 트랜잭션 커밋 이후에 비동기 작업 큐로 분석 요청을 전달한다.
+    // Publishes the worker job after the request transaction is committed.
     private void dispatchAfterCommit(Long analysisId) {
         DispatchVitamateAnalysisJobCommand dispatchCommand = new DispatchVitamateAnalysisJobCommand(analysisId);
 
@@ -114,7 +113,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         });
     }
 
-    // 기존 멱등성 요청이 같은 본문인지 확인하고 응답 결과로 변환한다.
+    // Reuses an existing idempotent request only when the request body hash matches.
     private CreateVitamateAnalysisResult toCreateResultOrThrowConflict(
             ExistingAnalysis existingAnalysis,
             String requestHash
@@ -130,7 +129,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         );
     }
 
-    // 동시 요청으로 unique 충돌이 난 경우 저장된 기존 요청을 다시 조회한다.
+    // Handles a concurrent unique-key race by reloading the existing request.
     private CreateVitamateAnalysisResult findExistingResultOrThrowConflict(
             Long vitamateBlockId,
             String requestedBy,
@@ -146,7 +145,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         return toCreateResultOrThrowConflict(existingAnalysis, requestHash);
     }
 
-    // 서비스 진입 시점에 필수값, 빈 목록, null 원소, 중복 파일 버전 ID를 검증한다.
+    // Validates required identifiers, prompt, file list, null elements, and duplicates.
     private void validateCommand(CreateVitamateAnalysisCommand command) {
         if (command == null
                 || command.blockId() == null
@@ -168,14 +167,14 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         }
     }
 
-    // 선택한 파일 버전들이 모두 같은 프로젝트의 완료된 파일인지 확인한다.
+    // Ensures every selected file version belongs to the same project and is completed.
     private void validateFileVersions(Long projectId, List<Long> fileVersionIds) {
         if (!fileReader.existsAllCompletedFileVersionsInProject(projectId, fileVersionIds)) {
             throw new NotFoundException(VitamateErrorCode.VITAMATE_FILE_VERSION_INVALID);
         }
     }
 
-    // 문자열 필수값 검증을 위한 공통 보조 메서드다.
+    // Checks blank strings for command validation.
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

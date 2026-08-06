@@ -6,19 +6,19 @@ import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisRe
 import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateAnalysisJobQuery;
 import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisJobDetailResult;
 import com.group3.vitamins.vitamate.analysis.application.usecase.GetVitamateAnalysisJobUseCase;
-import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// Python worker가 처리할 비타메이트 분석 작업 입력 조회 서비스
+// Loads the processing analysis job payload consumed by the Python worker.
 @Service
 @RequiredArgsConstructor
 public class VitamateAnalysisJobQueryService implements GetVitamateAnalysisJobUseCase {
 
     private final VitamateAnalysisReaderPort analysisReaderPort;
 
-    // PROCESSING 상태와 attemptId가 일치하는 분석 작업 입력을 조회한다.
+    // Finds a PROCESSING job only when the attemptId and lease are still valid.
     @Override
     @Transactional(readOnly = true)
     public VitamateAnalysisJobDetailResult handle(GetVitamateAnalysisJobQuery query) {
@@ -29,7 +29,7 @@ public class VitamateAnalysisJobQueryService implements GetVitamateAnalysisJobUs
                 .orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_ANALYSIS_NOT_FOUND));
     }
 
-    // 내부 작업 조회에 필요한 분석 ID와 attemptId가 유효한지 확인한다.
+    // Validates the identifiers required for worker job lookup.
     private void validateQuery(GetVitamateAnalysisJobQuery query) {
         if (query == null
                 || query.analysisId() == null

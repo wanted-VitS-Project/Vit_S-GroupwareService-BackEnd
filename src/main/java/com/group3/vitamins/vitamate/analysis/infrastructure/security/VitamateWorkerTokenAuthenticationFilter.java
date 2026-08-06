@@ -1,6 +1,6 @@
 package com.group3.vitamins.vitamate.analysis.infrastructure.security;
 
-import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
 
-// Python worker가 보낸 내부 토큰을 검증하는 필터
+// Authenticates internal requests from the Python Vitamate worker.
 public class VitamateWorkerTokenAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String HEADER_NAME = "X-Vitamate-Worker-Token";
@@ -58,7 +58,7 @@ public class VitamateWorkerTokenAuthenticationFilter extends OncePerRequestFilte
         }
     }
 
-    // 토큰 비교 시간이 달라지지 않도록 고정 시간 비교를 사용한다.
+    // Compares worker tokens without short-circuit string comparison.
     private boolean matches(String expectedToken, String actualToken) {
         if (!StringUtils.hasText(expectedToken) || !StringUtils.hasText(actualToken)) {
             return false;
@@ -70,7 +70,7 @@ public class VitamateWorkerTokenAuthenticationFilter extends OncePerRequestFilte
         );
     }
 
-    // 내부 인증 실패 응답을 공통 JSON 형태로 내려준다.
+    // Writes a compact JSON error for internal worker authentication failures.
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
         VitamateErrorCode errorCode = VitamateErrorCode.VITAMATE_WORKER_UNAUTHORIZED;
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

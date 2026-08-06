@@ -6,7 +6,7 @@ import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisSt
 import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisCallbackResult;
 import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisCallbackService;
 import com.group3.vitamins.vitamate.analysis.application.support.VitamateAnalysisStateManager;
-import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,6 +31,7 @@ class VitamateAnalysisCallbackServiceTest {
 
     private static final Long ANALYSIS_ID = 1L;
     private static final String ATTEMPT_ID = "attempt-1";
+    private static final String INVALID_CITATION_TARGET_MESSAGE = "Citation target is outside selected documents.";
 
     private VitamateAnalysisStateManager stateManager;
     private VitamateAnalysisStorePort analysisStore;
@@ -48,7 +49,7 @@ class VitamateAnalysisCallbackServiceTest {
     class CompletedCallback {
 
         @Test
-        @DisplayName("citation 범위가 유효하면 결과와 citation을 저장한다")
+        @DisplayName("saves completed result and citations")
         void savesCompletedResultAndCitations() {
             when(analysisStore.existsAllCitationTargets(eq(ANALYSIS_ID), anyList()))
                     .thenReturn(true);
@@ -64,15 +65,12 @@ class VitamateAnalysisCallbackServiceTest {
         }
 
         @Test
-        @DisplayName("citation이 선택 문서 범위를 벗어나면 FAILED로 마감한다")
+        @DisplayName("marks failed when citation targets are invalid")
         void failsWhenCitationTargetsAreInvalid() {
             when(analysisStore.existsAllCitationTargets(eq(ANALYSIS_ID), anyList()))
                     .thenReturn(false);
-            when(stateManager.failProcessing(
-                    ANALYSIS_ID,
-                    ATTEMPT_ID,
-                    "분석 근거가 선택 문서 범위를 벗어났습니다."
-            )).thenReturn(true);
+            when(stateManager.failProcessing(ANALYSIS_ID, ATTEMPT_ID, INVALID_CITATION_TARGET_MESSAGE))
+                    .thenReturn(true);
 
             VitamateAnalysisCallbackResult result = callbackService.handle(completedCommand());
 
@@ -83,7 +81,7 @@ class VitamateAnalysisCallbackServiceTest {
         }
 
         @Test
-        @DisplayName("현재 worker 시도가 아니면 callback을 무시한다")
+        @DisplayName("ignores stale worker callback")
         void ignoresWhenAttemptDoesNotMatch() {
             when(analysisStore.existsAllCitationTargets(eq(ANALYSIS_ID), anyList()))
                     .thenReturn(true);
@@ -106,7 +104,7 @@ class VitamateAnalysisCallbackServiceTest {
     class FailedCallback {
 
         @Test
-        @DisplayName("실패 사유를 저장하고 FAILED로 마감한다")
+        @DisplayName("saves failed result")
         void savesFailedResult() {
             when(stateManager.failProcessing(ANALYSIS_ID, ATTEMPT_ID, "python error"))
                     .thenReturn(true);
@@ -121,11 +119,11 @@ class VitamateAnalysisCallbackServiceTest {
     }
 
     @Nested
-    @DisplayName("입력값 검증")
+    @DisplayName("input validation")
     class ValidateInput {
 
         @Test
-        @DisplayName("지원하지 않는 상태는 처리하지 않는다")
+        @DisplayName("rejects unsupported status")
         void rejectsUnsupportedStatus() {
             HandleVitamateAnalysisCallbackCommand command = new HandleVitamateAnalysisCallbackCommand(
                     ANALYSIS_ID,
@@ -145,7 +143,7 @@ class VitamateAnalysisCallbackServiceTest {
         }
 
         @Test
-        @DisplayName("citation 순번이 중복되면 처리하지 않는다")
+        @DisplayName("rejects duplicate citation rank")
         void rejectsDuplicateCitationRankOrder() {
             HandleVitamateAnalysisCallbackCommand command = new HandleVitamateAnalysisCallbackCommand(
                     ANALYSIS_ID,
@@ -158,14 +156,14 @@ class VitamateAnalysisCallbackServiceTest {
                                     101L,
                                     1,
                                     BigDecimal.valueOf(0.123456),
-                                    "첫 번째 근거"
+                                    "first citation"
                             ),
                             new HandleVitamateAnalysisCallbackCommand.Citation(
                                     3002L,
                                     101L,
                                     1,
                                     BigDecimal.valueOf(0.234567),
-                                    "두 번째 근거"
+                                    "second citation"
                             )
                     ),
                     null
@@ -180,7 +178,7 @@ class VitamateAnalysisCallbackServiceTest {
         }
     }
 
-    // 성공 callback 테스트에 사용할 command를 만든다.
+    // Build a valid completed callback command used by happy-path tests.
     private HandleVitamateAnalysisCallbackCommand completedCommand() {
         return new HandleVitamateAnalysisCallbackCommand(
                 ANALYSIS_ID,
@@ -192,13 +190,13 @@ class VitamateAnalysisCallbackServiceTest {
                         101L,
                         1,
                         BigDecimal.valueOf(0.123456),
-                        "핵심 요구사항 근거"
+                        "core requirement evidence"
                 )),
                 null
         );
     }
 
-    // 실패 callback 테스트에 사용할 command를 만든다.
+    // Build a valid failed callback command used by failure-state tests.
     private HandleVitamateAnalysisCallbackCommand failedCommand() {
         return new HandleVitamateAnalysisCallbackCommand(
                 ANALYSIS_ID,

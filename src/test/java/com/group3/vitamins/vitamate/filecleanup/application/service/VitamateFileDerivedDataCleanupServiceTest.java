@@ -1,7 +1,7 @@
 package com.group3.vitamins.vitamate.filecleanup.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.filecleanup.application.command.CleanupVitamateFileDerivedDataCommand;
 import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateFileDerivedDataCleanupPort;
 import com.group3.vitamins.vitamate.filecleanup.application.result.CleanupVitamateFileDerivedDataResult;

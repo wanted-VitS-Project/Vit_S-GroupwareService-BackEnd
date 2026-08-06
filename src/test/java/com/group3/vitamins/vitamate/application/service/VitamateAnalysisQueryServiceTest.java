@@ -6,7 +6,7 @@ import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisRe
 import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateAnalysisQuery;
 import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisDetailResult;
 import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisQueryService;
-import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,11 +39,11 @@ class VitamateAnalysisQueryServiceTest {
     }
 
     @Nested
-    @DisplayName("분석 상세 조회")
+    @DisplayName("get analysis")
     class GetAnalysis {
 
         @Test
-        @DisplayName("접근 가능한 분석이면 상태, 문서, 근거를 반환한다")
+        @DisplayName("returns accessible analysis detail")
         void returnsAccessibleAnalysisDetail() {
             VitamateAnalysisReaderPort.VitamateAnalysisDetail detail = analysisDetail();
             when(analysisReader.findAccessibleAnalysis(ANALYSIS_ID, USER_ID))
@@ -53,7 +53,7 @@ class VitamateAnalysisQueryServiceTest {
 
             assertThat(result.analysisId()).isEqualTo(ANALYSIS_ID);
             assertThat(result.blockId()).isEqualTo(10L);
-            assertThat(result.prompt()).isEqualTo("핵심 기술 요구사항과 위험 요소를 정리해줘.");
+            assertThat(result.prompt()).isEqualTo("Summarize core requirements.");
             assertThat(result.analysisStatus()).isEqualTo("COMPLETED");
             assertThat(result.result()).isEqualTo("analysis result");
             assertThat(result.errorMessage()).isNull();
@@ -62,7 +62,7 @@ class VitamateAnalysisQueryServiceTest {
                     .first()
                     .satisfies(document -> {
                         assertThat(document.fileVersionId()).isEqualTo(101L);
-                        assertThat(document.fileName()).isEqualTo("제안요청서.pdf");
+                        assertThat(document.fileName()).isEqualTo("proposal.pdf");
                     });
             assertThat(result.citations())
                     .hasSize(1)
@@ -72,12 +72,12 @@ class VitamateAnalysisQueryServiceTest {
                         assertThat(citation.fileVersionId()).isEqualTo(101L);
                         assertThat(citation.documentChunkId()).isEqualTo(3001L);
                         assertThat(citation.pageNumber()).isEqualTo(4);
-                        assertThat(citation.excerpt()).isEqualTo("통합 관제 플랫폼 구축");
+                        assertThat(citation.excerpt()).isEqualTo("security requirement excerpt");
                     });
         }
 
         @Test
-        @DisplayName("분석이 없거나 접근할 수 없으면 404 예외를 던진다")
+        @DisplayName("throws not found when analysis is not accessible")
         void throwsNotFoundWhenAnalysisIsNotAccessible() {
             when(analysisReader.findAccessibleAnalysis(ANALYSIS_ID, USER_ID))
                     .thenReturn(Optional.empty());
@@ -90,11 +90,11 @@ class VitamateAnalysisQueryServiceTest {
     }
 
     @Nested
-    @DisplayName("입력값 검증")
+    @DisplayName("input validation")
     class ValidateInput {
 
         @Test
-        @DisplayName("분석 ID가 없으면 조회 포트를 호출하지 않는다")
+        @DisplayName("rejects missing analysis id")
         void rejectsMissingAnalysisId() {
             assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(null, USER_ID)))
                     .isInstanceOf(ValidationException.class)
@@ -105,7 +105,7 @@ class VitamateAnalysisQueryServiceTest {
         }
 
         @Test
-        @DisplayName("분석 ID가 0 이하이면 조회 포트를 호출하지 않는다")
+        @DisplayName("rejects non-positive analysis id")
         void rejectsNonPositiveAnalysisId() {
             assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(0L, USER_ID)))
                     .isInstanceOf(ValidationException.class)
@@ -116,7 +116,7 @@ class VitamateAnalysisQueryServiceTest {
         }
 
         @Test
-        @DisplayName("사용자 ID가 비어 있으면 조회 포트를 호출하지 않는다")
+        @DisplayName("rejects blank user id")
         void rejectsBlankUserId() {
             assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(ANALYSIS_ID, " ")))
                     .isInstanceOf(ValidationException.class)
@@ -127,17 +127,17 @@ class VitamateAnalysisQueryServiceTest {
         }
     }
 
-    // 조회 테스트에서 사용할 query 값을 만든다.
+    // Build the query used by analysis lookup tests.
     private GetVitamateAnalysisQuery query() {
         return new GetVitamateAnalysisQuery(ANALYSIS_ID, USER_ID);
     }
 
-    // 조회 성공 케이스에서 사용할 분석 상세 값을 만든다.
+    // Build a representative analysis detail returned by the reader port.
     private VitamateAnalysisReaderPort.VitamateAnalysisDetail analysisDetail() {
         return new VitamateAnalysisReaderPort.VitamateAnalysisDetail(
                 ANALYSIS_ID,
                 10L,
-                "핵심 기술 요구사항과 위험 요소를 정리해줘.",
+                "Summarize core requirements.",
                 "COMPLETED",
                 "analysis result",
                 null,
@@ -145,14 +145,14 @@ class VitamateAnalysisQueryServiceTest {
                 LocalDateTime.of(2026, 8, 4, 14, 8),
                 List.of(new VitamateAnalysisReaderPort.Document(
                         101L,
-                        "제안요청서.pdf"
+                        "proposal.pdf"
                 )),
                 List.of(new VitamateAnalysisReaderPort.Citation(
                         1,
                         101L,
                         3001L,
                         4,
-                        "통합 관제 플랫폼 구축"
+                        "security requirement excerpt"
                 ))
         );
     }

@@ -1,4 +1,4 @@
-package com.group3.vitamins.vitamate.analysis.domain.exception;
+package com.group3.vitamins.vitamate.domain.exception;
 
 import com.group3.vitamins.global.domain.common.error.ErrorCode;
 import lombok.Getter;
