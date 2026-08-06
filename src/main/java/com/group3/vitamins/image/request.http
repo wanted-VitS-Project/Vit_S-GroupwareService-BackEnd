@@ -65,16 +65,17 @@ GET localhost:8080/api/v1/steps/15/blocks
 GET localhost:8080/api/v1/blocks/images/3/items/1?direction=next
 
 ### 이미지 다운로드 (단건) — URL의 1을 imgBlockId로, imgId 쿼리파라미터를 실제 이미지 ID로 교체할 것.
-### 응답 헤더에 Content-Disposition: attachment; filename="원본파일명" 확인, 원본 파일명으로 잘 받아지는지 확인
+### ⚠️ filename=은 항상 "download.jpg" ASCII 폴백이다 — 실제 원본 파일명은 filename*=UTF-8''...에 인코딩되어 있다.
+### 그 값을 디코딩해서 원본 파일명과 일치하는지 확인할 것 (filename=만 보면 항상 download.jpg로 보임, 정상 동작).
 ### 응답 바디를 파일로 저장 — 받은 뒤 실제로 열어서 이미지가 맞는지 확인할 것
 GET localhost:8080/api/v1/blocks/images/3/download?imgId=4
 
 > ./downloaded.jpg
 
 ### 이미지 다운로드 (전체, zip) — imgId 생략. URL의 1을 imgBlockId로 교체할 것.
-### 응답 헤더에 Content-Disposition: attachment; filename="블록명.zip" 확인, 압축 풀어서 이미지 전부 들어있는지 확인
+### ⚠️ 마찬가지로 filename=은 "download.zip" 고정, 실제 블록명은 filename*=UTF-8''...에서 확인할 것.
 ### 응답 바디를 파일로 저장 — 받은 뒤 압축 풀어서 이미지 전부 들어있는지 확인할 것
-GET localhost:8080/api/v1/blocks/images/3/download
+GET localhost:8080/api/v1/blocks/images/4/download
 
 > ./downloaded.zip
 
@@ -121,6 +122,8 @@ Content-Type: application/json
 }
 
 ### 이미지 완전 삭제(하드 삭제) — imgIds를 휴지통 조회에서 확인한 삭제된 imgId들로 교체할 것.
+### ⚠️ 바로 위 복구 API에서 이미 복구시킨 imgId(예: 7)는 이제 활성 상태라 여기 쓰면 404 IMG-006만 확인하게 됨 —
+### 복구와 겹치지 않는, 아직 휴지통에 남아있는 다른 imgId를 써야 정상 삭제 케이스(200)까지 확인할 수 있다(2026-08-06, 코드 리뷰로 발견).
 ### 성공하면 DB 행이 실제로 없어지는지(재조회 시 404) + S3 버킷에서 해당 키 객체가 실제로 지워졌는지 확인할 것.
 ### 아직 삭제 안 된(활성) imgId나 존재하지 않는 imgId 섞으면 404 IMG-006, imgIds 비우거나 중복 넣으면 400 IMG-005 확인
 ### ⚠️ 블록까지 삭제된 이미지(위 "블록 삭제" 단계로 지운 블록 소속 imgId)도 이건 정상적으로 삭제되어야 한다(복구와 다름).
@@ -129,5 +132,5 @@ DELETE localhost:8080/api/v1/blocks/images/items/hard
 Content-Type: application/json
 
 {
-    "imgIds": [7]
+    "imgIds": [8]
 }

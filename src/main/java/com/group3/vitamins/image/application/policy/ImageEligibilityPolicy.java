@@ -107,8 +107,10 @@ public class ImageEligibilityPolicy {
         try {
             stepAccessUseCase.requireEditable(stepId, userId, role);
         } catch (NotFoundException | ForbiddenException e) {
-            log.warn("블록 삭제된 이미지 - 스텝 편집 권한 없음 - imgBlockId={}, stepId={}", imgBlockId, stepId);
-            throw new ForbiddenException(ImageErrorCode.FORBIDDEN);
+            // 응답 코드는 그대로 IMG-002로 감싸지만, 원인(Step 도메인이 실제로 왜 거부했는지 —
+            // 스텝 자체가 없는 건지, 편집 권한이 없는 건지)은 cause로 남겨서 운영 중 추적 가능하게 한다.
+            log.warn("블록 삭제된 이미지 - 스텝 편집 권한 없음 - imgBlockId={}, stepId={}", imgBlockId, stepId, e);
+            throw new ForbiddenException(ImageErrorCode.FORBIDDEN, e);
         }
     }
 

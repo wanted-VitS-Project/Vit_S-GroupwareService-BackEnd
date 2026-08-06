@@ -130,9 +130,13 @@
 **Response**: JSON이 아니라 파일 바이너리를 응답 바디에 직접 담아 내려준다.
 
 ```text
-단건: Content-Type: image/jpeg 등, Content-Disposition: attachment; filename="원본파일명.jpg"
-전체: Content-Type: application/zip, Content-Disposition: attachment; filename="블록명.zip"
+단건: Content-Type: image/jpeg 등,
+      Content-Disposition: attachment; filename="download.jpg"; filename*=UTF-8''원본파일명.jpg
+전체: Content-Type: application/zip,
+      Content-Disposition: attachment; filename="download.zip"; filename*=UTF-8''블록명.zip
 ```
+
+> ⚠️ **`filename=`은 항상 ASCII 폴백(`download.확장자`)이고, 실제 파일명(원본 파일명/블록명, 한글 포함)은 `filename*=UTF-8''...`에만 있다** (RFC 5987/6266) — `filename=`만 읽는 구식 클라이언트는 실제 이름 대신 `download.jpg`/`download.zip`을 보게 된다. HTTP 헤더 값이 ISO-8859-1로 나가서 한글을 `filename=`에 그대로 넣으면 깨지거나 헤더 파싱이 틀어질 수 있어(2026-08-06 발견) 이렇게 분리했다 — 최신 브라우저는 `filename*=`을 우선 사용해서 실사용엔 문제없다.
 
 **Status Code**
 
@@ -154,7 +158,7 @@
 > - 404 원본 `IMG-014`("다운로드할 이미지가 없습니다")는 새 상황(전체 다운로드인데 활성 이미지 0장)이라 다음 순번 `IMG-008`로 신규 부여.
 > - `IMG-016`(401)·`IMG-017`(500)은 다른 API와 동일 이유로 공통 코드로 대체.
 >
-> **구현 메모**: 저장소(S3)에서 실제 파일 바이트를 읽어와야 해서 `ImageStoragePort`에 `download`/`contentTypeOf` 메서드를 추가했다(기존엔 업로드·presign URL 발급만 있었음). 블록 전체 다운로드는 원본 파일명이 겹치는 경우(같은 이름으로 여러 번 업로드) zip 엔트리 이름 충돌을 막기 위해 `{imgId}_{원본파일명}`으로 구분한다. zip은 이미지 개수만큼 S3에서 순차로 읽어 메모리에서 조립한다 — 이미지 개수가 아주 많아지면(수백 장) 메모리·응답 시간 부담이 커질 수 있어, 필요해지면 스트리밍 방식으로 바꾸는 걸 검토할 것.
+> **구현 메모**: 저장소(S3)에서 실제 파일 바이트를 읽어와야 해서 `ImageStoragePort`에 `download`/`contentTypeOf` 메서드를 추가했다(기존엔 업로드·presign URL 발급만 있었음). 블록 전체 다운로드는 원본 파일명이 겹치는 경우(같은 이름으로 여러 번 업로드) zip 엔트리 이름 충돌을 막기 위해 OS 탐색기 방식과 동일하게 `원본파일명-1.jpg`, `원본파일명-2.jpg`, ...로 구분한다(2026-08-06, 처음엔 `{imgId}_{원본파일명}`이었으나 imgId가 사용자에게 무의미해서 변경 — `-1`로도 겹치면 `-2`로 계속 재시도). zip은 이미지 개수만큼 S3에서 순차로 읽어 메모리에서 조립한다 — 이미지 개수가 아주 많아지면(수백 장) 메모리·응답 시간 부담이 커질 수 있어, 필요해지면 스트리밍 방식으로 바꾸는 걸 검토할 것.
 
 ---
 

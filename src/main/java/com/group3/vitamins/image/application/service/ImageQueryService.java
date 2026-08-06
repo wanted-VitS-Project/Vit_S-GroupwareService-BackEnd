@@ -169,15 +169,38 @@ public class ImageQueryService implements ImageQueryUseCase {
         }
     }
 
-    /** 같은 이름으로 여러 번 업로드된 경우 zip 안에서 항목이 서로 덮어써지는 걸 막는다. */
+    /**
+     * 같은 이름으로 여러 번 업로드된 경우 zip 안에서 항목이 서로 덮어써지는 걸 막는다. imgId 같은 내부
+     * ID를 그대로 노출하면 사용자가 봤을 때 의미를 알 수 없어서, OS 탐색기가 중복 파일에 붙이는 것과
+     * 같은 방식(원본파일명-1.jpg, 원본파일명-2.jpg, ...)으로 구분한다. 우연히 그 이름도 이미 쓰여 있으면
+     * (예: 실제로 "photo-1.jpg"라는 파일명이 따로 존재) 번호를 계속 올려가며 재시도한다 — 그러지 않으면
+     * {@code ZipOutputStream}이 중복 엔트리에서 예외를 던져 전체 다운로드가 500으로 실패한다
+     * (2026-08-06, 코드 리뷰로 발견).
+     */
     private String uniqueEntryName(ImageItem item, Set<String> usedNames) {
         String name = sanitizeEntryName(item.getOriginalName());
         if (usedNames.add(name)) {
             return name;
         }
-        String disambiguated = item.getImgId() + "_" + name;
-        usedNames.add(disambiguated);
-        return disambiguated;
+        String base = stripExtension(name);
+        String extension = extensionOf(name);
+        int counter = 1;
+        String candidate;
+        do {
+            candidate = base + "-" + counter + extension;
+            counter++;
+        } while (!usedNames.add(candidate));
+        return candidate;
+    }
+
+    private String stripExtension(String name) {
+        int dotIndex = name.lastIndexOf('.');
+        return dotIndex > 0 ? name.substring(0, dotIndex) : name;
+    }
+
+    private String extensionOf(String name) {
+        int dotIndex = name.lastIndexOf('.');
+        return dotIndex > 0 ? name.substring(dotIndex) : "";
     }
 
     /**

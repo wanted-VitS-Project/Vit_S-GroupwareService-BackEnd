@@ -95,6 +95,7 @@ public class ImageCommandService implements ImageCommandUseCase {
         int nextOrderIndex = imageRepository.findMaxOrderIndex(command.imgBlockId()) + 1;
 
         List<ImageItem> draftItems = new ArrayList<>(files.size());
+        List<String> uploadedStorageKeys = new ArrayList<>(files.size());
         for (int i = 0; i < files.size(); i++) {
             MultipartFile file = files.get(i);
             String extension = extensions.get(i);
@@ -102,6 +103,7 @@ public class ImageCommandService implements ImageCommandUseCase {
                     ? captions.get(i) : "";
 
             UploadedImage uploaded = imageStoragePort.upload(command.imgBlockId(), file, extension);
+            uploadedStorageKeys.add(uploaded.storageKey());
 
             draftItems.add(ImageItem.newItem(
                     command.imgBlockId(),
@@ -113,6 +115,25 @@ public class ImageCommandService implements ImageCommandUseCase {
                     nextOrderIndex + i
             ));
         }
+
+        // S3 업로드는 DB 트랜잭션을 못 타서, 이후 단계(추가 업로드·DB 저장·활동 로그 발행 등)가 실패해
+        // 트랜잭션이 롤백돼도 이미 올라간 S3 객체는 자동으로 안 지워진다 — 고아 객체로 남는다(재시도할
+        // 때마다 쌓임). 트랜잭션이 커밋으로 끝나지 않으면 지금까지 올린 걸 보상 삭제한다(2026-08-06,
+        // 코드 리뷰로 발견).
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    for (String storageKey : uploadedStorageKeys) {
+                        try {
+                            imageStoragePort.delete(storageKey);
+                        } catch (RuntimeException e) {
+                            log.error("이미지 생성 실패 후 업로드된 S3 객체 정리 실패 - storageKey={}", storageKey, e);
+                        }
+                    }
+                }
+            }
+        });
 
         List<ImageItem> savedItems = imageRepository.createAll(draftItems);
 

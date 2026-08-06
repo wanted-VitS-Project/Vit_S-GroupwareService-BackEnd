@@ -58,6 +58,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 이미지 항목 API.
@@ -217,7 +218,10 @@ public class ImageController {
             @RequestBody ImageItemUpdateRequest request,
             Authentication authentication
     ) {
-        if (request.images() == null) {
+        // 배열 자체가 없거나(null), 배열 안에 항목 하나가 null로 온 경우 — 후자는 이 뒤 map()에서
+        // entry.imgId() 호출 시 NPE(500)로 새는데, 클라이언트가 보낼 수 있는 형식 오류라 500이 아니라
+        // 문서화된 IMG-005로 거부해야 한다(2026-08-06, 코드 리뷰로 발견).
+        if (request.images() == null || request.images().stream().anyMatch(Objects::isNull)) {
             throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
         }
         List<UpdateImageItemsCommand.Entry> entries = request.images().stream()
