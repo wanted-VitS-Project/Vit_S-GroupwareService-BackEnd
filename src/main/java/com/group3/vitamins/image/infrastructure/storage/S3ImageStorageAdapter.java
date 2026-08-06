@@ -55,15 +55,29 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         byte[] body = prepareBody(file, extension, original);
         String key = "images/" + imgBlockId + "/" + UUID.randomUUID() + "." + extension;
 
-        s3Client.putObject(
-                PutObjectRequest.builder()
-                        .bucket(bucket)
-                        .key(key)
-                        .contentType(contentTypeOf(extension))
-                        .contentLength((long) body.length)
-                        .build(),
-                RequestBody.fromInputStream(new ByteArrayInputStream(body), body.length)
-        );
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(key)
+                            .contentType(contentTypeOf(extension))
+                            .contentLength((long) body.length)
+                            .build(),
+                    RequestBody.fromInputStream(new ByteArrayInputStream(body), body.length)
+            );
+        } catch (RuntimeException e) {
+            // putObject가 예외를 던지면 이 메서드는 UploadedImage를 못 돌려주고, 그러면 호출자
+            // (ImageCommandService)가 이 key를 보상 삭제 대상 목록에 담을 기회 자체가 없다 — 그런데
+            // S3가 실제로는 객체를 만들었는데 응답만 유실된 경우(네트워크 타임아웃 등)라면 이 key로
+            // 고아 객체가 남을 수 있다. 여기서 한 번 더 최선 노력으로 지워서 그 경우를 방어한다
+            // (2026-08-06, 코드 리뷰로 발견). 삭제 자체가 실패해도 원래 예외를 그대로 던진다.
+            try {
+                s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+            } catch (RuntimeException deleteFailure) {
+                log.error("이미지 업로드 실패 후 정리 삭제도 실패 - key={}", key, deleteFailure);
+            }
+            throw e;
+        }
 
         log.info("이미지 업로드 완료 - imgBlockId={}, key={}, size={}", imgBlockId, key, body.length);
 
