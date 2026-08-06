@@ -19,6 +19,9 @@ public class FileIndexEntity {
     @Column(name = "file_version_id")
     private Long fileVersionId;
 
+    @Column(name = "index_attempt_id", length = 36)
+    private String indexAttemptId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "index_status", nullable = false, length = 20)
     private FileIndexStatus indexStatus;
@@ -47,7 +50,8 @@ public class FileIndexEntity {
     }
 
     // Python callback 상태에 맞춰 인덱싱 상태를 갱신한다.
-    public void changeStatus(FileIndexStatus status, String errorMessage, LocalDateTime now) {
+    public void changeStatus(String indexAttemptId, FileIndexStatus status, String errorMessage, LocalDateTime now) {
+        this.indexAttemptId = indexAttemptId;
         this.indexStatus = status;
         this.updatedAt = now;
         this.deletedAt = null;

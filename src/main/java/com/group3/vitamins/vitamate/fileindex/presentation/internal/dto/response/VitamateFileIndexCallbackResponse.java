@@ -12,6 +12,9 @@ public record VitamateFileIndexCallbackResponse(
         @Schema(description = "파일 버전 ID", example = "101")
         Long fileVersionId,
 
+        @Schema(description = "처리 대상 파일 인덱싱 시도 ID", example = "550e8400-e29b-41d4-a716-446655440000")
+        String indexAttemptId,
+
         @Schema(description = "저장된 인덱싱 상태", example = "COMPLETED")
         String indexStatus,
 
@@ -24,6 +27,7 @@ public record VitamateFileIndexCallbackResponse(
         return new VitamateFileIndexCallbackResponse(
                 result.accepted(),
                 result.fileVersionId(),
+                result.indexAttemptId(),
                 result.indexStatus(),
                 result.reason()
         );
