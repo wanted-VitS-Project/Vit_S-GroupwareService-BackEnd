@@ -6,6 +6,8 @@ import com.group3.vitamins.file.infrastructure.persistence.SpringDataFileVersion
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.DocumentChunkJpaRepository;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.ChunkEmbedding;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -74,7 +76,7 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
     }
 
     @Override
-    public int replaceChunks(
+    public List<SavedDocumentChunk> replaceChunks(
             Long fileVersionId,
             List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks
     ) {
@@ -98,6 +100,44 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
                         now
                 ));
 
-        return chunks.size();
+        return documentChunkRepository.findActiveByFileVersionIdAndChunkIndexIn(fileVersionId, chunkIndexes)
+                .stream()
+                .map(chunk -> new SavedDocumentChunk(
+                        chunk.getId(),
+                        chunk.getChunkIndex(),
+                        chunk.getEmbeddingStatus()
+                ))
+                .toList();
+    }
+
+    @Override
+    public int updateChunkEmbeddings(
+            Long fileVersionId,
+            String embeddingModel,
+            List<ChunkEmbedding> chunks
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Long> documentChunkIds = chunks.stream()
+                .map(ChunkEmbedding::documentChunkId)
+                .toList();
+
+        long activeChunkCount = documentChunkRepository.countActiveByFileVersionIdAndIdIn(
+                fileVersionId,
+                documentChunkIds
+        );
+
+        if (activeChunkCount != documentChunkIds.size()) {
+            return 0;
+        }
+
+        return chunks.stream()
+                .mapToInt(chunk -> documentChunkRepository.updateChunkEmbedding(
+                        fileVersionId,
+                        chunk.documentChunkId(),
+                        chunk.chromaId(),
+                        embeddingModel,
+                        now
+                ))
+                .sum();
     }
 }

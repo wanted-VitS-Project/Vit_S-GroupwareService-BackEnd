@@ -6,7 +6,9 @@ import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
 import com.group3.vitamins.vitamate.fileindex.application.result.SaveVitamateDocumentChunksResult;
+import com.group3.vitamins.vitamate.fileindex.application.result.SaveVitamateDocumentChunksResult.SavedChunkResult;
 import com.group3.vitamins.vitamate.fileindex.application.usecase.SaveVitamateDocumentChunksUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,11 +38,18 @@ public class VitamateDocumentChunkSaveService implements SaveVitamateDocumentChu
             throw new NotFoundException(VitamateErrorCode.VITAMATE_FILE_VERSION_NOT_FOUND);
         }
 
-        int savedChunkCount = fileIndexDataPort.replaceChunks(command.fileVersionId(), command.chunks());
+        List<SavedDocumentChunk> savedChunks = fileIndexDataPort.replaceChunks(command.fileVersionId(), command.chunks());
 
         return new SaveVitamateDocumentChunksResult(
                 command.fileVersionId(),
-                savedChunkCount
+                savedChunks.size(),
+                savedChunks.stream()
+                        .map(chunk -> new SavedChunkResult(
+                                chunk.documentChunkId(),
+                                chunk.chunkIndex(),
+                                chunk.embeddingStatus()
+                        ))
+                        .toList()
         );
     }
 

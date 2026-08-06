@@ -5,6 +5,8 @@ import com.group3.vitamins.file.infrastructure.persistence.SpringDataFileReposit
 import com.group3.vitamins.file.infrastructure.persistence.SpringDataFileVersionRepository;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.DocumentChunkJpaRepository;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.ChunkEmbedding;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.adapter.JpaVitamateFileIndexDataAdapter;
 import jakarta.persistence.EntityManager;
@@ -89,7 +91,10 @@ class JpaVitamateFileIndexDataAdapterTest {
         @DisplayName("returns file metadata and presigned download url")
         void returnsFileMetadataAndDownloadUrl() {
             when(fileStoragePort.presignDownload("local/vitamate-test/rfp.pdf", "proposal.pdf"))
-                    .thenReturn(new FileStoragePort.PresignedUrl("https://example.com/download", Instant.parse("2026-08-06T09:30:00Z")));
+                    .thenReturn(new FileStoragePort.PresignedUrl(
+                            "https://example.com/download",
+                            Instant.parse("2026-08-06T09:30:00Z")
+                    ));
 
             Optional<VitamateFileIndexSourceResult> result = adapter.findIndexSource(FILE_VERSION_ID);
 
@@ -147,14 +152,20 @@ class JpaVitamateFileIndexDataAdapterTest {
         }
 
         @Test
-        @DisplayName("upserts existing chunk without changing document_chunk_id")
+        @DisplayName("upserts existing chunk and returns document_chunk_id")
         void upsertsExistingChunkWithoutChangingId() {
             Long existingChunkId = insertDocumentChunk(FILE_VERSION_ID, 0, "기존 청크", null);
 
-            int savedCount = adapter.replaceChunks(FILE_VERSION_ID, List.of(chunk(0, "수정된 청크")));
+            List<SavedDocumentChunk> savedChunks = adapter.replaceChunks(
+                    FILE_VERSION_ID,
+                    List.of(chunk(0, "수정된 청크"))
+            );
 
             Long currentChunkId = findChunkId(FILE_VERSION_ID, 0);
-            assertThat(savedCount).isEqualTo(1);
+            assertThat(savedChunks).hasSize(1);
+            assertThat(savedChunks.get(0).documentChunkId()).isEqualTo(existingChunkId);
+            assertThat(savedChunks.get(0).chunkIndex()).isEqualTo(0);
+            assertThat(savedChunks.get(0).embeddingStatus()).isEqualTo("PENDING");
             assertThat(currentChunkId).isEqualTo(existingChunkId);
             assertThat(findChunkExcerpt(FILE_VERSION_ID, 0)).isEqualTo("수정된 청크");
             assertThat(findChunkDeletedAt(FILE_VERSION_ID, 0)).isNull();
@@ -166,15 +177,56 @@ class JpaVitamateFileIndexDataAdapterTest {
             insertDocumentChunk(FILE_VERSION_ID, 0, "남길 청크", null);
             insertDocumentChunk(FILE_VERSION_ID, 1, "빠진 청크", null);
 
-            int savedCount = adapter.replaceChunks(FILE_VERSION_ID, List.of(chunk(0, "남길 청크 수정")));
+            List<SavedDocumentChunk> savedChunks = adapter.replaceChunks(
+                    FILE_VERSION_ID,
+                    List.of(chunk(0, "남길 청크 수정"))
+            );
 
-            assertThat(savedCount).isEqualTo(1);
+            assertThat(savedChunks).hasSize(1);
             assertThat(findChunkDeletedAt(FILE_VERSION_ID, 0)).isNull();
             assertThat(findChunkDeletedAt(FILE_VERSION_ID, 1)).isNotNull();
         }
     }
 
-    // file 테이블 부모 데이터를 준비한다.
+    @Nested
+    @DisplayName("document chunk embedding update")
+    class UpdateChunkEmbeddings {
+
+        @Test
+        @DisplayName("updates chroma id and embedding status for active chunks")
+        void updatesChunkEmbeddings() {
+            Long chunkId = insertDocumentChunk(FILE_VERSION_ID, 0, "인덱싱 대상 청크", null);
+
+            int updatedCount = adapter.updateChunkEmbeddings(
+                    FILE_VERSION_ID,
+                    "gemini-embedding-001",
+                    List.of(new ChunkEmbedding(chunkId, "vitamate:document-chunk:" + chunkId))
+            );
+
+            assertThat(updatedCount).isEqualTo(1);
+            assertThat(findChunkChromaId(chunkId)).isEqualTo("vitamate:document-chunk:" + chunkId);
+            assertThat(findChunkEmbeddingModel(chunkId)).isEqualTo("gemini-embedding-001");
+            assertThat(findChunkEmbeddingStatus(chunkId)).isEqualTo("COMPLETED");
+        }
+
+        @Test
+        @DisplayName("returns zero when chunk does not belong to requested file version")
+        void returnsZeroWhenChunkDoesNotBelongToFileVersion() {
+            insertFileVersion(900002L, FILE_ID, "COMPLETED", null);
+            Long otherChunkId = insertDocumentChunk(900002L, 0, "다른 파일 버전 청크", null);
+
+            int updatedCount = adapter.updateChunkEmbeddings(
+                    FILE_VERSION_ID,
+                    "gemini-embedding-001",
+                    List.of(new ChunkEmbedding(otherChunkId, "vitamate:document-chunk:" + otherChunkId))
+            );
+
+            assertThat(updatedCount).isZero();
+            assertThat(findChunkEmbeddingStatus(otherChunkId)).isEqualTo("PENDING");
+        }
+    }
+
+    // file 테이블의 부모 데이터를 준비합니다.
     private void insertFile(Long fileId, Long projectId, LocalDateTime deletedAt) {
         jdbcTemplate.update("""
                 INSERT INTO `file` (
@@ -188,7 +240,7 @@ class JpaVitamateFileIndexDataAdapterTest {
         );
     }
 
-    // file_version 테이블 부모 데이터를 준비한다.
+    // file_version 테이블의 부모 데이터를 준비합니다.
     private void insertFileVersion(Long fileVersionId, Long fileId, String uploadStatus, LocalDateTime deletedAt) {
         jdbcTemplate.update("""
                 INSERT INTO file_version (
@@ -213,7 +265,7 @@ class JpaVitamateFileIndexDataAdapterTest {
         );
     }
 
-    // 기존 document_chunk 행을 직접 만든다.
+    // 기존 document_chunk 행을 직접 만듭니다.
     private Long insertDocumentChunk(Long fileVersionId, int chunkIndex, String excerpt, LocalDateTime deletedAt) {
         jdbcTemplate.update("""
                 INSERT INTO document_chunk (
@@ -223,7 +275,7 @@ class JpaVitamateFileIndexDataAdapterTest {
                 )
                 VALUES (?, ?, 1, '테스트 섹션',
                         0, 80, 30, ?,
-                        'COMPLETED', ?, ?, ?)
+                        'PENDING', ?, ?, ?)
                 """,
                 fileVersionId,
                 chunkIndex,
@@ -233,15 +285,10 @@ class JpaVitamateFileIndexDataAdapterTest {
                 deletedAt
         );
 
-        return jdbcTemplate.queryForObject(
-                "SELECT document_chunk_id FROM document_chunk WHERE file_version_id = ? AND chunk_index = ?",
-                Long.class,
-                fileVersionId,
-                chunkIndex
-        );
+        return findChunkId(fileVersionId, chunkIndex);
     }
 
-    // 저장 요청용 청크 command를 만든다.
+    // 저장 요청용 chunk command를 만듭니다.
     private ChunkCommand chunk(int chunkIndex, String excerpt) {
         return new ChunkCommand(
                 chunkIndex,
@@ -278,6 +325,30 @@ class JpaVitamateFileIndexDataAdapterTest {
                 LocalDateTime.class,
                 fileVersionId,
                 chunkIndex
+        );
+    }
+
+    private String findChunkChromaId(Long documentChunkId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT chroma_id FROM document_chunk WHERE document_chunk_id = ?",
+                String.class,
+                documentChunkId
+        );
+    }
+
+    private String findChunkEmbeddingModel(Long documentChunkId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT embedding_model FROM document_chunk WHERE document_chunk_id = ?",
+                String.class,
+                documentChunkId
+        );
+    }
+
+    private String findChunkEmbeddingStatus(Long documentChunkId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT embedding_status FROM document_chunk WHERE document_chunk_id = ?",
+                String.class,
+                documentChunkId
         );
     }
 }

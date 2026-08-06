@@ -13,5 +13,26 @@ public interface VitamateFileIndexDataPort {
 
     boolean existsIndexableFileVersionForUpdate(Long fileVersionId);
 
-    int replaceChunks(Long fileVersionId, List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks);
+    List<SavedDocumentChunk> replaceChunks(Long fileVersionId, List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks);
+
+    int updateChunkEmbeddings(
+            Long fileVersionId,
+            String embeddingModel,
+            List<ChunkEmbedding> chunks
+    );
+
+    // Spring DB에 저장된 document_chunk의 최소 식별 정보입니다.
+    record SavedDocumentChunk(
+            Long documentChunkId,
+            Integer chunkIndex,
+            String embeddingStatus
+    ) {
+    }
+
+    // ChromaDB 저장 후 Spring DB에 반영할 chunk 임베딩 식별 정보입니다.
+    record ChunkEmbedding(
+            Long documentChunkId,
+            String chromaId
+    ) {
+    }
 }

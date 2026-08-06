@@ -15,6 +15,33 @@ public interface DocumentChunkJpaRepository extends JpaRepository<DocumentChunkE
     // 청크 ID와 파일 버전 ID가 서로 연결되어 있고 삭제되지 않았는지 확인한다.
     boolean existsByIdAndFileVersionIdAndDeletedAtIsNull(Long id, Long fileVersionId);
 
+    // Python worker가 ChromaDB에 저장할 수 있도록 방금 저장된 chunk ID 목록을 조회합니다.
+    @Query("""
+        SELECT c
+          FROM DocumentChunkEntity c
+         WHERE c.fileVersionId = :fileVersionId
+           AND c.chunkIndex IN :chunkIndexes
+           AND c.deletedAt IS NULL
+         ORDER BY c.chunkIndex ASC
+        """)
+    List<DocumentChunkEntity> findActiveByFileVersionIdAndChunkIndexIn(
+            @Param("fileVersionId") Long fileVersionId,
+            @Param("chunkIndexes") List<Integer> chunkIndexes
+    );
+
+    // 임베딩 결과 요청의 모든 chunk가 같은 fileVersionId에 속하는지 확인합니다.
+    @Query("""
+        SELECT COUNT(c)
+          FROM DocumentChunkEntity c
+         WHERE c.fileVersionId = :fileVersionId
+           AND c.id IN :documentChunkIds
+           AND c.deletedAt IS NULL
+        """)
+    long countActiveByFileVersionIdAndIdIn(
+            @Param("fileVersionId") Long fileVersionId,
+            @Param("documentChunkIds") List<Long> documentChunkIds
+    );
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE DocumentChunkEntity c
@@ -86,6 +113,25 @@ public interface DocumentChunkJpaRepository extends JpaRepository<DocumentChunkE
             @Param("endOffset") Integer endOffset,
             @Param("tokenCount") Integer tokenCount,
             @Param("excerpt") String excerpt,
+            @Param("now") LocalDateTime now
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE DocumentChunkEntity c
+           SET c.chromaId = :chromaId,
+               c.embeddingModel = :embeddingModel,
+               c.embeddingStatus = 'COMPLETED',
+               c.updatedAt = :now
+         WHERE c.fileVersionId = :fileVersionId
+           AND c.id = :documentChunkId
+           AND c.deletedAt IS NULL
+        """)
+    int updateChunkEmbedding(
+            @Param("fileVersionId") Long fileVersionId,
+            @Param("documentChunkId") Long documentChunkId,
+            @Param("chromaId") String chromaId,
+            @Param("embeddingModel") String embeddingModel,
             @Param("now") LocalDateTime now
     );
 }

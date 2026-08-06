@@ -6,6 +6,7 @@ import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
 import com.group3.vitamins.vitamate.fileindex.application.result.SaveVitamateDocumentChunksResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.stream.IntStream;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
@@ -43,16 +45,21 @@ class VitamateDocumentChunkSaveServiceTest {
     class SaveChunks {
 
         @Test
-        @DisplayName("saves extracted chunks after file version check")
+        @DisplayName("saves extracted chunks and returns saved chunk ids")
         void savesExtractedChunks() {
             SaveVitamateDocumentChunksCommand command = command(List.of(chunk(0, "첫 번째 청크")));
             when(fileIndexDataPort.existsIndexableFileVersionForUpdate(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexDataPort.replaceChunks(eq(FILE_VERSION_ID), eq(command.chunks()))).thenReturn(1);
+            when(fileIndexDataPort.replaceChunks(eq(FILE_VERSION_ID), eq(command.chunks())))
+                    .thenReturn(List.of(new SavedDocumentChunk(100L, 0, "PENDING")));
 
             SaveVitamateDocumentChunksResult result = saveService.handle(command);
 
             assertThat(result.fileVersionId()).isEqualTo(FILE_VERSION_ID);
             assertThat(result.savedChunkCount()).isEqualTo(1);
+            assertThat(result.savedChunks()).hasSize(1);
+            assertThat(result.savedChunks().get(0).documentChunkId()).isEqualTo(100L);
+            assertThat(result.savedChunks().get(0).chunkIndex()).isEqualTo(0);
+            assertThat(result.savedChunks().get(0).embeddingStatus()).isEqualTo("PENDING");
             verify(fileIndexDataPort).existsIndexableFileVersionForUpdate(FILE_VERSION_ID);
             verify(fileIndexDataPort).replaceChunks(FILE_VERSION_ID, command.chunks());
         }
@@ -149,12 +156,12 @@ class VitamateDocumentChunkSaveServiceTest {
         }
     }
 
-    // 테스트용 청크 저장 command를 만든다.
+    // 테스트용 저장 command를 한 곳에서 만듭니다.
     private SaveVitamateDocumentChunksCommand command(List<ChunkCommand> chunks) {
         return new SaveVitamateDocumentChunksCommand(FILE_VERSION_ID, chunks);
     }
 
-    // document_chunk 한 행에 해당하는 테스트 청크를 만든다.
+    // document_chunk 한 행에 해당하는 테스트 chunk를 만듭니다.
     private ChunkCommand chunk(Integer chunkIndex, String excerpt) {
         return new ChunkCommand(
                 chunkIndex,
@@ -166,5 +173,4 @@ class VitamateDocumentChunkSaveServiceTest {
                 excerpt
         );
     }
-
 }
