@@ -2,6 +2,7 @@ package com.group3.vitamins.issue.infrastructure.persistence;
 
 import com.group3.vitamins.issue.domain.model.Issue;
 import com.group3.vitamins.issue.domain.repository.IssueRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -15,11 +16,13 @@ public class IssueRepositoryAdapter implements IssueRepository {
     private final SpringDataIssueRepository springDataIssueRepository;
     private final SpringDataIssueAssignRepository springDataIssueAssignRepository;
     private final SpringDataIssueBlockRepository springDataIssueBlockRepository;
+    private final EntityManager entityManager;
 
     @Override
     public Issue save(Issue issue) {
-        return IssueMapper.toDomain(
-                springDataIssueRepository.save(IssueMapper.toEntity(issue)));
+        IssueEntity saved = springDataIssueRepository.saveAndFlush(IssueMapper.toEntity(issue));
+        entityManager.refresh(saved);
+        return IssueMapper.toDomain(saved);
     }
 
     @Override
