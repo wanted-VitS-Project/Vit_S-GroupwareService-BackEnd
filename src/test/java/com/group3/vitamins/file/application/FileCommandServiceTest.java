@@ -73,7 +73,7 @@ class FileCommandServiceTest {
     /** 문서 → 블록 → 스텝 편집 권한(EDITOR) 경로 스텁. */
     private void stubEditable() {
         when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
-        when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+        when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
         when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
                 .thenReturn(new StepAccessUseCase.StepAccessView(STEP_ID, PROJECT_ID, MemberPermission.EDITOR));
     }
@@ -142,7 +142,7 @@ class FileCommandServiceTest {
         void notEditable() {
             when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
             when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
                     .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
 
@@ -213,7 +213,7 @@ class FileCommandServiceTest {
         void notEditable() {
             when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
             when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
                     .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
 

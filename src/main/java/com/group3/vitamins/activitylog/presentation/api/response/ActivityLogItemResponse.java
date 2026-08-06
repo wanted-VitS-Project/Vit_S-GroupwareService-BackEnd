@@ -10,7 +10,7 @@ public record ActivityLogItemResponse(
         @Schema(description = "활동 기록 ID", example = "501")
         Long activityLogId,
 
-        @Schema(description = "CREATE, MODIFY, DELETE", example = "MODIFY")
+        @Schema(description = "CREATE, MODIFY, DELETE, RESTORE, PURGE. RESTORE·PURGE는 파일 휴지통 복원·영구삭제 전용", example = "MODIFY")
         String action,
 
         @Schema(description = "BLOCK 또는 RESOURCE", example = "RESOURCE")

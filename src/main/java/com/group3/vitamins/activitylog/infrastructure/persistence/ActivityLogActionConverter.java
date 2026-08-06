@@ -16,6 +16,8 @@ public class ActivityLogActionConverter implements AttributeConverter<ActivityLo
             case CREATE -> "create";
             case MODIFY -> "modify";
             case DELETE -> "delete";
+            case RESTORE -> "restore";
+            case PURGE -> "purge";
         };
     }
 
@@ -28,6 +30,8 @@ public class ActivityLogActionConverter implements AttributeConverter<ActivityLo
             case "create" -> ActivityLogAction.CREATE;
             case "modify" -> ActivityLogAction.MODIFY;
             case "delete" -> ActivityLogAction.DELETE;
+            case "restore" -> ActivityLogAction.RESTORE;
+            case "purge" -> ActivityLogAction.PURGE;
             default -> throw new IllegalArgumentException("Unknown activity log action: " + dbData);
         };
     }

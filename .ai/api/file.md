@@ -1,6 +1,6 @@
 # 📎 File · FileVersion API
 
-**최종 업데이트**: 2026-08-04 · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
+**최종 업데이트**: 2026-08-06 (§1 업로드 대상에 결재(APPROVAL) 블록 추가 · §3 목록은 FILE 전용 명시) · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
@@ -20,6 +20,7 @@
 | 영구삭제(§7) 차단 범위 | 결재(`approval_document`) **+ AI 분석(`vitamate_analysis_document`)** 참조까지. `file_index`·`document_chunk` 는 파생이라 함께 정리 |
 | `file_index.index_status` | **Spring DB 정본 · Python callback 으로 갱신** · 값 `PENDING·PROCESSING·COMPLETED·FAILED` |
 | §11 버전목록 스코프 | **프로젝트 전체** — 경로 `GET /projects/{projectId}/file-versions` (블록 단위 폐기) |
+| 업로드 대상 블록(§1) | **`FILE` + `APPROVAL`** — 결재 블록 드롭존도 공용 파일 API 재사용. `block_file`+`approval_document` **이중 링크**. **단 §3 목록은 `FILE` 전용**(결재 파일은 결재 상세에서 조회) |
 
 **블록 생명주기 분리 (A안 확정 · `../docs/global/BLOCK.md` §4-4 근거)** — 블록 삭제는 파일을 건드리지 않는다. 파일은 `file.project_id` 소속으로 살아남고, 조회는 `block.deleted_at IS NULL` 로 거른다. 블록 삭제 후 남은 파일 접근은 §11(프로젝트 전체 보기)로 회수한다. `block_file` 은 hard delete(파일 영구삭제 시 `ON DELETE CASCADE`).
 
@@ -147,12 +148,13 @@
 ⛔ **파일 자체는 이 API 로 올리지 않는다.** 응답의 `uploadUrl` 로 클라이언트가 저장소에 직접 PUT 한 뒤 완료 통보를 호출한다.
 ⛔ **동명 문서가 있으면 `409` 로 거부한다.** 사용자가 확인하면 `allowDuplicateName: true` 로 다시 호출한다 (`FILE-009`).
 ⭐ **`uploadUrl` 만료 = 10분** (2026-08-06 확정).
+⭐ **업로드 대상 블록 = `FILE` 또는 `APPROVAL`** (2026-08-06 확정). 결재 블록의 드롭존에 올린 파일도 이 API 로 받는다 — 결재 도메인은 자체 업로드 API 를 두지 않고 공용 파일 API 를 재사용한다. 결재 블록에 올리면 파일이 `block_file` 로 그 블록에 매달리고(FILE 블록과 동일), 이후 프론트가 결재 첨부 API(`POST /approvals/{id}/revisions/{revId}/documents`)로 `fileVersionId` 를 넘겨 `approval_document` 링크를 추가한다 → **`block_file` + `approval_document` 이중 링크**(팀 합의). 권한·삭제잠금(§5)·버전 조회는 FILE 블록과 완전히 같은 `블록→스텝` 경로를 탄다. 그 외 타입 블록은 `FILE_BLOCK_NOT_FOUND`.
 
 **Request Body**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `blockId` | Long | Y | 파일을 붙일 블록 |
+| `blockId` | Long | Y | 파일을 붙일 블록 (`FILE` 또는 `APPROVAL` 타입) |
 | `originalFileName` | String | Y | 원본 파일명 (확장자 포함) |
 | `sizeBytes` | Long | Y | 50MB 이하 |
 | `mimeType` | String | N | MIME 타입 |
@@ -171,7 +173,7 @@
 | 400 | `FILE_EXTENSION_BLOCKED` | 실행 파일 확장자 (`FILE-008`) |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `FILE_EDIT_PERMISSION_REQUIRED` | 스텝 편집 권한 없음 |
-| 404 | `FILE_BLOCK_NOT_FOUND` | 블록이 없거나 **soft delete 된 상태** (`block.deleted_at IS NOT NULL`) |
+| 404 | `FILE_BLOCK_NOT_FOUND` | 블록이 없거나 **soft delete** 됨 (`block.deleted_at IS NOT NULL`) 또는 **`FILE`·`APPROVAL` 이 아닌 타입** |
 | 404 | `FILE_NOT_FOUND` | `fileId` 로 지정한 문서 없음 |
 | 409 | `FILE_NAME_DUPLICATED` | 동명 문서 존재. `allowDuplicateName: true` 로 재요청 |
 
@@ -219,6 +221,7 @@
 ⛔ **완료된 버전이 하나도 없는 문서는 목록에 없다.** 업로드 실패로 버전이 0개인 문서가 빈 항목으로 뜨는 것을 막는다 (`FILE-002`).
 ⛔ **정렬은 블록 연결일 오름차순이다.** 파일 순서 변경 기능이 없다.
 ⛔ **블록이 soft delete 됐으면 `404` 다.** `block.deleted_at IS NULL` 을 확인한다 — FK `CASCADE` 는 발동하지 않는다.
+⛔ **이 목록은 `FILE` 블록 전용이다.** 결재 블록에 매달린 파일(§1)은 여기서 조회하지 않는다 — 결재 파일은 결재 상세 화면(`approval_document`)에서 본다. `APPROVAL` 블록으로 호출하면 `FILE_BLOCK_NOT_FOUND`. (업로드·다운로드·버전조회는 결재 블록도 받지만 이 목록만 FILE 로 좁힌다.)
 
 **Response**
 

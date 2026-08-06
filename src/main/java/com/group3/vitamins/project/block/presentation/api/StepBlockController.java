@@ -3,10 +3,12 @@ package com.group3.vitamins.project.block.presentation.api;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.block.application.query.BlockListQuery;
+import com.group3.vitamins.project.block.application.result.BlockOption;
 import com.group3.vitamins.project.block.application.result.BlockSummary;
 import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
 import com.group3.vitamins.project.block.application.usecase.BlockQueryUseCase;
 import com.group3.vitamins.project.block.presentation.api.response.BlockListResponse;
+import com.group3.vitamins.project.block.presentation.api.response.BlockOptionListResponse;
 import com.group3.vitamins.project.presentation.api.ProjectResponseMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -129,5 +131,33 @@ public class StepBlockController {
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         BlockLayoutListResponse.from(results)));
+    }
+
+    @Operation(summary = "스텝 블록 선택 후보 조회",
+            description = "이슈 등록 페이지의 「관련 블록 연결」 목록용. blockId·type·title 만 내리고 "
+                    + "타입별 상세·이슈 집계·담당자를 조회하지 않는다. 순서는 일괄 조회와 같다(rowIndex → sortOrder). "
+                    + "블록 추가 직후라 제목이 비어 있으면 title 이 null 이다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "조회 성공. 블록이 0개면 빈 배열"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "STEP_ACCESS_DENIED — 스텝 접근 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "STEP_NOT_FOUND — 스텝이 존재하지 않음")
+    })
+    @GetMapping("/options")
+    public ResponseEntity<ApiResponse<BlockOptionListResponse>> getBlockOptions(
+            @Parameter(description = "조회할 스텝 ID")
+            @PathVariable Long stepId,
+            Authentication authentication
+    ) {
+        List<BlockOption> options = blockQueryUseCase.getBlockOptions(new BlockListQuery(
+                stepId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        BlockOptionListResponse.from(options)));
     }
 }
