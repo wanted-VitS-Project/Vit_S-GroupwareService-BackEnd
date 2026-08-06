@@ -39,13 +39,19 @@ public class DepartmentRepositoryAdapter implements DepartmentRepository {
     }
 
     @Override
-    public boolean existsByName(String name) {
-        return springDataRepository.existsByName(name);
+    public boolean existsSiblingName(String name, Long parentId) {
+        // MySQL/H2 는 parent_id 가 NULL 인 행끼리 UNIQUE 로 안 막으므로, 최상위(부모 없음)는
+        // IS NULL 파생 쿼리로 따로 센다. (파생 쿼리에 null 을 그대로 넘기면 `= null` 이 되어 항상 false)
+        return parentId == null
+                ? springDataRepository.existsByNameAndParentIdIsNull(name)
+                : springDataRepository.existsByNameAndParentId(name, parentId);
     }
 
     @Override
-    public boolean existsByNameAndDepartmentIdNot(String name, Long departmentId) {
-        return springDataRepository.existsByNameAndDepartmentIdNot(name, departmentId);
+    public boolean existsSiblingNameExcludingSelf(String name, Long parentId, Long departmentId) {
+        return parentId == null
+                ? springDataRepository.existsByNameAndParentIdIsNullAndDepartmentIdNot(name, departmentId)
+                : springDataRepository.existsByNameAndParentIdAndDepartmentIdNot(name, parentId, departmentId);
     }
 
     @Override
