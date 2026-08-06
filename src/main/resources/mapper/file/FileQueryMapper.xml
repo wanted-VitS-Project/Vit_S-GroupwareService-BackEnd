@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.file.infrastructure.adapter.FileQueryMapper">
+
+    <!-- 블록 안 동명(살아있는) 문서 존재 여부 (§1). block_file ⋈ file, deleted_at IS NULL. -->
+    <select id="existsActiveNameInBlock" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM block_file bf
+              JOIN file f ON f.file_id = bf.file_id
+             WHERE bf.block_id = #{blockId}
+               AND f.name = #{name}
+               AND f.deleted_at IS NULL
+        )
+    </select>
+
+    <!-- 문서가 연결된 블록 (파일 1 : 블록 1). 권한 판정 경로 fileId→block→step. -->
+    <select id="findBlockIdByFileId" resultType="long">
+        SELECT bf.block_id
+          FROM block_file bf
+         WHERE bf.file_id = #{fileId}
+         LIMIT 1
+    </select>
+
+    <!-- 완료된 버전 목록(§8 이력) — 차수 내림차순. 실패·미완료·삭제 버전 제외. -->
+    <select id="findCompletedVersions"
+            resultType="com.group3.vitamins.file.application.result.FileVersionProjection">
+        SELECT file_version_id     AS fileVersionId,
+               version_no          AS versionNo,
+               original_file_name  AS originalFileName,
+               extension           AS extension,
+               size_bytes          AS sizeBytes,
+               page_count          AS pageCount,
+               comment             AS comment,
+               uploader_name       AS uploaderName,
+               uploader_department AS uploaderDepartment,
+               uploader_position   AS uploaderPosition,
+               completed_at        AS completedAt
+          FROM file_version
+         WHERE file_id = #{fileId}
+           AND upload_status = 'COMPLETED'
+           AND deleted_at IS NULL
+         ORDER BY version_no DESC
+    </select>
+
+    <!-- 완료 버전 기준 최대 차수(§11 latest 판정). 완료 버전이 없으면 0. §8 이력과 같은 정의. -->
+    <select id="findMaxCompletedVersionNo" resultType="int">
+        SELECT COALESCE(MAX(version_no), 0)
+          FROM file_version
+         WHERE file_id = #{fileId}
+           AND upload_status = 'COMPLETED'
+           AND deleted_at IS NULL
+    </select>
+
+    <!-- 블록 파일 목록(§3) — 문서별 최신 완료 버전 + 전체 버전 수. 완료 버전 0개 문서는 INNER JOIN 으로 제외. -->
+    <!-- deleted=false: 재직 문서(deleted_at IS NULL) / true: 휴지통. 정렬은 블록 연결일 오름차순. -->
+    <select id="findBlockFiles"
+            resultType="com.group3.vitamins.file.application.result.BlockFileProjection">
+        SELECT f.file_id             AS fileId,
+               f.name                AS name,
+               lv.file_version_id    AS latestVersionId,
+               lv.version_no         AS latestVersionNo,
+               vc.cnt                AS versionCount,
+               lv.original_file_name AS originalFileName,
+               lv.extension          AS extension,
+               lv.size_bytes         AS sizeBytes,
+               lv.uploader_name      AS uploaderName,
+               lv.uploader_department AS uploaderDepartment,
+               lv.uploader_position  AS uploaderPosition,
+               lv.completed_at       AS updatedAt,
+               f.deleted_at          AS deletedAt
+          FROM block_file bf
+          JOIN file f ON f.file_id = bf.file_id
+          JOIN (
+                -- 블록에 연결된 문서로 먼저 좁힌 뒤 집계한다 — file_version 전체를 스캔하지 않도록.
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                  JOIN block_file bfi ON bfi.file_id = fv.file_id AND bfi.block_id = #{blockId}
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE bf.block_id = #{blockId}
+           AND (
+                (#{deleted} = FALSE AND f.deleted_at IS NULL)
+                OR (#{deleted} = TRUE AND f.deleted_at IS NOT NULL)
+               )
+         ORDER BY bf.linked_at ASC, f.file_id ASC
+    </select>
+
+</mapper>

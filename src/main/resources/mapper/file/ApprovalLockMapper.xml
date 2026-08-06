@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.file.infrastructure.adapter.ApprovalLockMapper">
+
+    <!--
+      문서의 버전 중 하나라도 진행 중(IN_PROGRESS) 결재의 대상이면 그 결재를 돌려준다 (§5).
+      경로: file_version(file_id) → approval_document(file_version_id) → approval_revision → approval.
+      approval.status = 'IN_PROGRESS' 만 잠근다(회수·완료된 결재는 삭제 허용). 삭제된 참조는 제외.
+    -->
+    <select id="findInProgressApproval"
+            resultType="com.group3.vitamins.file.application.port.ApprovalLockQueryPort$InProgressApproval">
+        SELECT a.approval_id AS approvalId,
+               ar.title      AS title
+          FROM file_version fv
+          JOIN approval_document ad
+            ON ad.file_version_id = fv.file_version_id
+           AND ad.deleted_at IS NULL
+          JOIN approval_revision ar
+            ON ar.approval_revision_id = ad.approval_revision_id
+          JOIN approval a
+            ON a.approval_id = ar.approval_id
+           AND a.deleted_at IS NULL
+         WHERE fv.file_id = #{fileId}
+           AND a.status = 'IN_PROGRESS'
+         ORDER BY a.approval_id DESC
+         LIMIT 1
+    </select>
+
+</mapper>

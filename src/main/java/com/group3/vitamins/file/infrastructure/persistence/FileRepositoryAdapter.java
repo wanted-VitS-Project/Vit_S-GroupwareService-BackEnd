@@ -1,0 +1,28 @@
+package com.group3.vitamins.file.infrastructure.persistence;
+
+import com.group3.vitamins.file.domain.model.File;
+import com.group3.vitamins.file.domain.repository.FileRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+@RequiredArgsConstructor
+public class FileRepositoryAdapter implements FileRepository {
+
+    private final SpringDataFileRepository springDataRepository;
+
+    @Override
+    public File save(File file) {
+        // saveAndFlush — 제약 위반(FK 등)을 커밋이 아니라 쓰기 시점에 발생시켜 서비스가 변환할 수 있게 한다.
+        return FilePersistenceMapper.toDomain(
+                springDataRepository.saveAndFlush(FilePersistenceMapper.toEntity(file)));
+    }
+
+    @Override
+    public Optional<File> findById(Long fileId) {
+        return springDataRepository.findById(fileId)
+                .map(FilePersistenceMapper::toDomain);
+    }
+}
