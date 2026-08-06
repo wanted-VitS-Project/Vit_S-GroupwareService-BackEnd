@@ -14,10 +14,11 @@ public record BusinessCategoryResponse(
         @Schema(description = "카테고리 이름", example = "도로 설계")
         String name,
 
-        @Schema(description = "업무코드. 미입력이면 null", example = "ROAD")
+        @Schema(description = "업무코드. 미입력이면 null", example = "ROAD", nullable = true)
         String code,
 
-        @Schema(description = "설명. 미입력이면 null", example = "국도·지방도·고속도로 등 도로 설계 관련 용역 과업")
+        @Schema(description = "설명. 미입력이면 null", example = "국도·지방도·고속도로 등 도로 설계 관련 용역 과업",
+                nullable = true)
         String description,
 
         @Schema(description = "삭제 가능 여부. 연결된 프로젝트가 없으면 true", example = "true")

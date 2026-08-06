@@ -147,6 +147,47 @@ springdoc:
 | DTO 필드 | `@Schema(description, example)` | ✅ | 프론트가 보는 필드 설명 |
 | 내부 전용 엔드포인트 | `@Hidden` | — | 문서에서 숨김 |
 
+### 2-3-1. null 표현 규칙 (2026-08-06 확정)
+
+> **null 가능 여부는 설명문이 아니라 `nullable = true` 로 표현한다.**
+
+설명문에 "미지정이면 null" 이라고 적어도 **생성된 OpenAPI 문서에는 아무 흔적이 남지 않는다.**
+프론트가 스키마로 타입을 생성하면 그 필드는 non-null 로 잡히고, 실제 응답에 null 이 오는 순간 깨진다.
+설명문은 사람이 읽는 보조 설명이지 기계가 읽는 계약이 아니다.
+
+springdoc 은 `springdoc.api-docs.version` 을 지정하지 않으면 **OpenAPI 3.0** 문서를 만들고,
+3.0 에서 null 허용을 나타내는 유일한 수단이 `nullable: true` 다. (3.1 로 올리면 `type: [..., "null"]`
+방식으로 바뀌므로, 버전을 바꿀 때 이 규칙도 함께 재검토한다.)
+
+| 대상 | 규칙 |
+|------|------|
+| **응답** 필드가 null 일 수 있다 | ✅ `@Schema(nullable = true)` **필수** + 설명문에도 조건을 적는다 |
+| **요청** 필드에 **명시적 null 이 의미를 갖는다** (예: "null 을 보내면 해제") | ✅ `nullable = true` |
+| **요청** 필드가 **생략 가능**할 뿐이다 (예: "생략하면 기본값") | ❌ 붙이지 않는다 — 이건 `required` 의 영역이지 `nullable` 이 아니다 |
+| 필드 타입이 **다른 객체**(`$ref`) 다 | ⚠️ **보류.** springdoc 2.8.17 에서 `$ref` 필드에 nullable 을 붙이면 참조된 스키마 자체가 오염되는 회귀가 보고돼 있다. 실제 `/v3/api-docs` 출력을 확인하기 전까지 붙이지 않는다 |
+
+**`example` 에 `"null"` 을 적지 마라.** 문자열 `"null"` 이라는 예시값이 되어 프론트를 오도한다.
+null 가능은 `nullable = true` 로 표현하고, `example` 에는 **실제 값 예시**를 넣는다.
+넣을 값이 마땅치 않으면 `example` 을 생략한다.
+
+```java
+// ✅ 올바른 예
+@Schema(description = "부서명. 부서 미배정이면 null", example = "사업1팀", nullable = true)
+String department,
+
+// ❌ 잘못된 예 — 설명문에만 null 이 있고 스키마엔 안 나타난다
+@Schema(description = "부서명. 부서 미배정이면 null", example = "사업1팀")
+String department,
+
+// ❌ 잘못된 예 — example 이 문자열 "null" 이 된다
+@Schema(description = "연결된 공고 ID", example = "null")
+Long noticeId,
+```
+
+> 📌 **적용 범위**: 규칙 확정과 동시에 `project`·`businesscategory` 도메인(담당: 동훈)은 일괄 정리했다.
+> 나머지 도메인은 **각 담당자가 해당 도메인을 손볼 때 함께 정리**한다. 도메인을 가로지르는 소급 일괄 수정은
+> 하지 않는다 — 리뷰 단위가 커져 실제 변경이 묻히고, 담당자가 아닌 사람이 계약을 바꾸게 된다.
+
 ### 2-4. 작성 예시
 
 ```java
@@ -204,6 +245,8 @@ public record SignupRequest(
 - ❌ 어노테이션 설명에 **명세에 없는 내용**을 지어내기
 - ❌ 명세에 있는 **에러코드를 빠뜨리기** — 프론트가 에러 분기를 못 짬
 - ❌ `example` 에 **실제 계정·토큰·개인정보** 넣기 (⚠️ 이 레포는 PUBLIC)
+- ❌ null 가능 필드를 **설명문으로만** 표시하고 `nullable = true` 를 빠뜨리기 (§2-3-1)
+- ❌ `example = "null"` — 문자열 `"null"` 이 예시값이 된다 (§2-3-1)
 - ❌ 운영 프로필에서 Swagger UI 열어두기
 - ❌ 어노테이션만 고치고 실제 구현은 그대로 두기 (문서와 동작 불일치)
 

@@ -10,7 +10,7 @@ import java.util.List;
 @Schema(description = "프로젝트 생성 요청")
 public record ProjectCreateRequest(
 
-        @Schema(description = "연결할 공고 ID. 생략하면 공고 없이 생성", example = "null")
+        @Schema(description = "연결할 공고 ID. 생략하면 공고 없이 생성", example = "45")
         Long bidNoticeId,
 
         @Schema(description = "과업명 (최대 300자)", example = "OO시 상수도 관리 용역")

@@ -8,7 +8,8 @@ public record BusinessCategoryUpdateRequest(
         @Schema(description = "카테고리 이름 (최대 100자). 생략하면 안 바뀐다", example = "상하수도·환경")
         String name,
 
-        @Schema(description = "업무코드 (최대 30자). null 을 보내면 업무코드를 지운다. 생략하면 안 바뀐다", example = "WATER")
+        @Schema(description = "업무코드 (최대 30자). null 을 보내면 업무코드를 지운다. 생략하면 안 바뀐다",
+                example = "WATER", nullable = true)
         String code,
 
         @Schema(description = "설명. 생략하면 안 바뀐다", example = "상수도·하수도 및 환경 설계")

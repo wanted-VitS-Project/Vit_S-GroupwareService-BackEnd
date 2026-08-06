@@ -20,7 +20,7 @@ public record BlockCreateResponse(
         @Schema(description = "블록 타입", example = "CHECKLIST")
         String type,
 
-        @Schema(description = "블록 제목. 안 보냈으면 null", example = "제출 서류 점검")
+        @Schema(description = "블록 제목. 안 보냈으면 null", example = "제출 서류 점검", nullable = true)
         String title,
 
         @Schema(description = "블록 담당자. 안 보냈으면 null")
