@@ -2,6 +2,7 @@ package com.group3.vitamins.image.application.usecase;
 
 import com.group3.vitamins.image.application.command.CreateImageItemsCommand;
 import com.group3.vitamins.image.application.command.DeleteImageItemCommand;
+import com.group3.vitamins.image.application.command.RestoreImageItemsCommand;
 import com.group3.vitamins.image.application.command.UpdateImageItemsCommand;
 
 import java.time.LocalDateTime;
@@ -47,4 +48,20 @@ public interface ImageCommandUseCase {
 
     //이미지 항목 삭제
     void delete(DeleteImageItemCommand command);
+
+    //이미지 항목 복구 (소프트 삭제 취소)
+    RestoreImageItemsView restore(RestoreImageItemsCommand command);
+
+    record RestoreImageItemsView(
+            List<RestoredImageView> images
+    ) {
+    }
+
+    record RestoredImageView(
+            Long imgBlockId,
+            Long imgId,
+            String originalName,
+            int orderIndex
+    ) {
+    }
 }

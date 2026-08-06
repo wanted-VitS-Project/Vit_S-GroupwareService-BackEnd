@@ -5,6 +5,8 @@ import com.group3.vitamins.image.domain.repository.ImageRepository;
 import com.group3.vitamins.image.infrastructure.persistence.ImageJpaEntity;
 import com.group3.vitamins.image.infrastructure.persistence.SpringDataImageRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +76,55 @@ public class CatalogImageAdapter implements ImageRepository {
     @Transactional
     public int markAllDeletedByBlock(Long imgBlockId, LocalDateTime deletedAt) {
         return springDataImageRepository.markAllDeletedByBlockIfActive(imgBlockId, deletedAt);
+    }
+
+    @Override
+    public Optional<ImageItem> findNextByOrderIndex(Long imgBlockId, int orderIndex) {
+        return firstOf(springDataImageRepository.findActiveAfterOrderIndex(imgBlockId, orderIndex, TOP_1));
+    }
+
+    @Override
+    public Optional<ImageItem> findPreviousByOrderIndex(Long imgBlockId, int orderIndex) {
+        return firstOf(springDataImageRepository.findActiveBeforeOrderIndex(imgBlockId, orderIndex, TOP_1));
+    }
+
+    @Override
+    public Optional<ImageItem> findFirstActive(Long imgBlockId) {
+        return firstOf(springDataImageRepository.findActiveOrderByOrderIndexAsc(imgBlockId, TOP_1));
+    }
+
+    @Override
+    public Optional<ImageItem> findLastActive(Long imgBlockId) {
+        return firstOf(springDataImageRepository.findActiveOrderByOrderIndexDesc(imgBlockId, TOP_1));
+    }
+
+    @Override
+    public int countActive(Long imgBlockId) {
+        return springDataImageRepository.countActiveByImgBlockId(imgBlockId);
+    }
+
+    @Override
+    public boolean existsActiveByOrderIndex(Long imgBlockId, int orderIndex) {
+        return springDataImageRepository.existsActiveByOrderIndex(imgBlockId, orderIndex);
+    }
+
+    @Override
+    public List<ImageItem> findAllByImgIds(List<Long> imgIds) {
+        return springDataImageRepository.findAllByImgIdIn(imgIds).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public int restore(Long imgId, Long imgBlockId, int orderIndex) {
+        return springDataImageRepository.restore(imgId, imgBlockId, orderIndex);
+    }
+
+    private static final Pageable TOP_1 = PageRequest.of(0, 1);
+
+    private Optional<ImageItem> firstOf(List<ImageJpaEntity> entities) {
+        return entities.stream().findFirst().map(this::toDomain);
     }
 
     private ImageItem toDomain(ImageJpaEntity entity) {

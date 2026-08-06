@@ -1,5 +1,6 @@
 package com.group3.vitamins.image.infrastructure.persistence;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -38,4 +39,39 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
     @Query("UPDATE ImageJpaEntity i SET i.deletedAt = :deletedAt "
             + "WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
     int markAllDeletedByBlockIfActive(@Param("imgBlockId") Long imgBlockId, @Param("deletedAt") LocalDateTime deletedAt);
+
+    /** Pageable로 "1건만" 받는다 — JPQL은 표준적으로 LIMIT을 지원하지 않아 이 방식이 더 이식성이 좋다. */
+    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "AND i.orderIndex > :orderIndex ORDER BY i.orderIndex ASC")
+    List<ImageJpaEntity> findActiveAfterOrderIndex(@Param("imgBlockId") Long imgBlockId,
+                                                    @Param("orderIndex") int orderIndex, Pageable pageable);
+
+    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "AND i.orderIndex < :orderIndex ORDER BY i.orderIndex DESC")
+    List<ImageJpaEntity> findActiveBeforeOrderIndex(@Param("imgBlockId") Long imgBlockId,
+                                                     @Param("orderIndex") int orderIndex, Pageable pageable);
+
+    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "ORDER BY i.orderIndex ASC")
+    List<ImageJpaEntity> findActiveOrderByOrderIndexAsc(@Param("imgBlockId") Long imgBlockId, Pageable pageable);
+
+    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "ORDER BY i.orderIndex DESC")
+    List<ImageJpaEntity> findActiveOrderByOrderIndexDesc(@Param("imgBlockId") Long imgBlockId, Pageable pageable);
+
+    @Query("SELECT COUNT(i) FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
+    int countActiveByImgBlockId(@Param("imgBlockId") Long imgBlockId);
+
+    @Query("SELECT CASE WHEN COUNT(i) > 0 THEN true ELSE false END FROM ImageJpaEntity i "
+            + "WHERE i.imgBlockId = :imgBlockId AND i.orderIndex = :orderIndex AND i.deletedAt IS NULL")
+    boolean existsActiveByOrderIndex(@Param("imgBlockId") Long imgBlockId, @Param("orderIndex") int orderIndex);
+
+    /** 삭제 필터 없음 — 복구 API가 "존재 자체가 없음"과 "이미 활성 상태"를 구분하는 데 쓴다. */
+    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgId IN :imgIds")
+    List<ImageJpaEntity> findAllByImgIdIn(@Param("imgIds") List<Long> imgIds);
+
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ImageJpaEntity i SET i.deletedAt = NULL, i.orderIndex = :orderIndex, i.updatedAt = CURRENT_TIMESTAMP "
+            + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NOT NULL")
+    int restore(@Param("imgId") Long imgId, @Param("imgBlockId") Long imgBlockId, @Param("orderIndex") int orderIndex);
 }

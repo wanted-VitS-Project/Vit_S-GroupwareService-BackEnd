@@ -22,6 +22,12 @@ public interface ImageStoragePort {
     /** 저장된 키로 한시적으로 열리는 조회용 URL을 발급한다. */
     String presignViewUrl(String storageKey);
 
+    /** 다운로드 API용 — 저장소에서 실제 파일 바이트를 그대로 읽어온다(응답 바디에 직접 실어 보내야 해서). */
+    byte[] download(String storageKey);
+
+    /** 확장자에 대응하는 Content-Type. 다운로드 응답 헤더용. */
+    String contentTypeOf(String extension);
+
     record UploadedImage(String storageKey, long sizeBytes) {
     }
 }

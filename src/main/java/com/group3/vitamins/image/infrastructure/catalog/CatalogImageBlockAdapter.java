@@ -22,8 +22,21 @@ public class CatalogImageBlockAdapter implements ImageBlockRepository {
 
     @Override
     @Transactional
+    public Long create(Long blockId) {
+        // IDENTITY 라 save() 시점에 INSERT 가 나가고 PK 가 채워져 돌아온다 — 되찾기 조회가 필요없다.
+        return springDataImageBlockRepository
+                .save(new ImageBlockJpaEntity(blockId)).getImgBlockId();
+    }
+
+    @Override
+    @Transactional
     public boolean existsActive(Long imgBlockId) {
         return springDataImageBlockRepository.findActiveForUpdate(imgBlockId).isPresent();
+    }
+
+    @Override
+    public boolean existsActiveReadOnly(Long imgBlockId) {
+        return springDataImageBlockRepository.existsActiveNoLock(imgBlockId);
     }
 
     @Override

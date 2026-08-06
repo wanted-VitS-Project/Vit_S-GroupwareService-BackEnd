@@ -1,8 +1,10 @@
 package com.group3.vitamins.image.application.command;
 
-public record DeleteImageItemCommand(
+import java.util.List;
+
+public record RestoreImageItemsCommand(
         String userId,
-        Long imgId,
+        List<Long> imgIds,
         String role
 ) {
 }

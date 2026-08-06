@@ -74,6 +74,24 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         return s3Presigner.presignGetObject(presignRequest).url().toExternalForm();
     }
 
+    @Override
+    public byte[] download(String storageKey) {
+        return s3Client.getObjectAsBytes(
+                GetObjectRequest.builder().bucket(bucket).key(storageKey).build()
+        ).asByteArray();
+    }
+
+    @Override
+    public String contentTypeOf(String extension) {
+        return switch (extension) {
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            default -> "application/octet-stream";
+        };
+    }
+
     private byte[] prepareBody(MultipartFile file, String extension) {
         if (NON_RESIZABLE_EXTENSIONS.contains(extension) || file.getSize() <= RESIZE_THRESHOLD_BYTES) {
             return readAllBytes(file);
@@ -100,16 +118,6 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         } catch (IOException e) {
             throw new UncheckedImageReadException(e);
         }
-    }
-
-    private String contentTypeOf(String extension) {
-        return switch (extension) {
-            case "jpg", "jpeg" -> "image/jpeg";
-            case "png" -> "image/png";
-            case "gif" -> "image/gif";
-            case "webp" -> "image/webp";
-            default -> "application/octet-stream";
-        };
     }
 
     private static class UncheckedImageReadException extends RuntimeException {

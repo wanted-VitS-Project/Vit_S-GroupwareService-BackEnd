@@ -19,6 +19,13 @@ public class ImageHandlerService {
     private final ImageBlockRepository imageBlockRepository;
     private final ImageRepository imageRepository;
 
+    /** 블록 생성 시 항목이 0개인 상세 행을 만든다. 항목(이미지) 추가는 ImageCommandService 소관이다. */
+    public Long create(Long blockId) {
+        Long imgBlockId = imageBlockRepository.create(blockId);
+        log.info("이미지 블록 상세 행 생성 - blockId={}, imgBlockId={}", blockId, imgBlockId);
+        return imgBlockId;
+    }
+
     /**
      * 이미지 블록 삭제 이벤트 수신.
      *
@@ -44,13 +51,10 @@ public class ImageHandlerService {
 
         log.info("이미지 블록 삭제 완료 - imgBlockId={}, 삭제된 항목 수={}", imgBlockId, deletedItemCount);
 
-        // TODO: 활동 로그(블록 삭제) 이벤트 발행 — resourceId=null, 기록 정보=삭제 전 Block명 (§5.1 Block 공통).
-        //       블록에 속한 항목 각각의 삭제는 별도로 로그를 남기지 않는다 — Block 삭제 활동으로 대표된다.
-        //       블록 삭제 이벤트 타입이 아직 확정 안 돼서(동훈님) 리스너 자체가 주석 처리 상태라
-        //       이 메서드가 실제로 호출되는 시점은 아직 없다 — 이벤트 타입 확정되면 같이 정리할 것.
-        // domainEventPublisher.publish(ActivityOccurredEvent.of(
-        //         ActivityLogAction.DELETE, blockId, null, userId,
-        //         List.of(new ActivityFieldChange(null, null, null))
-        // ));
+        // 활동 로그(블록 삭제, §5.1)는 여기서 발행하지 않는다 — 어댑터가 없는 타입(FILE·APPROVAL 등)의
+        // 블록은 이 메서드 자체가 호출되지 않으므로, 이 위치에서 발행하면 그 타입들은 삭제 로그가
+        // 영원히 누락된다. 모든 블록 타입에 공통 적용되는 로그이니, 실제 block.deleted_at 을 찍는
+        // Block 도메인 쪽 삭제 서비스가 발행해야 한다 (텍스트·체크리스트 도메인과 동일한 결론).
+        // 블록에 속한 항목들의 개별 삭제도 로그를 남기지 않는다 — Block 삭제 활동으로 대표된다.
     }
 }

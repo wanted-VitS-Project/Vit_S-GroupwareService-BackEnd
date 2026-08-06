@@ -40,4 +40,36 @@ public interface ImageRepository {
      * @return 실제로 삭제 처리된 항목 수 (중복 이벤트 판별용)
      */
     int markAllDeletedByBlock(Long imgBlockId, LocalDateTime deletedAt);
+
+    /** orderIndex 초과인 활성 항목 중 최솟값 하나. 없으면(=맨 마지막) empty — 순환 여부는 서비스가 판단한다. */
+    Optional<ImageItem> findNextByOrderIndex(Long imgBlockId, int orderIndex);
+
+    /** orderIndex 미만인 활성 항목 중 최댓값 하나. 없으면(=맨 처음) empty — 순환 여부는 서비스가 판단한다. */
+    Optional<ImageItem> findPreviousByOrderIndex(Long imgBlockId, int orderIndex);
+
+    /** orderIndex가 가장 작은 활성 항목(첫 이미지). "다음"이 없을 때 처음으로 순환하는 데 쓴다. */
+    Optional<ImageItem> findFirstActive(Long imgBlockId);
+
+    /** orderIndex가 가장 큰 활성 항목(마지막 이미지). "이전"이 없을 때 마지막으로 순환하는 데 쓴다. */
+    Optional<ImageItem> findLastActive(Long imgBlockId);
+
+    /** 블록에 속한 활성 항목 총 개수. */
+    int countActive(Long imgBlockId);
+
+    /** 그 블록에 이 orderIndex를 가진 활성 항목이 실제로 있는지 — 다음/이전 조회 전 currentOrderIndex 검증용. */
+    boolean existsActiveByOrderIndex(Long imgBlockId, int orderIndex);
+
+    /**
+     * imgId 목록에 대응하는 항목을 활성·삭제 여부 상관없이 전부 찾는다. 복구 API의 검증용 —
+     * 존재 자체가 없는 imgId와 이미 활성 상태인 imgId를 구분하려면 삭제 필터 없는 조회가 필요하다.
+     */
+    List<ImageItem> findAllByImgIds(List<Long> imgIds);
+
+    /**
+     * 소프트 삭제된 항목을 복구한다(deletedAt → null, orderIndex 갱신, updatedAt 갱신). "확인 후 쓰기"가
+     * 아니라 조건부 UPDATE로 원자 처리한다 — 대상이 이미 활성이거나 존재하지 않으면 0건.
+     *
+     * @return 실제로 복구된 행 수(0 또는 1)
+     */
+    int restore(Long imgId, Long imgBlockId, int orderIndex);
 }

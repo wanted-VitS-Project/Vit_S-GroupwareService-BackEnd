@@ -8,6 +8,7 @@ public record CreateImageItemsCommand(
         String userId,
         Long imgBlockId,
         List<MultipartFile> files,
-        List<String> captions
+        List<String> captions,
+        String role
 ) {
 }

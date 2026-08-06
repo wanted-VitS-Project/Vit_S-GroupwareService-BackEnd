@@ -35,6 +35,29 @@ public class ImageEligibilityPolicy {
         }
     }
 
+    /**
+     * 복구 API 전용 — {@link #assertBlockActiveOrThrow} 와 같은 조회(image_block 자체 테이블, 공유
+     * Block 도메인과 무관)를 쓰지만, "블록이 아예 없음"(IMG-003, 생성·수정 API 용)이 아니라
+     * "있었는데 삭제되어 되돌릴 자리가 없음"이라는 걸 명확히 알려주기 위해 별도 코드로 던진다.
+     */
+    public void assertBlockActiveForRestoreOrThrow(Long imgBlockId) {
+        if (!imageBlockRepository.existsActive(imgBlockId)) {
+            log.warn("복구 대상 이미지의 블록이 삭제됨 - imgBlockId={}", imgBlockId);
+            throw new NotFoundException(ImageErrorCode.BLOCK_DELETED_CANNOT_RESTORE);
+        }
+    }
+
+    /**
+     * 조회(GET)용 — {@link #assertBlockActiveOrThrow} 는 내부적으로 PESSIMISTIC_WRITE 락 조회를 써서
+     * 읽기 전용 트랜잭션에서 부르면 DB가 거부한다. 락이 필요 없는 단순 조회 화면(이미지 항목 조회 등)은 이걸 쓴다.
+     */
+    public void assertBlockActiveOrThrowReadOnly(Long imgBlockId) {
+        if (!imageBlockRepository.existsActiveReadOnly(imgBlockId)) {
+            log.warn("이미지 블록 존재하지 않음 - imgBlockId={}", imgBlockId);
+            throw new NotFoundException(ImageErrorCode.BLOCK_NOT_FOUND);
+        }
+    }
+
     public ImageItem getActiveItemOrThrow(Long imgId) {
         return imageRepository.findActiveByImgId(imgId)
                 .orElseThrow(() -> {
@@ -43,11 +66,24 @@ public class ImageEligibilityPolicy {
                 });
     }
 
-    public void assertEditPermission(Long imgBlockId, String userId) {
-        if (!blockCatalogPort.hasEditPermission(BLOCK_TYPE, imgBlockId, userId)) {
+    public void assertEditPermission(Long imgBlockId, String userId, String role) {
+        if (!blockCatalogPort.hasEditPermission(BLOCK_TYPE, imgBlockId, userId, role)) {
             log.warn("편집 권한 없음 - blockType={}, imgBlockId={}, userId={}", BLOCK_TYPE, imgBlockId, userId);
             throw new ForbiddenException(ImageErrorCode.FORBIDDEN);
         }
+    }
+
+    /** 이미지 항목 조회(GET)는 편집 권한이 아니라 접근(VIEWER 이상) 권한만 있으면 된다. */
+    public void assertViewPermission(Long imgBlockId, String userId, String role) {
+        if (!blockCatalogPort.hasViewPermission(BLOCK_TYPE, imgBlockId, userId, role)) {
+            log.warn("접근 권한 없음 - blockType={}, imgBlockId={}, userId={}", BLOCK_TYPE, imgBlockId, userId);
+            throw new ForbiddenException(ImageErrorCode.VIEW_FORBIDDEN);
+        }
+    }
+
+    /** 전체 다운로드(zip) 파일명용 — 활동 로그 Block명 조회와 같은 포트를 재사용한다. */
+    public String getBlockTitle(Long imgBlockId) {
+        return blockCatalogPort.getBlockTitle(BLOCK_TYPE, imgBlockId);
     }
 
     /** @return 검증을 통과한 확장자(소문자, 점 없음) */

@@ -14,7 +14,10 @@ public enum ImageErrorCode implements ErrorCode {
     BLOCK_NOT_FOUND("IMG-003", "존재하지 않는 블록입니다."),
     CAPTION_COUNT_MISMATCH("IMG-004", "이미지 개수와 캡션 개수가 일치하지 않습니다."),
     INVALID_IMAGE_LIST("IMG-005", "요청한 이미지 목록이 유효하지 않습니다."),
-    ITEM_NOT_FOUND("IMG-006", "존재하지 않는 항목입니다.");
+    ITEM_NOT_FOUND("IMG-006", "존재하지 않는 항목입니다."),
+    VIEW_FORBIDDEN("IMG-007", "접근 권한이 없습니다."),
+    NO_IMAGES_TO_DOWNLOAD("IMG-008", "다운로드할 이미지가 없습니다."),
+    BLOCK_DELETED_CANNOT_RESTORE("IMG-009", "상위 블록이 삭제되어 하위 항목을 복구할 수 없습니다.");
     // 401(미인증)·403(RESET_REQUIRED)은 여기 도메인 코드로 안 만든다 — 전 도메인 공통으로
     // AUTH_UNAUTHENTICATED/AUTH_PASSWORD_RESET_REQUIRED 를 쓴다 (GlobalExceptionHandler·PasswordResetGateFilter).
     // 500(예상 못한 서버 오류)도 도메인 코드를 안 만든다 — S3 업로드 실패 등은 GlobalExceptionHandler 의

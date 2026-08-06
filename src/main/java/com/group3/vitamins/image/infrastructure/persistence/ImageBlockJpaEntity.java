@@ -2,16 +2,19 @@ package com.group3.vitamins.image.infrastructure.persistence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
 /**
- * 이미지 블록 상세 행({@code image_block}) — 생성·삭제는 Block 도메인(동훈님)이 전담한다.
- * 이 도메인은 항목 생성 시 대상 블록의 존재/활성 여부를 확인하는 읽기 전용 용도로만 매핑한다.
+ * 이미지 블록 상세 행({@code image_block}) — 블록 생성 시 이 도메인이 빈 행을 만들고
+ * (텍스트·체크리스트와 동일 패턴), 삭제는 Block 도메인이 발행하는 삭제 이벤트를 받아 처리한다.
  */
 @Entity
 @NoArgsConstructor
@@ -20,6 +23,7 @@ import java.time.LocalDateTime;
 public class ImageBlockJpaEntity {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "img_block_id")
     private Long imgBlockId;
 
@@ -27,6 +31,7 @@ public class ImageBlockJpaEntity {
     @Column(name = "block_id", nullable = false)
     private Long blockId;
 
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -35,4 +40,9 @@ public class ImageBlockJpaEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    /** 상세 빈 행 생성용. 항목(image)은 0개로 시작한다. */
+    public ImageBlockJpaEntity(Long blockId) {
+        this.blockId = blockId;
+    }
 }

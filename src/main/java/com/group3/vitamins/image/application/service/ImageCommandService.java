@@ -5,6 +5,7 @@ import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.image.application.command.CreateImageItemsCommand;
 import com.group3.vitamins.image.application.command.DeleteImageItemCommand;
+import com.group3.vitamins.image.application.command.RestoreImageItemsCommand;
 import com.group3.vitamins.image.application.command.UpdateImageItemsCommand;
 import com.group3.vitamins.image.application.policy.ImageEligibilityPolicy;
 import com.group3.vitamins.image.application.port.ImageStoragePort;
@@ -25,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +59,7 @@ public class ImageCommandService implements ImageCommandUseCase {
                 command.imgBlockId(), command.userId(), command.files().size());
 
         eligibilityPolicy.assertBlockActiveOrThrow(command.imgBlockId());
-        eligibilityPolicy.assertEditPermission(command.imgBlockId(), command.userId());
+        eligibilityPolicy.assertEditPermission(command.imgBlockId(), command.userId(), command.role());
 
         List<MultipartFile> files = command.files();
         List<String> captions = command.captions();
@@ -104,15 +106,15 @@ public class ImageCommandService implements ImageCommandUseCase {
         log.info("이미지 항목 생성 완료 - imgBlockId={}, count={}", command.imgBlockId(), savedItems.size());
 
         // 활동 로그 — 이미지 항목 생성은 이미지 단위로 한 건씩 남긴다 (§5.3 이미지).
-        // 생성처럼 특정 필드가 아닌 활동은 changes 를 비울 수 없어 전부 null인 항목 하나를 담아 보낸다
-        // (원본 이미지명 등 사람이 읽을 정보는 activity_log에 스냅샷으로 안 남고, 조회 시 resourceId로
-        // image 테이블을 조인해 조합한다 — Block명과 동일한 원칙, `.ai/api/activity-log.md` 참고).
+        // 생성처럼 특정 필드가 아닌 활동은 changes 를 비울 수 없어 전부 null인 항목 하나를 담아 보낸다.
+        // resourceName 에는 원본 파일명을 스냅샷으로 남긴다.
         Long blockId = imageBlockRepository.getBlockId(command.imgBlockId());
         for (ImageItem saved : savedItems) {
             domainEventPublisher.publish(ActivityOccurredEvent.of(
                     ActivityLogAction.CREATE,
                     blockId,
                     saved.getImgId(),
+                    saved.getOriginalName(),
                     command.userId(),
                     List.of(new ActivityFieldChange(null, null, null))
             ));
@@ -140,7 +142,7 @@ public class ImageCommandService implements ImageCommandUseCase {
                 command.imgBlockId(), command.userId(), command.images().size());
 
         eligibilityPolicy.assertBlockActiveOrThrow(command.imgBlockId());
-        eligibilityPolicy.assertEditPermission(command.imgBlockId(), command.userId());
+        eligibilityPolicy.assertEditPermission(command.imgBlockId(), command.userId(), command.role());
 
         List<UpdateImageItemsCommand.Entry> requested = command.images();
         Set<Long> requestedIds = requested.stream()
@@ -176,6 +178,7 @@ public class ImageCommandService implements ImageCommandUseCase {
                     ActivityLogAction.DELETE,
                     blockId,
                     imgId,
+                    currentByImgId.get(imgId).getOriginalName(),
                     command.userId(),
                     List.of(new ActivityFieldChange(null, null, null))
             ));
@@ -210,7 +213,8 @@ public class ImageCommandService implements ImageCommandUseCase {
             if (!changes.isEmpty()) {
                 imageRepository.updateCaptionAndOrder(entry.imgId(), command.imgBlockId(), newCaption, newOrderIndex);
                 domainEventPublisher.publish(ActivityOccurredEvent.of(
-                        ActivityLogAction.MODIFY, blockId, entry.imgId(), command.userId(), changes));
+                        ActivityLogAction.MODIFY, blockId, entry.imgId(), before.getOriginalName(),
+                        command.userId(), changes));
             }
 
             resultViews.add(new UpdatedImageOrderView(entry.imgId(), newOrderIndex, newCaption));
@@ -226,7 +230,7 @@ public class ImageCommandService implements ImageCommandUseCase {
         log.info("이미지 항목 삭제 요청 - imgId={}, userId={}", command.imgId(), command.userId());
 
         ImageItem before = eligibilityPolicy.getActiveItemOrThrow(command.imgId());
-        eligibilityPolicy.assertEditPermission(before.getImgBlockId(), command.userId());
+        eligibilityPolicy.assertEditPermission(before.getImgBlockId(), command.userId(), command.role());
 
         // 이 API는 PATCH의 배열 누락 삭제와 동일한 원칙 — 소프트 삭제만, S3는 지우지 않는다
         // (`.ai/api/image.md` §S3 저장 정책 참고. 같은 "삭제"가 어느 버튼이냐에 따라 S3 처리가
@@ -243,10 +247,77 @@ public class ImageCommandService implements ImageCommandUseCase {
                 ActivityLogAction.DELETE,
                 blockId,
                 command.imgId(),
+                before.getOriginalName(),
                 command.userId(),
                 List.of(new ActivityFieldChange(null, null, null))
         ));
 
         log.info("이미지 항목 삭제 완료 - imgId={}", command.imgId());
+    }
+
+    @Override
+    public RestoreImageItemsView restore(RestoreImageItemsCommand command) {
+        log.info("이미지 항목 복구 요청 - userId={}, imgIds={}", command.userId(), command.imgIds());
+
+        List<Long> imgIds = command.imgIds();
+        Set<Long> uniqueIds = new HashSet<>(imgIds);
+        if (imgIds.isEmpty() || uniqueIds.size() != imgIds.size()) {
+            log.warn("복구 요청 목록이 유효하지 않음 - imgIds={}", imgIds);
+            throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
+        }
+
+        Map<Long, ImageItem> foundByImgId = imageRepository.findAllByImgIds(imgIds).stream()
+                .collect(Collectors.toMap(ImageItem::getImgId, item -> item));
+
+        // 요청한 imgId 전부가 실제로 존재하고, 실제로 삭제된 상태여야 복구 대상이다.
+        // 존재 자체가 없는 것과 이미 활성인 것을 구분할 필요가 없어(둘 다 "복구할 수 없는 항목") 같은 코드로 묶는다.
+        for (Long imgId : uniqueIds) {
+            ImageItem item = foundByImgId.get(imgId);
+            if (item == null || item.getDeletedAt() == null) {
+                log.warn("복구 대상 아님(존재하지 않거나 이미 활성) - imgId={}", imgId);
+                throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+            }
+        }
+
+        // 이미지가 속한 블록별로(=스텝별로) 블록이 살아있는지·편집 권한이 있는지 확인한다 — 여러 블록에
+        // 걸친 요청일 수 있다. 블록이 이미 삭제된 경우(예: 블록 자체 삭제로 항목이 일괄 삭제된 뒤 휴지통
+        // 조회엔 여전히 나옴) hasEditPermission이 대상을 못 찾아 그냥 false를 반환하므로, 권한 확인보다
+        // 먼저 블록 생존 여부를 확인해야 "편집 권한이 없다"는 오해의 소지가 있는 메시지 대신 "삭제된
+        // 블록이라 복구할 수 없다"는 걸 명확히 알려줄 수 있다 (사용자가 실제 테스트로 발견 — 2026-08-06).
+        // 이 순서(존재 확인 → 권한 확인)는 텍스트·체크리스트 도메인의 기존 서비스도 동일하게 쓰는
+        // 패턴이라 이 도메인만 바꾸지 않는다 — 권한 없는 사용자에게 존재 여부가 먼저 드러나는 트레이드오프는
+        // 팀 전체가 공유하는 기존 컨벤션으로 두고, 필요하면 나중에 전체 도메인 단위로 재검토한다.
+        Set<Long> imgBlockIds = foundByImgId.values().stream()
+                .map(ImageItem::getImgBlockId)
+                .collect(Collectors.toSet());
+        for (Long imgBlockId : imgBlockIds) {
+            eligibilityPolicy.assertBlockActiveForRestoreOrThrow(imgBlockId);
+            eligibilityPolicy.assertEditPermission(imgBlockId, command.userId(), command.role());
+        }
+
+        // 복구된 이미지는 각 블록의 현재 활성 목록 맨 뒤에 붙는다(원래 순서 복원이 아님) — 요청에 여러
+        // 블록이 섞여 있어도, 같은 블록끼리는 요청에 나열된 순서 그대로 이어 붙인다.
+        Map<Long, Integer> nextOrderIndexByBlock = new HashMap<>();
+        List<RestoredImageView> resultViews = new ArrayList<>(imgIds.size());
+
+        for (Long imgId : imgIds) {
+            ImageItem item = foundByImgId.get(imgId);
+            Long imgBlockId = item.getImgBlockId();
+            int orderIndex = nextOrderIndexByBlock.compute(imgBlockId,
+                    (blockId, current) -> current == null ? imageRepository.findMaxOrderIndex(blockId) + 1 : current + 1);
+
+            int restored = imageRepository.restore(imgId, imgBlockId, orderIndex);
+            if (restored == 0) {
+                // 검증~복구 사이에 동시에 상태가 바뀐 경우(레이스). 존재하지 않는 항목과 동일하게 취급한다.
+                log.warn("이미지 항목 복구 경합 발생 - imgId={}", imgId);
+                throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+            }
+
+            resultViews.add(new RestoredImageView(imgBlockId, imgId, item.getOriginalName(), orderIndex));
+        }
+
+        log.info("이미지 항목 복구 완료 - count={}", resultViews.size());
+
+        return new RestoreImageItemsView(resultViews);
     }
 }

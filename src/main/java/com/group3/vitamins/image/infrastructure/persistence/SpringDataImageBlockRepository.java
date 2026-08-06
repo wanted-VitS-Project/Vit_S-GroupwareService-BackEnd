@@ -22,6 +22,14 @@ public interface SpringDataImageBlockRepository extends JpaRepository<ImageBlock
     Optional<ImageBlockJpaEntity> findActiveForUpdate(@Param("imgBlockId") Long imgBlockId);
 
     /**
+     * 락 없는 존재 확인 — 조회(GET)처럼 읽기 전용 트랜잭션에서 쓴다. {@link #findActiveForUpdate} 는
+     * PESSIMISTIC_WRITE 라 읽기 전용 트랜잭션에서 호출하면 DB가 거부한다(MySQL "READ ONLY transaction").
+     */
+    @Query("SELECT CASE WHEN COUNT(i) > 0 THEN true ELSE false END FROM ImageBlockJpaEntity i "
+            + "WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
+    boolean existsActiveNoLock(@Param("imgBlockId") Long imgBlockId);
+
+    /**
      * deleted_at 조건을 UPDATE 문 자체에 걸어서 "확인 후 쓰기" 사이의 틈을 없앤다.
      * 이미 삭제된 행이면 0을 반환한다 (중복 삭제 이벤트 판별용).
      */
