@@ -1,11 +1,12 @@
 package com.group3.vitamins.vitamate.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.vitamate.application.command.HandleVitamateAnalysisCallbackCommand;
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort;
-import com.group3.vitamins.vitamate.application.result.VitamateAnalysisCallbackResult;
-import com.group3.vitamins.vitamate.application.support.VitamateAnalysisStateManager;
-import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.analysis.application.command.HandleVitamateAnalysisCallbackCommand;
+import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisStorePort;
+import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisCallbackResult;
+import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisCallbackService;
+import com.group3.vitamins.vitamate.analysis.application.support.VitamateAnalysisStateManager;
+import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

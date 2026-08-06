@@ -2,7 +2,7 @@ package com.group3.vitamins.vitamate.fileindex.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.fileindex.application.command.HandleVitamateFileIndexCallbackCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexCallbackResult;

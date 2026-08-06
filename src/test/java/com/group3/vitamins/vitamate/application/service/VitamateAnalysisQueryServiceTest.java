@@ -2,10 +2,11 @@ package com.group3.vitamins.vitamate.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisReaderPort;
-import com.group3.vitamins.vitamate.application.query.GetVitamateAnalysisQuery;
-import com.group3.vitamins.vitamate.application.result.VitamateAnalysisDetailResult;
-import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisReaderPort;
+import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateAnalysisQuery;
+import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisDetailResult;
+import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisQueryService;
+import com.group3.vitamins.vitamate.analysis.domain.exception.VitamateErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

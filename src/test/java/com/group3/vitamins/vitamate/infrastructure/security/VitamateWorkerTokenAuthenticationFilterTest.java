@@ -1,5 +1,7 @@
 package com.group3.vitamins.vitamate.infrastructure.security;
 
+import com.group3.vitamins.vitamate.analysis.infrastructure.security.VitamateWorkerAuthProperties;
+import com.group3.vitamins.vitamate.analysis.infrastructure.security.VitamateWorkerTokenAuthenticationFilter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

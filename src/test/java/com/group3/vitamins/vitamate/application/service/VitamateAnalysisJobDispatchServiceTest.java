@@ -1,9 +1,10 @@
 package com.group3.vitamins.vitamate.application.service;
 
-import com.group3.vitamins.vitamate.application.command.DispatchVitamateAnalysisJobCommand;
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisJobPublisherPort;
-import com.group3.vitamins.vitamate.application.result.StartVitamateAnalysisResult;
-import com.group3.vitamins.vitamate.application.support.VitamateAnalysisStateManager;
+import com.group3.vitamins.vitamate.analysis.application.command.DispatchVitamateAnalysisJobCommand;
+import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisJobPublisherPort;
+import com.group3.vitamins.vitamate.analysis.application.result.StartVitamateAnalysisResult;
+import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisJobDispatchService;
+import com.group3.vitamins.vitamate.analysis.application.support.VitamateAnalysisStateManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
