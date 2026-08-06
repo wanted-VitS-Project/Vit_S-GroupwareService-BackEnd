@@ -12,6 +12,8 @@ public interface IssueQueryMapper {
 
     Optional<IssueBlockStepRow> findBlockStep(@Param("blockId") Long blockId);
 
+    Optional<IssueRow> findIssue(@Param("issueId") Long issueId);
+
     List<IssueRow> findIssues(@Param("stepId") Long stepId, @Param("blockId") Long blockId);
 
     List<IssueAssigneeRow> findAssignees(@Param("issueIds") Collection<Long> issueIds);

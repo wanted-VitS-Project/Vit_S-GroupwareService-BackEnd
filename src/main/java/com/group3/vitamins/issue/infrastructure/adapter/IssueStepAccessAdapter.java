@@ -30,6 +30,19 @@ public class IssueStepAccessAdapter implements IssueStepAccessPort {
     }
 
     @Override
+    public StepAccessView requireIssueAccess(Long stepId, String requesterUserId, String role) {
+        try {
+            StepAccessUseCase.StepAccessView step =
+                    stepAccessUseCase.requireAccess(stepId, requesterUserId, role);
+            return new StepAccessView(step.stepId(), step.projectId());
+        } catch (NotFoundException e) {
+            throw new NotFoundException(IssueErrorCode.ISS_NOT_FOUND, e);
+        } catch (ForbiddenException e) {
+            throw new ForbiddenException(IssueErrorCode.ISS_ACCESS_PERMISSION_REQUIRED, e);
+        }
+    }
+
+    @Override
     public StepAccessView requireEditable(Long stepId, String requesterUserId, String role) {
         try {
             StepAccessUseCase.StepAccessView step =
