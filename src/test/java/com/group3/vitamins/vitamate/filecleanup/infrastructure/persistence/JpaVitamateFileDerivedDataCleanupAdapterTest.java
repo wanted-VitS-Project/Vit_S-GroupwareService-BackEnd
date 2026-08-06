@@ -155,12 +155,21 @@ class JpaVitamateFileDerivedDataCleanupAdapterTest {
     private void insertDocumentChunk(Long documentChunkId, Long fileVersionId, int chunkIndex) {
         jdbcTemplate.update("""
                 INSERT INTO document_chunk (
-                    document_chunk_id, file_version_id, deleted_at
+                    document_chunk_id, file_version_id, chunk_index,
+                    page_number, section_title, start_offset, end_offset,
+                    token_count, chroma_id, excerpt, embedding_model,
+                    embedding_status, created_at, updated_at, deleted_at
                 )
-                VALUES (?, ?, null)
+                VALUES (?, ?, ?,
+                        1, 'cleanup-test', 0, 100,
+                        30, null, 'cleanup excerpt', null,
+                        'PENDING', ?, ?, null)
                 """,
                 documentChunkId,
-                fileVersionId
+                fileVersionId,
+                chunkIndex,
+                NOW,
+                NOW
         );
     }
 
