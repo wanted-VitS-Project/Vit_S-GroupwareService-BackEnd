@@ -23,7 +23,15 @@ public enum ProjectErrorCode implements ErrorCode {
     PROJECT_EDIT_DENIED("PROJECT_EDIT_DENIED",
             "프로젝트를 편집할 권한이 없습니다."),
     USER_NOT_FOUND("USER_NOT_FOUND",
-            "지정한 사용자를 찾을 수 없습니다.");
+            "지정한 사용자를 찾을 수 없습니다."),
+    MEMBER_PERMISSION_INVALID("MEMBER_PERMISSION_INVALID",
+            "허용되지 않은 권한 등급입니다."),
+    MEMBER_ALREADY_EXISTS("MEMBER_ALREADY_EXISTS",
+            "이미 참여자로 등록된 사용자입니다."),
+    MEMBER_NOT_FOUND("MEMBER_NOT_FOUND",
+            "참여자를 찾을 수 없습니다."),
+    MEMBER_SELF_EDIT_DENIED("MEMBER_SELF_EDIT_DENIED",
+            "자기 자신의 권한 행은 변경할 수 없습니다.");
 
     private final String code;
     private final String message;
