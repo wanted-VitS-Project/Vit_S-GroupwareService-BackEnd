@@ -82,6 +82,7 @@ public class ImageController {
             + "(presigned URL이 1시간마다 만료되고, 그 사이 추가된 이미지도 놓치지 않기 위함).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이미지 항목 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "direction 값이 올바르지 않습니다. (IMG-011, next/prev만 허용)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "접근 권한이 없습니다. (IMG-007) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
@@ -101,7 +102,7 @@ public class ImageController {
     ) {
         ImageItemView view = imageQueryUseCase.getItem(new GetImageItemQuery(
                 authentication.getName(), imgBlockId, currentOrderIndex,
-                ImageNavigationDirection.valueOf(direction.toUpperCase()),
+                parseDirection(direction),
                 RequesterRole.from(authentication)));
 
         ImageItemQueryResponse data = new ImageItemQueryResponse(
@@ -157,7 +158,7 @@ public class ImageController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "이미지 항목 생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "지원하지 않는 파일 형식입니다. (IMG-001) / 이미지 개수와 캡션 개수가 일치하지 않습니다. (IMG-004) / "
-                            + "한 번에 업로드할 수 있는 파일 개수를 초과했습니다. (IMG-010, 최대 20장)"),
+                            + "한 번에 업로드할 수 있는 파일 개수를 초과했습니다. (IMG-010, 최대 15장)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (IMG-002) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (IMG-003)"),
@@ -315,10 +316,24 @@ public class ImageController {
         if (requestJson == null || requestJson.isBlank()) {
             return null;
         }
+        ImageItemCreateRequest parsed;
         try {
-            return objectMapper.readValue(requestJson, ImageItemCreateRequest.class).captions();
+            parsed = objectMapper.readValue(requestJson, ImageItemCreateRequest.class);
         } catch (JsonProcessingException e) {
             throw new HttpMessageNotReadableException("request 파트의 JSON 형식이 올바르지 않습니다.", e, null);
+        }
+        // JSON 리터럴 null("request": null)은 파싱 자체는 성공하고 Jackson이 Java null을 돌려준다 —
+        // .captions() 를 바로 부르면 NPE(500)로 샌다. request 파트를 아예 안 보낸 것과 같은 의미로
+        // 보고 동일하게 처리한다(2026-08-06, 코드 리뷰로 발견).
+        return parsed != null ? parsed.captions() : null;
+    }
+
+    /** direction 은 명세상 next/prev만 허용된다 — enum 변환 실패를 500이 아니라 400 IMG-011로 명확히 응답한다. */
+    private ImageNavigationDirection parseDirection(String direction) {
+        try {
+            return ImageNavigationDirection.valueOf(direction.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(ImageErrorCode.INVALID_DIRECTION);
         }
     }
 }

@@ -58,7 +58,10 @@ public class ImageCommandService implements ImageCommandUseCase {
 
     // 한 번의 요청 안에서 S3 업로드를 몇 번이나 반복하며 트랜잭션(비관적 락 포함)을 붙잡고 있을지의
     // 최악값을 유한하게 만든다 — 개수 자체는 명세에 없어 구현 시 임의 결정 (.ai/api/image.md 참고).
-    private static final int MAX_FILES_PER_REQUEST = 20;
+    // 15 * MAX_FILE_SIZE_BYTES(20MB) = 300MB — application.yml의 multipart.max-request-size와
+    // 정확히 맞춘 값이라, 파일 개수 상한에 걸리기 전에 항상 전체 용량 상한에도 안전하게 걸린다
+    // (2026-08-06, 코드 리뷰로 20장×20MB=400MB가 300MB 상한을 넘을 수 있던 불일치 발견 후 조정).
+    private static final int MAX_FILES_PER_REQUEST = 15;
 
     @Override
     public CreateImageItemsView create(CreateImageItemsCommand command) {
@@ -85,17 +88,43 @@ public class ImageCommandService implements ImageCommandUseCase {
             throw new ValidationException(ImageErrorCode.CAPTION_COUNT_MISMATCH);
         }
 
-        // 확장자는 업로드를 시작하기 전에 전부 검증한다 — 뒤쪽 파일이 걸리면
-        // 앞서 이미 올린 파일들이 고아 객체로 S3 에 남기 때문이다.
+        // 확장자·실제 콘텐츠(매직 바이트, 위장 업로드 방지) 검증은 업로드를 시작하기 전에 전부 끝낸다 —
+        // 파일마다 업로드하면서 검증하면 뒤쪽 파일이 걸릴 때 앞서 이미 올린 파일들이 고아 객체로 S3에
+        // 남는다(2026-08-06, 사용자가 직접 테스트로 발견 — 처음엔 콘텐츠 검증만 업로드 어댑터 안에 있어서
+        // 이 원칙이 깨져 있었음).
         List<String> extensions = new ArrayList<>(files.size());
         for (MultipartFile file : files) {
-            extensions.add(eligibilityPolicy.assertSupportedExtensionOrThrow(file.getOriginalFilename()));
+            String extension = eligibilityPolicy.assertSupportedExtensionOrThrow(file.getOriginalFilename());
+            eligibilityPolicy.assertActualImageContentOrThrow(file, extension);
+            extensions.add(extension);
         }
 
         int nextOrderIndex = imageRepository.findMaxOrderIndex(command.imgBlockId()) + 1;
 
         List<ImageItem> draftItems = new ArrayList<>(files.size());
         List<String> uploadedStorageKeys = new ArrayList<>(files.size());
+
+        // S3 업로드는 DB 트랜잭션을 못 타서, 업로드 도중이나 이후 단계(다음 파일 업로드 실패·DB 저장
+        // 실패·활동 로그 발행 실패 등)에서 트랜잭션이 롤백돼도 이미 올라간 S3 객체는 자동으로 안
+        // 지워진다 — 고아 객체로 남는다(재시도할 때마다 쌓임). 그래서 등록은 업로드 루프가 시작되기
+        // *전에* 해야 한다 — 루프 안, 첫 파일이 아닌 다음 파일에서 업로드 자체가 실패해도 그 이전에
+        // 이미 올라간 파일들이 정리 대상에 걸리게 하려는 것 (2026-08-06, 코드 리뷰로 두 차례 발견 —
+        // 처음엔 등록 위치가 루프 뒤였어서 두 번째 파일부터의 업로드 실패는 못 잡았었음).
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    for (String storageKey : uploadedStorageKeys) {
+                        try {
+                            imageStoragePort.delete(storageKey);
+                        } catch (RuntimeException e) {
+                            log.error("이미지 생성 실패 후 업로드된 S3 객체 정리 실패 - storageKey={}", storageKey, e);
+                        }
+                    }
+                }
+            }
+        });
+
         for (int i = 0; i < files.size(); i++) {
             MultipartFile file = files.get(i);
             String extension = extensions.get(i);
@@ -115,25 +144,6 @@ public class ImageCommandService implements ImageCommandUseCase {
                     nextOrderIndex + i
             ));
         }
-
-        // S3 업로드는 DB 트랜잭션을 못 타서, 이후 단계(추가 업로드·DB 저장·활동 로그 발행 등)가 실패해
-        // 트랜잭션이 롤백돼도 이미 올라간 S3 객체는 자동으로 안 지워진다 — 고아 객체로 남는다(재시도할
-        // 때마다 쌓임). 트랜잭션이 커밋으로 끝나지 않으면 지금까지 올린 걸 보상 삭제한다(2026-08-06,
-        // 코드 리뷰로 발견).
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != TransactionSynchronization.STATUS_COMMITTED) {
-                    for (String storageKey : uploadedStorageKeys) {
-                        try {
-                            imageStoragePort.delete(storageKey);
-                        } catch (RuntimeException e) {
-                            log.error("이미지 생성 실패 후 업로드된 S3 객체 정리 실패 - storageKey={}", storageKey, e);
-                        }
-                    }
-                }
-            }
-        });
 
         List<ImageItem> savedItems = imageRepository.createAll(draftItems);
 

@@ -1,8 +1,6 @@
 package com.group3.vitamins.image.infrastructure.storage;
 
-import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.image.application.port.ImageStoragePort;
-import com.group3.vitamins.image.domain.exception.ImageErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
@@ -22,7 +20,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,8 +47,11 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
 
     @Override
     public UploadedImage upload(Long imgBlockId, MultipartFile file, String extension) {
+        // 실제 콘텐츠가 진짜 이미지인지(위장 업로드 방지)는 여기서 다시 확인하지 않는다 — 호출자
+        // (ImageCommandService)가 업로드를 시작하기 전에 ImageEligibilityPolicy.assertActualImageContentOrThrow
+        // 로 전체 파일을 먼저 검증한다(2026-08-06, 파일마다 여기서 검증하면 뒤쪽 파일이 걸릴 때 앞서
+        // 올라간 파일이 고아 객체로 남는 문제가 있어서 검증 시점을 앞단으로 옮김).
         byte[] original = readAllBytes(file);
-        assertActualImageContentOrThrow(original, extension, file.getOriginalFilename());
         byte[] body = prepareBody(file, extension, original);
         String key = "images/" + imgBlockId + "/" + UUID.randomUUID() + "." + extension;
 
@@ -131,46 +131,6 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
         } catch (IOException e) {
             throw new UncheckedImageReadException(e);
         }
-    }
-
-    /**
-     * 확장자(파일명 기준, 사용자가 임의로 붙일 수 있음)가 아니라 실제 바이트 내용이 그 확장자가
-     * 맞는 이미지 포맷인지 매직 바이트로 확인한다. 확장자만 검사하면 HTML·스크립트 파일도 이름만
-     * `.png`/`.gif`로 바꿔서 그대로 통과·저장될 수 있다(위장 업로드).
-     */
-    private void assertActualImageContentOrThrow(byte[] content, String extension, String originalFilename) {
-        if (!matchesSignature(content, extension)) {
-            log.warn("파일 내용이 확장자와 일치하지 않음(위장 업로드 의심) - originalFilename={}, extension={}",
-                    originalFilename, extension);
-            throw new ValidationException(ImageErrorCode.UNSUPPORTED_FILE_TYPE);
-        }
-    }
-
-    private boolean matchesSignature(byte[] content, String extension) {
-        return switch (extension) {
-            case "jpg", "jpeg" -> startsWith(content, 0xFF, 0xD8, 0xFF);
-            case "png" -> startsWith(content, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
-            // "GIF87a" 또는 "GIF89a"
-            case "gif" -> startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
-                    || startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
-            // RIFF 컨테이너(offset 0) + WEBP(offset 8)
-            case "webp" -> startsWith(content, 0x52, 0x49, 0x46, 0x46)
-                    && content.length >= 12
-                    && startsWith(Arrays.copyOfRange(content, 8, 12), 0x57, 0x45, 0x42, 0x50);
-            default -> false;
-        };
-    }
-
-    private boolean startsWith(byte[] content, int... signature) {
-        if (content.length < signature.length) {
-            return false;
-        }
-        for (int i = 0; i < signature.length; i++) {
-            if ((content[i] & 0xFF) != signature[i]) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static class UncheckedImageReadException extends RuntimeException {

@@ -13,7 +13,11 @@ import com.group3.vitamins.text.application.port.BlockCatalogPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
 import java.util.Set;
 
 @Component
@@ -135,6 +139,57 @@ public class ImageEligibilityPolicy {
             throw new ValidationException(ImageErrorCode.UNSUPPORTED_FILE_TYPE);
         }
         return extension;
+    }
+
+    /**
+     * 확장자(파일명 기준, 사용자가 임의로 붙일 수 있음)가 아니라 실제 바이트 내용이 그 확장자가 맞는
+     * 이미지 포맷인지 매직 바이트로 확인한다. 확장자만 검사하면 HTML·스크립트 파일도 이름만
+     * `.png`/`.gif`로 바꿔서 그대로 통과·저장될 수 있다(위장 업로드).
+     *
+     * <p>{@link #assertSupportedExtensionOrThrow}와 같은 이유로 업로드를 시작하기 *전에* 파일 전부를
+     * 검증해야 한다 — 처음엔 이 검증을 업로드 어댑터(S3ImageStorageAdapter) 안에 파일마다 두어서,
+     * 뒤쪽 파일이 위장 파일로 걸리면 앞서 이미 올라간 파일들이 S3에 고아 객체로 남는 문제가 있었다
+     * (2026-08-06, 사용자가 직접 테스트로 발견 — 원래 설계 원칙을 어긴 것이었다).
+     */
+    public void assertActualImageContentOrThrow(MultipartFile file, String extension) {
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        if (!matchesSignature(content, extension)) {
+            log.warn("파일 내용이 확장자와 일치하지 않음(위장 업로드 의심) - originalFilename={}, extension={}",
+                    file.getOriginalFilename(), extension);
+            throw new ValidationException(ImageErrorCode.UNSUPPORTED_FILE_TYPE);
+        }
+    }
+
+    private boolean matchesSignature(byte[] content, String extension) {
+        return switch (extension) {
+            case "jpg", "jpeg" -> startsWith(content, 0xFF, 0xD8, 0xFF);
+            case "png" -> startsWith(content, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+            // "GIF87a" 또는 "GIF89a"
+            case "gif" -> startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
+                    || startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
+            // RIFF 컨테이너(offset 0) + WEBP(offset 8)
+            case "webp" -> startsWith(content, 0x52, 0x49, 0x46, 0x46)
+                    && content.length >= 12
+                    && startsWith(Arrays.copyOfRange(content, 8, 12), 0x57, 0x45, 0x42, 0x50);
+            default -> false;
+        };
+    }
+
+    private boolean startsWith(byte[] content, int... signature) {
+        if (content.length < signature.length) {
+            return false;
+        }
+        for (int i = 0; i < signature.length; i++) {
+            if ((content[i] & 0xFF) != signature[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String extractExtension(String originalFilename) {
