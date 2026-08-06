@@ -82,7 +82,7 @@ class FileUploadServiceTest {
     }
 
     private void stubBlockAndEditable() {
-        when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+        when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
         when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
                 .thenReturn(new StepAccessUseCase.StepAccessView(STEP_ID, PROJECT_ID, MemberPermission.EDITOR));
     }
@@ -158,7 +158,7 @@ class FileUploadServiceTest {
         @Test
         @DisplayName("블록이 없거나 삭제되었으면 FILE_BLOCK_NOT_FOUND")
         void blockNotFound() {
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.empty());
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.startUpload(startCmd("a.pdf", 5000L, null, null, false)))
                     .satisfies(hasCode(FileErrorCode.FILE_BLOCK_NOT_FOUND));
@@ -167,7 +167,7 @@ class FileUploadServiceTest {
         @Test
         @DisplayName("편집 권한이 없으면 FILE_EDIT_PERMISSION_REQUIRED")
         void notEditable() {
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
             when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
                     .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
 
@@ -216,7 +216,7 @@ class FileUploadServiceTest {
 
         private void stubPermissionForComplete() {
             when(fileQueryPort.findBlockIdByFileId(31L)).thenReturn(Optional.of(BLOCK_ID));
-            when(blockCatalogPort.resolveFileBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
             when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
                     .thenReturn(new StepAccessUseCase.StepAccessView(STEP_ID, PROJECT_ID, MemberPermission.EDITOR));
         }

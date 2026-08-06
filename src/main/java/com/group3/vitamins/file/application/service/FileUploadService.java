@@ -60,7 +60,7 @@ public class FileUploadService implements FileUploadUseCase {
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
-        Long stepId = blockCatalogPort.resolveFileBlockStepId(command.blockId())
+        Long stepId = blockCatalogPort.resolveAttachableBlockStepId(command.blockId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
 
         Long projectId = requireEditable(stepId, command.requesterUserId(), command.role()).projectId();
@@ -123,7 +123,7 @@ public class FileUploadService implements FileUploadUseCase {
 
         Long blockId = fileQueryPort.findBlockIdByFileId(version.getFileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
-        Long stepId = blockCatalogPort.resolveFileBlockStepId(blockId)
+        Long stepId = blockCatalogPort.resolveAttachableBlockStepId(blockId)
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
         requireEditable(stepId, command.requesterUserId(), command.role());
 

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.infrastructure.adapter.ProjectMemberQueryMapper">
+
+    <select id="findMembers"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.ProjectMemberRow">
+        SELECT pm.project_member_id      AS memberId,
+               pm.user_id                AS userId,
+               e.name                    AS name,
+               d.name                    AS department,
+               pm.permission             AS permission,
+               (e.resigned_at IS NOT NULL) AS resigned
+        FROM project_member pm
+                 JOIN employee e
+                      ON e.user_id = pm.user_id
+                          AND e.deleted_at IS NULL
+                 LEFT JOIN department d
+                           ON d.department_id = e.department_id
+        WHERE pm.project_id = #{projectId}
+        ORDER BY e.name ASC, pm.user_id ASC
+    </select>
+
+</mapper>
