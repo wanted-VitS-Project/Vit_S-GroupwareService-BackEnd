@@ -44,4 +44,15 @@ public interface SpringDataNotificationRepository extends JpaRepository<Notifica
               AND n.deletedAt IS NULL
             """)
     int markAllRead(@Param("userId") String userId, @Param("now") LocalDateTime now);
+
+    /** RET-001 — 보존 기간이 지난 알림을 전 사용자 대상으로 일괄 논리 삭제한다. */
+    @Modifying
+    @Query("""
+            UPDATE NotificationJpaEntity n
+            SET n.deletedAt = :deletedAt
+            WHERE n.createdAt < :createdBefore
+              AND n.deletedAt IS NULL
+            """)
+    int deleteCreatedBefore(@Param("createdBefore") LocalDateTime createdBefore,
+                            @Param("deletedAt") LocalDateTime deletedAt);
 }

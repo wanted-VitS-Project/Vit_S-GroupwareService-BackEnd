@@ -1,6 +1,5 @@
 package com.group3.vitamins.notification.presentation;
 
-import com.group3.vitamins.notification.application.command.DeleteNotificationCommand;
 import com.group3.vitamins.notification.application.command.GetNotificationTargetCommand;
 import com.group3.vitamins.notification.application.command.MarkAllReadCommand;
 import com.group3.vitamins.notification.application.query.ListNotificationsQuery;
@@ -18,9 +17,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -65,28 +62,6 @@ public class NotificationController {
                 new ListNotificationsQuery(userId, category, isRead, page, size));
 
         return ApiResponse.success("알림 목록 조회 성공", NotificationListResponse.from(result));
-    }
-
-    @Operation(summary = "알림 삭제", description = "본인 알림을 논리 삭제한다. 하드 삭제 아님.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "삭제 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-                    description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "NOTIFICATION_FORBIDDEN — 다른 사용자의 알림 삭제 시도"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "NOTIFICATION_NOT_FOUND — 존재하지 않거나 이미 삭제된 알림")
-    })
-    @DeleteMapping("/{notificationId}")
-    public ResponseEntity<Void> deleteNotification(
-            @Parameter(description = "알림 구분 번호", example = "301")
-            @PathVariable Long notificationId,
-            @AuthenticationPrincipal String userId) {
-
-        notificationCommandUseCase.deleteNotification(new DeleteNotificationCommand(notificationId, userId));
-
-        // 204 No Content 는 본문을 가질 수 없다(RFC 9110) — ApiResponse 래핑 없이 빈 응답으로 반환한다
-        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "알림 이동 대상 조회",

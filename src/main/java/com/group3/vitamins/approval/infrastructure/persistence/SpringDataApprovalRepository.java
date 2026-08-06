@@ -21,6 +21,12 @@ public interface SpringDataApprovalRepository extends JpaRepository<ApprovalJpaE
                          @Param("revisionNo") int revisionNo,
                          @Param("inProgress") ApprovalStatus inProgress);
 
+    /** PRC-002/PRC-007 — 마지막 결재선 처리 시 approval을 최종 상태로 종료(`COMPLETED`/`REJECTED`) */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalJpaEntity a SET a.status = :finalStatus, a.completedAt = CURRENT_TIMESTAMP, "
+            + "a.updatedAt = CURRENT_TIMESTAMP WHERE a.approvalId = :approvalId")
+    void finalizeApproval(@Param("approvalId") Long approvalId, @Param("finalStatus") ApprovalStatus finalStatus);
+
     /** 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) — approval 자체를 논리 삭제한다 */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ApprovalJpaEntity a SET a.deletedAt = :deletedAt, a.updatedAt = :deletedAt "

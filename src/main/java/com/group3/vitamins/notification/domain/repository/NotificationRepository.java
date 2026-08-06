@@ -24,4 +24,7 @@ public interface NotificationRepository {
 
     /** ACT-005 — 본인의 안 읽은 알림 전체를 일괄 읽음 처리하고 처리 건수를 반환한다. */
     int markAllRead(String userId, LocalDateTime now);
+
+    /** RET-001 — {@code createdBefore} 이전에 생성된 알림을 전부(전 사용자 대상) 논리 삭제하고 처리 건수를 반환한다. */
+    int deleteCreatedBefore(LocalDateTime createdBefore, LocalDateTime deletedAt);
 }
