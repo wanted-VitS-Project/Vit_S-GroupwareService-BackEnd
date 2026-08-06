@@ -69,7 +69,21 @@ public enum ApprovalErrorCode implements ErrorCode {
     // --- 블록 삭제 잠금 (APR-001-2 · INV-09) — ApprovalBlockDetailAdapter.deleteDetail() 전용 ---
 
     /** 진행 중(IN_PROGRESS)인 결재가 붙은 블록은 삭제할 수 없다 — 블록팀의 삭제 트랜잭션을 여기서 막는다 */
-    APPROVAL_IN_PROGRESS("APPROVAL_IN_PROGRESS", "진행 중인 결재가 있어 블록을 삭제할 수 없습니다.");
+    APPROVAL_IN_PROGRESS("APPROVAL_IN_PROGRESS", "진행 중인 결재가 있어 블록을 삭제할 수 없습니다."),
+
+    // --- 9. 결재관리 목록조회 (API 명세 요구사항: MGT-001~004) ---
+
+    /** MGT-003 — MASTER·ADMIN이 아닌 사용자의 scope=all 요청 시 403 */
+    APPROVAL_SCOPE_ALL_FORBIDDEN("APPROVAL_SCOPE_ALL_FORBIDDEN", "전체 조회는 MASTER만 가능합니다."),
+
+    // --- 11. 결재 승인 (API 명세 요구사항: PRC-001~004) — 이후 반려(PRC-005~009)에서도 공용 ---
+
+    /** PRC-001 — 해당 결재선의 결재자가 아님(존재하지 않는 lineId 포함, 리소스 존재 여부 비노출) */
+    APPROVAL_LINE_FORBIDDEN("APPROVAL_LINE_FORBIDDEN", "해당 결재선의 결재자가 아닙니다."),
+    /** PRC-001 — line.status가 ACTIVE가 아직 아님(WAITING 등 차례 안 옴) */
+    APPROVAL_LINE_NOT_ACTIVE("APPROVAL_LINE_NOT_ACTIVE", "아직 처리할 차례가 아닙니다."),
+    /** PRC-009 — 이미 처리 종결(APPROVED/REJECTED/CANCELED)된 결재선의 중복 처리(동시 요청·이중 클릭) */
+    APPROVAL_LINE_ALREADY_PROCESSED("APPROVAL_LINE_ALREADY_PROCESSED", "이미 처리된 결재선입니다.");
 
     private final String code;
     private final String message;

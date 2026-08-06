@@ -97,6 +97,65 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     }
 
     @Override
+    public List<ApprovalLine> findLinesByApprovalId(Long approvalId) {
+        return springDataApprovalLineRepository.findByApprovalId(approvalId).stream()
+                .map(this::toLine)
+                .toList();
+    }
+
+    @Override
+    public List<ApprovalRevision> findRevisionsByApprovalId(Long approvalId) {
+        return springDataApprovalRevisionRepository.findByApprovalIdOrderByRevisionNoAsc(approvalId).stream()
+                .map(this::toRevision)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public Optional<ApprovalLine> findLineByIdForUpdate(Long lineId) {
+        return springDataApprovalLineRepository.findByIdForUpdate(lineId).map(this::toLine);
+    }
+
+    @Override
+    @Transactional
+    public ApprovalLine markLineProcessed(Long lineId, ApprovalLineStatus status, String opinion) {
+        springDataApprovalLineRepository.markProcessed(lineId, status, opinion);
+        return springDataApprovalLineRepository.findById(lineId)
+                .map(this::toLine)
+                .orElseThrow(() -> new IllegalStateException("line not found after process: " + lineId));
+    }
+
+    @Override
+    public Optional<ApprovalLine> findLineBySequenceNo(Long revisionId, int sequenceNo) {
+        return springDataApprovalLineRepository
+                .findByApprovalRevisionIdAndSequenceNo(revisionId, sequenceNo)
+                .map(this::toLine);
+    }
+
+    @Override
+    @Transactional
+    public ApprovalLine activateLine(Long lineId) {
+        springDataApprovalLineRepository.activate(lineId, ApprovalLineStatus.ACTIVE);
+        return springDataApprovalLineRepository.findById(lineId)
+                .map(this::toLine)
+                .orElseThrow(() -> new IllegalStateException("line not found after activate: " + lineId));
+    }
+
+    @Override
+    @Transactional
+    public void finalizeApproval(Long approvalId, Long revisionId, ApprovalStatus finalStatus) {
+        springDataApprovalRevisionRepository.finalizeRevision(revisionId, finalStatus);
+        springDataApprovalRepository.finalizeApproval(approvalId, finalStatus);
+    }
+
+    @Override
+    @Transactional
+    public void cancelWaitingLinesAfter(Long revisionId, int sequenceNo) {
+        springDataApprovalLineRepository.cancelWaitingAfter(
+                revisionId, sequenceNo, ApprovalLineStatus.WAITING, ApprovalLineStatus.CANCELED);
+    }
+
+    @Override
     public List<ApprovalDocument> findDocumentsByRevisionId(Long revisionId) {
         return springDataApprovalDocumentRepository.findByApprovalRevisionId(revisionId).stream()
                 .map(this::toDocument)
