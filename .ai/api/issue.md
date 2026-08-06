@@ -71,6 +71,9 @@
 
 `assigneeIds`와 `blockIds`는 PATCH에서 **추가분이 아니라 최종 전체 목록**이다.
 
+`assigneeIds`는 `GET /api/v1/projects/{projectId}/members` 응답의 `members[].userId`를 사용한다.
+`blockIds`는 `GET /api/v1/steps/{stepId}/blocks/options` 응답의 `blocks[].blockId`를 사용한다.
+
 ---
 
 ## 1. 스텝별 이슈 목록 조회
@@ -198,7 +201,7 @@ Step 진입
 
 ```bash
 GET /api/v1/projects/{projectId}/members
-GET /api/v1/steps/{stepId}/blocks
+GET /api/v1/steps/{stepId}/blocks/options
 ```
 
 **Block 연결 이슈 팝업**
@@ -340,7 +343,7 @@ Step 존재 및 접근 권한 확인
 |---|---|:---:|---|
 | `title` | String | N | 제목. 전달 시 빈 값 불가, 최대 200자 |
 | `content` | String | N | 내용. 명시적 `null`이면 내용 삭제 |
-| `dueDate` | String | N | 마감 일시. 명시적 `null`이면 마감일 해제 |
+| `dueDate` | LocalDate | N | 마감일. 명시적 `null`이면 마감일 해제 |
 | `priority` | String | N | `LOW` · `MEDIUM` · `HIGH` |
 | `assigneeIds` | List<String> | N | 최종 담당자 전체 목록 |
 | `blockIds` | List<Long> | N | 최종 관련 Block 전체 목록 |
