@@ -5,15 +5,21 @@
 
 <mapper namespace="com.group3.vitamins.file.infrastructure.adapter.FileQueryMapper">
 
-    <!-- 블록 안 동명(살아있는) 문서 존재 여부 (§1). block_file ⋈ file, deleted_at IS NULL. -->
+    <!-- 블록 안 동명 문서 존재 여부 (§1 중복검사). block_file ⋈ file ⋈ file_version. -->
+    <!-- ⚠️ 완료(COMPLETED) 버전이 있는 문서만 "존재"로 본다 — §3 목록(완료본만 표시)과 정합. -->
+    <!-- 그러지 않으면 §1 이 완료 전에 만들어 두고 버려진 file row(UPLOADING/FAILED)가 이름을 선점해, -->
+    <!-- 화면엔 아무것도 없는데 재업로드가 409 FILE_NAME_DUPLICATED 로 막힌다. -->
     <select id="existsActiveNameInBlock" resultType="boolean">
         SELECT EXISTS (
             SELECT 1
               FROM block_file bf
               JOIN file f ON f.file_id = bf.file_id
+              JOIN file_version fv ON fv.file_id = f.file_id
              WHERE bf.block_id = #{blockId}
                AND f.name = #{name}
                AND f.deleted_at IS NULL
+               AND fv.upload_status = 'COMPLETED'
+               AND fv.deleted_at IS NULL
         )
     </select>
 
@@ -93,6 +99,34 @@
                 OR (#{deleted} = TRUE AND f.deleted_at IS NOT NULL)
                )
          ORDER BY bf.linked_at ASC, f.file_id ASC
+    </select>
+
+    <!-- 프로젝트 파일 버전 목록(§11, #138) — 비타메이트 분석 선택용. 프로젝트 전체 문서의 완료 버전(과거 버전 포함). -->
+    <!-- 블록이 삭제돼 고아가 된 파일도 포함(파일은 프로젝트 소속). 휴지통 문서(file.deleted_at)는 제외. -->
+    <!-- file_index 는 LEFT JOIN — 인덱스 행이 없거나 소프트삭제됐으면 COALESCE 로 'PENDING' 을 내린다(쓰기는 AI 담당). -->
+    <select id="findProjectFileVersions"
+            resultType="com.group3.vitamins.file.application.result.ProjectFileVersionProjection">
+        SELECT f.file_id                                  AS fileId,
+               f.name                                     AS name,
+               fv.file_version_id                         AS fileVersionId,
+               fv.version_no                              AS versionNo,
+               fv.original_file_name                      AS originalFileName,
+               fv.extension                               AS extension,
+               fv.size_bytes                              AS sizeBytes,
+               fv.page_count                              AS pageCount,
+               fv.completed_at                            AS completedAt,
+               COALESCE(fi.index_status, 'PENDING')       AS indexStatus
+          FROM file f
+          JOIN file_version fv
+                ON fv.file_id = f.file_id
+               AND fv.upload_status = 'COMPLETED'
+               AND fv.deleted_at IS NULL
+          LEFT JOIN file_index fi
+                ON fi.file_version_id = fv.file_version_id
+               AND fi.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NULL
+         ORDER BY f.file_id ASC, fv.version_no DESC
     </select>
 
 </mapper>
