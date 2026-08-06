@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @DisplayName("VitamateAnalysisHistoryQueryService")
@@ -32,6 +33,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
     private static final Long STEP_ID = 30L;
     private static final Long PROJECT_ID = 40L;
     private static final String USER_ID = "EMP001";
+    private static final int HISTORY_LIMIT = 20;
 
     private VitamateBlockReaderPort blockReader;
     private VitamateAnalysisReaderPort analysisReader;
@@ -53,7 +55,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
         void returnsHistoriesForAccessibleVitamateBlock() {
             when(blockReader.findAccessibleVitamateBlock(BLOCK_ID, USER_ID))
                     .thenReturn(Optional.of(blockContext()));
-            when(analysisReader.findBlockAnalysisHistories(VITAMATE_BLOCK_ID))
+            when(analysisReader.findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT))
                     .thenReturn(List.of(history(1L), history(2L)));
 
             VitamateAnalysisHistoryResult result = queryService.handle(query());
@@ -63,7 +65,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
                     .hasSize(2)
                     .extracting(VitamateAnalysisHistoryResult.Item::analysisId)
                     .containsExactly(1L, 2L);
-            verify(analysisReader).findBlockAnalysisHistories(VITAMATE_BLOCK_ID);
+            verify(analysisReader).findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT);
         }
 
         @Test
@@ -71,7 +73,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
         void returnsEmptyContentWhenNoAnalysisHistoryExists() {
             when(blockReader.findAccessibleVitamateBlock(BLOCK_ID, USER_ID))
                     .thenReturn(Optional.of(blockContext()));
-            when(analysisReader.findBlockAnalysisHistories(VITAMATE_BLOCK_ID))
+            when(analysisReader.findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT))
                     .thenReturn(List.of());
 
             VitamateAnalysisHistoryResult result = queryService.handle(query());
@@ -91,7 +93,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
                     .satisfies(exception -> assertThat(((NotFoundException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_BLOCK_NOT_FOUND));
 
-            verify(analysisReader, never()).findBlockAnalysisHistories(VITAMATE_BLOCK_ID);
+            verify(analysisReader, never()).findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT);
         }
     }
 
@@ -103,6 +105,17 @@ class VitamateAnalysisHistoryQueryServiceTest {
         @DisplayName("rejects missing block id")
         void rejectsMissingBlockId() {
             assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(null, USER_ID));
+        }
+
+        @Test
+        @DisplayName("rejects missing query")
+        void rejectsMissingQuery() {
+            assertThatThrownBy(() -> queryService.handle(null))
+                    .isInstanceOf(ValidationException.class)
+                    .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
+                            .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
+
+            verifyNoInteractions(blockReader, analysisReader);
         }
 
         @Test
@@ -124,8 +137,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
                     .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
 
-            verify(blockReader, never()).findAccessibleVitamateBlock(query.blockId(), query.userId());
-            verify(analysisReader, never()).findBlockAnalysisHistories(VITAMATE_BLOCK_ID);
+            verifyNoInteractions(blockReader, analysisReader);
         }
     }
 

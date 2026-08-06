@@ -227,6 +227,7 @@
         WHERE va.vitamate_block_id = #{vitamateBlockId}
           AND va.deleted_at IS NULL
         ORDER BY va.created_at DESC, va.vitamate_analysis_id DESC
+        LIMIT #{limit}
     </select>
 
 </mapper>

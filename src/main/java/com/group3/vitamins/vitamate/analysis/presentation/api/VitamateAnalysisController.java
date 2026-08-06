@@ -96,7 +96,7 @@ public class VitamateAnalysisController {
 
     @Operation(
             summary = "블록별 분석 실행 이력 조회",
-            description = "비타메이트 블록에서 실행된 분석 요청 이력을 최신순으로 조회한다."
+            description = "비타메이트 블록에서 실행된 분석 요청 이력을 최신순으로 최대 20건 조회한다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "분석 실행 이력 조회 성공"),

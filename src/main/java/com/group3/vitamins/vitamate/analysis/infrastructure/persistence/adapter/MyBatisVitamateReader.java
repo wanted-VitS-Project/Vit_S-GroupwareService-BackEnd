@@ -63,10 +63,10 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 ));
     }
 
-    // 비타메이트 블록에 속한 분석 실행 이력 목록을 조회합니다.
+    // 비타메이트 블록에 속한 분석 실행 이력 목록을 지정한 개수까지만 조회합니다.
     @Override
-    public List<VitamateAnalysisHistory> findBlockAnalysisHistories(Long vitamateBlockId) {
-        return mapper.findBlockAnalysisHistories(vitamateBlockId).stream()
+    public List<VitamateAnalysisHistory> findBlockAnalysisHistories(Long vitamateBlockId, int limit) {
+        return mapper.findBlockAnalysisHistories(vitamateBlockId, limit).stream()
                 .map(this::toAnalysisHistory)
                 .toList();
     }

@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class VitamateAnalysisHistoryQueryService implements GetVitamateBlockAnalysisHistoryUseCase {
 
+    private static final int HISTORY_LIMIT = 20;
+
     private final VitamateBlockReaderPort blockReader;
     private final VitamateAnalysisReaderPort analysisReader;
 
@@ -32,7 +34,7 @@ public class VitamateAnalysisHistoryQueryService implements GetVitamateBlockAnal
 
         return VitamateAnalysisHistoryResult.from(
                 blockContext.blockId(),
-                analysisReader.findBlockAnalysisHistories(blockContext.vitamateBlockId())
+                analysisReader.findBlockAnalysisHistories(blockContext.vitamateBlockId(), HISTORY_LIMIT)
         );
     }
 
