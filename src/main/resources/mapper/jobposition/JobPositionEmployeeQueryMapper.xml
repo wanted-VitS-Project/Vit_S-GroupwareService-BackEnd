@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  직급별 사원 목록 조회 SQL (사원 도메인 소관 employee 테이블).
+  쓰기·단건 조회는 JPA(JobPositionRepositoryAdapter) 담당.
+  namespace = Mapper 인터페이스 전체 경로 · id = 메서드명 (팀 MyBatis 컨벤션).
+  모집단 기준은 §1 employeeCount 와 동일: is_system=0 AND resigned_at IS NULL AND deleted_at IS NULL
+  → 목록 길이 = 그 직급의 employeeCount.
+-->
+<mapper namespace="com.group3.vitamins.jobposition.infrastructure.adapter.JobPositionEmployeeQueryMapper">
+
+    <!--
+      직급에 속한 사원 한 페이지(전건). 부서는 미배정일 수 있어 LEFT JOIN.
+      상위 부서(p)는 departmentPath("본사 / 개발팀") 조립용으로 이름만 내려준다(조립은 서비스).
+      정렬은 이름 오름차순, 동명이인은 사번 오름차순 (사원 목록과 동일 계약).
+    -->
+    <select id="findEmployeesByJobPosition"
+            resultType="com.group3.vitamins.jobposition.application.result.JobPositionEmployeeRow">
+        SELECT e.user_id       AS userId,
+               e.name          AS name,
+               d.name          AS departmentName,
+               p.name          AS parentDepartmentName
+          FROM employee e
+          LEFT JOIN department d ON d.department_id = e.department_id
+          LEFT JOIN department p ON p.department_id = d.parent_id
+         WHERE e.job_position_id = #{jobPositionId}
+           AND e.is_system = 0
+           AND e.resigned_at IS NULL
+           AND e.deleted_at IS NULL
+         ORDER BY e.name ASC, e.user_id ASC
+    </select>
+
+</mapper>

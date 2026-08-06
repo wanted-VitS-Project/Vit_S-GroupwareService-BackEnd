@@ -77,6 +77,16 @@ spring:
       "[mail.smtp.timeout]": 5000
       "[mail.smtp.writetimeout]": 5000
 
+  # 이미지 블록: 리사이즈는 서버가 받은 뒤에 한다 — 원본이 이 한도를 먼저 통과해야 리사이즈 코드까지
+  # 도달한다. 스크린샷 등 원본이 기본값(1MB/요청 10MB)을 쉽게 넘어서 넉넉히 올려둔다.
+  # max-request-size 는 한 번에 여러 장 첨부할 때의 합계 한도 — 20~30장 정도 한꺼번에 올려도
+  # 안 걸리게 넉넉히 잡는다 (완전 무제한은 안 함 — 개별 파일 20MB 한도와 별개로, 합계까지
+  # 없애면 파일 개수를 늘려서 사실상 무제한 업로드가 가능해져 메모리 부담이 그대로 남는다).
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 300MB
+
 server:
   servlet:
     session:
@@ -145,6 +155,13 @@ cloud:
 account:
   mail:
     login-url: ${APP_LOGIN_URL:http://localhost:3000/login}
+
+# ── 알림 자동 정리 (RET-001) ─────────────────────────────
+# 개별 삭제 API 가 없는 대신, 생성된 지 3개월(RET-001 정책값, 코드 상수) 지난 알림을 매일 배치로 논리 삭제한다.
+# 여기 있는 건 실행 시각뿐 — 보존 기간은 운영 튜닝값이 아니라 정책값이라 설정으로 안 뺀다.
+notification:
+  retention:
+    cron: ${NOTIFICATION_RETENTION_CRON:0 0 3 * * *}
 
 
 vitamate:

@@ -1,7 +1,7 @@
 # 비타메이트 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-05 (Queue + callback 비동기 분석 계약 반영)
+**최종 동기화**: 2026-08-06 (document_chunk 임베딩 및 ChromaDB 저장 내부 API 계약 추가)
 **도메인 담당**: 정현
 
 > 이 파일이 비타메이트 API 계약 기준이다. 임의 변경 금지.
@@ -18,6 +18,9 @@
 | ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
 | ✅ 확정 | Python 분석 작업 조회 | GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | 내부 서버 |
 | ✅ 확정 | Python 분석 결과 콜백 | POST | `/internal/v1/vitamate/analyses/{analysisId}/callback` | 내부 서버 |
+| ✅ 확정 | 파일 인덱싱 소스 조회 | GET | `/internal/v1/vitamate/file-versions/{fileVersionId}/index-source` | 내부 서버 |
+| ✅ 확정 | 문서 청크 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks` | 내부 서버 |
+| ✅ 확정 | 문서 청크 임베딩 결과 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks/embeddings` | 내부 서버 |
 | ✅ 확정 | 파일 인덱싱 상태 콜백 | POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | 내부 서버 |
 
 ---
@@ -166,6 +169,14 @@ analysisId
 해당 비타메이트 블록에서 수행한 분석 실행 이력을 조회한다.
 
 권한은 `blockId → block → step` 기준의 스텝 접근 권한을 적용한다.
+
+반환 상한:
+
+| 항목 | 규칙 |
+|------|------|
+| 최대 건수 | 최신순 20건 |
+| 정렬 | `createdAt DESC`, 동일 시각이면 `analysisId DESC` |
+| 페이징 | v1에서는 제공하지 않는다. 이력이 20건을 초과하면 최신 20건만 반환한다 |
 
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
@@ -523,6 +534,317 @@ callback null 규칙:
 
 ---
 
+## 파일 인덱싱 소스 조회 `GET /internal/v1/vitamate/file-versions/{fileVersionId}/index-source`
+
+**상태**: ✅ 확정
+
+Python worker가 파일 버전의 텍스트 추출을 위해 다운로드 정보와 파일 메타데이터를 조회하는 내부 API다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 텍스트 추출 대상 파일 버전 ID |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 파일 버전 ID |
+| `fileId` | Long | 파일 ID |
+| `projectId` | Long | 파일이 속한 프로젝트 ID |
+| `originalFileName` | String | 원본 파일명 |
+| `extension` | String | 확장자 |
+| `mimeType` | String | MIME 타입 |
+| `sizeBytes` | Long | 파일 크기 |
+| `storageKey` | String | 저장소 객체 키. 응답에는 필요 시에만 포함하고 로그에는 남기지 않는다 |
+| `downloadUrl` | String | Python worker가 파일을 다운로드할 URL |
+
+조회 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 `file_version`이 없으면 404 |
+| 업로드 상태 | 업로드 완료 상태의 파일 버전만 조회 가능 |
+| 삭제 상태 | 삭제된 파일 또는 파일 버전은 조회하지 않는다 |
+| 다운로드 URL | local/dev/prod 저장소 정책에 맞게 발급한다. dev/prod에서는 공개 URL이 아니라 제한된 다운로드 URL을 사용한다 |
+| 로그 | `fileVersionId`, `extension`, `sizeBytes` 정도만 남기고 원문, storage key, worker token은 남기지 않는다 |
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 다운로드 정보를 이용해 텍스트 추출을 진행한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | `fileVersionId` 형식 오류. ack하고 운영 확인 대상으로 본다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전이 없음. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+**Response 예시**
+
+```json
+{
+  "fileVersionId": 101,
+  "fileId": 31,
+  "projectId": 10,
+  "originalFileName": "스마트시티_제안요청서.pdf",
+  "extension": "pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 6081740,
+  "storageKey": "projects/10/files/31/versions/101.pdf",
+  "downloadUrl": "https://example.com/presigned-download-url"
+}
+```
+
+---
+
+## 문서 청크 저장 `POST /internal/v1/vitamate/file-versions/{fileVersionId}/chunks`
+
+**상태**: ✅ 확정
+
+Python worker가 파일에서 추출한 텍스트를 `document_chunk` 단위로 분리한 뒤 Spring Boot에 저장하는 내부 API다.
+저장 후 Python worker가 각 청크를 ChromaDB에 저장할 수 있도록 `documentChunkId` 목록을 반환한다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 청크 저장 대상 파일 버전 ID |
+
+**Request**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `chunks` | Object[] | 저장할 문서 청크 목록 |
+| `chunks[].chunkIndex` | Integer | 파일 버전 내 청크 순서. 0부터 시작 |
+| `chunks[].pageNumber` | Integer | 페이지 번호. 알 수 없으면 `null` |
+| `chunks[].sectionTitle` | String | 섹션 제목. 알 수 없으면 `null` |
+| `chunks[].startOffset` | Integer | 원문 시작 위치. 알 수 없으면 `null` |
+| `chunks[].endOffset` | Integer | 원문 종료 위치. 알 수 없으면 `null` |
+| `chunks[].tokenCount` | Integer | 추정 토큰 수. 알 수 없으면 `null` |
+| `chunks[].excerpt` | String | 청크 본문. `document_chunk.excerpt`에 저장하며 1000자 이하 |
+
+저장 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 완료·미삭제 `file_version` 또는 미삭제 `file`이 없으면 404 |
+| 저장 방식 | `fileVersionId + chunkIndex` 기준 upsert로 저장하며 기존 `document_chunk_id`는 유지한다 |
+| 누락 청크 처리 | 기존 활성 청크 중 요청에 포함되지 않은 `chunkIndex`는 soft delete한다 |
+| 삭제 해제 | soft-deleted 청크의 `chunkIndex`가 다시 전달되면 값을 갱신하고 `deleted_at`을 `null`로 해제한다 |
+| 청크 목록 | `chunks`가 비어 있으면 400 |
+| 청크 개수 | 한 요청에 최대 500개까지 허용한다 |
+| 청크 순서 | `chunkIndex`는 0 이상이며 같은 요청 안에서 중복될 수 없다 |
+| 청크 본문 | `excerpt`는 빈 값일 수 없고 1000자를 초과할 수 없다 |
+| 임베딩 상태 | 청크 저장 시 `embedding_status = 'PENDING'`으로 저장한다 |
+| 인덱싱 시도 ID | 청크 저장 시 Spring Boot가 `indexAttemptId`를 새로 생성한다. Python worker는 이 값을 임베딩 결과 저장 API와 최종 상태 callback에 그대로 전달한다 |
+| Chroma 연동 | 이 API에서는 ChromaDB 저장을 하지 않는다. Python worker가 응답의 `documentChunkId`와 `indexAttemptId` 기준으로 ChromaDB에 저장한 뒤 임베딩 결과 저장 API를 호출한다 |
+| 트랜잭션 | 파일 버전 행을 잠근 뒤 누락 청크 soft delete와 청크 upsert를 하나의 트랜잭션에서 처리한다 |
+| 로그 | `fileVersionId`, 저장 청크 수만 남기고 문서 원문, storage key, worker token은 남기지 않는다 |
+
+**Request 예시**
+
+```json
+{
+  "chunks": [
+    {
+      "chunkIndex": 0,
+      "pageNumber": 1,
+      "sectionTitle": "제안 개요",
+      "startOffset": 0,
+      "endOffset": 920,
+      "tokenCount": 310,
+      "excerpt": "스마트시티 통합 관제 플랫폼 구축을 위해 실시간 데이터 수집과 분석 기능이 필요하다."
+    }
+  ]
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 청크 저장 성공. 이후 Python worker는 임베딩 생성과 ChromaDB 저장을 진행한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 요청 형식 또는 청크 검증 실패. 파일 인덱싱 상태를 `FAILED`로 callback한다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전이 없음. ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 파일 버전 ID |
+| `indexAttemptId` | String | 이번 파일 인덱싱 시도 ID. 임베딩 결과 저장과 상태 callback에서 같은 값을 사용한다 |
+| `savedChunkCount` | Integer | 저장된 청크 수 |
+| `savedChunks` | Object[] | 저장된 청크 목록 |
+| `savedChunks[].documentChunkId` | Long | Spring DB에서 생성되었거나 유지된 문서 청크 ID |
+| `savedChunks[].chunkIndex` | Integer | 파일 버전 내 청크 순서 |
+| `savedChunks[].embeddingStatus` | String | 청크 저장 직후 상태. `PENDING` |
+
+**Response 예시**
+
+```json
+{
+  "fileVersionId": 101,
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
+  "savedChunkCount": 2,
+  "savedChunks": [
+    {
+      "documentChunkId": 9001,
+      "chunkIndex": 0,
+      "embeddingStatus": "PENDING"
+    },
+    {
+      "documentChunkId": 9002,
+      "chunkIndex": 1,
+      "embeddingStatus": "PENDING"
+    }
+  ]
+}
+```
+
+---
+
+## 문서 청크 임베딩 결과 저장 `POST /internal/v1/vitamate/file-versions/{fileVersionId}/chunks/embeddings`
+
+**상태**: ✅ 확정
+
+Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spring Boot에 전달하는 내부 API다.
+
+프론트에서 호출하지 않는다.
+
+서비스 인증:
+
+| 항목 | 규칙 |
+|------|------|
+| 호출자 | Python worker만 호출 |
+| 인증 방식 | Python worker 전용 내부 서비스 토큰 |
+| Header | `X-Vitamate-Worker-Token` |
+| 토큰 저장 | Spring Boot와 Python worker 모두 환경변수 `VITAMATE_WORKER_TOKEN`으로 주입한다 |
+| 전송 보안 | local을 제외한 dev/prod 환경은 HTTPS만 허용하고 Python worker는 TLS 인증서 검증을 끄지 않는다 |
+| 검증 위치 | `/internal/v1/vitamate/**` 진입 전 전용 SecurityFilterChain에서 검증한다 |
+| 금지 사항 | 토큰 값을 GitHub, yml, 로그, Swagger example에 남기지 않고 HTTP 요청이나 redirect 요청에 포함하지 않는다 |
+| 실패 응답 | 인증 실패 401, 권한 없는 호출 403 |
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 임베딩 결과를 반영할 파일 버전 ID |
+
+**Request**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `embeddingModel` | String | 임베딩에 사용한 모델명 |
+| `indexAttemptId` | String | 청크 저장 응답에서 받은 현재 인덱싱 시도 ID |
+| `chunks` | Object[] | 임베딩 결과를 반영할 청크 목록 |
+| `chunks[].documentChunkId` | Long | Spring DB의 문서 청크 ID |
+| `chunks[].chromaId` | String | ChromaDB에 저장된 벡터 ID |
+
+저장 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 파일 버전 존재 여부 | `fileVersionId`에 해당하는 완료·미삭제 `file_version` 또는 미삭제 `file`이 없으면 404 |
+| 인덱싱 시도 ID | `indexAttemptId`는 비어 있을 수 없고 현재 `file_index.index_attempt_id`와 일치해야 한다 |
+| 청크 소속 | 모든 `chunks[].documentChunkId`는 path의 `fileVersionId`에 속한 활성 `document_chunk`여야 한다 |
+| 청크 목록 | `chunks`가 비어 있으면 400 |
+| 청크 개수 | 한 요청에 최대 500개까지 허용한다 |
+| 청크 ID | `documentChunkId`는 같은 요청 안에서 중복될 수 없다 |
+| Chroma ID | `chromaId`는 비어 있을 수 없고 150자를 초과할 수 없으며 같은 요청 안에서 중복될 수 없다 |
+| 임베딩 모델 | `embeddingModel`은 비어 있을 수 없고 100자를 초과할 수 없다 |
+| 저장 방식 | 모든 청크 검증이 끝난 뒤 `chroma_id`, `embedding_model`, `embedding_status`를 갱신한다 |
+| 완료 상태 | 정상 반영된 청크는 `embedding_status = 'COMPLETED'`로 저장한다 |
+| 일부 실패 | 일부 청크만 저장하지 않는다. 하나라도 검증에 실패하면 전체 요청을 실패 처리한다 |
+| 분석 사용 조건 | AI 분석 작업 조회는 `embedding_status = 'COMPLETED'`인 청크만 후보로 사용한다 |
+| 로그 | `fileVersionId`, 반영 청크 수, `embeddingModel`만 남기고 문서 원문, Chroma vector 값, worker token은 남기지 않는다 |
+
+**Request 예시**
+
+```json
+{
+  "embeddingModel": "gemini-embedding-001",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
+  "chunks": [
+    {
+      "documentChunkId": 9001,
+      "chromaId": "vitamate:document-chunk:9001"
+    },
+    {
+      "documentChunkId": 9002,
+      "chromaId": "vitamate:document-chunk:9002"
+    }
+  ]
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | Python worker 처리 기준 |
+|------|------|------|------------------------|
+| 200 | OK | - | 임베딩 결과 저장 성공. 이후 파일 인덱싱 상태를 `COMPLETED`로 callback한다 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 요청 형식, 청크 소속, Chroma ID 검증 실패. 파일 인덱싱 상태를 `FAILED`로 callback한다 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전·청크가 없거나 `indexAttemptId`가 현재 시도와 다름. 늦은 worker 결과로 보고 ack하고 재시도하지 않는다 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `fileVersionId` | Long | 파일 버전 ID |
+| `indexAttemptId` | String | 반영된 인덱싱 시도 ID |
+| `updatedChunkCount` | Integer | 임베딩 결과가 반영된 청크 수 |
+| `embeddingStatus` | String | 최종 상태. 정상 처리 시 `COMPLETED` |
+
+**Response 예시**
+
+```json
+{
+  "fileVersionId": 101,
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
+  "updatedChunkCount": 2,
+  "embeddingStatus": "COMPLETED"
+}
+```
+
+---
+
 ## 파일 인덱싱 상태 콜백 `POST /internal/v1/vitamate/file-indexes/{fileVersionId}/callback`
 
 **상태**: ✅ 확정
@@ -555,6 +877,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
+| `indexAttemptId` | String | 현재 인덱싱 시도 ID. `PENDING`, `PROCESSING`은 생략 가능하고, `COMPLETED`, `FAILED`는 필수 |
 | `errorMessage` | String | 실패 사유. `FAILED`일 때 필수 |
 
 저장 상태값:
@@ -581,6 +904,8 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 |------|------|
 | 생성/갱신 | `fileVersionId` 기준으로 `file_index`가 없으면 생성하고, 있으면 갱신한다 |
 | 중복 callback | 같은 `fileVersionId`로 여러 번 호출되어도 중복 row를 만들지 않는다 |
+| 시도 ID 생성 | `PENDING`, `PROCESSING` callback에 `indexAttemptId`가 없으면 Spring Boot가 새 값을 생성해 응답한다 |
+| 늦은 callback 차단 | `COMPLETED`, `FAILED`는 현재 `indexAttemptId`와 일치할 때만 저장한다. 일치하지 않으면 `accepted=false`로 응답하고 상태를 바꾸지 않는다 |
 | 상태 검증 | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 외 값은 400 |
 | 실패 메시지 | `FAILED`인데 `errorMessage`가 비어 있으면 400 |
 | 완료 메시지 | `PENDING`, `PROCESSING`, `COMPLETED`이면 기존 `index_error_message`를 제거한다 |
@@ -591,6 +916,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 ```json
 {
   "indexStatus": "PROCESSING",
+  "indexAttemptId": null,
   "errorMessage": null
 }
 ```
@@ -600,6 +926,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 ```json
 {
   "indexStatus": "COMPLETED",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "errorMessage": null
 }
 ```
@@ -609,6 +936,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 ```json
 {
   "indexStatus": "FAILED",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "errorMessage": "PDF 텍스트 추출에 실패했습니다."
 }
 ```
@@ -630,6 +958,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 |---------|------|------|
 | `accepted` | Boolean | 상태 저장 여부 |
 | `fileVersionId` | Long | 파일 버전 ID |
+| `indexAttemptId` | String | 저장되었거나 검증된 인덱싱 시도 ID |
 | `indexStatus` | String | 저장된 인덱싱 상태 |
 | `reason` | String | `accepted=false`일 때 무시 사유 |
 
@@ -639,6 +968,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 {
   "accepted": true,
   "fileVersionId": 101,
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "indexStatus": "COMPLETED",
   "reason": null
 }

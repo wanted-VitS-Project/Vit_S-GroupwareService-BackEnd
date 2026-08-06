@@ -6,8 +6,14 @@ import com.group3.vitamins.approval.application.command.ResubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.SubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalLinesCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalRevisionCommand;
+import com.group3.vitamins.approval.application.query.GetApprovalDetailQuery;
+import com.group3.vitamins.approval.application.query.GetApprovalHistoryQuery;
 import com.group3.vitamins.approval.application.query.GetApprovalRevisionQuery;
+import com.group3.vitamins.approval.application.query.ListApprovalsQuery;
+import com.group3.vitamins.approval.application.result.ApprovalDetailResult;
 import com.group3.vitamins.approval.application.result.ApprovalDocumentView;
+import com.group3.vitamins.approval.application.result.ApprovalHistoryResult;
+import com.group3.vitamins.approval.application.result.ApprovalListPageResult;
 import com.group3.vitamins.approval.application.result.ApprovalLineView;
 import com.group3.vitamins.approval.application.result.ApprovalResubmissionResult;
 import com.group3.vitamins.approval.application.result.ApprovalRevisionDetail;
@@ -19,6 +25,9 @@ import com.group3.vitamins.approval.presentation.api.request.AddApprovalDocument
 import com.group3.vitamins.approval.presentation.api.request.UpdateApprovalLinesRequest;
 import com.group3.vitamins.approval.presentation.api.request.UpdateApprovalRevisionRequest;
 import com.group3.vitamins.approval.presentation.api.response.AddApprovalDocumentResponse;
+import com.group3.vitamins.approval.presentation.api.response.ApprovalDetailResponse;
+import com.group3.vitamins.approval.presentation.api.response.ApprovalHistoryResponse;
+import com.group3.vitamins.approval.presentation.api.response.ApprovalListResponse;
 import com.group3.vitamins.approval.presentation.api.response.ApprovalRevisionDetailResponse;
 import com.group3.vitamins.approval.presentation.api.response.ResubmitApprovalRevisionResponse;
 import com.group3.vitamins.approval.presentation.api.response.SubmitApprovalResponse;
@@ -42,8 +51,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -59,6 +70,94 @@ public class ApprovalRevisionController {
 
     private final ApprovalCommandUseCase approvalCommandUseCase;
     private final ApprovalQueryUseCase approvalQueryUseCase;
+
+    @Operation(summary = "결재관리 목록조회",
+            description = "scope=drafted(기본)는 요청자 본인이 기안한 결재, pending은 요청자가 현재 ACTIVE인 결재, "
+                    + "all은 MASTER·ADMIN만 전체 결재를 조회한다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER·ADMIN이 아닌 사용자의 scope=all 요청")
+    })
+    @GetMapping
+    public ApiResponse<ApprovalListResponse> listApprovals(
+            @Parameter(description = "조회 범위", example = "drafted")
+            @RequestParam(required = false) String scope,
+            @Parameter(description = "결재 상태 필터", example = "IN_PROGRESS")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "기안자 필터(사번, scope=all에서만 적용)", example = "EMP2024001")
+            @RequestParam(required = false) String drafterId,
+            @Parameter(description = "결재자 필터(사번, scope=all에서만 적용)", example = "EMP2024002")
+            @RequestParam(required = false) String approverId,
+            @Parameter(description = "조회 시작일", example = "2026-07-01")
+            @RequestParam(required = false) LocalDate fromDate,
+            @Parameter(description = "조회 종료일", example = "2026-07-31")
+            @RequestParam(required = false) LocalDate toDate,
+            @Parameter(description = "결재 제목 또는 프로젝트명 검색어", example = "제안서")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "현재 회차 번호 필터", example = "1")
+            @RequestParam(required = false) Integer revisionNo,
+            @Parameter(description = "페이지 번호(기본 0)", example = "0")
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기(기본 10)", example = "10")
+            @RequestParam(required = false, defaultValue = "10") int size,
+            @AuthenticationPrincipal String userId) {
+
+        ApprovalListPageResult result = approvalQueryUseCase.listApprovals(new ListApprovalsQuery(
+                scope, status, drafterId, approverId, fromDate, toDate, keyword, revisionNo, page, size, userId));
+
+        return ApiResponse.success("결재 목록 조회 성공", ApprovalListResponse.from(result));
+    }
+
+    @Operation(summary = "결재 상세조회",
+            description = "항상 현재 회차를 보여준다(회차 지정 불가). 조회 권한은 회차 상세조회와 동일(기안자·현재 회차 ACTIVE 이상 결재자·MASTER). "
+                    + "원본 블록·스텝·프로젝트로 이동할 수 있는 blockOrigin을 포함한다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "APPROVAL_NOT_FOUND — 결재 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "APPROVAL_LINE_NOT_VIEWABLE — 차례 안 온 결재자(WAITING)의 조회")
+    })
+    @GetMapping("/{approvalId}")
+    public ApiResponse<ApprovalDetailResponse> getApprovalDetail(
+            @Parameter(description = "결재 구분 번호", example = "1")
+            @PathVariable Long approvalId,
+            @AuthenticationPrincipal String userId) {
+
+        ApprovalDetailResult detail = approvalQueryUseCase.getApprovalDetail(
+                new GetApprovalDetailQuery(approvalId, userId));
+
+        return ApiResponse.success("결재 상세 조회 성공", ApprovalDetailResponse.from(detail));
+    }
+
+    @Operation(summary = "결재 이력조회",
+            description = "이 결재의 전체 회차를 회차 번호 오름차순으로 반환한다. isCurrent로 진행 중인 회차를 구분한다. "
+                    + "조회 권한은 회차 상세조회와 동일하되, 전체 회차를 통틀어 판정한다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "APPROVAL_NOT_FOUND — 결재 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "APPROVAL_LINE_NOT_VIEWABLE — 이력 조회 권한 없음")
+    })
+    @GetMapping("/{approvalId}/revisions")
+    public ApiResponse<ApprovalHistoryResponse> getApprovalHistory(
+            @Parameter(description = "결재 구분 번호", example = "1")
+            @PathVariable Long approvalId,
+            @AuthenticationPrincipal String userId) {
+
+        ApprovalHistoryResult result = approvalQueryUseCase.getApprovalHistory(
+                new GetApprovalHistoryQuery(approvalId, userId));
+
+        return ApiResponse.success("결재 이력 조회 성공", ApprovalHistoryResponse.from(result));
+    }
 
     @Operation(summary = "결재 회차 상세조회",
             description = "기안자·해당 회차 ACTIVE 이상 결재자(과거 이력 포함)·MASTER 만 조회할 수 있다.")

@@ -64,9 +64,14 @@ dependencies {
 
     // --- AWS ---
     implementation platform('software.amazon.awssdk:bom:2.50.2')
+    // S3Presigner(프론트에 돌려줄 presigned URL 발급용)도 이 모듈 안에 포함돼 있다 — 별도 아티팩트 없음.
     implementation 'software.amazon.awssdk:s3'
     // --- PDF (미리보기 페이지 수 추출 · 미리보기 5p 절단) ---
     implementation 'org.apache.pdfbox:pdfbox:3.0.4'
+
+    // --- 이미지 처리 ---
+    // 이미지 블록: S3 업로드 전 큰 이미지를 리사이즈한다 (원본 화질 유지하며 용량만 절약).
+    implementation 'net.coobird:thumbnailator:0.4.20'
 
     // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
@@ -86,6 +91,7 @@ dependencies {
     // --- Test ---
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:3.0.5'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // 트랜잭션 경계(REQUIRES_NEW·롤백)는 목으로 검증할 수 없다. 실제 DB 가 있어야 한다.
     // ⚠️ MySQL 전용 마이그레이션은 H2 에서 돌지 않는다. 트랜잭션 테스트는 Flyway 를 끄고

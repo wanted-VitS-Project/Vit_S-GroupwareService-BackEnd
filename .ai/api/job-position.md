@@ -11,6 +11,7 @@
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
 | 직급 목록 조회 | GET | `/api/v1/job-positions` | ADMIN |
+| **직급별 사원 목록 조회** | GET | `/api/v1/job-positions/{jobPositionId}/employees` | ADMIN |
 | 직급 생성 | POST | `/api/v1/job-positions` | ADMIN |
 | 직급 수정 | PATCH | `/api/v1/job-positions/{jobPositionId}` | ADMIN |
 | 직급 삭제 | DELETE | `/api/v1/job-positions/{jobPositionId}` | ADMIN |
@@ -135,6 +136,48 @@
 | 401 · 403 | `AUTH_UNAUTHENTICATED` / `ACC_ADMIN_REQUIRED` | |
 | 404 | `POS_NOT_FOUND` | 직급 없음 |
 | 409 | `POS_IN_USE` | 사용 인원 있음. `message` 에 인원 수 |
+
+## 5. 직급별 사원 목록 조회 ✅ 확정
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/job-positions/{jobPositionId}/employees` |
+| 인증 필요 | Y · ADMIN |
+| 요구사항 | POS-010 · USC-POS-009 |
+
+> 🆕 **2026-08-06 신설** — 직급 목록(§1)은 인원 **수(`employeeCount`)** 만 준다. 이 API 는 그 직급에 **어떤 사원들이 있는지** 목록으로 준다.
+
+⛔ **모집단은 §1 `employeeCount` 와 같다** — 시스템 계정·퇴사자·삭제 사원 제외(`is_system=0 AND resigned_at IS NULL AND deleted_at IS NULL`). 그래서 **목록 길이 = 그 직급의 `employeeCount`**.
+⛔ **정렬은 이름 오름차순, 동명이인은 사번(`userId`) 오름차순.**
+⛔ **페이징이 없다.** 회사 단위 직급 하나의 인원 규모라 한 번에 내려준다(§1 과 동일 정책). 필요해지면 추가한다.
+⛔ **직급이 없으면 `404`(`POS_NOT_FOUND`).** 인원이 0명인 (존재하는) 직급은 빈 배열이다.
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.jobPositionId` | Long | 조회한 직급 번호 |
+| `data.jobPositionName` | String | 조회한 직급명 (목록 전체 공통이라 `data` 레벨에 한 번) |
+| `data.content[].userId` | String | 사번 (`NOT NULL`) |
+| `data.content[].name` | String | 이름 (`NOT NULL`) |
+| `data.content[].departmentName` | String | 부서명 (`null` 허용 — 부서 미배정) |
+| `data.content[].departmentPath` | String | `기술본부 / 개발팀` (`null` 허용) |
+
+```json
+{ "httpStatus": 200, "message": "직급별 사원 목록 조회 성공",
+  "data": { "jobPositionId": 1, "jobPositionName": "사원", "content": [
+    { "userId": "EMP001", "name": "김철수", "departmentName": "개발팀", "departmentPath": "본사 / 개발팀" },
+    { "userId": "EMP014", "name": "이영희", "departmentName": null, "departmentPath": null }
+  ] } }
+```
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (0명이면 빈 배열) |
+| 401 · 403 | `AUTH_UNAUTHENTICATED` / `ACC_ADMIN_REQUIRED` | |
+| 404 | `POS_NOT_FOUND` | 직급 없음 |
+
+---
 
 ## 요구사항 명세
 
