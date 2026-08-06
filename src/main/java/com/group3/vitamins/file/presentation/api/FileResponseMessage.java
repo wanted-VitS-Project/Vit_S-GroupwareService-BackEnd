@@ -11,6 +11,7 @@ public final class FileResponseMessage {
     public static final String BLOCK_FILES = "블록 파일 목록 조회 성공";
     public static final String FILE_RENAMED = "문서명을 수정했습니다.";
     public static final String FILE_TRASHED = "문서를 휴지통으로 이동했습니다.";
+    public static final String PROJECT_FILE_VERSIONS = "파일 버전 목록 조회 성공";
 
     private FileResponseMessage() {
     }
