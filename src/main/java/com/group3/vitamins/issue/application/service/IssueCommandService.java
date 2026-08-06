@@ -1,7 +1,9 @@
 package com.group3.vitamins.issue.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.command.CreateIssueCommand;
+import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
 import com.group3.vitamins.issue.application.port.IssueAssigneePort;
 import com.group3.vitamins.issue.application.port.IssueBlockPort;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
@@ -61,6 +63,21 @@ public class IssueCommandService implements IssueCommandUseCase {
         issueRepository.saveBlockLinks(saved.getIssueId(), blockIds);
 
         return toResult(saved, assignees, blocks);
+    }
+
+    @Override
+    public void deleteIssue(DeleteIssueCommand command) {
+        Issue issue = issueRepository.findActiveById(command.issueId())
+                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+
+        issueStepAccessPort.requireEditable(
+                issue.getStepId(), command.requesterUserId(), command.role());
+
+        issueRepository.deleteAssignees(issue.getIssueId());
+        issueRepository.deleteBlockLinks(issue.getIssueId());
+
+        issue.delete(LocalDateTime.now());
+        issueRepository.save(issue);
     }
 
     private void validateTitle(String title) {
