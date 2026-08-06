@@ -1,12 +1,15 @@
 package com.group3.vitamins.approval.application.usecase;
 
 import com.group3.vitamins.approval.application.command.AddApprovalDocumentCommand;
+import com.group3.vitamins.approval.application.command.ApproveApprovalLineCommand;
+import com.group3.vitamins.approval.application.command.RejectApprovalLineCommand;
 import com.group3.vitamins.approval.application.command.RemoveApprovalDocumentCommand;
 import com.group3.vitamins.approval.application.command.ResubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.SubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalLinesCommand;
 import com.group3.vitamins.approval.application.command.UpdateApprovalRevisionCommand;
 import com.group3.vitamins.approval.application.result.ApprovalDocumentView;
+import com.group3.vitamins.approval.application.result.ApprovalLineProcessResult;
 import com.group3.vitamins.approval.application.result.ApprovalLineView;
 import com.group3.vitamins.approval.application.result.ApprovalResubmissionResult;
 import com.group3.vitamins.approval.application.result.ApprovalSubmissionResult;
@@ -31,4 +34,8 @@ public interface ApprovalCommandUseCase {
     void removeDocument(RemoveApprovalDocumentCommand command);
 
     ApprovalSubmissionResult submit(SubmitApprovalCommand command);
+
+    ApprovalLineProcessResult approve(ApproveApprovalLineCommand command);
+
+    ApprovalLineProcessResult reject(RejectApprovalLineCommand command);
 }

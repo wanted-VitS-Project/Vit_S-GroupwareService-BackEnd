@@ -3,7 +3,9 @@ package com.group3.vitamins.approval.domain.repository;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalDocument;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
+import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalRevision;
+import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalWithRevision;
 import com.group3.vitamins.approval.domain.model.NewApprovalLine;
 
@@ -35,6 +37,30 @@ public interface ApprovalRepository {
     Optional<ApprovalRevision> findLatestRevisionReadOnly(Long approvalId);
 
     List<ApprovalLine> findLinesByRevisionId(Long revisionId);
+
+    /** MGT-007 — 이력 조회 권한 판정용. 이 결재의 모든 회차를 통틀어 결재선을 전부 가져온다(삭제분 제외). */
+    List<ApprovalLine> findLinesByApprovalId(Long approvalId);
+
+    /** MGT-007 — 회차별 이력. {@code revisionNo} 오름차순 */
+    List<ApprovalRevision> findRevisionsByApprovalId(Long approvalId);
+
+    /** PRC-001 — 결재선 처리(승인·반려) 직전 잠금 조회. 동시 처리 방지(INV-07과 동일 이유) */
+    Optional<ApprovalLine> findLineByIdForUpdate(Long lineId);
+
+    /** PRC-002/PRC-007 — 결재자 처리(승인·반려) 반영. {@code status} 로 승인/반려를 함께 표현한다 */
+    ApprovalLine markLineProcessed(Long lineId, ApprovalLineStatus status, String opinion);
+
+    /** PRC-002 — 다음 순번 결재선(WAITING) 조회. 없으면 이 회차의 마지막 순번이었다는 뜻 */
+    Optional<ApprovalLine> findLineBySequenceNo(Long revisionId, int sequenceNo);
+
+    /** PRC-002 — 다음 결재선을 ACTIVE 로 전환 */
+    ApprovalLine activateLine(Long lineId);
+
+    /** PRC-002/PRC-007 — 마지막 결재선 처리 시 회차·결재 모두 최종 상태로 종료(단일 트랜잭션) */
+    void finalizeApproval(Long approvalId, Long revisionId, ApprovalStatus finalStatus);
+
+    /** PRC-007 — 반려 시 이후 순번의 {@code WAITING} 결재선을 전부 {@code CANCELED}로 전환 */
+    void cancelWaitingLinesAfter(Long revisionId, int sequenceNo);
 
     List<ApprovalDocument> findDocumentsByRevisionId(Long revisionId);
 

@@ -4,6 +4,8 @@ import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
 import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.approval.application.command.AddApprovalDocumentCommand;
+import com.group3.vitamins.approval.application.command.ApproveApprovalLineCommand;
+import com.group3.vitamins.approval.application.command.RejectApprovalLineCommand;
 import com.group3.vitamins.approval.application.command.RemoveApprovalDocumentCommand;
 import com.group3.vitamins.approval.application.command.ResubmitApprovalCommand;
 import com.group3.vitamins.approval.application.command.SubmitApprovalCommand;
@@ -11,12 +13,14 @@ import com.group3.vitamins.approval.application.command.UpdateApprovalLinesComma
 import com.group3.vitamins.approval.application.command.UpdateApprovalRevisionCommand;
 import com.group3.vitamins.approval.application.policy.ApprovalDocumentEligibilityPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalLineEligibilityPolicy;
+import com.group3.vitamins.approval.application.policy.ApprovalLineProcessingPolicy;
 import com.group3.vitamins.approval.application.policy.ApprovalRevisionEligibilityPolicy;
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
 import com.group3.vitamins.approval.application.port.FileCatalogPort;
 import com.group3.vitamins.approval.application.port.FileVersionSummary;
 import com.group3.vitamins.approval.application.result.ApprovalDocumentView;
+import com.group3.vitamins.approval.application.result.ApprovalLineProcessResult;
 import com.group3.vitamins.approval.application.result.ApprovalLineView;
 import com.group3.vitamins.approval.application.result.ApprovalResubmissionResult;
 import com.group3.vitamins.approval.application.result.ApprovalSubmissionResult;
@@ -43,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -60,6 +65,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
     private final ApprovalRevisionEligibilityPolicy revisionEligibilityPolicy;
     private final ApprovalLineEligibilityPolicy lineEligibilityPolicy;
+    private final ApprovalLineProcessingPolicy lineProcessingPolicy;
     private final ApprovalDocumentEligibilityPolicy documentEligibilityPolicy;
     private final EmployeeCatalogPort employeeCatalogPort;
     private final FileCatalogPort fileCatalogPort;
@@ -321,6 +327,89 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         return new ApprovalSubmissionResult(command.approvalId(), command.revisionId(),
                 submittedRevision.getRevisionNo(), submittedRevision.getStatus(),
                 submittedRevision.getSubmittedAt(), firstActiveLineId);
+    }
+
+    @Override
+    public ApprovalLineProcessResult approve(ApproveApprovalLineCommand command) {
+        log.info("결재 승인 요청 - lineId={}, requesterId={}", command.lineId(), command.requesterId());
+
+        ApprovalLine line = lineProcessingPolicy.getActiveOwnedLineOrThrow(command.lineId(), command.requesterId());
+        ApprovalRevision revision = approvalRepository.findRevisionById(line.getRevisionId())
+                .orElseThrow(() -> new IllegalStateException("revision not found for line " + command.lineId()));
+        Approval approval = approvalRepository.findApproval(revision.getApprovalId())
+                .orElseThrow(() -> new IllegalStateException("approval not found for revision " + revision.getRevisionId()));
+
+        ApprovalLine approvedLine = approvalRepository.markLineProcessed(
+                command.lineId(), ApprovalLineStatus.APPROVED, command.opinion());
+
+        // PRC-001 — 사용자가 직접 한 행동(라인 자체의 ACTIVE→APPROVED)만 로그. 다음 라인 활성화·회차/결재
+        // 완료 전환은 파생 효과라 기록 안 함(상신#7과 동일 원칙)
+        publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), approvedLine.getLineId(),
+                resourceName(revision.getTitle()), command.requesterId(),
+                List.of(new ActivityFieldChange("status",
+                        ApprovalLineStatus.ACTIVE.name(), ApprovalLineStatus.APPROVED.name())));
+
+        Optional<ApprovalLine> nextLine =
+                approvalRepository.findLineBySequenceNo(line.getRevisionId(), line.getSequenceNo() + 1);
+        Long nextActiveLineId = null;
+        boolean approvalCompleted = false;
+
+        if (nextLine.isPresent()) {
+            // PRC-002 — 다음 결재선 활성화 + 그 결재자에게 요청 알림(SUB-003과 동일 패턴)
+            ApprovalLine activated = approvalRepository.activateLine(nextLine.get().getLineId());
+            nextActiveLineId = activated.getLineId();
+            domainEventPublisher.publish(NotificationRequestedEvent.of(
+                    activated.getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
+                    revision.getTitle() + " 결재 요청이 도착했습니다.", approval.getBlockId()));
+        } else {
+            // PRC-002 — 마지막 순번 승인 → 회차·결재 모두 COMPLETED 종료 + 기안자에게 완료 알림
+            approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.COMPLETED);
+            approvalCompleted = true;
+            domainEventPublisher.publish(NotificationRequestedEvent.of(
+                    approval.getDrafterId(), "APPROVAL_COMPLETED", "결재 완료",
+                    revision.getTitle() + " 결재가 완료되었습니다.", approval.getBlockId()));
+        }
+
+        log.info("결재 승인 완료 - lineId={}, nextActiveLineId={}, approvalCompleted={}",
+                command.lineId(), nextActiveLineId, approvalCompleted);
+
+        return new ApprovalLineProcessResult(approvedLine.getLineId(), approvedLine.getStatus().name(),
+                approvedLine.getProcessedAt(), nextActiveLineId, approvalCompleted);
+    }
+
+    @Override
+    public ApprovalLineProcessResult reject(RejectApprovalLineCommand command) {
+        log.info("결재 반려 요청 - lineId={}, requesterId={}", command.lineId(), command.requesterId());
+
+        ApprovalLine line = lineProcessingPolicy.getActiveOwnedLineOrThrow(command.lineId(), command.requesterId());
+        ApprovalRevision revision = approvalRepository.findRevisionById(line.getRevisionId())
+                .orElseThrow(() -> new IllegalStateException("revision not found for line " + command.lineId()));
+        Approval approval = approvalRepository.findApproval(revision.getApprovalId())
+                .orElseThrow(() -> new IllegalStateException("approval not found for revision " + revision.getRevisionId()));
+
+        ApprovalLine rejectedLine = approvalRepository.markLineProcessed(
+                command.lineId(), ApprovalLineStatus.REJECTED, command.opinion());
+
+        // PRC-005 — 사용자가 직접 한 행동(라인 자체의 ACTIVE→REJECTED)만 로그. 다운스트림 CANCELED·
+        // 회차/결재 REJECTED 전환은 파생 효과라 기록 안 함(승인#11과 동일 원칙)
+        publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), rejectedLine.getLineId(),
+                resourceName(revision.getTitle()), command.requesterId(),
+                List.of(new ActivityFieldChange("status",
+                        ApprovalLineStatus.ACTIVE.name(), ApprovalLineStatus.REJECTED.name())));
+
+        // PRC-007 — 이후 WAITING 단계 전부 CANCELED, 회차·결재 전체 REJECTED로 종료
+        approvalRepository.cancelWaitingLinesAfter(line.getRevisionId(), line.getSequenceNo());
+        approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.REJECTED);
+
+        // PRC-008 — 기안자에게만 반려 알림
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                approval.getDrafterId(), "APPROVAL_REJECTED", "결재 반려",
+                revision.getTitle() + " 결재가 반려되었습니다.", approval.getBlockId()));
+
+        log.info("결재 반려 완료 - lineId={}", command.lineId());
+
+        return new ApprovalLineProcessResult(rejectedLine.getLineId(), rejectedLine.getStatus().name(),
+                rejectedLine.getProcessedAt(), null, true);
     }
 
     private boolean isBlank(String value) {

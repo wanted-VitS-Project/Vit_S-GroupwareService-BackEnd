@@ -44,4 +44,9 @@ public class NotificationRepositoryAdapter implements NotificationRepository {
     public int markAllRead(String userId, LocalDateTime now) {
         return springDataRepository.markAllRead(userId, now);
     }
+
+    @Override
+    public int deleteCreatedBefore(LocalDateTime createdBefore, LocalDateTime deletedAt) {
+        return springDataRepository.deleteCreatedBefore(createdBefore, deletedAt);
+    }
 }
