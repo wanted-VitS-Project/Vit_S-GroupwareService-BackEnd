@@ -29,7 +29,7 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
         return blockRepository.findById(blockId)
                 .flatMap(block -> stepRepository.findById(block.getStepId())
                         .map(step -> new BlockSummary(
-                                block.getBlockId(), block.getType().name(),
+                                block.getBlockId(), block.getType().name(), step.getStepId(),
                                 step.getProjectId(), block.getCreatedBy())));
     }
 
