@@ -28,7 +28,7 @@ public class ActivityLogEntity {
 
     @Convert(converter = ActivityLogActionConverter.class)
     @Column(name = "act", nullable = false,
-            columnDefinition = "enum('create','delete','modify')")
+            columnDefinition = "enum('create','delete','modify','restore','purge')")
     private ActivityLogAction act;
 
     @Column(name = "resource_id")
