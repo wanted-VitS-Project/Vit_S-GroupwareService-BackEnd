@@ -65,7 +65,13 @@ public record IssueUpdateRequest(
             return PatchField.absent();
         }
         JsonNode node = body.get(name);
-        return PatchField.present(node == null || node.isNull() ? null : node.asText());
+        if (node == null || node.isNull()) {
+            return PatchField.present(null);
+        }
+        if (!node.isTextual()) {
+            throw invalidRequest();
+        }
+        return PatchField.present(node.asText());
     }
 
     private static PatchField<LocalDate> dateField(JsonNode body, String name) {
@@ -76,10 +82,13 @@ public record IssueUpdateRequest(
         if (node == null || node.isNull()) {
             return PatchField.present(null);
         }
+        if (!node.isTextual()) {
+            throw invalidRequest();
+        }
         try {
             return PatchField.present(LocalDate.parse(node.asText()));
         } catch (DateTimeParseException e) {
-            throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
+            throw invalidRequest();
         }
     }
 
@@ -88,13 +97,19 @@ public record IssueUpdateRequest(
             return PatchField.absent();
         }
         JsonNode node = body.get(name);
-        if (node == null || node.isNull() || !node.isArray()) {
+        if (node == null || node.isNull()) {
             return PatchField.present(null);
+        }
+        if (!node.isArray()) {
+            throw invalidRequest();
         }
 
         List<String> values = new ArrayList<>();
         for (JsonNode item : node) {
-            values.add(item == null || item.isNull() ? null : item.asText());
+            if (item == null || item.isNull() || !item.isTextual()) {
+                throw invalidRequest();
+            }
+            values.add(item.asText());
         }
         return PatchField.present(values);
     }
@@ -104,18 +119,24 @@ public record IssueUpdateRequest(
             return PatchField.absent();
         }
         JsonNode node = body.get(name);
-        if (node == null || node.isNull() || !node.isArray()) {
+        if (node == null || node.isNull()) {
             return PatchField.present(null);
+        }
+        if (!node.isArray()) {
+            throw invalidRequest();
         }
 
         List<Long> values = new ArrayList<>();
         for (JsonNode item : node) {
-            if (item == null || item.isNull() || !item.canConvertToLong()) {
-                values.add(null);
-            } else {
-                values.add(item.asLong());
+            if (item == null || item.isNull() || !item.isIntegralNumber() || !item.canConvertToLong()) {
+                throw invalidRequest();
             }
+            values.add(item.asLong());
         }
         return PatchField.present(values);
+    }
+
+    private static ValidationException invalidRequest() {
+        return new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
     }
 }
