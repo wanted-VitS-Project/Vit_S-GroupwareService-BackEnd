@@ -45,8 +45,9 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
      * 부서 생성 (`.ai/api/department.md` §2).
      *
      * <p>{@code parentId} 유무로 최상위/하위가 갈린다. 하위 부서를 상위로 지정하면 계층이 3단이 되므로
-     * {@code DEPT_MAX_DEPTH_EXCEEDED}(409) 로 막는다. 부서명은 <b>전체에서</b> 유니크해야 한다 —
-     * MySQL 은 {@code parent_id} 가 {@code NULL} 인 행끼리 중복을 허용해 최상위 부서명 중복이 막히지 않기 때문.
+     * {@code DEPT_MAX_DEPTH_EXCEEDED}(409) 로 막는다. 부서명은 <b>같은 상위 부서 안에서만</b> 유니크하다
+     * (2026-08-06). 하위 부서 동명은 DB {@code uk_department_parent_name} 이, 최상위 동명은 MySQL 이
+     * {@code NULL} parent 를 UNIQUE 로 안 막으므로 아래 app 레벨 검사가 막는다.
      */
     @Override
     public DepartmentResult create(CreateDepartmentCommand command) {
@@ -66,12 +67,13 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
             }
             parentName = parent.getName();
         }
-        if (departmentRepository.existsByName(command.name())) {
+        if (departmentRepository.existsSiblingName(command.name(), parentId)) {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
-        // existsByName 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_name 이
-        // 최종 방어선이므로, 그 위반은 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
+        // 검사 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. 하위 부서는 uk_department_parent_name 이
+        // 최종 방어선이라 그 위반을 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
+        // (최상위는 parent_id NULL 이라 이 DB 제약이 안 잡으므로 위 app 검사가 유일한 방어선 — ADMIN 저빈도라 허용.)
         // 부모 행을 위에서 잠갔으므로 이 시점의 제약 위반은 부서명 유니크뿐이다(FK 위반 불가) → 매핑이 결정적.
         // save 구현이 saveAndFlush 라 위반을 즉시 감지한다.
         Department saved;
@@ -98,12 +100,14 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
 
         Department department = departmentRepository.findById(command.departmentId())
                 .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_NOT_FOUND));
-        if (departmentRepository.existsByNameAndDepartmentIdNot(command.name(), command.departmentId())) {
+        // 상위는 바뀌지 않으므로 그 부서의 현재 parentId 기준 형제끼리, 자기 자신은 제외하고 비교한다.
+        if (departmentRepository.existsSiblingNameExcludingSelf(
+                command.name(), department.getParentId(), command.departmentId())) {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
         department.rename(command.name());
-        // 검사~커밋 틈의 동시 중복은 uk_department_name 이 잡는다 → 500 대신 409 로 변환 (save 가 saveAndFlush 라 즉시 감지).
+        // 검사~커밋 틈의 동시 중복(하위 부서)은 uk_department_parent_name 이 잡는다 → 500 대신 409 (saveAndFlush 라 즉시 감지).
         Department saved;
         try {
             saved = departmentRepository.save(department);

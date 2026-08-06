@@ -15,11 +15,17 @@ import java.util.Optional;
  */
 public interface SpringDataDepartmentRepository extends JpaRepository<DepartmentJpaEntity, Long> {
 
-    /** 부서명 전체 유니크 검증 (생성) */
-    boolean existsByName(String name);
+    /** 같은 상위 부서 안 동명 검증 (생성, 하위 부서) */
+    boolean existsByNameAndParentId(String name, Long parentId);
 
-    /** 부서명 유니크 검증 (수정) — 자기 자신은 제외한다 */
-    boolean existsByNameAndDepartmentIdNot(String name, Long departmentId);
+    /** 최상위 형제 동명 검증 (생성, 부모 없음) — 파생 쿼리가 {@code parent_id IS NULL} 로 번역한다 */
+    boolean existsByNameAndParentIdIsNull(String name);
+
+    /** 같은 상위 부서 안 동명 검증 (수정, 하위 부서) — 자기 자신 제외 */
+    boolean existsByNameAndParentIdAndDepartmentIdNot(String name, Long parentId, Long departmentId);
+
+    /** 최상위 형제 동명 검증 (수정, 부모 없음) — 자기 자신 제외 */
+    boolean existsByNameAndParentIdIsNullAndDepartmentIdNot(String name, Long departmentId);
 
     /** 직속 하위 부서 수 — 삭제 차단 판정 */
     long countByParentId(Long parentId);

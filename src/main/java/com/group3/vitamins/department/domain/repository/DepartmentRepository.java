@@ -16,8 +16,9 @@ public interface DepartmentRepository {
 
     /**
      * 부서를 저장한다. 구현은 {@code saveAndFlush} 로 즉시 반영해, 유니크 제약 위반
-     * ({@code uk_department_name})을 커밋까지 미루지 않고 이 시점에 드러낸다 — 서비스가 그 위반을
-     * 명세의 409({@code DEPT_NAME_DUPLICATED})로 변환할 수 있게 한다.
+     * ({@code uk_department_parent_name} = 같은 상위 부서 안 동명)을 커밋까지 미루지 않고 이 시점에
+     * 드러낸다 — 서비스가 그 위반을 명세의 409({@code DEPT_NAME_DUPLICATED})로 변환할 수 있게 한다.
+     * (최상위 동명은 이 DB 제약이 잡지 못하므로 서비스가 app 레벨로 먼저 막는다.)
      */
     Department save(Department department);
 
@@ -30,11 +31,17 @@ public interface DepartmentRepository {
      */
     Optional<Department> findByIdForUpdate(Long departmentId);
 
-    /** 부서명 전체 유니크 검증 (생성). */
-    boolean existsByName(String name);
+    /**
+     * 같은 상위 부서 안에서 부서명 중복 검증 (생성). {@code parentId} 가 {@code null} 이면
+     * 최상위 형제(부모 없는 부서)끼리 비교한다.
+     */
+    boolean existsSiblingName(String name, Long parentId);
 
-    /** 부서명 유니크 검증 (수정) — 자기 자신은 제외한다. */
-    boolean existsByNameAndDepartmentIdNot(String name, Long departmentId);
+    /**
+     * 같은 상위 부서 안에서 부서명 중복 검증 (수정) — 자기 자신은 제외한다.
+     * 상위는 바뀌지 않으므로 그 부서의 현재 {@code parentId} 기준 형제끼리 비교한다.
+     */
+    boolean existsSiblingNameExcludingSelf(String name, Long parentId, Long departmentId);
 
     /** 직속 하위 부서 수 — 삭제 차단 판정. */
     long countByParentId(Long parentId);

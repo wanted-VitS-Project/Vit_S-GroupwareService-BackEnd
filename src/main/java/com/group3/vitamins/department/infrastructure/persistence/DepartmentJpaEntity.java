@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -22,7 +23,13 @@ import lombok.NoArgsConstructor;
  * (매핑하지 않은 DB 컬럼은 {@code ddl-auto: validate} 에 걸리지 않는다).
  */
 @Entity
-@Table(name = "department")
+@Table(name = "department",
+        // (parent_id, name) 복합 유니크 = DB 의 uk_department_parent_name 을 엔티티에도 명시한다(2026-08-06).
+        // validate 는 UNIQUE 를 검사하지 않아 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨
+        // "같은 부모 아래 동명"(=자식 부서 중복)이 실제로 막힌다. ⚠️ MySQL/H2 모두 parent_id 가 NULL 인
+        // 행끼리는 UNIQUE 로 안 막으므로 최상위 동명은 서비스가 app 레벨로 막는다(DepartmentCommandService).
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_department_parent_name", columnNames = {"parent_id", "name"}))
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -33,9 +40,7 @@ public class DepartmentJpaEntity {
     @Column(name = "department_id")
     private Long departmentId;
 
-    // unique=true 로 DB 의 uk_department_name 을 엔티티에도 명시한다. validate 는 UNIQUE 를 검사하지
-    // 않으므로 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨 중복 저장(수정 경로 포함)이 실제로 막힌다.
-    @Column(name = "name", nullable = false, length = 50, unique = true)
+    @Column(name = "name", nullable = false, length = 50)
     private String name;
 
     /** 상위 부서. {@code null} 이면 최상위 */
