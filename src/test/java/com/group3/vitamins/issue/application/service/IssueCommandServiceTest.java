@@ -2,6 +2,7 @@ package com.group3.vitamins.issue.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.issue.application.command.ChangeIssueStatusCommand;
 import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
 import com.group3.vitamins.issue.application.result.IssueStatusResult;
@@ -138,6 +139,23 @@ class IssueCommandServiceTest {
 
         verifyNoInteractions(issueStepAccessPort);
         verify(issueRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("상태 변경 권한이 없으면 예외를 전파하고 저장하지 않는다")
+    void changeIssueStatus_forbidden() {
+        Issue issue = issue(101L, IssueStatus.TO_DO, null);
+        when(issueRepository.findActiveById(101L)).thenReturn(Optional.of(issue));
+        when(issueStepAccessPort.requireEditable(10L, "EMP002", "MEMBER"))
+                .thenThrow(new ForbiddenException(IssueErrorCode.ISS_EDIT_PERMISSION_REQUIRED));
+
+        assertThatThrownBy(() -> service.changeIssueStatus(
+                new ChangeIssueStatusCommand(101L, "DONE", "EMP002", "MEMBER")))
+                .isInstanceOfSatisfying(ForbiddenException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                IssueErrorCode.ISS_EDIT_PERMISSION_REQUIRED));
+
+        verify(issueRepository, never()).save(issue);
     }
 
     @Test

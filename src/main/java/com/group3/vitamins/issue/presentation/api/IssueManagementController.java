@@ -49,6 +49,7 @@ public class IssueManagementController {
     public ResponseEntity<ApiResponse<IssueStatusChangeResponse>> changeIssueStatus(
             @Parameter(description = "상태를 변경할 이슈 ID")
             @PathVariable Long issueId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true)
             @RequestBody(required = false) IssueStatusChangeRequest request,
             Authentication authentication
     ) {
