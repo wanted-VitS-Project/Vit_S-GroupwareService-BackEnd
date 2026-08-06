@@ -64,9 +64,14 @@ dependencies {
 
     // --- AWS ---
     implementation platform('software.amazon.awssdk:bom:2.50.2')
+    // S3Presigner(프론트에 돌려줄 presigned URL 발급용)도 이 모듈 안에 포함돼 있다 — 별도 아티팩트 없음.
     implementation 'software.amazon.awssdk:s3'
     // --- PDF (미리보기 페이지 수 추출 · 미리보기 5p 절단) ---
     implementation 'org.apache.pdfbox:pdfbox:3.0.4'
+
+    // --- 이미지 처리 ---
+    // 이미지 블록: S3 업로드 전 큰 이미지를 리사이즈한다 (원본 화질 유지하며 용량만 절약).
+    implementation 'net.coobird:thumbnailator:0.4.20'
 
     // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.image.infrastructure.blockdetail.ImageDetailMapper">
+
+    <select id="findFirstImagesByImgBlockIds"
+            resultType="com.group3.vitamins.image.infrastructure.blockdetail.ImageDetailRow">
+        SELECT i.img_block_id  AS imgBlockId,
+        i.img_id        AS imgId,
+        i.original_name AS originalName,
+        i.image_url     AS imageUrl,
+        i.caption       AS caption,
+        i.order_index   AS orderIndex,
+        i.created_at    AS createdAt,
+        (SELECT COUNT(*) FROM image i3
+        WHERE i3.img_block_id = i.img_block_id AND i3.deleted_at IS NULL) AS totalCount
+        FROM image i
+        WHERE i.img_block_id IN
+        <foreach item="id" collection="imgBlockIds" open="(" separator="," close=")">#{id}</foreach>
+        AND i.deleted_at IS NULL
+        AND i.order_index = (
+        SELECT MIN(i2.order_index) FROM image i2
+        WHERE i2.img_block_id = i.img_block_id AND i2.deleted_at IS NULL
+        )
+    </select>
+
+</mapper>
