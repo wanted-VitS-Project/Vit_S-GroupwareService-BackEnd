@@ -99,7 +99,7 @@ public class VitamateInternalFileVersionIndexController {
             @RequestBody(required = false) SaveVitamateChunkEmbeddingsRequest request
     ) {
         SaveVitamateChunkEmbeddingsCommand command = request == null
-                ? new SaveVitamateChunkEmbeddingsCommand(fileVersionId, null, null)
+                ? new SaveVitamateChunkEmbeddingsCommand(fileVersionId, null, null, null)
                 : request.toCommand(fileVersionId);
 
         SaveVitamateChunkEmbeddingsResult result = saveChunkEmbeddingsUseCase.handle(command);

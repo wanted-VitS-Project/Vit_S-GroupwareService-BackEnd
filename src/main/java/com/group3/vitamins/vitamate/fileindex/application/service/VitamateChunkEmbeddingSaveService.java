@@ -24,6 +24,7 @@ import java.util.Set;
 public class VitamateChunkEmbeddingSaveService implements SaveVitamateChunkEmbeddingsUseCase {
 
     private static final int MAX_CHUNK_COUNT = 500;
+    private static final int MAX_INDEX_ATTEMPT_ID_LENGTH = 36;
     private static final int MAX_EMBEDDING_MODEL_LENGTH = 100;
     private static final int MAX_CHROMA_ID_LENGTH = 150;
     private static final String COMPLETED_EMBEDDING_STATUS = "COMPLETED";
@@ -40,6 +41,7 @@ public class VitamateChunkEmbeddingSaveService implements SaveVitamateChunkEmbed
 
         int updatedChunkCount = fileIndexDataPort.updateChunkEmbeddings(
                 command.fileVersionId(),
+                command.indexAttemptId(),
                 command.embeddingModel(),
                 command.chunks().stream()
                         .map(chunk -> new ChunkEmbedding(
@@ -55,6 +57,7 @@ public class VitamateChunkEmbeddingSaveService implements SaveVitamateChunkEmbed
 
         return new SaveVitamateChunkEmbeddingsResult(
                 command.fileVersionId(),
+                command.indexAttemptId(),
                 updatedChunkCount,
                 COMPLETED_EMBEDDING_STATUS
         );
@@ -65,6 +68,9 @@ public class VitamateChunkEmbeddingSaveService implements SaveVitamateChunkEmbed
         if (command == null
                 || command.fileVersionId() == null
                 || command.fileVersionId() <= 0
+                || command.indexAttemptId() == null
+                || command.indexAttemptId().isBlank()
+                || command.indexAttemptId().length() > MAX_INDEX_ATTEMPT_ID_LENGTH
                 || command.embeddingModel() == null
                 || command.embeddingModel().isBlank()
                 || command.embeddingModel().length() > MAX_EMBEDDING_MODEL_LENGTH

@@ -7,6 +7,7 @@ import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDo
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunks;
 import com.group3.vitamins.vitamate.fileindex.application.result.SaveVitamateDocumentChunksResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.when;
 class VitamateDocumentChunkSaveServiceTest {
 
     private static final Long FILE_VERSION_ID = 900001L;
+    private static final String INDEX_ATTEMPT_ID = "550e8400-e29b-41d4-a716-446655440000";
 
     private VitamateFileIndexDataPort fileIndexDataPort;
     private VitamateDocumentChunkSaveService saveService;
@@ -50,11 +52,15 @@ class VitamateDocumentChunkSaveServiceTest {
             SaveVitamateDocumentChunksCommand command = command(List.of(chunk(0, "첫 번째 청크")));
             when(fileIndexDataPort.existsIndexableFileVersionForUpdate(FILE_VERSION_ID)).thenReturn(true);
             when(fileIndexDataPort.replaceChunks(eq(FILE_VERSION_ID), eq(command.chunks())))
-                    .thenReturn(List.of(new SavedDocumentChunk(100L, 0, "PENDING")));
+                    .thenReturn(new SavedDocumentChunks(
+                            INDEX_ATTEMPT_ID,
+                            List.of(new SavedDocumentChunk(100L, 0, "PENDING"))
+                    ));
 
             SaveVitamateDocumentChunksResult result = saveService.handle(command);
 
             assertThat(result.fileVersionId()).isEqualTo(FILE_VERSION_ID);
+            assertThat(result.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(result.savedChunkCount()).isEqualTo(1);
             assertThat(result.savedChunks()).hasSize(1);
             assertThat(result.savedChunks().get(0).documentChunkId()).isEqualTo(100L);

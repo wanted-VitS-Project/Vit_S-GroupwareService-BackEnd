@@ -668,7 +668,8 @@ Python worker가 파일에서 추출한 텍스트를 `document_chunk` 단위로 
 | 청크 순서 | `chunkIndex`는 0 이상이며 같은 요청 안에서 중복될 수 없다 |
 | 청크 본문 | `excerpt`는 빈 값일 수 없고 1000자를 초과할 수 없다 |
 | 임베딩 상태 | 청크 저장 시 `embedding_status = 'PENDING'`으로 저장한다 |
-| Chroma 연동 | 이 API에서는 ChromaDB 저장을 하지 않는다. Python worker가 응답의 `documentChunkId` 기준으로 ChromaDB에 저장한 뒤 임베딩 결과 저장 API를 호출한다 |
+| 인덱싱 시도 ID | 청크 저장 시 Spring Boot가 `indexAttemptId`를 새로 생성한다. Python worker는 이 값을 임베딩 결과 저장 API와 최종 상태 callback에 그대로 전달한다 |
+| Chroma 연동 | 이 API에서는 ChromaDB 저장을 하지 않는다. Python worker가 응답의 `documentChunkId`와 `indexAttemptId` 기준으로 ChromaDB에 저장한 뒤 임베딩 결과 저장 API를 호출한다 |
 | 트랜잭션 | 파일 버전 행을 잠근 뒤 누락 청크 soft delete와 청크 upsert를 하나의 트랜잭션에서 처리한다 |
 | 로그 | `fileVersionId`, 저장 청크 수만 남기고 문서 원문, storage key, worker token은 남기지 않는다 |
 
@@ -706,6 +707,7 @@ Python worker가 파일에서 추출한 텍스트를 `document_chunk` 단위로 
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `fileVersionId` | Long | 파일 버전 ID |
+| `indexAttemptId` | String | 이번 파일 인덱싱 시도 ID. 임베딩 결과 저장과 상태 callback에서 같은 값을 사용한다 |
 | `savedChunkCount` | Integer | 저장된 청크 수 |
 | `savedChunks` | Object[] | 저장된 청크 목록 |
 | `savedChunks[].documentChunkId` | Long | Spring DB에서 생성되었거나 유지된 문서 청크 ID |
@@ -717,6 +719,7 @@ Python worker가 파일에서 추출한 텍스트를 `document_chunk` 단위로 
 ```json
 {
   "fileVersionId": 101,
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "savedChunkCount": 2,
   "savedChunks": [
     {
@@ -767,6 +770,7 @@ Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spri
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `embeddingModel` | String | 임베딩에 사용한 모델명 |
+| `indexAttemptId` | String | 청크 저장 응답에서 받은 현재 인덱싱 시도 ID |
 | `chunks` | Object[] | 임베딩 결과를 반영할 청크 목록 |
 | `chunks[].documentChunkId` | Long | Spring DB의 문서 청크 ID |
 | `chunks[].chromaId` | String | ChromaDB에 저장된 벡터 ID |
@@ -776,10 +780,12 @@ Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spri
 | 항목 | 규칙 |
 |------|------|
 | 파일 버전 존재 여부 | `fileVersionId`에 해당하는 완료·미삭제 `file_version` 또는 미삭제 `file`이 없으면 404 |
+| 인덱싱 시도 ID | `indexAttemptId`는 비어 있을 수 없고 현재 `file_index.index_attempt_id`와 일치해야 한다 |
 | 청크 소속 | 모든 `chunks[].documentChunkId`는 path의 `fileVersionId`에 속한 활성 `document_chunk`여야 한다 |
 | 청크 목록 | `chunks`가 비어 있으면 400 |
 | 청크 개수 | 한 요청에 최대 500개까지 허용한다 |
-| Chroma ID | `chromaId`는 비어 있을 수 없고 같은 요청 안에서 중복될 수 없다 |
+| 청크 ID | `documentChunkId`는 같은 요청 안에서 중복될 수 없다 |
+| Chroma ID | `chromaId`는 비어 있을 수 없고 150자를 초과할 수 없으며 같은 요청 안에서 중복될 수 없다 |
 | 임베딩 모델 | `embeddingModel`은 비어 있을 수 없고 100자를 초과할 수 없다 |
 | 저장 방식 | 모든 청크 검증이 끝난 뒤 `chroma_id`, `embedding_model`, `embedding_status`를 갱신한다 |
 | 완료 상태 | 정상 반영된 청크는 `embedding_status = 'COMPLETED'`로 저장한다 |
@@ -792,6 +798,7 @@ Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spri
 ```json
 {
   "embeddingModel": "gemini-embedding-001",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "chunks": [
     {
       "documentChunkId": 9001,
@@ -813,7 +820,7 @@ Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spri
 | 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 요청 형식, 청크 소속, Chroma ID 검증 실패. 파일 인덱싱 상태를 `FAILED`로 callback한다 |
 | 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치. ack하지 않고 설정 오류로 알림 처리한다 |
 | 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한이 없는 인증 주체. ack하지 않고 설정 오류로 알림 처리한다 |
-| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전 또는 청크가 없음. ack하고 재시도하지 않는다 |
+| 404 | Not Found | `VITAMATE_FILE_VERSION_NOT_FOUND` | 대상 파일 버전·청크가 없거나 `indexAttemptId`가 현재 시도와 다름. 늦은 worker 결과로 보고 ack하고 재시도하지 않는다 |
 | 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 일시 장애 가능성이 있으므로 재시도 정책을 따른다 |
 
 **Response — `200`**
@@ -821,6 +828,7 @@ Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spri
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `fileVersionId` | Long | 파일 버전 ID |
+| `indexAttemptId` | String | 반영된 인덱싱 시도 ID |
 | `updatedChunkCount` | Integer | 임베딩 결과가 반영된 청크 수 |
 | `embeddingStatus` | String | 최종 상태. 정상 처리 시 `COMPLETED` |
 
@@ -829,6 +837,7 @@ Python worker가 ChromaDB에 저장한 `document_chunk` 임베딩 결과를 Spri
 ```json
 {
   "fileVersionId": 101,
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "updatedChunkCount": 2,
   "embeddingStatus": "COMPLETED"
 }
@@ -868,6 +877,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
+| `indexAttemptId` | String | 현재 인덱싱 시도 ID. `PENDING`, `PROCESSING`은 생략 가능하고, `COMPLETED`, `FAILED`는 필수 |
 | `errorMessage` | String | 실패 사유. `FAILED`일 때 필수 |
 
 저장 상태값:
@@ -894,6 +904,8 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 |------|------|
 | 생성/갱신 | `fileVersionId` 기준으로 `file_index`가 없으면 생성하고, 있으면 갱신한다 |
 | 중복 callback | 같은 `fileVersionId`로 여러 번 호출되어도 중복 row를 만들지 않는다 |
+| 시도 ID 생성 | `PENDING`, `PROCESSING` callback에 `indexAttemptId`가 없으면 Spring Boot가 새 값을 생성해 응답한다 |
+| 늦은 callback 차단 | `COMPLETED`, `FAILED`는 현재 `indexAttemptId`와 일치할 때만 저장한다. 일치하지 않으면 `accepted=false`로 응답하고 상태를 바꾸지 않는다 |
 | 상태 검증 | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 외 값은 400 |
 | 실패 메시지 | `FAILED`인데 `errorMessage`가 비어 있으면 400 |
 | 완료 메시지 | `PENDING`, `PROCESSING`, `COMPLETED`이면 기존 `index_error_message`를 제거한다 |
@@ -904,6 +916,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 ```json
 {
   "indexStatus": "PROCESSING",
+  "indexAttemptId": null,
   "errorMessage": null
 }
 ```
@@ -913,6 +926,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 ```json
 {
   "indexStatus": "COMPLETED",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "errorMessage": null
 }
 ```
@@ -922,6 +936,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 ```json
 {
   "indexStatus": "FAILED",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "errorMessage": "PDF 텍스트 추출에 실패했습니다."
 }
 ```
@@ -943,6 +958,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 |---------|------|------|
 | `accepted` | Boolean | 상태 저장 여부 |
 | `fileVersionId` | Long | 파일 버전 ID |
+| `indexAttemptId` | String | 저장되었거나 검증된 인덱싱 시도 ID |
 | `indexStatus` | String | 저장된 인덱싱 상태 |
 | `reason` | String | `accepted=false`일 때 무시 사유 |
 
@@ -952,6 +968,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 {
   "accepted": true,
   "fileVersionId": 101,
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
   "indexStatus": "COMPLETED",
   "reason": null
 }

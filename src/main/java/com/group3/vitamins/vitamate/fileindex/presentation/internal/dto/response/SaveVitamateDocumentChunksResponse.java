@@ -11,6 +11,9 @@ public record SaveVitamateDocumentChunksResponse(
         @Schema(description = "파일 버전 ID", example = "101")
         Long fileVersionId,
 
+        @Schema(description = "이번 파일 인덱싱 시도 ID. 이후 임베딩 저장과 callback 요청에 그대로 전달한다", example = "550e8400-e29b-41d4-a716-446655440000")
+        String indexAttemptId,
+
         @Schema(description = "저장된 chunk 수", example = "1")
         int savedChunkCount,
 
@@ -22,6 +25,7 @@ public record SaveVitamateDocumentChunksResponse(
     public static SaveVitamateDocumentChunksResponse from(SaveVitamateDocumentChunksResult result) {
         return new SaveVitamateDocumentChunksResponse(
                 result.fileVersionId(),
+                result.indexAttemptId(),
                 result.savedChunkCount(),
                 result.savedChunks().stream()
                         .map(SavedChunkResponse::from)

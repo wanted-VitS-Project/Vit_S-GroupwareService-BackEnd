@@ -6,9 +6,10 @@ import com.group3.vitamins.file.infrastructure.persistence.SpringDataFileVersion
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.DocumentChunkJpaRepository;
 import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDocumentChunksCommand.ChunkCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.ChunkEmbedding;
-import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunks;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.adapter.JpaVitamateFileIndexDataAdapter;
+import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,6 +46,7 @@ class JpaVitamateFileIndexDataAdapterTest {
     private static final Long PROJECT_ID = 900001L;
     private static final Long FILE_ID = 900001L;
     private static final Long FILE_VERSION_ID = 900001L;
+    private static final String INDEX_ATTEMPT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 6, 18, 30);
 
     @Autowired
@@ -55,6 +57,9 @@ class JpaVitamateFileIndexDataAdapterTest {
 
     @Autowired
     private DocumentChunkJpaRepository documentChunkRepository;
+
+    @Autowired
+    private FileIndexJpaRepository fileIndexRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -72,11 +77,13 @@ class JpaVitamateFileIndexDataAdapterTest {
                 fileVersionRepository,
                 fileRepository,
                 documentChunkRepository,
+                fileIndexRepository,
                 fileStoragePort,
                 entityManager
         );
 
         jdbcTemplate.update("DELETE FROM document_chunk");
+        jdbcTemplate.update("DELETE FROM file_index");
         jdbcTemplate.update("DELETE FROM file_version");
         jdbcTemplate.update("DELETE FROM `file`");
         insertFile(FILE_ID, PROJECT_ID, null);
@@ -156,19 +163,38 @@ class JpaVitamateFileIndexDataAdapterTest {
         void upsertsExistingChunkWithoutChangingId() {
             Long existingChunkId = insertDocumentChunk(FILE_VERSION_ID, 0, "기존 청크", null);
 
-            List<SavedDocumentChunk> savedChunks = adapter.replaceChunks(
+            SavedDocumentChunks savedChunks = adapter.replaceChunks(
                     FILE_VERSION_ID,
                     List.of(chunk(0, "수정된 청크"))
             );
 
             Long currentChunkId = findChunkId(FILE_VERSION_ID, 0);
-            assertThat(savedChunks).hasSize(1);
-            assertThat(savedChunks.get(0).documentChunkId()).isEqualTo(existingChunkId);
-            assertThat(savedChunks.get(0).chunkIndex()).isEqualTo(0);
-            assertThat(savedChunks.get(0).embeddingStatus()).isEqualTo("PENDING");
+            assertThat(savedChunks.indexAttemptId()).isNotBlank();
+            assertThat(savedChunks.chunks()).hasSize(1);
+            assertThat(savedChunks.chunks().get(0).documentChunkId()).isEqualTo(existingChunkId);
+            assertThat(savedChunks.chunks().get(0).chunkIndex()).isEqualTo(0);
+            assertThat(savedChunks.chunks().get(0).embeddingStatus()).isEqualTo("PENDING");
             assertThat(currentChunkId).isEqualTo(existingChunkId);
             assertThat(findChunkExcerpt(FILE_VERSION_ID, 0)).isEqualTo("수정된 청크");
             assertThat(findChunkDeletedAt(FILE_VERSION_ID, 0)).isNull();
+        }
+
+        @Test
+        @DisplayName("resets completed embedding metadata when chunk is saved again")
+        void resetsCompletedEmbeddingMetadataWhenChunkIsSavedAgain() {
+            Long existingChunkId = insertDocumentChunk(FILE_VERSION_ID, 0, "completed chunk", null);
+            markChunkCompleted(existingChunkId, "chroma-old", "gemini-embedding-001");
+
+            SavedDocumentChunks savedChunks = adapter.replaceChunks(
+                    FILE_VERSION_ID,
+                    List.of(chunk(0, "updated chunk"))
+            );
+
+            assertThat(savedChunks.chunks()).hasSize(1);
+            assertThat(savedChunks.chunks().get(0).documentChunkId()).isEqualTo(existingChunkId);
+            assertThat(findChunkChromaId(existingChunkId)).isNull();
+            assertThat(findChunkEmbeddingModel(existingChunkId)).isNull();
+            assertThat(findChunkEmbeddingStatus(existingChunkId)).isEqualTo("PENDING");
         }
 
         @Test
@@ -177,12 +203,12 @@ class JpaVitamateFileIndexDataAdapterTest {
             insertDocumentChunk(FILE_VERSION_ID, 0, "남길 청크", null);
             insertDocumentChunk(FILE_VERSION_ID, 1, "빠진 청크", null);
 
-            List<SavedDocumentChunk> savedChunks = adapter.replaceChunks(
+            SavedDocumentChunks savedChunks = adapter.replaceChunks(
                     FILE_VERSION_ID,
                     List.of(chunk(0, "남길 청크 수정"))
             );
 
-            assertThat(savedChunks).hasSize(1);
+            assertThat(savedChunks.chunks()).hasSize(1);
             assertThat(findChunkDeletedAt(FILE_VERSION_ID, 0)).isNull();
             assertThat(findChunkDeletedAt(FILE_VERSION_ID, 1)).isNotNull();
         }
@@ -197,8 +223,11 @@ class JpaVitamateFileIndexDataAdapterTest {
         void updatesChunkEmbeddings() {
             Long chunkId = insertDocumentChunk(FILE_VERSION_ID, 0, "인덱싱 대상 청크", null);
 
+            insertFileIndex(FILE_VERSION_ID, INDEX_ATTEMPT_ID);
+
             int updatedCount = adapter.updateChunkEmbeddings(
                     FILE_VERSION_ID,
+                    INDEX_ATTEMPT_ID,
                     "gemini-embedding-001",
                     List.of(new ChunkEmbedding(chunkId, "vitamate:document-chunk:" + chunkId))
             );
@@ -215,14 +244,35 @@ class JpaVitamateFileIndexDataAdapterTest {
             insertFileVersion(900002L, FILE_ID, "COMPLETED", null);
             Long otherChunkId = insertDocumentChunk(900002L, 0, "다른 파일 버전 청크", null);
 
+            insertFileIndex(FILE_VERSION_ID, INDEX_ATTEMPT_ID);
+
             int updatedCount = adapter.updateChunkEmbeddings(
                     FILE_VERSION_ID,
+                    INDEX_ATTEMPT_ID,
                     "gemini-embedding-001",
                     List.of(new ChunkEmbedding(otherChunkId, "vitamate:document-chunk:" + otherChunkId))
             );
 
             assertThat(updatedCount).isZero();
             assertThat(findChunkEmbeddingStatus(otherChunkId)).isEqualTo("PENDING");
+        }
+
+        @Test
+        @DisplayName("returns zero when index attempt does not match")
+        void returnsZeroWhenIndexAttemptDoesNotMatch() {
+            Long chunkId = insertDocumentChunk(FILE_VERSION_ID, 0, "embedding chunk", null);
+            insertFileIndex(FILE_VERSION_ID, INDEX_ATTEMPT_ID);
+
+            int updatedCount = adapter.updateChunkEmbeddings(
+                    FILE_VERSION_ID,
+                    "11111111-1111-1111-1111-111111111111",
+                    "gemini-embedding-001",
+                    List.of(new ChunkEmbedding(chunkId, "vitamate:document-chunk:" + chunkId))
+            );
+
+            assertThat(updatedCount).isZero();
+            assertThat(findChunkChromaId(chunkId)).isNull();
+            assertThat(findChunkEmbeddingStatus(chunkId)).isEqualTo("PENDING");
         }
     }
 
@@ -289,6 +339,39 @@ class JpaVitamateFileIndexDataAdapterTest {
     }
 
     // 저장 요청용 chunk command를 만듭니다.
+    // file_index의 현재 인덱싱 시도 row를 준비합니다.
+    private void insertFileIndex(Long fileVersionId, String indexAttemptId) {
+        jdbcTemplate.update("""
+                INSERT INTO file_index (
+                    file_version_id, index_attempt_id, index_status,
+                    created_at, updated_at, deleted_at
+                )
+                VALUES (?, ?, 'PENDING', ?, ?, NULL)
+                """,
+                fileVersionId,
+                indexAttemptId,
+                NOW,
+                NOW
+        );
+    }
+
+    // 기존 chunk가 이미 ChromaDB와 연결된 상태를 준비합니다.
+    private void markChunkCompleted(Long documentChunkId, String chromaId, String embeddingModel) {
+        jdbcTemplate.update("""
+                UPDATE document_chunk
+                   SET chroma_id = ?,
+                       embedding_model = ?,
+                       embedding_status = 'COMPLETED',
+                       updated_at = ?
+                 WHERE document_chunk_id = ?
+                """,
+                chromaId,
+                embeddingModel,
+                NOW,
+                documentChunkId
+        );
+    }
+
     private ChunkCommand chunk(int chunkIndex, String excerpt) {
         return new ChunkCommand(
                 chunkIndex,

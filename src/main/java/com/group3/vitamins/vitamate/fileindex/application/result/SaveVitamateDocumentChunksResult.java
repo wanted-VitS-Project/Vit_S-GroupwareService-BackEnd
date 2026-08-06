@@ -5,6 +5,7 @@ import java.util.List;
 // document_chunk 저장 결과
 public record SaveVitamateDocumentChunksResult(
         Long fileVersionId,
+        String indexAttemptId,
         int savedChunkCount,
         List<SavedChunkResult> savedChunks
 ) {

@@ -8,7 +8,9 @@ import com.group3.vitamins.vitamate.fileindex.application.command.SaveVitamateDo
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.ChunkEmbedding;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunks;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
+import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 // 파일 인덱싱 소스 조회와 document_chunk 저장을 JPA로 처리합니다.
 @Repository
@@ -27,6 +30,7 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
     private final SpringDataFileVersionRepository fileVersionRepository;
     private final SpringDataFileRepository fileRepository;
     private final DocumentChunkJpaRepository documentChunkRepository;
+    private final FileIndexJpaRepository fileIndexRepository;
     private final FileStoragePort fileStoragePort;
     private final EntityManager entityManager;
 
@@ -76,11 +80,21 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
     }
 
     @Override
-    public List<SavedDocumentChunk> replaceChunks(
+    public SavedDocumentChunks replaceChunks(
             Long fileVersionId,
             List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks
     ) {
         LocalDateTime now = LocalDateTime.now();
+        String indexAttemptId = UUID.randomUUID().toString();
+
+        fileIndexRepository.upsertStatus(
+                fileVersionId,
+                indexAttemptId,
+                "PENDING",
+                null,
+                null,
+                now
+        );
 
         List<Integer> chunkIndexes = chunks.stream()
                 .map(SaveVitamateDocumentChunksCommand.ChunkCommand::chunkIndex)
@@ -100,7 +114,7 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
                         now
                 ));
 
-        return documentChunkRepository.findActiveByFileVersionIdAndChunkIndexIn(fileVersionId, chunkIndexes)
+        List<SavedDocumentChunk> savedChunks = documentChunkRepository.findActiveByFileVersionIdAndChunkIndexIn(fileVersionId, chunkIndexes)
                 .stream()
                 .map(chunk -> new SavedDocumentChunk(
                         chunk.getId(),
@@ -108,15 +122,23 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
                         chunk.getEmbeddingStatus()
                 ))
                 .toList();
+
+        return new SavedDocumentChunks(indexAttemptId, savedChunks);
     }
 
     @Override
     public int updateChunkEmbeddings(
             Long fileVersionId,
+            String indexAttemptId,
             String embeddingModel,
             List<ChunkEmbedding> chunks
     ) {
         LocalDateTime now = LocalDateTime.now();
+
+        if (fileIndexRepository.findCurrentAttemptForUpdate(fileVersionId, indexAttemptId).isEmpty()) {
+            return 0;
+        }
+
         List<Long> documentChunkIds = chunks.stream()
                 .map(ChunkEmbedding::documentChunkId)
                 .toList();

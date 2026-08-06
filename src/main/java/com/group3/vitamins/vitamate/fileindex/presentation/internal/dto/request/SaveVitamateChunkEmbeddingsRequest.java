@@ -8,6 +8,9 @@ import java.util.List;
 // Python worker가 ChromaDB 저장 후 전달하는 임베딩 결과 요청입니다.
 @Schema(description = "document_chunk 임베딩 결과 저장 요청")
 public record SaveVitamateChunkEmbeddingsRequest(
+        @Schema(description = "청크 저장 응답에서 받은 현재 파일 인덱싱 시도 ID", example = "550e8400-e29b-41d4-a716-446655440000")
+        String indexAttemptId,
+
         @Schema(description = "임베딩 생성에 사용한 모델명", example = "gemini-embedding-001")
         String embeddingModel,
 
@@ -24,6 +27,7 @@ public record SaveVitamateChunkEmbeddingsRequest(
 
         return new SaveVitamateChunkEmbeddingsCommand(
                 fileVersionId,
+                indexAttemptId,
                 embeddingModel,
                 chunkCommands
         );

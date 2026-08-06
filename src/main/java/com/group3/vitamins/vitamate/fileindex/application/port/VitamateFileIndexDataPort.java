@@ -13,13 +13,21 @@ public interface VitamateFileIndexDataPort {
 
     boolean existsIndexableFileVersionForUpdate(Long fileVersionId);
 
-    List<SavedDocumentChunk> replaceChunks(Long fileVersionId, List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks);
+    SavedDocumentChunks replaceChunks(Long fileVersionId, List<SaveVitamateDocumentChunksCommand.ChunkCommand> chunks);
 
     int updateChunkEmbeddings(
             Long fileVersionId,
+            String indexAttemptId,
             String embeddingModel,
             List<ChunkEmbedding> chunks
     );
+
+    // 이번 파일 인덱싱 시도와 저장된 chunk 목록을 함께 돌려줍니다.
+    record SavedDocumentChunks(
+            String indexAttemptId,
+            List<SavedDocumentChunk> chunks
+    ) {
+    }
 
     // Spring DB에 저장된 document_chunk의 최소 식별 정보입니다.
     record SavedDocumentChunk(

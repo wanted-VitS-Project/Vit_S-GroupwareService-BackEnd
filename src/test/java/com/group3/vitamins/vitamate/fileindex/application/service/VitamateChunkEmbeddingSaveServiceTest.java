@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 class VitamateChunkEmbeddingSaveServiceTest {
 
     private static final Long FILE_VERSION_ID = 900001L;
+    private static final String INDEX_ATTEMPT_ID = "550e8400-e29b-41d4-a716-446655440000";
 
     private VitamateFileIndexDataPort fileIndexDataPort;
     private VitamateChunkEmbeddingSaveService embeddingSaveService;
@@ -50,6 +51,7 @@ class VitamateChunkEmbeddingSaveServiceTest {
             when(fileIndexDataPort.existsIndexableFileVersionForUpdate(FILE_VERSION_ID)).thenReturn(true);
             when(fileIndexDataPort.updateChunkEmbeddings(
                     eq(FILE_VERSION_ID),
+                    eq(INDEX_ATTEMPT_ID),
                     eq("gemini-embedding-001"),
                     any()
             )).thenReturn(1);
@@ -57,10 +59,11 @@ class VitamateChunkEmbeddingSaveServiceTest {
             SaveVitamateChunkEmbeddingsResult result = embeddingSaveService.handle(command);
 
             assertThat(result.fileVersionId()).isEqualTo(FILE_VERSION_ID);
+            assertThat(result.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(result.updatedChunkCount()).isEqualTo(1);
             assertThat(result.embeddingStatus()).isEqualTo("COMPLETED");
             verify(fileIndexDataPort).existsIndexableFileVersionForUpdate(FILE_VERSION_ID);
-            verify(fileIndexDataPort).updateChunkEmbeddings(eq(FILE_VERSION_ID), eq("gemini-embedding-001"), any());
+            verify(fileIndexDataPort).updateChunkEmbeddings(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq("gemini-embedding-001"), any());
         }
 
         @Test
@@ -74,7 +77,7 @@ class VitamateChunkEmbeddingSaveServiceTest {
                     .satisfies(exception -> assertThat(((NotFoundException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_FILE_VERSION_NOT_FOUND));
 
-            verify(fileIndexDataPort, never()).updateChunkEmbeddings(any(), any(), any());
+            verify(fileIndexDataPort, never()).updateChunkEmbeddings(any(), any(), any(), any());
         }
 
         @Test
@@ -82,7 +85,7 @@ class VitamateChunkEmbeddingSaveServiceTest {
         void throwsNotFoundWhenChunkBelongsToAnotherFileVersion() {
             SaveVitamateChunkEmbeddingsCommand command = command(List.of(chunk(100L, "vitamate:document-chunk:100")));
             when(fileIndexDataPort.existsIndexableFileVersionForUpdate(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexDataPort.updateChunkEmbeddings(eq(FILE_VERSION_ID), eq("gemini-embedding-001"), any()))
+            when(fileIndexDataPort.updateChunkEmbeddings(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq("gemini-embedding-001"), any()))
                     .thenReturn(0);
 
             assertThatThrownBy(() -> embeddingSaveService.handle(command))
@@ -107,6 +110,18 @@ class VitamateChunkEmbeddingSaveServiceTest {
         void rejectsMissingFileVersionId() {
             assertInvalid(new SaveVitamateChunkEmbeddingsCommand(
                     null,
+                    INDEX_ATTEMPT_ID,
+                    "gemini-embedding-001",
+                    List.of(chunk(1L, "chroma-1"))
+            ));
+        }
+
+        @Test
+        @DisplayName("rejects blank indexAttemptId")
+        void rejectsBlankIndexAttemptId() {
+            assertInvalid(new SaveVitamateChunkEmbeddingsCommand(
+                    FILE_VERSION_ID,
+                    " ",
                     "gemini-embedding-001",
                     List.of(chunk(1L, "chroma-1"))
             ));
@@ -117,6 +132,7 @@ class VitamateChunkEmbeddingSaveServiceTest {
         void rejectsBlankEmbeddingModel() {
             assertInvalid(new SaveVitamateChunkEmbeddingsCommand(
                     FILE_VERSION_ID,
+                    INDEX_ATTEMPT_ID,
                     " ",
                     List.of(chunk(1L, "chroma-1"))
             ));
@@ -127,6 +143,7 @@ class VitamateChunkEmbeddingSaveServiceTest {
         void rejectsTooLongEmbeddingModel() {
             assertInvalid(new SaveVitamateChunkEmbeddingsCommand(
                     FILE_VERSION_ID,
+                    INDEX_ATTEMPT_ID,
                     "m".repeat(101),
                     List.of(chunk(1L, "chroma-1"))
             ));
@@ -192,6 +209,7 @@ class VitamateChunkEmbeddingSaveServiceTest {
     private SaveVitamateChunkEmbeddingsCommand command(List<ChunkEmbeddingCommand> chunks) {
         return new SaveVitamateChunkEmbeddingsCommand(
                 FILE_VERSION_ID,
+                INDEX_ATTEMPT_ID,
                 "gemini-embedding-001",
                 chunks
         );
