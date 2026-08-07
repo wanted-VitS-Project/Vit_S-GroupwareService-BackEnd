@@ -7,6 +7,7 @@ import com.group3.vitamins.image.application.command.RestoreImageItemsCommand;
 import com.group3.vitamins.image.application.command.UpdateImageItemsCommand;
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
 import com.group3.vitamins.image.application.query.GetImageItemQuery;
+import com.group3.vitamins.image.application.query.GetImageItemsQuery;
 import com.group3.vitamins.image.application.query.ImageNavigationDirection;
 import com.group3.vitamins.image.application.usecase.ImageCommandUseCase;
 import com.group3.vitamins.image.application.usecase.ImageCommandUseCase.CreateImageItemsView;
@@ -15,14 +16,17 @@ import com.group3.vitamins.image.application.usecase.ImageCommandUseCase.UpdateI
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageDownloadView;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageItemView;
+import com.group3.vitamins.image.application.usecase.ImageQueryUseCase.ImageItemsView;
 import com.group3.vitamins.image.domain.exception.ImageErrorCode;
 import com.group3.vitamins.image.presentation.api.request.ImageItemCreateRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemPurgeRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemRestoreRequest;
 import com.group3.vitamins.image.presentation.api.request.ImageItemUpdateRequest;
+import com.group3.vitamins.image.presentation.api.response.BlockImageItemResponse;
 import com.group3.vitamins.image.presentation.api.response.CreateImageItemsResponse;
 import com.group3.vitamins.image.presentation.api.response.ImageItemQueryResponse;
 import com.group3.vitamins.image.presentation.api.response.ImageItemResponse;
+import com.group3.vitamins.image.presentation.api.response.ImageItemsQueryResponse;
 import com.group3.vitamins.image.presentation.api.response.RestoreImageItemsResponse;
 import com.group3.vitamins.image.presentation.api.response.RestoredImageItemResponse;
 import com.group3.vitamins.image.presentation.api.response.UpdateImageItemsResponse;
@@ -110,6 +114,38 @@ public class ImageController {
                 view.caption(), view.orderIndex(), view.totalCount());
 
         return ResponseEntity.ok(ApiResponse.success("이미지 항목 조회 성공", data));
+    }
+
+    @Operation(summary = "이미지 항목 전체 조회", description = "이미지 블록에 속한 활성 이미지 전체를 "
+            + "orderIndex 오름차순으로 조회한다. 수정 화면이 목록을 통째로 그린 뒤 그대로 수정 API로 되돌려 "
+            + "보내는 용도라, 조회지만 편집 권한이 필요하다. 이미지가 0장이면 빈 배열과 totalCount=0을 응답한다. "
+            + "imageUrl은 1시간 만료되는 presigned URL이라 캐싱하지 말 것.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이미지 항목 전체 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (IMG-002) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (IMG-003)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "COMMON_INTERNAL_ERROR — 서버 내부 오류입니다.")
+    })
+    @GetMapping("/{imgBlockId}/items")
+    public ResponseEntity<ApiResponse<ImageItemsQueryResponse>> getItems(
+            @Parameter(description = "조회할 이미지 블록 ID", example = "1")
+            @PathVariable Long imgBlockId,
+            Authentication authentication
+    ) {
+        ImageItemsView view = imageQueryUseCase.getItems(new GetImageItemsQuery(
+                authentication.getName(), imgBlockId, RequesterRole.from(authentication)));
+
+        List<BlockImageItemResponse> images = view.images().stream()
+                .map(image -> new BlockImageItemResponse(
+                        image.imgId(), image.originalName(), image.imageUrl(),
+                        image.caption(), image.orderIndex()))
+                .toList();
+
+        ImageItemsQueryResponse data = new ImageItemsQueryResponse(view.totalCount(), images);
+
+        return ResponseEntity.ok(ApiResponse.success("이미지 항목 전체 조회 성공", data));
     }
 
     @Operation(summary = "이미지 다운로드", description = "imgId를 지정하면 그 이미지 한 장을 원본 파일명으로 응답하고, "
