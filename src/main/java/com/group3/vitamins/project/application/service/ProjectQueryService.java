@@ -3,7 +3,7 @@ package com.group3.vitamins.project.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
-import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
+import com.group3.vitamins.project.application.port.ProjectDetailQueryPort;
 import com.group3.vitamins.project.application.port.ProjectListQueryPort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.query.ProjectDetailQuery;
@@ -15,11 +15,7 @@ import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectQueryUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.domain.model.MemberPermission;
-import com.group3.vitamins.project.domain.model.Project;
 import com.group3.vitamins.project.domain.model.ProjectStatus;
-import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
-import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
-import com.group3.vitamins.project.domain.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,12 +29,9 @@ public class ProjectQueryService implements ProjectQueryUseCase {
 
     private static final int MAX_PAGE_SIZE = 100;
 
-    private final ProjectRepository projectRepository;
-    private final ProjectMemberRepository projectMemberRepository;
-    private final ProjectBusinessCategoryRepository projectBusinessCategoryRepository;
-    private final BusinessCategoryLookupPort businessCategoryLookupPort;
     private final StepStatLookupPort stepStatLookupPort;
     private final ProjectListQueryPort projectListQueryPort;
+    private final ProjectDetailQueryPort projectDetailQueryPort;
     private final ProjectAccessPolicy projectAccessPolicy;
     private final ProjectAccessUseCase projectAccessUseCase;
 
@@ -81,34 +74,31 @@ public class ProjectQueryService implements ProjectQueryUseCase {
 
     @Override
     public ProjectDetailResult getProjectDetail(ProjectDetailQuery query) {
-        Project project = projectRepository.findById(query.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        ProjectDetailQueryPort.ProjectDetailView view =
+                projectDetailQueryPort.findDetail(query.projectId(), query.requesterUserId())
+                        .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
 
-        MemberPermission myPermission = projectAccessPolicy.resolvePermission(
-                query.role(),
-                projectMemberRepository.findPermission(query.projectId(), query.requesterUserId())
-                        .orElse(null));
-
-        StepStatLookupPort.StepStatView stat = stepStatLookupPort.countByProjectId(query.projectId());
+        MemberPermission myPermission =
+                projectAccessPolicy.resolvePermission(query.role(), view.memberPermission());
 
         return new ProjectDetailResult(
-                project.getProjectId(),
-                project.getName(),
-                project.getDescription(),
-                project.getClientName(),
-                project.getStatus().name(),
-                project.getStartedOn(),
-                project.getEndedOn(),
-                project.getContractAmount(),
-                progressRate(stat.totalCount(), stat.doneCount()),
-                stat.totalCount(),
-                stat.doneCount(),
-                resolveCategories(query.projectId()),
-                project.getBidNoticeId(),
-                project.getCloseReasonCode() == null ? null : project.getCloseReasonCode().name(),
-                project.getCloseReasonNote(),
+                view.projectId(),
+                view.name(),
+                view.description(),
+                view.clientName(),
+                view.status(),
+                view.startedOn(),
+                view.endedOn(),
+                view.contractAmount(),
+                progressRate(view.stepCount(), view.doneStepCount()),
+                view.stepCount(),
+                view.doneStepCount(),
+                view.businessCategories(),
+                view.bidNoticeId(),
+                view.closeReasonCode(),
+                view.closeReasonNote(),
                 myPermission.name(),
-                project.getCreatedAt());
+                view.createdAt());
     }
 
     /** 허용되지 않은 상태 값이면 400 을 던진다. 빈 값은 필터 미적용으로 본다. */
@@ -147,16 +137,5 @@ public class ProjectQueryService implements ProjectQueryUseCase {
             return null;
         }
         return doneCount * 100 / totalCount;
-    }
-
-    /** 연결된 카테고리를 이름·업무코드까지 채워 돌려준다. */
-    private List<BusinessCategorySummary> resolveCategories(Long projectId) {
-        List<Long> categoryIds = projectBusinessCategoryRepository.findCategoryIds(projectId);
-        if (categoryIds.isEmpty()) {
-            return List.of();
-        }
-        return businessCategoryLookupPort.findByIds(categoryIds).stream()
-                .map(view -> new BusinessCategorySummary(view.categoryId(), view.name(), view.code()))
-                .toList();
     }
 }
