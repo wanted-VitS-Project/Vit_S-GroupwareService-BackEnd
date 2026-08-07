@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -26,8 +28,15 @@ public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStoreP
     }
 
     @Override
-    public List<Long> findStalePendingFileVersionIds(LocalDateTime before) {
-        return fileIndexJpaRepository.findStalePendingFileVersionIds(before);
+    public List<Long> findStalePendingFileVersionIdCandidates(LocalDateTime before, int limit) {
+        return fileIndexJpaRepository.findStalePendingFileVersionIdCandidates(before, PageRequest.of(0, limit));
+    }
+
+    @Override
+    @Transactional
+    public boolean claimStalePending(Long fileVersionId, LocalDateTime before) {
+        int updatedCount = fileIndexJpaRepository.claimStalePending(fileVersionId, before, LocalDateTime.now());
+        return updatedCount == 1;
     }
 
     @Override

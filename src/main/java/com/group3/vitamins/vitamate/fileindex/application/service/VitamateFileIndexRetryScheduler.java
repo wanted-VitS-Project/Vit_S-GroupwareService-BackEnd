@@ -23,23 +23,35 @@ public class VitamateFileIndexRetryScheduler {
     // 발행이 안 된 것으로 간주한다.
     private static final long STALE_MINUTES = 5;
 
+    // 한 번에 재발행할 최대 건수 — backlog가 커져도 후보 목록과 로그가 무한히 늘지 않게 한다.
+    private static final int BATCH_LIMIT = 100;
+
     private final VitamateFileIndexStorePort fileIndexStorePort;
     private final DispatchVitamateFileIndexUseCase dispatchUseCase;
 
     @Scheduled(fixedDelayString = "${vitamate.file-index.retry.fixed-delay-ms:300000}")
     public void retryStalePendingJobs() {
         LocalDateTime before = LocalDateTime.now().minusMinutes(STALE_MINUTES);
-        List<Long> staleFileVersionIds = fileIndexStorePort.findStalePendingFileVersionIds(before);
+        List<Long> candidates = fileIndexStorePort.findStalePendingFileVersionIdCandidates(before, BATCH_LIMIT);
 
-        if (staleFileVersionIds.isEmpty()) {
+        if (candidates.isEmpty()) {
             return;
         }
 
-        log.warn("Vitamate file index retry found stale PENDING jobs. count={}, fileVersionIds={}",
-                staleFileVersionIds.size(), staleFileVersionIds);
-
-        for (Long fileVersionId : staleFileVersionIds) {
+        int claimedCount = 0;
+        for (Long fileVersionId : candidates) {
+            // 후보 조회와 재발행 사이에 worker가 이미 PROCESSING/COMPLETED로 넘겼을 수 있으므로,
+            // PENDING·stale 조건을 다시 검사하며 원자적으로 선점한 것만 재발행한다.
+            if (!fileIndexStorePort.claimStalePending(fileVersionId, before)) {
+                continue;
+            }
+            claimedCount++;
             dispatchUseCase.handle(new DispatchVitamateFileIndexCommand(fileVersionId));
+        }
+
+        if (claimedCount > 0) {
+            log.warn("Vitamate file index retry republished stale PENDING jobs. candidateCount={}, claimedCount={}",
+                    candidates.size(), claimedCount);
         }
     }
 }
