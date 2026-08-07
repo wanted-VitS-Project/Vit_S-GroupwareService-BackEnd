@@ -37,8 +37,8 @@ public record VitamateAnalysisHistoryResponse(
             @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COMMON\", \"COST_RESULT\"]")
             List<String> reviewCategoryCodes,
 
-            @Schema(description = "사용자 추가 요청. 없으면 null", example = "금액과 부가세 포함 여부를 특히 확인해줘.")
-            String additionalInstruction,
+            @Schema(description = "분석에 사용한 최종 프롬프트", example = "기준 문서와 비교하여 금액과 부가세 포함 여부를 확인해주세요.")
+            String prompt,
 
             @Schema(description = "분석 상태", example = "COMPLETED")
             String analysisStatus,
@@ -56,7 +56,7 @@ public record VitamateAnalysisHistoryResponse(
                     item.analysisId(),
                     item.reviewType(),
                     item.reviewCategoryCodes(),
-                    item.additionalInstruction(),
+                    item.prompt(),
                     item.analysisStatus(),
                     item.createdAt(),
                     item.completedAt()

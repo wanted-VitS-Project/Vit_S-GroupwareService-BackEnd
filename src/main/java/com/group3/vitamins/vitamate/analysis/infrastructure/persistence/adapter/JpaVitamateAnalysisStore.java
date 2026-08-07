@@ -55,8 +55,6 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStorePort {
                 analysis.prompt(),
                 analysis.reviewType(),
                 analysis.reviewCategoryCodes(),
-                analysis.additionalInstruction(),
-                analysis.promptTemplateVersion(),
                 analysis.requestedAt()
         ));
 
@@ -69,16 +67,20 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStorePort {
 
     // 분석 요청에 선택된 파일 버전 목록을 연결 테이블에 저장한다.
     @Override
-    public void saveAnalysisDocuments(Long analysisId, List<Long> fileVersionIds) {
-        if (fileVersionIds == null || fileVersionIds.isEmpty()) {
+    public void saveAnalysisDocuments(Long analysisId, List<NewAnalysisDocument> documents) {
+        if (documents == null || documents.isEmpty()) {
             return;
         }
 
-        List<VitamateAnalysisDocumentEntity> documents = fileVersionIds.stream()
-                .map(fileVersionId -> VitamateAnalysisDocumentEntity.of(analysisId, fileVersionId))
+        List<VitamateAnalysisDocumentEntity> documentEntities = documents.stream()
+                .map(document -> VitamateAnalysisDocumentEntity.of(
+                        analysisId,
+                        document.fileVersionId(),
+                        document.documentRole()
+                ))
                 .toList();
 
-        documentRepository.saveAll(documents);
+        documentRepository.saveAll(documentEntities);
     }
 
     // 분석 요청에서 선택한 템플릿을 요청 당시 값으로 고정해 저장한다.

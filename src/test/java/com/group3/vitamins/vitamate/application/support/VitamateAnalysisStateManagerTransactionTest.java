@@ -120,8 +120,6 @@ class VitamateAnalysisStateManagerTransactionTest {
                 "reviewType=COST_REPORT; categories=COMMON",
                 "COST_REPORT",
                 "COMMON",
-                null,
-                "COST_REPORT_V1",
                 REQUESTED_AT
         ));
         return saved.getId();
@@ -199,7 +197,7 @@ class VitamateAnalysisStateManagerTransactionTest {
         }
 
         @Override
-        public void saveAnalysisDocuments(Long analysisId, List<Long> fileVersionIds) {
+        public void saveAnalysisDocuments(Long analysisId, List<NewAnalysisDocument> documents) {
             throw unused();
         }
 

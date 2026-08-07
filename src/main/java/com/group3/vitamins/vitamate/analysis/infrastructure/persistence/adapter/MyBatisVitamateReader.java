@@ -82,7 +82,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 row.getAnalysisId(),
                 row.getReviewType(),
                 toCategoryCodes(row.getReviewCategoryCodes()),
-                row.getAdditionalInstruction(),
+                row.getPrompt(),
                 row.getAnalysisStatus(),
                 row.getCreatedAt(),
                 row.getCompletedAt()
@@ -111,7 +111,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 analysis.getBlockId(),
                 analysis.getReviewType(),
                 toCategoryCodes(analysis.getReviewCategoryCodes()),
-                analysis.getAdditionalInstruction(),
+                analysis.getPrompt(),
                 templates.stream()
                         .map(template -> new TemplateVersion(
                                 template.getCategoryCode(),
@@ -136,7 +136,8 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
     private Document toDocument(VitamateAnalysisDocumentRow row) {
         return new Document(
                 row.getFileVersionId(),
-                row.getFileName()
+                row.getFileName(),
+                row.getDocumentRole()
         );
     }
 
@@ -168,7 +169,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 job.getAttemptId(),
                 job.getReviewType(),
                 toCategoryCodes(job.getReviewCategoryCodes()),
-                job.getAdditionalInstruction(),
+                job.getPrompt(),
                 templateRows.stream()
                         .map(this::toJobReviewTemplate)
                         .toList(),
@@ -215,6 +216,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
         return new JobDocument(
                 row.getFileVersionId(),
                 row.getFileName(),
+                row.getDocumentRole(),
                 chunksByFileVersionId.getOrDefault(row.getFileVersionId(), List.of())
         );
     }

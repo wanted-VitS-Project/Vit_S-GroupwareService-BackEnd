@@ -10,7 +10,7 @@ public record VitamateAnalysisJobDetailResult(
         String attemptId,
         String reviewType,
         List<String> reviewCategoryCodes,
-        String additionalInstruction,
+        String prompt,
         List<ReviewTemplate> reviewTemplates,
         SearchScope searchScope,
         List<Document> documents
@@ -23,7 +23,7 @@ public record VitamateAnalysisJobDetailResult(
                 detail.attemptId(),
                 detail.reviewType(),
                 detail.reviewCategoryCodes(),
-                detail.additionalInstruction(),
+                detail.prompt(),
                 detail.reviewTemplates().stream()
                         .map(ReviewTemplate::from)
                         .toList(),
@@ -71,6 +71,7 @@ public record VitamateAnalysisJobDetailResult(
     public record Document(
             Long fileVersionId,
             String fileName,
+            String documentRole,
             List<Chunk> chunks
     ) {
         // 포트의 문서 값을 application result 문서 값으로 변환합니다.
@@ -78,6 +79,7 @@ public record VitamateAnalysisJobDetailResult(
             return new Document(
                     document.fileVersionId(),
                     document.fileName(),
+                    document.documentRole(),
                     document.chunks().stream()
                             .map(Chunk::from)
                             .toList()

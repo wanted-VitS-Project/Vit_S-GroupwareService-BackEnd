@@ -3,6 +3,7 @@ package com.group3.vitamins.file.application;
 import com.group3.vitamins.file.application.command.CompleteFileUploadCommand;
 import com.group3.vitamins.file.application.command.StartFileUploadCommand;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
+import com.group3.vitamins.file.application.port.FileIndexTriggerPort;
 import com.group3.vitamins.file.application.port.FileQueryPort;
 import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.file.application.port.PdfPageCounterPort;
@@ -61,6 +62,7 @@ class FileUploadServiceTest {
     private FileStoragePort fileStoragePort;
     private PdfPageCounterPort pdfPageCounterPort;
     private FileVersionFailureRecorder failureRecorder;
+    private FileIndexTriggerPort fileIndexTriggerPort;
     private FileUploadService service;
 
     @BeforeEach
@@ -75,10 +77,11 @@ class FileUploadServiceTest {
         fileStoragePort = Mockito.mock(FileStoragePort.class);
         pdfPageCounterPort = Mockito.mock(PdfPageCounterPort.class);
         failureRecorder = Mockito.mock(FileVersionFailureRecorder.class);
+        fileIndexTriggerPort = Mockito.mock(FileIndexTriggerPort.class);
         service = new FileUploadService(
                 blockCatalogPort, stepAccessUseCase, fileRepository, fileVersionRepository,
                 blockFileRepository, fileQueryPort, uploaderLookupPort, fileStoragePort, pdfPageCounterPort,
-                failureRecorder);
+                failureRecorder, fileIndexTriggerPort);
     }
 
     private void stubBlockAndEditable() {
@@ -238,6 +241,7 @@ class FileUploadServiceTest {
             assertThat(result.pageCount()).isEqualTo(42);
             assertThat(result.name()).isEqualTo("제안서");
             assertThat(version.getUploadStatus()).isEqualTo(UploadStatus.COMPLETED);
+            verify(fileIndexTriggerPort, times(1)).triggerIndexing(74L);
         }
 
         @Test
@@ -263,6 +267,7 @@ class FileUploadServiceTest {
                     .satisfies(hasCode(FileErrorCode.FILE_OBJECT_NOT_FOUND));
             // FAILED 전이는 REQUIRES_NEW 레코더가 별도 트랜잭션에서 확정 저장한다(롤백 회피).
             verify(failureRecorder, times(1)).markFailed(version);
+            verify(fileIndexTriggerPort, never()).triggerIndexing(anyLong());
         }
 
         @Test
@@ -277,6 +282,7 @@ class FileUploadServiceTest {
                     .satisfies(hasCode(FileErrorCode.FILE_SIZE_MISMATCH));
             // 크기 불일치도 객체 없음과 대칭으로 FAILED 를 기록한다.
             verify(failureRecorder, times(1)).markFailed(version);
+            verify(fileIndexTriggerPort, never()).triggerIndexing(anyLong());
         }
 
         @Test
