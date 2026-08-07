@@ -11,4 +11,5 @@ public class IssueResponseMessage {
     public static final String UPDATE_SUCCESS = "이슈 수정 성공";
     public static final String STATUS_CHANGE_SUCCESS = "이슈 상태 변경 성공";
     public static final String DELETE_SUCCESS = "이슈 삭제 성공";
+    public static final String CALENDAR_SUCCESS = "담당 이슈 캘린더 조회 성공";
 }

@@ -2,6 +2,7 @@ package com.group3.vitamins.issue.application.port;
 
 import com.group3.vitamins.issue.application.result.IssueResult;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,8 @@ public interface IssueQueryPort {
 
     List<RelatedBlockResult> findRelatedBlocks(Collection<Long> issueIds);
 
+    List<CalendarIssueResult> findMyCalendarIssues(String userId);
+
     record BlockStepResult(Long blockId, Long stepId) {
     }
 
@@ -25,5 +28,18 @@ public interface IssueQueryPort {
     }
 
     record RelatedBlockResult(Long issueId, Long blockId, String title, String type) {
+    }
+
+    record CalendarIssueResult(
+            Long issueId,
+            String title,
+            String status,
+            String priority,
+            LocalDateTime dueDate,
+            Long stepId,
+            String stepName,
+            Long projectId,
+            String projectName
+    ) {
     }
 }
