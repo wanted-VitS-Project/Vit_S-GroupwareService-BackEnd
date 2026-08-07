@@ -96,7 +96,11 @@ class ApprovalCommandServiceActivityLogTest {
         when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
         when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001", "EMP002")))
-                .thenReturn(List.of(employee("EMP001"), employee("EMP002")));
+                .thenReturn(List.of(employee("EMP001", "김철수"), employee("EMP002", "이영희")));
+        when(employeeCatalogPort.findEmployee("EMP001"))
+                .thenReturn(java.util.Optional.of(employee("EMP001", "김철수")));
+        when(employeeCatalogPort.findEmployee("EMP002"))
+                .thenReturn(java.util.Optional.of(employee("EMP002", "이영희")));
         when(approvalRepository.findLinesByRevisionId(200L)).thenReturn(List.of(first, second));
         when(approvalRepository.replaceLines(org.mockito.ArgumentMatchers.eq(200L), org.mockito.ArgumentMatchers.anyList()))
                 .thenReturn(List.of(second, first));
@@ -109,8 +113,38 @@ class ApprovalCommandServiceActivityLogTest {
         assertThat(event.resourceName()).isEqualTo("휴가 품의");
         assertThat(event.changes()).singleElement().satisfies(change -> {
             assertThat(change.field()).isEqualTo("lines");
-            assertThat(change.beforeValue()).isEqualTo("EMP001,EMP002");
-            assertThat(change.afterValue()).isEqualTo("EMP002,EMP001");
+            assertThat(change.beforeValue()).isEqualTo("김철수,이영희");
+            assertThat(change.afterValue()).isEqualTo("이영희,김철수");
+        });
+    }
+
+    @Test
+    void lineOrderChangeFallsBackToApproverIdWhenEmployeeLookupMisses() {
+        Approval approval = approval(10L);
+        ApprovalRevision revision = ApprovalRevision.reconstruct(
+                200L, 100L, 1, "휴가 품의", "내용", ApprovalStatus.DRAFT,
+                null, null, null, null, null);
+        ApprovalLine onlyLine = line(1L, "EMP009", 1);
+        UpdateApprovalLinesCommand command = new UpdateApprovalLinesCommand(
+                100L, 200L, "EMP000",
+                List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
+
+        when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
+        when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
+                .thenReturn(List.of(employee("EMP001", "김철수")));
+        // "EMP009"(퇴사·탈퇴 등으로 조회 불가)는 스텁하지 않아 findEmployee가 기본값 Optional.empty()를 반환한다.
+        when(approvalRepository.findLinesByRevisionId(200L)).thenReturn(List.of(onlyLine));
+        when(approvalRepository.replaceLines(org.mockito.ArgumentMatchers.eq(200L), org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(List.of(onlyLine));
+
+        service.updateLines(command);
+
+        ActivityOccurredEvent event = capturedActivityEvent();
+        assertThat(event.changes()).singleElement().satisfies(change -> {
+            assertThat(change.field()).isEqualTo("lines");
+            assertThat(change.beforeValue()).isEqualTo("EMP009");
+            assertThat(change.afterValue()).isEqualTo("김철수");
         });
     }
 
@@ -130,7 +164,7 @@ class ApprovalCommandServiceActivityLogTest {
                 ApprovalLineStatus.DRAFT, null, null, null, null);
     }
 
-    private EmployeeSummary employee(String userId) {
-        return new EmployeeSummary(userId, userId, null, null, null);
+    private EmployeeSummary employee(String userId, String name) {
+        return new EmployeeSummary(userId, name, null, null, null);
     }
 }

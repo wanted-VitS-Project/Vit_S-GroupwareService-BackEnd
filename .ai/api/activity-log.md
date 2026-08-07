@@ -1,6 +1,7 @@
 # ActivityLog API
 
 **상태**: md 명세 기준 계약 (`../API.md` §0·§1)
+**최종 업데이트**: 2026-08-07 (결재선 `lines` 값을 사번→이름으로 변경, "필드별 표시 규칙" FE 가이드 섹션 신설) · **담당**: 김용준
 **최종 업데이트**: 2026-08-06 (파일 휴지통 복원·영구삭제 액션 `RESTORE`·`PURGE` 추가 — 별도 휴지통 로그 화면 없이 기존 Step/Block 활동 기록에 함께 노출) · **담당**: 김용준
 **최종 업데이트**: 2026-08-05 (API 명세 양식 정리 · field 단위 저장 반영) · **담당**: 김용준
 **Domain**: `프로젝트` · SUB-Domain `ActivityLog`
@@ -380,6 +381,34 @@ List.of(new ActivityFieldChange(null, null, null))
 
 BE는 `actor`, `block`, `resource`, `action`, `fieldName`, `beforeValue`, `afterValue` 같은 원자 데이터를 내려주고, FE가 화면 문구를 조립한다.
 
+### 필드별 표시 규칙 (FE 참고, BE 계약 아님)
+
+`fieldName` 값 기준으로 아래 중 하나로 표시한다. 새 필드가 추가되면 이 표에도 같이 추가한다.
+
+| 방식 | 대상 필드 | 설명 |
+| --- | --- | --- |
+| 펼치기(전문 표시) | `title`, `content`, `caption` | 자유 텍스트라 길 수 있음 — 화살표로 펼쳐서 `beforeValue`/`afterValue` 전문을 보여준다 |
+| 그대로 표시 | `orderIndex` | 1부터 시작하는 위치 번호라 값 변환 없이 "N번째 → M번째"로 그대로 쓴다 |
+| 값 사전 매칭 | `isCompleted`, `status` | 아래 사전으로 변환해서 화면 옆에 짧게 표시(펼치기 불필요) |
+| BE가 이미 이름으로 변환함 | `lines` | 사번이 아니라 결재자 이름 CSV로 내려오므로 FE가 추가로 변환할 필요 없음 |
+
+**값 사전** (초안 — 실제 화면 문구는 확인 후 확정)
+
+| `fieldName` | 값 | 표시 |
+| --- | --- | --- |
+| `isCompleted` | `true` | 완료 |
+| `isCompleted` | `false` | 미완료 |
+| `status` | `DRAFT` | 초안 |
+| `status` | `IN_PROGRESS` | 진행중 |
+| `status` | `ACTIVE` | 진행중 |
+| `status` | `WAITING` | 대기 |
+| `status` | `APPROVED` | 승인 |
+| `status` | `REJECTED` | 반려 |
+| `status` | `COMPLETED` | 완료 |
+| `status` | `CANCELED` | 취소 |
+
+> `status`는 결재 회차(`ApprovalStatus`: `DRAFT`/`IN_PROGRESS`/`REJECTED`/`COMPLETED`/`CANCELED`)와 결재선(`ApprovalLineStatus`: `DRAFT`/`WAITING`/`ACTIVE`/`APPROVED`/`REJECTED`/`CANCELED`) 두 enum을 같은 `fieldName`으로 내려보낸다. 값 종류가 거의 겹치지 않고(`IN_PROGRESS`·`COMPLETED`는 회차만, `ACTIVE`·`WAITING`·`APPROVED`는 결재선만 가짐), 겹치는 `REJECTED`·`CANCELED`도 의미가 같아서 어느 쪽인지 구분하지 않고 값 하나로 통일된 사전을 써도 된다.
+
 ## 각 도메인이 갖춰야 할 구조
 
 | 위치 | 담당 | 규칙 |
@@ -476,6 +505,8 @@ Block 위치, 크기, 정렬 순서 변경은 현재 로그 수집 대상에서 
 | 결재 상신 | `MODIFY` | 결재 회차 ID | 결재 제목 | `status` 변경 전·후 값 |
 | 재상신 회차 생성 | `CREATE` | 새 결재 회차 ID | 결재 제목 | null change 1개 |
 
-결재선 `lines` 값은 결재 순서대로 정렬한 결재자 사번을 쉼표로 연결한다. 결재자별 행을 따로 만들지 않으며, 사번과 순서가 모두 같으면 로그를 남기지 않는다.
+결재선 `lines` 값은 결재 순서대로 정렬한 **결재자 이름**을 쉼표로 연결한다(2026-08-07 변경 — 사번 그대로 노출하면 FE가 화면에서 못 알아봐서, `employee` 라이브 조회로 이름으로 바꿔서 기록한다). 결재자별 행을 따로 만들지 않으며, 이름과 순서가 모두 같으면 로그를 남기지 않는다.
+
+⚠️ `employee` 조회에 실패하면(퇴사·탈퇴 등) 이름 대신 사번을 그대로 남긴다 — 로그 저장 자체를 막지 않는다.
 
 상신에 따라 자동으로 바뀌는 결재 전체 상태와 각 결재선 상태는 별도 로그로 중복 기록하지 않는다.

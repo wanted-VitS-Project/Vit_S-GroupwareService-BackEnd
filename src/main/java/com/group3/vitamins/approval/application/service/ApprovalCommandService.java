@@ -46,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -125,7 +126,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         List<ApprovalLine> previousLines = approvalRepository.findLinesByRevisionId(command.revisionId());
         String previousLineLabel = previousLines.stream()
                 .sorted(Comparator.comparingInt(ApprovalLine::getSequenceNo))
-                .map(ApprovalLine::getApproverId)
+                .map(line -> approverDisplayName(line.getApproverId()))
                 .collect(Collectors.joining(","));
 
         List<NewApprovalLine> newLines = command.lines().stream()
@@ -133,9 +134,11 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 .toList();
         List<ApprovalLine> savedLines = approvalRepository.replaceLines(command.revisionId(), newLines);
 
+        Map<String, String> newApproverNames = employees.stream()
+                .collect(Collectors.toMap(EmployeeSummary::userId, EmployeeSummary::name));
         String newLineLabel = command.lines().stream()
                 .sorted(Comparator.comparingInt(UpdateApprovalLinesCommand.LineInput::order))
-                .map(UpdateApprovalLinesCommand.LineInput::approverId)
+                .map(input -> newApproverNames.getOrDefault(input.approverId(), input.approverId()))
                 .collect(Collectors.joining(","));
         if (!previousLineLabel.equals(newLineLabel)) {
             publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), command.revisionId(),
@@ -428,6 +431,12 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
     private String resourceName(String value) {
         return isBlank(value) ? null : value;
+    }
+
+    private String approverDisplayName(String approverId) {
+        return employeeCatalogPort.findEmployee(approverId)
+                .map(EmployeeSummary::name)
+                .orElse(approverId);
     }
 
     private List<ApprovalLineView> zipLinesWithEmployees(List<ApprovalLine> lines, List<EmployeeSummary> employees) {
