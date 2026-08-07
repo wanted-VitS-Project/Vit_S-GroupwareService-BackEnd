@@ -52,7 +52,19 @@ class VitamateAnalysisJobQueryServiceTest {
 
             assertThat(result.analysisId()).isEqualTo(ANALYSIS_ID);
             assertThat(result.attemptId()).isEqualTo(ATTEMPT_ID);
-            assertThat(result.prompt()).isEqualTo("Summarize core requirements.");
+            assertThat(result.reviewType()).isEqualTo("COST_REPORT");
+            assertThat(result.reviewCategoryCodes()).containsExactly("COST_RESULT", "COST_STATEMENT");
+            assertThat(result.additionalInstruction()).isEqualTo("금액 산식도 확인해줘.");
+            assertThat(result.reviewTemplates())
+                    .hasSize(1)
+                    .first()
+                    .satisfies(template -> {
+                        assertThat(template.reviewType()).isEqualTo("COST_REPORT");
+                        assertThat(template.categoryCode()).isEqualTo("COST_RESULT");
+                        assertThat(template.categoryName()).isEqualTo("I. 원가계산 결과");
+                        assertThat(template.promptTemplate()).isEqualTo("원가계산 결과 검토 템플릿");
+                        assertThat(template.templateVersion()).isEqualTo("COST_REPORT_V1");
+                    });
             assertThat(result.searchScope().projectId()).isEqualTo(10L);
             assertThat(result.searchScope().blockId()).isEqualTo(20L);
             assertThat(result.searchScope().fileVersionIds()).containsExactly(101L);
@@ -135,7 +147,16 @@ class VitamateAnalysisJobQueryServiceTest {
         return new VitamateAnalysisReaderPort.VitamateAnalysisJobDetail(
                 ANALYSIS_ID,
                 ATTEMPT_ID,
-                "Summarize core requirements.",
+                "COST_REPORT",
+                List.of("COST_RESULT", "COST_STATEMENT"),
+                "금액 산식도 확인해줘.",
+                List.of(new VitamateAnalysisReaderPort.JobReviewTemplate(
+                        "COST_REPORT",
+                        "COST_RESULT",
+                        "I. 원가계산 결과",
+                        "원가계산 결과 검토 템플릿",
+                        "COST_REPORT_V1"
+                )),
                 new VitamateAnalysisReaderPort.JobSearchScope(
                         10L,
                         20L,

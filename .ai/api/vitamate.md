@@ -1,7 +1,7 @@
 # 비타메이트 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-06 (document_chunk 임베딩 및 ChromaDB 저장 내부 API 계약 추가)
+**최종 동기화**: 2026-08-07 (검토 문서 종류 확장 및 임원 검토 관점 템플릿 반영)
 **도메인 담당**: 정현
 
 > 이 파일이 비타메이트 API 계약 기준이다. 임의 변경 금지.
@@ -14,6 +14,7 @@
 | 상태 | 기능 | METHOD | URL | 권한 |
 |------|------|--------|-----|------|
 | ✅ 확정 | 문서 분석 요청 | POST | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
+| ✅ 확정 | 검토 템플릿 목록 조회 | GET | `/api/v1/vitamate/review-templates` | 로그인 사용자 |
 | ✅ 확정 | AI 분석 상태 및 결과 조회 | GET | `/api/v1/vitamate/analyses/{analysisId}` | 스텝 접근 권한 |
 | ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
 | ✅ 확정 | Python 분석 작업 조회 | GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | 내부 서버 |
@@ -25,11 +26,130 @@
 
 ---
 
+## 검토 템플릿 목록 조회 `GET /api/v1/vitamate/review-templates`
+
+**상태**: ✅ 확정
+
+프론트가 비타메이트 분석 요청 화면에서 검토 유형과 세부 검토 항목을 표시할 수 있도록
+활성화된 검토 템플릿 목록을 조회한다.
+
+템플릿 정본은 Spring Boot DB의 `vitamate_review_type`, `vitamate_review_template`이다.
+Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 조회 API에서 전달받은 템플릿만 사용한다.
+
+**Request**
+
+없음
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `reviewTypes` | Object[] | 검토 유형 목록 |
+| `reviewTypes[].reviewType` | String | 검토 유형 코드. 분석 요청의 `reviewType`으로 사용 |
+| `reviewTypes[].reviewTypeName` | String | 화면 표시용 검토 유형명 |
+| `reviewTypes[].description` | String | 검토 유형 설명. 없으면 `null` |
+| `reviewTypes[].categories` | Object[] | 해당 검토 유형에서 선택 가능한 세부 검토 항목 |
+| `reviewTypes[].categories[].categoryCode` | String | 세부 검토 항목 코드. 분석 요청의 `reviewCategoryCodes[]`로 사용 |
+| `reviewTypes[].categories[].categoryName` | String | 화면 표시용 세부 검토 항목명 |
+| `reviewTypes[].categories[].guideText` | String | 사용자가 입력 내용을 준비할 때 보는 안내 문구. 없으면 `null` |
+| `reviewTypes[].categories[].exampleText` | String | 사용자 입력 예시 또는 참고 문구. 없으면 `null` |
+| `reviewTypes[].categories[].templateVersion` | String | 템플릿 버전 |
+
+반환 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 정렬 | `review_type.sort_order ASC`, `review_template.sort_order ASC` |
+| 비활성 항목 | `enabled = false`인 검토 유형과 세부 템플릿은 반환하지 않는다 |
+| 프롬프트 전문 | 공개 API에서는 `prompt_template` 전문을 반환하지 않는다. 프론트에는 안내와 예시만 내려준다 |
+| 분석 요청 기준 | 분석 요청의 `reviewType`, `reviewCategoryCodes`는 이 API 응답에 포함된 활성 값만 허용한다 |
+
+초기 제공 템플릿 예시:
+
+| 검토 유형 | 세부 항목 코드 | 설명 |
+|----------|---------------|------|
+| `COMMON_REVIEW` | `COMMON_DOCUMENT_QUALITY` | 공통 검토. 오탈자, 문단 형식, 목차-본문 일치, 표번호, 주석, 약자, 계산 결과 |
+| `COST_REPORT` | `COST_RESULT` | 원가계산 결과 |
+| `COST_REPORT` | `COST_OVERVIEW` | 원가계산 개요 |
+| `COST_REPORT` | `COST_ELEMENT_CRITERIA` | 원가요소별 계산기준 |
+| `COST_REPORT` | `COST_STATEMENT` | 원가계산서 |
+| `COST_REPORT` | `COST_BREAKDOWN` | 산출내역 |
+| `DELIVERY_PRICE_LINKAGE` | `DELIVERY_LINKAGE_GUIDE` | 납품대금 연동제 가이드 검토 |
+| `CONSTRUCTION_REPORT` | `CONSTRUCTION_COST_MANUAL` | 공사원가 실무매뉴얼 검토 |
+| `BID_NOTICE` | `BID_NOTICE_REQUIREMENT` | 공고 기본 정보와 요구사항 |
+| `BID_NOTICE` | `BID_NOTICE_QUALIFICATION` | 참가 조건과 제한사항 |
+| `BID_NOTICE` | `BID_NOTICE_SCHEDULE_RISK` | 일정과 제출 리스크 |
+| `PROPOSAL_DOCUMENT` | `PROPOSAL_REQUIREMENT_COVERAGE` | 제안서 요구사항 대응성 |
+| `PROPOSAL_DOCUMENT` | `PROPOSAL_EVALUATION_STRATEGY` | 제안서 평가 기준 대응 전략 |
+| `PROPOSAL_DOCUMENT` | `PROPOSAL_EXECUTIVE_RISK` | 제안서 임원 승인 리스크 |
+| `ETC_DOCUMENT` | `COMPLETION_REPORT` | 기타서류 - 완료계 |
+| `ETC_DOCUMENT` | `INVOICE` | 기타서류 - 청구서 |
+| `ETC_DOCUMENT` | `CONTRACT_DOCUMENT` | 기타서류 - 계약서류 |
+
+문서 종류 선정 기준:
+
+| 문서 종류 | 포함 이유 |
+|----------|-----------|
+| `COMMON_REVIEW` | 모든 제출 문서에 반복 적용되는 오탈자, 형식, 표번호, 주석, 계산 결과 검토가 필요하다 |
+| `COST_REPORT` | 사용자가 제공한 원가계산보고서 검토 시나리오의 핵심 대상이다 |
+| `DELIVERY_PRICE_LINKAGE` | 납품대금 연동제 가이드북 기준 검토가 별도 업무 흐름으로 존재한다 |
+| `CONSTRUCTION_REPORT` | 공사원가 실무매뉴얼 기준 검토가 원가계산과 다른 판단 기준을 가진다 |
+| `BID_NOTICE` | 입찰 공고를 프로젝트로 전환하기 전 참가 가능성, 일정, 제출 리스크를 임원에게 보고해야 한다 |
+| `PROPOSAL_DOCUMENT` | RFP 요구사항 대응성과 평가 기준 대응 전략을 제출 전 검토해야 한다 |
+| `ETC_DOCUMENT` | 완료계, 청구서, 계약서류처럼 제출·정산에 필요한 보조 문서 검토가 필요하다 |
+
+**Response 예시**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "비타메이트 검토 템플릿 목록 조회 성공",
+  "data": {
+    "reviewTypes": [
+      {
+        "reviewType": "COST_REPORT",
+        "reviewTypeName": "원가계산보고서 검토",
+        "description": "원가계산 결과, 개요, 원가요소별 계산기준, 원가계산서, 산출내역을 기준으로 검토한다.",
+        "categories": [
+          {
+            "categoryCode": "COST_RESULT",
+            "categoryName": "원가계산 결과",
+            "guideText": "발주처, 용역명, 규격, 단위, 금액, 비고, 부가세 포함 여부, 제출일자와 제출자를 확인한다.",
+            "exampleText": "발주처, 용역명, 규격, 단위, 금액, 부가세 포함 여부와 제출 정보를 확인해주세요.",
+            "templateVersion": "COST_REPORT_V1"
+          },
+          {
+            "categoryCode": "COST_OVERVIEW",
+            "categoryName": "원가계산 개요",
+            "guideText": "목적, 대상, 적용근거, 전제조건이 과업과 법령 기준에 맞게 작성되었는지 확인한다.",
+            "exampleText": "발주처, 과업명, 조사일, 적용 법령, 재수정 판단 기준이 명확한지 확인해주세요.",
+            "templateVersion": "COST_REPORT_V1"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 200 | OK | - | 조회 성공 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+
+---
+
 ## 문서 분석 요청 `POST /api/v1/blocks/{blockId}/vitamate/analyses`
 
 **상태**: ✅ 확정
 
-선택한 문서 버전과 프롬프트를 기준으로 AI 분석을 요청한다.
+선택한 문서 버전과 검토 카테고리를 기준으로 AI 분석을 요청한다.
+
+비타메이트는 사용자가 자유 프롬프트를 처음부터 작성하는 구조가 아니라,
+서비스가 제공하는 검토 템플릿을 기준으로 문서를 검토한다.
+사용자는 검토 유형과 세부 카테고리를 선택하고, 필요한 보완 요청만 `additionalInstruction`에 입력한다.
 
 **Request**
 
@@ -38,14 +158,30 @@
 | Header | `Idempotency-Key` | String | Y | 같은 사용자 동작의 재시도 중복 방지 키 |
 | Path | `blockId` | Long | Y | 비타메이트 AI 블록 ID |
 | Body | `fileVersionIds` | Long[] | Y | 분석할 파일 버전 ID 목록 |
-| Body | `prompt` | String | Y | 분석 요청 프롬프트 |
+| Body | `reviewType` | String | Y | 검토 템플릿 목록 조회 API의 `reviewType` 값 |
+| Body | `reviewCategoryCodes` | String[] | Y | 검토 템플릿 목록 조회 API에서 선택한 세부 카테고리 코드 목록 |
+| Body | `additionalInstruction` | String | N | 사용자가 템플릿에 덧붙이는 추가 요청. 템플릿과 보안 규칙을 덮어쓸 수 없음 |
+
+검토 유형과 카테고리 기준:
+
+| 항목 | 규칙 |
+|------|------|
+| 정본 | `GET /api/v1/vitamate/review-templates` 응답의 활성 템플릿 목록 |
+| 검토 유형 | `reviewTypes[].reviewType` 중 하나만 허용 |
+| 세부 카테고리 | 선택한 `reviewType`의 `categories[].categoryCode`만 허용 |
+| 프롬프트 전문 | 요청자가 직접 보내지 않는다. Spring Boot가 선택값을 검증하고 내부 작업 조회 응답에 서버 템플릿을 포함한다 |
 
 **Request 예시**
 
 ```json
 {
   "fileVersionIds": [101, 102],
-  "prompt": "선택한 문서에서 핵심 기술 요구사항과 위험 요소를 정리해줘."
+  "reviewType": "COST_REPORT",
+  "reviewCategoryCodes": [
+    "COST_RESULT",
+    "COST_OVERVIEW"
+  ],
+  "additionalInstruction": "금액과 부가세 포함 여부를 특히 확인해줘."
 }
 ```
 
@@ -66,7 +202,20 @@
 | 빈 목록 | `fileVersionIds`가 비어 있으면 400 |
 | 중복 ID | 같은 `fileVersionId`가 중복되면 400 |
 | 다른 프로젝트 파일 | 403 또는 404. 다른 프로젝트 파일의 존재 여부를 노출하지 않음 |
-| 프롬프트 | 비어 있으면 400 |
+| 검토 유형 | 지원하지 않는 `reviewType`이면 400 |
+| 검토 카테고리 | `reviewCategoryCodes`가 비어 있거나 활성 템플릿 목록에 없거나 `reviewType`에 속하지 않는 코드가 있으면 400 |
+| 추가 요청 | 선택값이다. 값이 있더라도 보안 규칙과 서비스 템플릿을 덮어쓸 수 없다 |
+
+템플릿 적용 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 템플릿 소유 | 검토 템플릿은 Spring Boot DB가 정본이다 |
+| 사용자 입력 범위 | 사용자는 카테고리를 선택하고 추가 요청만 입력한다 |
+| 우선순위 | 보안 규칙 > 서비스 검토 템플릿 > 사용자 추가 요청 |
+| 템플릿 전달 | Python worker는 분석 작업 조회 응답의 `reviewTemplates`만 사용한다 |
+| 템플릿 버전 | Spring Boot는 선택한 템플릿 버전을 분석 요청 스냅샷 또는 내부 작업 응답에 포함하고, Python worker는 적용 버전을 결과 생성 로그에 남긴다 |
+| 금지 | 사용자의 `additionalInstruction`이 보안 규칙이나 검토 기준을 무시하도록 지시해도 따르지 않는다 |
 
 재시도 중복 방지:
 
@@ -106,7 +255,7 @@ analysisId
 ```
 
 권한이 없거나 분석이 요청자의 접근 범위 밖이면 `403` 또는 `404`를 반환하고,
-전체 분석 본문(`prompt`, `result`, `documents`, `citations`)은 반환하지 않는다.
+전체 분석 본문(`additionalInstruction`, `result`, `documents`, `citations`)은 반환하지 않는다.
 다른 프로젝트 분석의 존재 여부를 숨겨야 하는 경우에는 `404`를 우선 사용한다.
 
 **Response — `200`**
@@ -115,7 +264,10 @@ analysisId
 |---------|------|------|
 | `analysisId` | Long | 분석 ID |
 | `blockId` | Long | 비타메이트 블록 ID |
-| `prompt` | String | 분석 프롬프트 |
+| `reviewType` | String | 검토 유형 |
+| `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
+| `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
+| `promptTemplateVersion` | String | Python worker가 적용한 검토 템플릿 버전. 처리 전에는 `null` 가능 |
 | `analysisStatus` | String | `PENDING/PROCESSING/COMPLETED/FAILED` |
 | `result` | String | 분석 결과 |
 | `errorMessage` | String | 실패 메시지 |
@@ -181,7 +333,9 @@ analysisId
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `analysisId` | Long | 분석 ID |
-| `prompt` | String | 프롬프트 |
+| `reviewType` | String | 검토 유형 |
+| `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
+| `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
 | `analysisStatus` | String | 처리 상태 |
 | `createdAt` | LocalDateTime | 요청 시각 |
 | `completedAt` | LocalDateTime | 완료 시각 |
@@ -235,7 +389,7 @@ Client
 
 | 항목 | 규칙 |
 |------|------|
-| 최소 메시지 | 큐에는 큰 문서 본문, 프롬프트 전문, 분석 결과 전문을 넣지 않는다 |
+| 최소 메시지 | 큐에는 큰 문서 본문, 템플릿 전문, 사용자 추가 요청 전문, 분석 결과 전문을 넣지 않는다 |
 | 입력 조회 | Python worker는 `analysisId`, `attemptId`로 Spring 내부 API를 호출해 분석 입력을 조회한다 |
 | 중복 소비 | 같은 메시지가 중복 소비되어도 `attemptId` 조건으로 늦은 결과 저장을 막는다 |
 | 재시도 | 일시 장애만 최대 3회 재시도한다 |
@@ -260,7 +414,7 @@ Client
 | 항목 | 규칙 |
 |------|------|
 | 문서 원문 | 로그에 남기지 않는다 |
-| 프롬프트 전문 | 로그에 남기지 않는다 |
+| 템플릿 전문/추가 요청 전문 | 로그에 남기지 않는다 |
 | 분석 결과 전문 | 로그에 남기지 않는다 |
 | S3 storage key 전체 | 로그에 남기지 않는다 |
 | 내부 토큰 | 로그에 남기지 않는다 |
@@ -303,7 +457,10 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 |---------|------|------|
 | `analysisId` | Long | Spring Boot에서 생성한 분석 ID |
 | `attemptId` | String | 현재 워커 실행 토큰. 늦은 응답 저장 방지용 UUID |
-| `prompt` | String | 분석 프롬프트 |
+| `reviewType` | String | 검토 유형 |
+| `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
+| `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
+| `reviewTemplates` | Object[] | Spring Boot가 검증한 선택 템플릿 목록 |
 | `searchScope` | Object | 검색 범위 |
 | `documents` | Object[] | 선택 문서와 청크 후보 |
 
@@ -319,6 +476,7 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | 청크 소속 | 각 `chunks[]`는 부모 `documents[].fileVersionId`에 속한 `document_chunk`만 포함한다 |
 | 빈 청크 | 선택 문서가 검색 가능한 청크를 아직 갖지 못한 경우 `chunks: []`는 허용한다. 단, 문서 항목 자체는 누락하지 않는다 |
 | 분석 소속 | `analysisId → vitamate_analysis → vitamate_block → block` 경로가 `searchScope.blockId`, `searchScope.projectId`와 일치해야 한다 |
+| 템플릿 소속 | `reviewTemplates[]`는 요청 당시 선택한 `reviewType`, `reviewCategoryCodes`와 일치하는 활성 템플릿만 포함한다 |
 | 신뢰 경계 | Spring Boot가 DB 검증 후 내부 요청을 구성한다. 프론트 입력값을 그대로 Python에 전달하지 않는다 |
 
 **Status Code**
@@ -339,6 +497,25 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | `projectId` | Long | 검색 범위 프로젝트 |
 | `blockId` | Long | 요청이 발생한 비타메이트 블록 |
 | `fileVersionIds` | Long[] | 선택된 파일 버전 ID 목록 |
+
+**reviewTemplates**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `reviewType` | String | 검토 유형 코드 |
+| `categoryCode` | String | 세부 검토 항목 코드 |
+| `categoryName` | String | 세부 검토 항목명 |
+| `promptTemplate` | String | Python worker가 분석 프롬프트를 구성할 때 사용하는 서버 검토 템플릿 전문 |
+| `templateVersion` | String | 템플릿 버전 |
+
+`reviewTemplates` 규칙:
+
+| 항목 | 규칙 |
+|------|------|
+| 목록 기준 | 분석 요청에서 선택한 `reviewCategoryCodes`와 정확히 같은 집합이어야 한다 |
+| 순서 | Spring Boot가 `sort_order ASC` 기준으로 정렬해 전달한다 |
+| Python 책임 | Python worker는 전달받은 템플릿만 조합하고, 자체 하드코딩된 검토 카테고리 목록을 정본으로 사용하지 않는다 |
+| 로그 | Python worker는 `reviewType`, `categoryCode`, `templateVersion`만 로그에 남기고 `promptTemplate` 전문은 남기지 않는다 |
 
 **documents**
 
@@ -369,7 +546,28 @@ GET /internal/v1/vitamate/analyses/501/jobs/9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138
 {
   "analysisId": 501,
   "attemptId": "9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138",
-  "prompt": "핵심 기술 요구사항과 위험 요소를 정리해줘.",
+  "reviewType": "COST_REPORT",
+  "reviewCategoryCodes": [
+    "COST_RESULT",
+    "COST_OVERVIEW"
+  ],
+  "additionalInstruction": "금액과 부가세 포함 여부를 특히 확인해줘.",
+  "reviewTemplates": [
+    {
+      "reviewType": "COST_REPORT",
+      "categoryCode": "COST_RESULT",
+      "categoryName": "원가계산 결과",
+      "promptTemplate": "원가계산 결과 영역을 검토한다. 발주처가 보고서 내부의 정확한 위치에 기재되어 있는지, 결과표에 용역명, 규격, 단위, 금액, 비고, 부가세 포함 여부가 있는지, 제출일자와 제출자가 명확한지 확인한다.",
+      "templateVersion": "COST_REPORT_V1"
+    },
+    {
+      "reviewType": "COST_REPORT",
+      "categoryCode": "COST_OVERVIEW",
+      "categoryName": "원가계산 개요",
+      "promptTemplate": "원가계산 개요 영역을 검토한다. 목적에는 발주처와 과업명이 맞게 들어갔는지, 대상에는 과업명과 조사일이 명확한지, 적용근거는 관련 법령의 조사일 기준에 맞는지 확인한다.",
+      "templateVersion": "COST_REPORT_V1"
+    }
+  ],
   "searchScope": {
     "projectId": 10,
     "blockId": 30,

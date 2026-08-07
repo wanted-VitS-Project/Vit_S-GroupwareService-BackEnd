@@ -160,7 +160,9 @@ class VitamateAnalysisHistoryQueryServiceTest {
     private VitamateAnalysisReaderPort.VitamateAnalysisHistory history(Long analysisId) {
         return new VitamateAnalysisReaderPort.VitamateAnalysisHistory(
                 analysisId,
-                "핵심 기술 요구사항과 위험 요소를 정리해줘.",
+                "COST_REPORT",
+                List.of("COMMON", "COST_RESULT"),
+                "금액 산식도 확인해줘.",
                 "COMPLETED",
                 LocalDateTime.of(2026, 8, 4, 14, 5),
                 LocalDateTime.of(2026, 8, 4, 14, 8)

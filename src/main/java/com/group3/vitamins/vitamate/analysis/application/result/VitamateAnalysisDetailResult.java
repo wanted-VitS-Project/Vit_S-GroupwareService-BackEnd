@@ -5,13 +5,14 @@ import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisRe
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * 비타메이트 분석 상세 조회 결과입니다.
- */
+// 비타메이트 분석 상세 조회 결과입니다.
 public record VitamateAnalysisDetailResult(
         Long analysisId,
         Long blockId,
-        String prompt,
+        String reviewType,
+        List<String> reviewCategoryCodes,
+        String additionalInstruction,
+        String promptTemplateVersion,
         String analysisStatus,
         String result,
         String errorMessage,
@@ -21,12 +22,15 @@ public record VitamateAnalysisDetailResult(
         List<Citation> citations
 ) {
 
-    // 읽기 포트의 조회 결과를 컨트롤러 응답에 가까운 application result로 변환한다.
+    // 읽기 포트의 조회 결과를 컨트롤러 응답에 가까운 application result로 변환합니다.
     public static VitamateAnalysisDetailResult from(VitamateAnalysisReaderPort.VitamateAnalysisDetail detail) {
         return new VitamateAnalysisDetailResult(
                 detail.analysisId(),
                 detail.blockId(),
-                detail.prompt(),
+                detail.reviewType(),
+                detail.reviewCategoryCodes(),
+                detail.additionalInstruction(),
+                detail.promptTemplateVersion(),
                 detail.analysisStatus(),
                 detail.result(),
                 detail.errorMessage(),
@@ -45,7 +49,7 @@ public record VitamateAnalysisDetailResult(
             Long fileVersionId,
             String fileName
     ) {
-        // 포트의 문서 값을 application result 문서 값으로 변환한다.
+        // 포트의 문서 값을 application result 문서 값으로 변환합니다.
         private static Document from(VitamateAnalysisReaderPort.Document document) {
             return new Document(
                     document.fileVersionId(),
@@ -61,7 +65,7 @@ public record VitamateAnalysisDetailResult(
             Integer pageNumber,
             String excerpt
     ) {
-        // 포트의 citation 값을 application result citation 값으로 변환한다.
+        // 포트의 citation 값을 application result citation 값으로 변환합니다.
         private static Citation from(VitamateAnalysisReaderPort.Citation citation) {
             return new Citation(
                     citation.rankOrder(),
