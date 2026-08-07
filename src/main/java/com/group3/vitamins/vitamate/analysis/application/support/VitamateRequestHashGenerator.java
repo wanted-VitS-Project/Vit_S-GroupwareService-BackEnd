@@ -19,17 +19,19 @@ public class VitamateRequestHashGenerator {
     // 멱등성 비교에 사용할 요청 기준값을 SHA-256 해시로 변환합니다.
     public String generate(
             Long blockId,
-            List<Long> fileVersionIds,
+            List<Long> referenceFileVersionIds,
+            List<Long> targetFileVersionIds,
             String reviewType,
             List<String> reviewCategoryCodes,
-            String additionalInstruction
+            String prompt
     ) {
         String rawValue = createCanonicalValue(
                 blockId,
-                fileVersionIds,
+                referenceFileVersionIds,
+                targetFileVersionIds,
                 reviewType,
                 reviewCategoryCodes,
-                additionalInstruction
+                prompt
         );
         return sha256HashGenerator.generate(rawValue);
     }
@@ -37,12 +39,17 @@ public class VitamateRequestHashGenerator {
     // 순서 차이로 다른 요청처럼 보이지 않도록 파일과 카테고리 목록을 정렬합니다.
     private String createCanonicalValue(
             Long blockId,
-            List<Long> fileVersionIds,
+            List<Long> referenceFileVersionIds,
+            List<Long> targetFileVersionIds,
             String reviewType,
             List<String> reviewCategoryCodes,
-            String additionalInstruction
+            String prompt
     ) {
-        String sortedFileVersionIds = fileVersionIds.stream()
+        String sortedReferenceFileVersionIds = referenceFileVersionIds.stream()
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        String sortedTargetFileVersionIds = targetFileVersionIds.stream()
                 .sorted()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
@@ -52,13 +59,15 @@ public class VitamateRequestHashGenerator {
 
         return blockId
                 + DELIMITER
-                + sortedFileVersionIds
+                + sortedReferenceFileVersionIds
+                + DELIMITER
+                + sortedTargetFileVersionIds
                 + DELIMITER
                 + reviewType.trim()
                 + DELIMITER
                 + sortedCategoryCodes
                 + DELIMITER
-                + normalize(additionalInstruction);
+                + normalize(prompt);
     }
 
     private String normalize(String value) {

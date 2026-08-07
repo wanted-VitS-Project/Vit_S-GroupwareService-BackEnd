@@ -2,6 +2,7 @@ package com.group3.vitamins.image.application.usecase;
 
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
 import com.group3.vitamins.image.application.query.GetImageItemQuery;
+import com.group3.vitamins.image.application.query.GetImageItemsQuery;
 import com.group3.vitamins.image.application.query.GetImageTrashQuery;
 import com.group3.vitamins.image.application.query.GetProjectImagesQuery;
 
@@ -20,6 +21,24 @@ public interface ImageQueryUseCase {
             String caption,
             int orderIndex,
             int totalCount
+    ) {
+    }
+
+    //이미지 항목 전체 조회 — 한 블록의 활성 이미지 전부(수정 화면에서 목록을 통째로 그리는 용도)
+    ImageItemsView getItems(GetImageItemsQuery query);
+
+    record ImageItemsView(
+            int totalCount,
+            List<BlockImageView> images
+    ) {
+    }
+
+    record BlockImageView(
+            Long imgId,
+            String originalName,
+            String imageUrl,
+            String caption,
+            int orderIndex
     ) {
     }
 

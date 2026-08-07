@@ -70,7 +70,7 @@
             b.block_id AS blockId,
             va.review_type AS reviewType,
             va.review_category_codes AS reviewCategoryCodes,
-            va.additional_instruction AS additionalInstruction,
+            va.prompt AS prompt,
             va.analysis_status AS analysisStatus,
             va.result AS result,
             va.error_message AS errorMessage,
@@ -120,7 +120,8 @@
             resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisDocumentRow">
         SELECT
             vad.file_version_id AS fileVersionId,
-            f.name AS fileName
+            f.name AS fileName,
+            vad.document_role AS documentRole
         FROM vitamate_analysis_document vad
                  JOIN file_version fv
                       ON fv.file_version_id = vad.file_version_id
@@ -160,7 +161,7 @@
             va.processing_attempt_id AS attemptId,
             va.review_type AS reviewType,
             va.review_category_codes AS reviewCategoryCodes,
-            va.additional_instruction AS additionalInstruction,
+            va.prompt AS prompt,
             s.project_id AS projectId,
             b.block_id AS blockId
         FROM vitamate_analysis va
@@ -185,7 +186,8 @@
             resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow">
         SELECT
             vad.file_version_id AS fileVersionId,
-            f.name AS fileName
+            f.name AS fileName,
+            vad.document_role AS documentRole
         FROM vitamate_analysis_document vad
                  JOIN file_version fv
                       ON fv.file_version_id = vad.file_version_id
@@ -216,7 +218,7 @@
           AND fv.deleted_at IS NULL
           AND dc.deleted_at IS NULL
           AND dc.embedding_status = 'COMPLETED'
-        ORDER BY vad.created_at ASC, vad.vitamate_analysis_document_id ASC, dc.chunk_index ASC
+        ORDER BY vad.document_role ASC, vad.created_at ASC, vad.vitamate_analysis_document_id ASC, dc.chunk_index ASC
     </select>
 
     <select id="findBlockAnalysisHistories"
@@ -225,7 +227,7 @@
             va.vitamate_analysis_id AS analysisId,
             va.review_type AS reviewType,
             va.review_category_codes AS reviewCategoryCodes,
-            va.additional_instruction AS additionalInstruction,
+            va.prompt AS prompt,
             va.analysis_status AS analysisStatus,
             va.created_at AS createdAt,
             va.completed_at AS completedAt

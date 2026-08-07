@@ -28,7 +28,7 @@ public record VitamateAnalysisHistoryResult(
             Long analysisId,
             String reviewType,
             List<String> reviewCategoryCodes,
-            String additionalInstruction,
+            String prompt,
             String analysisStatus,
             LocalDateTime createdAt,
             LocalDateTime completedAt
@@ -40,7 +40,7 @@ public record VitamateAnalysisHistoryResult(
                     history.analysisId(),
                     history.reviewType(),
                     history.reviewCategoryCodes(),
-                    history.additionalInstruction(),
+                    history.prompt(),
                     history.analysisStatus(),
                     history.createdAt(),
                     history.completedAt()

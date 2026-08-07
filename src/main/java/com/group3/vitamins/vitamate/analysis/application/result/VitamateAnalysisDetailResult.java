@@ -11,7 +11,7 @@ public record VitamateAnalysisDetailResult(
         Long blockId,
         String reviewType,
         List<String> reviewCategoryCodes,
-        String additionalInstruction,
+        String prompt,
         List<TemplateVersion> templateVersions,
         String analysisStatus,
         String result,
@@ -29,7 +29,7 @@ public record VitamateAnalysisDetailResult(
                 detail.blockId(),
                 detail.reviewType(),
                 detail.reviewCategoryCodes(),
-                detail.additionalInstruction(),
+                detail.prompt(),
                 detail.templateVersions().stream()
                         .map(TemplateVersion::from)
                         .toList(),
@@ -49,13 +49,15 @@ public record VitamateAnalysisDetailResult(
 
     public record Document(
             Long fileVersionId,
-            String fileName
+            String fileName,
+            String documentRole
     ) {
         // 포트의 문서 값을 application result 문서 값으로 변환합니다.
         private static Document from(VitamateAnalysisReaderPort.Document document) {
             return new Document(
                     document.fileVersionId(),
-                    document.fileName()
+                    document.fileName(),
+                    document.documentRole()
             );
         }
     }

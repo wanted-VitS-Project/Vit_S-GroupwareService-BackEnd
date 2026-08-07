@@ -21,7 +21,7 @@ public interface VitamateAnalysisReaderPort {
             Long blockId,
             String reviewType,
             List<String> reviewCategoryCodes,
-            String additionalInstruction,
+            String prompt,
             List<TemplateVersion> templateVersions,
             String analysisStatus,
             String result,
@@ -41,7 +41,8 @@ public interface VitamateAnalysisReaderPort {
 
     record Document(
             Long fileVersionId,
-            String fileName
+            String fileName,
+            String documentRole
     ) {
     }
 
@@ -59,7 +60,7 @@ public interface VitamateAnalysisReaderPort {
             String attemptId,
             String reviewType,
             List<String> reviewCategoryCodes,
-            String additionalInstruction,
+            String prompt,
             List<JobReviewTemplate> reviewTemplates,
             JobSearchScope searchScope,
             List<JobDocument> documents
@@ -85,6 +86,7 @@ public interface VitamateAnalysisReaderPort {
     record JobDocument(
             Long fileVersionId,
             String fileName,
+            String documentRole,
             List<JobChunk> chunks
     ) {
     }
@@ -101,7 +103,7 @@ public interface VitamateAnalysisReaderPort {
             Long analysisId,
             String reviewType,
             List<String> reviewCategoryCodes,
-            String additionalInstruction,
+            String prompt,
             String analysisStatus,
             LocalDateTime createdAt,
             LocalDateTime completedAt

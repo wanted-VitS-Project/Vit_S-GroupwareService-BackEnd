@@ -54,7 +54,7 @@ class VitamateAnalysisJobQueryServiceTest {
             assertThat(result.attemptId()).isEqualTo(ATTEMPT_ID);
             assertThat(result.reviewType()).isEqualTo("COST_REPORT");
             assertThat(result.reviewCategoryCodes()).containsExactly("COST_RESULT", "COST_STATEMENT");
-            assertThat(result.additionalInstruction()).isEqualTo("금액 산식도 확인해줘.");
+            assertThat(result.prompt()).isEqualTo("금액 산식도 확인해줘.");
             assertThat(result.reviewTemplates())
                     .extracting(VitamateAnalysisJobDetailResult.ReviewTemplate::categoryCode)
                     .containsExactly("COST_RESULT", "COST_STATEMENT");
@@ -164,6 +164,7 @@ class VitamateAnalysisJobQueryServiceTest {
                 List.of(new VitamateAnalysisReaderPort.JobDocument(
                         101L,
                         "proposal.pdf",
+                        "TARGET",
                         List.of(new VitamateAnalysisReaderPort.JobChunk(
                                 3001L,
                                 "fv101-chunk-1",

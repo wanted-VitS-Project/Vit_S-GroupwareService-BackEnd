@@ -17,4 +17,10 @@ public interface FileRepository {
 
     /** 삭제 여부와 무관하게 문서를 찾는다(복구·상태 판정은 서비스가 deletedAt 으로 한다). */
     Optional<File> findById(Long fileId);
+
+    /**
+     * 문서 행을 물리 삭제한다(§7 영구삭제). {@code block_file} 은 {@code ON DELETE CASCADE} 로 함께 지워진다.
+     * ⚠️ 버전 행({@code file_version})은 CASCADE 가 없으므로 이 호출 전에 먼저 지워야 한다.
+     */
+    void deleteById(Long fileId);
 }

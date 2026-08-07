@@ -12,7 +12,7 @@ public class VitamateAnalysisJobRow {
     private String attemptId;
     private String reviewType;
     private String reviewCategoryCodes;
-    private String additionalInstruction;
+    private String prompt;
     private Long projectId;
     private Long blockId;
 }

@@ -77,10 +77,11 @@ public class VitamateAnalysisController {
                         blockId,
                         userId,
                         idempotencyKey,
-                        request.fileVersionIds(),
+                        request.referenceFileVersionIds(),
+                        request.targetFileVersionIds(),
                         request.reviewType(),
                         request.reviewCategoryCodes(),
-                        request.additionalInstruction()
+                        request.prompt()
                 )
         );
 

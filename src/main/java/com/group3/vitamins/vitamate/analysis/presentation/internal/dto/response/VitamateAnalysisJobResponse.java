@@ -20,8 +20,8 @@ public record VitamateAnalysisJobResponse(
         @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COMMON\", \"COST_RESULT\"]")
         List<String> reviewCategoryCodes,
 
-        @Schema(description = "템플릿에 덧붙일 사용자 추가 요청")
-        String additionalInstruction,
+        @Schema(description = "사용자가 기본 템플릿을 확인·보완해 확정한 최종 프롬프트. worker가 그대로 사용한다")
+        String prompt,
 
         @Schema(description = "분석 요청 당시 선택한 검토 템플릿 스냅샷")
         List<ReviewTemplate> reviewTemplates,
@@ -40,7 +40,7 @@ public record VitamateAnalysisJobResponse(
                 result.attemptId(),
                 result.reviewType(),
                 result.reviewCategoryCodes(),
-                result.additionalInstruction(),
+                result.prompt(),
                 result.reviewTemplates().stream()
                         .map(ReviewTemplate::from)
                         .toList(),
@@ -106,6 +106,9 @@ public record VitamateAnalysisJobResponse(
             @Schema(description = "파일명", example = "제안요청서.pdf")
             String fileName,
 
+            @Schema(description = "문서 역할", example = "TARGET")
+            String documentRole,
+
             @Schema(description = "검색 후보 청크 목록")
             List<Chunk> chunks
     ) {
@@ -114,6 +117,7 @@ public record VitamateAnalysisJobResponse(
             return new Document(
                     document.fileVersionId(),
                     document.fileName(),
+                    document.documentRole(),
                     document.chunks().stream()
                             .map(Chunk::from)
                             .toList()

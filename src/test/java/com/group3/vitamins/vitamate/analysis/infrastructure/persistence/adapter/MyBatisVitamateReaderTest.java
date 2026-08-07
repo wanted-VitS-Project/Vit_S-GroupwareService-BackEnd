@@ -52,6 +52,7 @@ class MyBatisVitamateReaderTest {
 
         assertThat(detail.reviewCategoryCodes())
                 .containsExactly("COST_RESULT", "COST_OVERVIEW");
+        assertThat(detail.prompt()).isEqualTo("합계를 중심으로 검토해주세요.");
         assertThat(detail.templateVersions())
                 .extracting(
                         VitamateAnalysisReaderPort.TemplateVersion::categoryCode,
@@ -71,7 +72,7 @@ class MyBatisVitamateReaderTest {
         VitamateAnalysisRow row = analysisRow(analysisId);
         row.setReviewType(null);
         row.setReviewCategoryCodes(null);
-        row.setAdditionalInstruction(null);
+        row.setPrompt(null);
 
         when(analysisMapper.findAccessibleAnalysis(analysisId, userId)).thenReturn(row);
         when(templateMapper.findAnalysisTemplateSnapshots(analysisId)).thenReturn(List.of());
@@ -84,7 +85,7 @@ class MyBatisVitamateReaderTest {
 
         assertThat(detail.reviewType()).isNull();
         assertThat(detail.reviewCategoryCodes()).isEmpty();
-        assertThat(detail.additionalInstruction()).isNull();
+        assertThat(detail.prompt()).isNull();
         assertThat(detail.templateVersions()).isEmpty();
     }
 
@@ -95,7 +96,7 @@ class MyBatisVitamateReaderTest {
         row.setBlockId(10L);
         row.setReviewType("COST_REPORT");
         row.setReviewCategoryCodes("COST_RESULT,COST_OVERVIEW");
-        row.setAdditionalInstruction("합계를 중심으로 검토해주세요.");
+        row.setPrompt("합계를 중심으로 검토해주세요.");
         row.setAnalysisStatus("COMPLETED");
         row.setResult("검토 결과");
         row.setCreatedAt(LocalDateTime.of(2026, 8, 7, 12, 0));

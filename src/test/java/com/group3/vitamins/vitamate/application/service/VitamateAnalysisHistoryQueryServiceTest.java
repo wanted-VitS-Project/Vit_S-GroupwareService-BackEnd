@@ -68,7 +68,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
             assertThat(result.content().get(0)).satisfies(item -> {
                 assertThat(item.reviewType()).isEqualTo("COST_REPORT");
                 assertThat(item.reviewCategoryCodes()).containsExactly("COST_RESULT", "COST_OVERVIEW");
-                assertThat(item.additionalInstruction()).isEqualTo("금액 산식도 확인해줘.");
+                assertThat(item.prompt()).isEqualTo("금액 산식도 확인해줘.");
             });
             verify(analysisReader).findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT);
         }

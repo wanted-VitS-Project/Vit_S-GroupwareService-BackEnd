@@ -14,7 +14,7 @@ public class VitamateAnalysisRow {
     private Long blockId;
     private String reviewType;
     private String reviewCategoryCodes;
-    private String additionalInstruction;
+    private String prompt;
     private String analysisStatus;
     private String result;
     private String errorMessage;
