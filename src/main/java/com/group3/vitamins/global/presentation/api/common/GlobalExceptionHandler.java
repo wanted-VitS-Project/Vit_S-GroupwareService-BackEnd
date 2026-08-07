@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -169,12 +170,14 @@ public class GlobalExceptionHandler {
         log.warn("[405] {} {} - 지원 메서드: {}",
                 request.getMethod(), request.getRequestURI(), e.getSupportedHttpMethods());
 
-        ResponseEntity.BodyBuilder response = ResponseEntity.status(405);
-        if (e.getSupportedHttpMethods() != null) {
-            response.allow(e.getSupportedHttpMethods().toArray(new HttpMethod[0]));
-        }
-        return response.body(ApiErrorResponse.of(
-                405, COMMON_METHOD_NOT_ALLOWED, COMMON_METHOD_NOT_ALLOWED_MESSAGE));
+        // RFC 9110 §15.5.6 — 405 응답은 Allow 헤더를 반드시 포함해야 한다.
+        // 지원 메서드를 모르는 경우(예외가 목록 없이 만들어진 경우)에도 빈 Allow 를 내보낸다 —
+        // 없는 메서드를 지어내지 않으면서 "모든 405 에 Allow 가 있다"는 계약은 지킨다.
+        Set<HttpMethod> supported = e.getSupportedHttpMethods();
+        return ResponseEntity.status(405)
+                .allow(supported == null ? new HttpMethod[0] : supported.toArray(new HttpMethod[0]))
+                .body(ApiErrorResponse.of(
+                        405, COMMON_METHOD_NOT_ALLOWED, COMMON_METHOD_NOT_ALLOWED_MESSAGE));
     }
 
     @ExceptionHandler(Exception.class)

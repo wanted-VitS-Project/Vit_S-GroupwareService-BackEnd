@@ -57,13 +57,14 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    @DisplayName("지원 메서드 정보가 없어도 405 로 응답한다 — Allow 헤더만 생략")
-    void handlesMissingSupportedMethods() {
+    @DisplayName("지원 메서드 정보가 없어도 Allow 헤더는 남긴다 — 없는 메서드를 지어내지 않고 빈 값으로")
+    void alwaysIncludesAllowHeader() {
         HttpRequestMethodNotSupportedException e = new HttpRequestMethodNotSupportedException("PATCH");
 
         ResponseEntity<ApiErrorResponse> response = handler.handleMethodNotSupported(e, request());
 
         assertThat(response.getStatusCode().value()).isEqualTo(405);
-        assertThat(response.getHeaders().get(HttpHeaders.ALLOW)).isNull();
+        assertThat(response.getHeaders().containsKey(HttpHeaders.ALLOW)).isTrue();
+        assertThat(response.getHeaders().getAllow()).isEmpty();
     }
 }

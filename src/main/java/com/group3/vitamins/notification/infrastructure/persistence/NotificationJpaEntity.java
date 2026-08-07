@@ -20,7 +20,12 @@ import java.util.Map;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class NotificationJpaEntity {
+public class
+
+
+
+
+NotificationJpaEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
