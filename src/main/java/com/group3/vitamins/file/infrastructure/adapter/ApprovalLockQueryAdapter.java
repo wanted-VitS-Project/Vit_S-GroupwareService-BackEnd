@@ -17,4 +17,9 @@ public class ApprovalLockQueryAdapter implements ApprovalLockQueryPort {
     public Optional<InProgressApproval> findInProgressApproval(Long fileId) {
         return Optional.ofNullable(approvalLockMapper.findInProgressApproval(fileId));
     }
+
+    @Override
+    public boolean existsAnyApprovalReference(Long fileId) {
+        return approvalLockMapper.existsAnyApprovalReference(fileId);
+    }
 }

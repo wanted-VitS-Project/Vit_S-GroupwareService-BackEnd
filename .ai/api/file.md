@@ -1,6 +1,6 @@
 # 📎 File · FileVersion API
 
-**최종 업데이트**: 2026-08-06 (§1 업로드 대상에 결재(APPROVAL) 블록 추가 · §3 목록은 FILE 전용 명시) · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
+**최종 업데이트**: 2026-08-07 (§12 프로젝트 전체 파일 모아보기 · §13 휴지통 모아보기 신설 · §7 파생데이터 정리 포트 선호출 명시) · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
@@ -27,11 +27,11 @@
 **착수 범위 (2026-08-06 · CRUD 우선)**
 
 - ✅ **이번**: §1·2 업로드 · §3·8·9·10 조회 · **버전 단건 조회(결재용)** · §4 수정 · §5 휴지통 이동 · **파일 버전 목록(비타메이트, #138) 읽기 구현 완료** — 프로젝트 스코프(`/projects/{projectId}/file-versions`) · `file_index` LEFT JOIN
-- ⏸️ **나중**: §6 복구 · §7 영구삭제 (휴지통 화면 대기). **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
+- 🚧 **착수(2026-08-07)**: §6 복구 · §7 영구삭제(파생데이터 정리 포트 선호출 포함) · **§12 프로젝트 전체 파일 모아보기** · **§13 휴지통 모아보기**. **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
 
 ## 엔드포인트
 
-### File (7)
+### File (9)
 
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
@@ -42,6 +42,8 @@
 | 휴지통으로 이동 | DELETE | `/api/v1/files/{fileId}` | 스텝 EDITOR |
 | 휴지통에서 복구 | POST | `/api/v1/files/{fileId}/restore` | 스텝 EDITOR |
 | 영구 삭제 | POST | `/api/v1/files/{fileId}/permanent-deletion` | 스텝 EDITOR |
+| **프로젝트 전체 파일 모아보기** | GET | `/api/v1/projects/{projectId}/files` | 프로젝트 접근 권한 |
+| **프로젝트 휴지통 모아보기** | GET | `/api/v1/projects/{projectId}/files/trash` | 프로젝트 접근 권한 |
 
 ### FileVersion (5)
 
@@ -347,6 +349,10 @@
 ⛔ **확인 문자를 서버가 검증한다.** 정확히 `영구 삭제` 여야 한다 (`FILE-023`).
 ⛔ **저장소 삭제가 일부 실패해도 DB 는 지운다.** 사용자를 기다리게 하지 않기 위해서이며, 실패한 키는 정리 대상으로 남긴다.
 
+⭐ **DB 삭제 전에 파생데이터 정리 포트를 선호출한다** (2026-08-07 추가) — `file`·`file_version` 물리 삭제 **직전**에 `FileDerivedDataCleanupPort.cleanupByFileId(fileId)` 를 호출한다. 타 도메인(비타메이트)이 `file_id` 기준으로 파생 데이터(`file_index`·`document_chunk`·`vitamate_analysis_document`·`vitamate_analysis_citation`)를 먼저 정리한다. **파일 도메인은 비타메이트 내부 테이블을 알 필요 없이 포트만 호출**하고, 구현체는 비타메이트가 소유한다(`VitamateFileDerivedDataCleanupAdapter`, 구현 완료). 같은 트랜잭션에서 실행돼 FK 순서(파생 → `file_version` → `file`)를 지킨다.
+
+⭐ **결재 '전체' 참조 판정** (2026-08-07) — `409 FILE_APPROVAL_REFERENCED` 는 진행 중뿐 아니라 **완료 결재까지 포함한 모든** `approval_document.file_version_id` 참조를 막는다. 파일 도메인이 이미 소유한 `ApprovalLockQueryPort`(읽기전용 결재 조인, `ApprovalLockMapper`)에 `existsAnyApprovalReference(fileId)` 를 추가해 판정한다 — 휴지통 이동의 `findInProgressApproval`(진행 중만) 과 같은 어댑터에서 상태 필터만 뺀다. **결재팀 신설 포트 요청 불필요**(포트 주석이 "결재 애그리게이트에 의존하지 않고 읽기 조인만 한다"고 이미 규정).
+
 **Request Body** — `confirmText` String Y (`영구 삭제` 와 정확히 일치)
 **Response** — `data.fileId` · `data.deletedVersionCount` · `data.storageDeletedCount`
 
@@ -574,3 +580,99 @@
 > `indexStatus`(`embeddingStatus`)는 `file_index`(**AI 담당 테이블**)에서 오며, **file 도메인이 `file_index` 를 LEFT JOIN 해 내려준다** — 인덱스 행이 없으면 `COALESCE` 로 `PENDING`.
 > ⛔ **쓰기(`index_status` 갱신)는 file 도메인이 하지 않는다 — AI 도메인 별도 이슈**(배정현 확인). 읽기만 여기 소관.
 > `file_index.index_status` enum 은 `PENDING·PROCESSING·COMPLETED·FAILED` (Spring DB 정본, 확정). `previewable` 은 **확장자 기준(PDF 여부)으로 확정** 판정한다 — §1 상단 규칙과 동일(page_count 추출 성공 여부는 무관).
+
+---
+
+## 12. 프로젝트 전체 파일 모아보기 (문서함)
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/projects/{projectId}/files` |
+| 인증 필요 | Y · 프로젝트 접근 권한 (열람 이상) |
+| 요청 출처 | 프로젝트 문서함 화면 — 프로젝트에 속한 모든 파일을 **스텝·블록 위치와 함께** 내려주고, 프론트가 스텝→블록 트리로 조합한다 |
+
+> 이미지 `프로젝트 이미지 모아보기`(`GET /projects/{projectId}/images`)와 **구조를 통일**한다 — `data.files[]` 평면 목록을 주고 프론트가 조합. 단 파일은 **문서 단위(최신 버전 1행)** 이고, 위치를 알 수 있게 `stepId·blockId` 를 함께 준다.
+
+**Path Parameter** — `projectId` Long Y
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.files[].stepId` | Long | 파일이 매달린 블록의 스텝 번호 |
+| `data.files[].stepName` | String | 스텝 표시명 |
+| `data.files[].blockId` | Long | 블록 번호. **블록이 삭제된 고아 파일이면 `null`** |
+| `data.files[].blockTitle` | String | 블록 제목. 블록 삭제 시 `null` |
+| `data.files[].blockDeleted` | boolean | 원래 블록이 삭제됐는지(고아 파일). 프론트가 "블록 삭제됨" 배지 |
+| `data.files[].fileId` | Long | 문서 번호 (`NOT NULL`) |
+| `data.files[].name` | String | 문서 표시명 (`NOT NULL`) |
+| `data.files[].latestVersionId` | Long | 최신 버전 번호 |
+| `data.files[].latestVersionNo` | int | 최신 버전 차수 |
+| `data.files[].versionCount` | int | 전체 버전 수 (`v1` 부터 항상 표시) |
+| `data.files[].originalFileName` | String | 최신 버전 원본 파일명 |
+| `data.files[].extension` | String | 확장자 |
+| `data.files[].sizeBytes` | Long | 최신 버전 크기 |
+| `data.files[].previewable` | boolean | PDF 만 `true` |
+| `data.files[].uploaderName` | String | 최신 버전 업로더 (스냅샷) |
+| `data.files[].uploaderDepartment` · `uploaderPosition` | String | 스냅샷 (`null` 허용) |
+| `data.files[].updatedAt` | String | 최신 버전 업로드 시각 |
+
+**정책**
+- ⛔ **활성 문서만** 반환한다 (`file.deleted_at IS NULL`). 휴지통은 §13.
+- ⛔ **문서 단위 최신 버전 1행.** 완료된 버전이 하나도 없는 문서는 제외한다(§3 과 동일).
+- ⛔ **presigned URL 을 임베드하지 않는다.** 다운로드는 클릭 시 §9(`GET /file-versions/{fileVersionId}/download`, 5분 URL)를 호출한다 — 문서함에 수십 개일 때 단명 URL 대량 발급을 피한다.
+- ✅ **고아 파일 포함** — 블록이 soft delete 돼도 파일은 프로젝트 소속으로 살아남는다(§11 원칙). 이 경우 `blockId:null`·`blockDeleted:true`, `stepId·stepName` 은 삭제된 블록 행에 남은 `step_id` 로 해석한다.
+- 정렬 — `stepId` → `blockId` → 블록 연결일 오름차순(§3 정렬과 동일 계열).
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
+| 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |
+
+> 🔑 권한은 파일 단위가 아니라 **프로젝트 단위** — §11 과 동일하게 공용 `ProjectAccessUseCase.requireAccess(projectId, userId, role)` 를 재사용한다. 403/404 코드도 §11 과 통일(`FILE_ACCESS_PERMISSION_REQUIRED`/`PROJECT_NOT_FOUND`).
+
+---
+
+## 13. 프로젝트 휴지통 모아보기
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/projects/{projectId}/files/trash` |
+| 인증 필요 | Y · 프로젝트 접근 권한 (열람 이상) |
+| 요청 출처 | 프로젝트 휴지통 화면 — 삭제(휴지통)된 파일을 프로젝트 전체 범위로 모아본다. 이미지 `GET /projects/{projectId}/images/trash` 와 구조 통일 |
+
+> §3(`GET /blocks/{blockId}/files?deleted=true`)은 **블록 단위** 휴지통이고, 이 API 는 **프로젝트 전체** 휴지통이다. 블록이 삭제돼 §3 로는 볼 수 없는 고아 파일도 여기서 회수한다.
+
+**Path Parameter** — `projectId` Long Y
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.files[].stepId` | Long | 삭제 당시 매달렸던 블록의 스텝 번호 |
+| `data.files[].stepName` | String | 스텝 표시명 |
+| `data.files[].blockId` | Long | 블록 번호. 블록도 삭제됐으면 `null` |
+| `data.files[].blockTitle` | String | 블록 제목. 블록 삭제 시 `null` |
+| `data.files[].blockDeleted` | boolean | 원래 블록이 삭제됐는지 |
+| `data.files[].fileId` | Long | 문서 번호 (`NOT NULL`) |
+| `data.files[].name` | String | 문서 표시명 (`NOT NULL`) |
+| `data.files[].versionCount` | int | 전체 버전 수 |
+| `data.files[].originalFileName` | String | 최신 버전 원본 파일명 |
+| `data.files[].extension` | String | 확장자 |
+| `data.files[].sizeBytes` | Long | 최신 버전 크기 |
+| `data.files[].deletedAt` | String | 휴지통 진입 시각 |
+
+**정책**
+- ⛔ **휴지통 문서만** 반환한다 (`file.deleted_at IS NOT NULL`).
+- ✅ **고아 파일 포함** — 블록 삭제로 §3 에서 사라진 파일도 여기서 보이고, 복구(§6)·영구삭제(§7)의 대상이 된다.
+- ⛔ **presigned URL 미임베드** — 휴지통에서는 다운로드 진입점을 두지 않는다(복구·영구삭제만).
+- 정렬 — `deletedAt` 내림차순(이미지 휴지통과 통일).
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
+| 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |

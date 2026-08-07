@@ -4,10 +4,14 @@ import com.group3.vitamins.file.application.port.FileStoragePort;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -17,6 +21,9 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Component
@@ -96,5 +103,31 @@ public class S3FileStorageAdapter implements FileStoragePort {
                 .bucket(bucket)
                 .key(storageKey)
                 .build()).asByteArray();
+    }
+
+    @Override
+    public int deleteObjects(Collection<String> storageKeys) {
+        if (storageKeys == null || storageKeys.isEmpty()) {
+            return 0;
+        }
+        List<ObjectIdentifier> objects = storageKeys.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .map(key -> ObjectIdentifier.builder().key(key).build())
+                .toList();
+        if (objects.isEmpty()) {
+            return 0;
+        }
+        try {
+            // 배치 삭제(최대 1000). 존재하지 않는 키는 성공으로 취급된다.
+            DeleteObjectsResponse res = s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                    .bucket(bucket)
+                    .delete(Delete.builder().objects(objects).quiet(false).build())
+                    .build());
+            return res.deleted().size();
+        } catch (S3Exception e) {
+            // 저장소 삭제 실패는 삼킨다 — DB 는 이미 지웠고 남은 키는 정리 대상이다(§7).
+            return 0;
+        }
     }
 }
