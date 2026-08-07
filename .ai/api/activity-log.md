@@ -392,7 +392,7 @@ BE는 `actor`, `block`, `resource`, `action`, `fieldName`, `beforeValue`, `after
 | 값 사전 매칭 | `isCompleted`, `status` | 아래 사전으로 변환해서 화면 옆에 짧게 표시(펼치기 불필요) |
 | BE가 이미 이름으로 변환함 | `lines` | 사번이 아니라 결재자 이름 CSV로 내려오므로 FE가 추가로 변환할 필요 없음 |
 
-**값 사전** (초안 — 실제 화면 문구는 확인 후 확정)
+**값 사전**
 
 | `fieldName` | 값 | 표시 |
 | --- | --- | --- |

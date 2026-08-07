@@ -134,8 +134,10 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 .toList();
         List<ApprovalLine> savedLines = approvalRepository.replaceLines(command.revisionId(), newLines);
 
+        // 중복 approverId가 섞여 있어도(순번 검증은 order만 본다) toMap이 IllegalStateException으로 죽지 않게
+        // 병합 함수로 방어한다 — 같은 사번이면 이름도 같으니 아무 쪽을 남겨도 결과는 같다.
         Map<String, String> newApproverNames = employees.stream()
-                .collect(Collectors.toMap(EmployeeSummary::userId, EmployeeSummary::name));
+                .collect(Collectors.toMap(EmployeeSummary::userId, EmployeeSummary::name, (a, b) -> a));
         String newLineLabel = command.lines().stream()
                 .sorted(Comparator.comparingInt(UpdateApprovalLinesCommand.LineInput::order))
                 .map(input -> newApproverNames.getOrDefault(input.approverId(), input.approverId()))
@@ -434,9 +436,16 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     }
 
     private String approverDisplayName(String approverId) {
-        return employeeCatalogPort.findEmployee(approverId)
-                .map(EmployeeSummary::name)
-                .orElse(approverId);
+        // 이름 조회는 활동 로그 표시용 부가 정보다 — 조회 자체가 실패(타임아웃 등)해도
+        // 결재선 교체(핵심 요청)는 막지 않고 사번으로 대체한다.
+        try {
+            return employeeCatalogPort.findEmployee(approverId)
+                    .map(EmployeeSummary::name)
+                    .orElse(approverId);
+        } catch (RuntimeException e) {
+            log.warn("결재자 이름 조회 실패 - approverId={}, 사번으로 대체", approverId, e);
+            return approverId;
+        }
     }
 
     private List<ApprovalLineView> zipLinesWithEmployees(List<ApprovalLine> lines, List<EmployeeSummary> employees) {

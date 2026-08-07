@@ -124,7 +124,8 @@ class ApprovalCommandServiceActivityLogTest {
         ApprovalRevision revision = ApprovalRevision.reconstruct(
                 200L, 100L, 1, "휴가 품의", "내용", ApprovalStatus.DRAFT,
                 null, null, null, null, null);
-        ApprovalLine onlyLine = line(1L, "EMP009", 1);
+        ApprovalLine previousLine = line(1L, "EMP009", 1);
+        ApprovalLine savedLine = line(2L, "EMP001", 1);
         UpdateApprovalLinesCommand command = new UpdateApprovalLinesCommand(
                 100L, 200L, "EMP000",
                 List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
@@ -134,11 +135,17 @@ class ApprovalCommandServiceActivityLogTest {
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
                 .thenReturn(List.of(employee("EMP001", "김철수")));
         // "EMP009"(퇴사·탈퇴 등으로 조회 불가)는 스텁하지 않아 findEmployee가 기본값 Optional.empty()를 반환한다.
-        when(approvalRepository.findLinesByRevisionId(200L)).thenReturn(List.of(onlyLine));
+        when(approvalRepository.findLinesByRevisionId(200L)).thenReturn(List.of(previousLine));
+        // replaceLines는 실제로 저장된 새 결재선(EMP001)을 돌려줘야 employees와 zip 결과도 맞다.
         when(approvalRepository.replaceLines(org.mockito.ArgumentMatchers.eq(200L), org.mockito.ArgumentMatchers.anyList()))
-                .thenReturn(List.of(onlyLine));
+                .thenReturn(List.of(savedLine));
 
-        service.updateLines(command);
+        List<com.group3.vitamins.approval.application.result.ApprovalLineView> result = service.updateLines(command);
+
+        assertThat(result).singleElement().satisfies(view -> {
+            assertThat(view.approverId()).isEqualTo("EMP001");
+            assertThat(view.approverName()).isEqualTo("김철수");
+        });
 
         ActivityOccurredEvent event = capturedActivityEvent();
         assertThat(event.changes()).singleElement().satisfies(change -> {
@@ -146,6 +153,32 @@ class ApprovalCommandServiceActivityLogTest {
             assertThat(change.beforeValue()).isEqualTo("EMP009");
             assertThat(change.afterValue()).isEqualTo("김철수");
         });
+    }
+
+    @Test
+    void lineOrderUnchangedDoesNotPublishActivity() {
+        Approval approval = approval(10L);
+        ApprovalRevision revision = ApprovalRevision.reconstruct(
+                200L, 100L, 1, "휴가 품의", "내용", ApprovalStatus.DRAFT,
+                null, null, null, null, null);
+        ApprovalLine existingLine = line(1L, "EMP001", 1);
+        UpdateApprovalLinesCommand command = new UpdateApprovalLinesCommand(
+                100L, 200L, "EMP000",
+                List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
+
+        when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
+        when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
+                .thenReturn(List.of(employee("EMP001", "김철수")));
+        when(employeeCatalogPort.findEmployee("EMP001"))
+                .thenReturn(java.util.Optional.of(employee("EMP001", "김철수")));
+        when(approvalRepository.findLinesByRevisionId(200L)).thenReturn(List.of(existingLine));
+        when(approvalRepository.replaceLines(org.mockito.ArgumentMatchers.eq(200L), org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(List.of(existingLine));
+
+        service.updateLines(command);
+
+        org.mockito.Mockito.verifyNoInteractions(domainEventPublisher);
     }
 
     private ActivityOccurredEvent capturedActivityEvent() {
