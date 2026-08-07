@@ -9,6 +9,7 @@ public final class JobPositionResponseMessage {
     }
 
     public static final String LIST_SUCCESS = "직급 목록 조회 성공";
+    public static final String EMPLOYEE_LIST_SUCCESS = "직급별 사원 목록 조회 성공";
     public static final String CREATED = "직급이 생성되었습니다.";
     public static final String UPDATED = "직급이 수정되었습니다.";
     public static final String DELETED = "직급이 삭제되었습니다.";

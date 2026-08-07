@@ -1,6 +1,7 @@
 package com.group3.vitamins.vitamate.fileindex.infrastructure.persistence;
 
 import com.group3.vitamins.vitamate.fileindex.domain.model.FileIndexStatus;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort.FileIndexStatusUpdateResult;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.adapter.JpaVitamateFileIndexStoreAdapter;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.entity.FileIndexEntity;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
@@ -44,6 +45,7 @@ class JpaVitamateFileIndexStoreAdapterTest {
 
     private static final Long ACTIVE_FILE_VERSION_ID = 900001L;
     private static final Long DELETED_FILE_VERSION_ID = 900002L;
+    private static final String INDEX_ATTEMPT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 6, 10, 30);
 
     @Autowired
@@ -88,10 +90,13 @@ class JpaVitamateFileIndexStoreAdapterTest {
         @Test
         @DisplayName("inserts PENDING status when row does not exist")
         void insertsPendingStatus() {
-            FileIndexStatus saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.PENDING, null, NOW);
+            FileIndexStatusUpdateResult saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, null, FileIndexStatus.PENDING, null, NOW);
 
             FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
-            assertThat(saved).isEqualTo(FileIndexStatus.PENDING);
+            assertThat(saved.accepted()).isTrue();
+            assertThat(saved.indexAttemptId()).isNotBlank();
+            assertThat(saved.indexStatus()).isEqualTo(FileIndexStatus.PENDING);
+            assertThat(entity.getIndexAttemptId()).isEqualTo(saved.indexAttemptId());
             assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.PENDING);
             assertThat(entity.getIndexErrorMessage()).isNull();
             assertThat(entity.getIndexedAt()).isNull();
@@ -100,10 +105,13 @@ class JpaVitamateFileIndexStoreAdapterTest {
         @Test
         @DisplayName("inserts PROCESSING status when row does not exist")
         void insertsProcessingStatus() {
-            FileIndexStatus saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.PROCESSING, null, NOW);
+            FileIndexStatusUpdateResult saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, NOW);
 
             FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
-            assertThat(saved).isEqualTo(FileIndexStatus.PROCESSING);
+            assertThat(saved.accepted()).isTrue();
+            assertThat(saved.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
+            assertThat(saved.indexStatus()).isEqualTo(FileIndexStatus.PROCESSING);
+            assertThat(entity.getIndexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.PROCESSING);
             assertThat(entity.getIndexErrorMessage()).isNull();
             assertThat(entity.getIndexedAt()).isNull();
@@ -112,12 +120,15 @@ class JpaVitamateFileIndexStoreAdapterTest {
         @Test
         @DisplayName("updates to COMPLETED and clears failure message")
         void updatesToCompletedStatus() {
-            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.FAILED, "extract failed", NOW.minusMinutes(1));
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, NOW.minusMinutes(2));
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, "extract failed", NOW.minusMinutes(1));
 
-            FileIndexStatus saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.COMPLETED, null, NOW);
+            FileIndexStatusUpdateResult saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.COMPLETED, null, NOW);
 
             FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
-            assertThat(saved).isEqualTo(FileIndexStatus.COMPLETED);
+            assertThat(saved.accepted()).isTrue();
+            assertThat(saved.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
+            assertThat(saved.indexStatus()).isEqualTo(FileIndexStatus.COMPLETED);
             assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.COMPLETED);
             assertThat(entity.getIndexErrorMessage()).isNull();
             assertThat(entity.getIndexedAt()).isEqualTo(NOW);
@@ -126,14 +137,38 @@ class JpaVitamateFileIndexStoreAdapterTest {
         @Test
         @DisplayName("updates to FAILED and clears indexed_at")
         void updatesToFailedStatus() {
-            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.COMPLETED, null, NOW.minusMinutes(1));
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, NOW.minusMinutes(2));
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.COMPLETED, null, NOW.minusMinutes(1));
 
-            FileIndexStatus saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.FAILED, "extract failed", NOW);
+            FileIndexStatusUpdateResult saved = adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, "extract failed", NOW);
 
             FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
-            assertThat(saved).isEqualTo(FileIndexStatus.FAILED);
+            assertThat(saved.accepted()).isTrue();
+            assertThat(saved.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
+            assertThat(saved.indexStatus()).isEqualTo(FileIndexStatus.FAILED);
             assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.FAILED);
             assertThat(entity.getIndexErrorMessage()).isEqualTo("extract failed");
+            assertThat(entity.getIndexedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("ignores terminal status when attempt id does not match")
+        void ignoresTerminalStatusWhenAttemptDoesNotMatch() {
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, NOW.minusMinutes(1));
+
+            FileIndexStatusUpdateResult saved = adapter.upsertStatus(
+                    ACTIVE_FILE_VERSION_ID,
+                    "11111111-1111-1111-1111-111111111111",
+                    FileIndexStatus.COMPLETED,
+                    null,
+                    NOW
+            );
+
+            FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
+            assertThat(saved.accepted()).isFalse();
+            assertThat(saved.reason()).isEqualTo("INDEX_ATTEMPT_MISMATCH");
+            assertThat(entity.getIndexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
+            assertThat(entity.getIndexStatus()).isEqualTo(FileIndexStatus.PROCESSING);
             assertThat(entity.getIndexedAt()).isNull();
         }
 
@@ -143,14 +178,14 @@ class JpaVitamateFileIndexStoreAdapterTest {
             ExecutorService executor = Executors.newFixedThreadPool(2);
             CountDownLatch ready = new CountDownLatch(2);
             CountDownLatch start = new CountDownLatch(1);
-            Callable<FileIndexStatus> callback = () -> {
+            Callable<FileIndexStatusUpdateResult> callback = () -> {
                 ready.countDown();
                 start.await(3, TimeUnit.SECONDS);
-                return adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, FileIndexStatus.PROCESSING, null, NOW);
+                return adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, null, FileIndexStatus.PROCESSING, null, NOW);
             };
 
             try {
-                List<Future<FileIndexStatus>> futures = List.of(
+                List<Future<FileIndexStatusUpdateResult>> futures = List.of(
                         executor.submit(callback),
                         executor.submit(callback)
                 );
@@ -158,8 +193,8 @@ class JpaVitamateFileIndexStoreAdapterTest {
                 assertThat(ready.await(3, TimeUnit.SECONDS)).isTrue();
                 start.countDown();
 
-                assertThat(futures.get(0).get(5, TimeUnit.SECONDS)).isEqualTo(FileIndexStatus.PROCESSING);
-                assertThat(futures.get(1).get(5, TimeUnit.SECONDS)).isEqualTo(FileIndexStatus.PROCESSING);
+                assertThat(futures.get(0).get(5, TimeUnit.SECONDS).indexStatus()).isEqualTo(FileIndexStatus.PROCESSING);
+                assertThat(futures.get(1).get(5, TimeUnit.SECONDS).indexStatus()).isEqualTo(FileIndexStatus.PROCESSING);
 
                 FileIndexEntity entity = repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow();
                 assertThat(repository.count()).isEqualTo(1);
@@ -170,7 +205,7 @@ class JpaVitamateFileIndexStoreAdapterTest {
         }
     }
 
-    // Prepares parent file_version rows required by file_index.
+    // file_index 저장에 필요한 부모 file_version 행을 준비합니다.
     private void insertFileVersion(Long fileVersionId, LocalDateTime deletedAt) {
         jdbcTemplate.update("""
                 INSERT INTO file_version (

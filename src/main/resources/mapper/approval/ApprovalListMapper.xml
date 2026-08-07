@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalListMapper">
+
+    <!-- approval + 현재 회차(current_revision_no) + block/step/project. block_id 는 항상 존재한다고 가정
+         (approval.block_id NULL="독립 결재"는 스키마 주석상 미래 확장 여지일 뿐, 현재 생성 경로는 전부 블록 경유). -->
+    <sql id="baseFrom">
+        FROM approval a
+        JOIN approval_revision cr
+            ON cr.approval_id = a.approval_id AND cr.revision_no = a.current_revision_no
+        JOIN employee drafter
+            ON drafter.user_id = a.user_id
+        JOIN block b
+            ON b.block_id = a.block_id
+        JOIN step st
+            ON st.step_id = b.step_id
+        JOIN project proj
+            ON proj.project_id = st.project_id
+    </sql>
+
+    <sql id="whereClause">
+        <where>
+            a.deleted_at IS NULL
+            <if test="drafterId != null">AND a.user_id = #{drafterId}</if>
+            <if test="status != null">AND a.status = #{status}</if>
+            <if test="fromDate != null">AND a.created_at &gt;= #{fromDate}</if>
+            <if test="toDate != null">AND a.created_at &lt; DATE_ADD(#{toDate}, INTERVAL 1 DAY)</if>
+            <if test="revisionNo != null">AND a.current_revision_no = #{revisionNo}</if>
+            <if test="keyword != null">
+                AND (cr.title LIKE CONCAT('%', #{keyword}, '%') OR proj.name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="approverId != null">
+                AND EXISTS (
+                    SELECT 1 FROM approval_line l
+                    WHERE l.approval_revision_id = cr.approval_revision_id
+                        AND l.user_id = #{approverId}
+                        AND l.deleted_at IS NULL
+                )
+            </if>
+            <if test="activeApproverId != null">
+                AND EXISTS (
+                    SELECT 1 FROM approval_line l
+                    WHERE l.approval_revision_id = cr.approval_revision_id
+                        AND l.user_id = #{activeApproverId}
+                        AND l.status = 'ACTIVE'
+                        AND l.deleted_at IS NULL
+                )
+            </if>
+        </where>
+    </sql>
+
+    <select id="countApprovals" resultType="long">
+        SELECT COUNT(*)
+        <include refid="baseFrom"/>
+        <include refid="whereClause"/>
+    </select>
+
+    <select id="findApprovals"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalListRow">
+        SELECT
+            a.approval_id           AS approvalId,
+            cr.title                AS title,
+            a.status                AS status,
+            a.current_revision_no   AS currentRevisionNo,
+            cr.approval_revision_id AS currentRevisionId,
+            a.user_id               AS drafterId,
+            drafter.name            AS drafterName,
+            ca.user_id              AS currentApproverId,
+            capp.name               AS currentApproverName,
+            proj.project_id         AS projectId,
+            proj.name               AS projectName,
+            st.step_id              AS stepId,
+            st.name                 AS stepName,
+            a.created_at            AS createdAt,
+            cr.submitted_at         AS submittedAt,
+            a.completed_at          AS completedAt
+        <include refid="baseFrom"/>
+        LEFT JOIN approval_line ca
+            ON ca.approval_revision_id = cr.approval_revision_id AND ca.status = 'ACTIVE'
+        LEFT JOIN employee capp
+            ON capp.user_id = ca.user_id
+        <include refid="whereClause"/>
+        ORDER BY a.created_at DESC, a.approval_id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="findLinePreviewsByRevisionIds"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLinePreviewRow">
+        SELECT
+            al.approval_revision_id AS revisionId,
+            al.user_id              AS approverId,
+            e.name                  AS approverName,
+            al.sequence_no          AS sequenceNo,
+            al.status               AS status
+        FROM approval_line al
+        JOIN employee e
+            ON e.user_id = al.user_id
+        WHERE al.approval_revision_id IN
+        <foreach item="id" collection="revisionIds" open="(" separator="," close=")">#{id}</foreach>
+        AND al.deleted_at IS NULL
+        ORDER BY al.approval_revision_id, al.sequence_no
+    </select>
+
+</mapper>

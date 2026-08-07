@@ -7,5 +7,5 @@ package com.group3.vitamins.approval.application.port;
  * 기안자를 정할 때 쓴다 — {@code BlockDetailPort.createDetail(Long blockId)}엔 블록을 만든 사람이
  * 안 넘어와서, 유일한 출처인 {@code block.created_by}를 이 포트로 가져온다.
  */
-public record BlockSummary(Long blockId, String type, Long projectId, String createdBy) {
+public record BlockSummary(Long blockId, String type, Long stepId, Long projectId, String createdBy) {
 }

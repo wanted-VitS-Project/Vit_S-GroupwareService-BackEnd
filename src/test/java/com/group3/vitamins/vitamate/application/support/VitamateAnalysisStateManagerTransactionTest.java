@@ -1,11 +1,12 @@
 package com.group3.vitamins.vitamate.application.support;
 
-import com.group3.vitamins.vitamate.application.port.VitamateAnalysisStorePort;
-import com.group3.vitamins.vitamate.application.result.CreateVitamateAnalysisResult;
-import com.group3.vitamins.vitamate.application.result.StartVitamateAnalysisResult;
-import com.group3.vitamins.vitamate.domain.model.AnalysisStatus;
-import com.group3.vitamins.vitamate.infrastructure.persistence.entity.VitamateAnalysisEntity;
-import com.group3.vitamins.vitamate.infrastructure.persistence.repository.VitamateAnalysisJpaRepository;
+import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisStorePort;
+import com.group3.vitamins.vitamate.analysis.application.result.CreateVitamateAnalysisResult;
+import com.group3.vitamins.vitamate.analysis.application.result.StartVitamateAnalysisResult;
+import com.group3.vitamins.vitamate.analysis.application.support.VitamateAnalysisStateManager;
+import com.group3.vitamins.vitamate.analysis.domain.model.AnalysisStatus;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisEntity;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

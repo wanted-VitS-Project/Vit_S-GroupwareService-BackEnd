@@ -5,6 +5,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ValidationExcept
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.fileindex.application.command.HandleVitamateFileIndexCallbackCommand;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort.FileIndexStatusUpdateResult;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexCallbackResult;
 import com.group3.vitamins.vitamate.fileindex.application.usecase.HandleVitamateFileIndexCallbackUseCase;
 import com.group3.vitamins.vitamate.fileindex.domain.model.FileIndexStatus;
@@ -15,12 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-// Validates and stores file indexing status callbacks from the Python worker.
+// Python worker가 전달한 파일 인덱싱 상태 callback을 검증하고 저장합니다.
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class VitamateFileIndexCallbackService implements HandleVitamateFileIndexCallbackUseCase {
+
+    private static final int MAX_INDEX_ATTEMPT_ID_LENGTH = 36;
 
     private final VitamateFileIndexStorePort fileIndexStore;
 
@@ -29,31 +32,46 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         validateCommand(command);
 
         FileIndexStatus status = parseStatus(command.indexStatus());
-        validateStatusRule(status, command.errorMessage());
+        validateStatusRule(status, command.indexAttemptId(), command.errorMessage());
 
         if (!fileIndexStore.existsFileVersion(command.fileVersionId())) {
             throw new NotFoundException(VitamateErrorCode.VITAMATE_FILE_VERSION_NOT_FOUND);
         }
 
-        FileIndexStatus savedStatus = fileIndexStore.upsertStatus(
+        FileIndexStatusUpdateResult statusUpdateResult = fileIndexStore.upsertStatus(
                 command.fileVersionId(),
+                command.indexAttemptId(),
                 status,
                 command.errorMessage(),
                 LocalDateTime.now()
         );
 
-        log.info("Vitamate file index status saved - fileVersionId={}, indexStatus={}",
-                command.fileVersionId(), savedStatus);
+        if (!statusUpdateResult.accepted()) {
+            log.warn("Vitamate file index callback ignored - fileVersionId={}, indexAttemptId={}, indexStatus={}, reason={}",
+                    command.fileVersionId(), command.indexAttemptId(), status, statusUpdateResult.reason());
+
+            return new VitamateFileIndexCallbackResult(
+                    false,
+                    command.fileVersionId(),
+                    statusUpdateResult.indexAttemptId(),
+                    status.name(),
+                    statusUpdateResult.reason()
+            );
+        }
+
+        log.info("Vitamate file index status saved - fileVersionId={}, indexAttemptId={}, indexStatus={}",
+                command.fileVersionId(), statusUpdateResult.indexAttemptId(), statusUpdateResult.indexStatus());
 
         return new VitamateFileIndexCallbackResult(
                 true,
                 command.fileVersionId(),
-                savedStatus.name(),
+                statusUpdateResult.indexAttemptId(),
+                statusUpdateResult.indexStatus().name(),
                 null
         );
     }
 
-    // Checks required callback fields before touching the store.
+    // 저장소에 접근하기 전에 callback 필수 값을 검증합니다.
     private void validateCommand(HandleVitamateFileIndexCallbackCommand command) {
         if (command == null
                 || command.fileVersionId() == null
@@ -64,7 +82,7 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         }
     }
 
-    // Converts the raw callback status into the domain enum.
+    // 문자열 상태값을 도메인 enum으로 변환합니다.
     private FileIndexStatus parseStatus(String rawStatus) {
         try {
             return FileIndexStatus.valueOf(rawStatus);
@@ -73,8 +91,17 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         }
     }
 
-    // Enforces state-specific errorMessage rules.
-    private void validateStatusRule(FileIndexStatus status, String errorMessage) {
+    // 상태별 indexAttemptId와 errorMessage 규칙을 검증합니다.
+    private void validateStatusRule(FileIndexStatus status, String indexAttemptId, String errorMessage) {
+        if ((status == FileIndexStatus.COMPLETED || status == FileIndexStatus.FAILED)
+                && (indexAttemptId == null || indexAttemptId.isBlank())) {
+            throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
+        }
+
+        if (indexAttemptId != null && indexAttemptId.length() > MAX_INDEX_ATTEMPT_ID_LENGTH) {
+            throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
+        }
+
         if (status == FileIndexStatus.FAILED
                 && (errorMessage == null || errorMessage.isBlank())) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);

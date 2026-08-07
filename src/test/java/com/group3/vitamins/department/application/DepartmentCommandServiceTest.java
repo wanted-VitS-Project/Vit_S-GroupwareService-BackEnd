@@ -60,7 +60,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("최상위 부서를 생성하면 parentName·인원 수가 없고(0) 저장된다")
         void createsRootDepartment() {
-            when(departmentRepository.existsByName("신규본부")).thenReturn(false);
+            when(departmentRepository.existsSiblingName("신규본부", null)).thenReturn(false);
             when(departmentRepository.save(any())).thenReturn(department(10L, "신규본부", null));
 
             DepartmentResult result = commandService.create(new CreateDepartmentCommand("ADMIN", "신규본부", null));
@@ -78,7 +78,7 @@ class DepartmentCommandServiceTest {
         @DisplayName("하위 부서를 생성하면 상위 부서명(parentName)이 응답에 담긴다")
         void createsChildDepartment() {
             when(departmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
-            when(departmentRepository.existsByName("인사팀")).thenReturn(false);
+            when(departmentRepository.existsSiblingName("인사팀", 1L)).thenReturn(false);
             when(departmentRepository.save(any())).thenReturn(department(11L, "인사팀", 1L));
 
             DepartmentResult result = commandService.create(new CreateDepartmentCommand("ADMIN", "인사팀", 1L));
@@ -91,9 +91,9 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("검사 통과 후 저장 시 유니크 위반이 나면 DEPT_NAME_DUPLICATED 로 변환한다(500 방지)")
         void mapsUniqueViolationToConflict() {
-            when(departmentRepository.existsByName("인사팀")).thenReturn(false);
+            when(departmentRepository.existsSiblingName("인사팀", null)).thenReturn(false);
             when(departmentRepository.save(any()))
-                    .thenThrow(new DataIntegrityViolationException("uk_department_name"));
+                    .thenThrow(new DataIntegrityViolationException("uk_department_parent_name"));
 
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("ADMIN", "인사팀", null)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NAME_DUPLICATED));
@@ -105,7 +105,7 @@ class DepartmentCommandServiceTest {
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("MASTER", "인사팀", null)))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
             verify(departmentRepository, never()).save(any());
-            verify(departmentRepository, never()).existsByName(anyString());
+            verify(departmentRepository, never()).existsSiblingName(anyString(), any());
         }
 
         @Test
@@ -146,7 +146,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("이미 존재하는 부서명이면 DEPT_NAME_DUPLICATED")
         void rejectsDuplicateName() {
-            when(departmentRepository.existsByName("인사팀")).thenReturn(true);
+            when(departmentRepository.existsSiblingName("인사팀", null)).thenReturn(true);
 
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("ADMIN", "인사팀", null)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NAME_DUPLICATED));
@@ -163,7 +163,7 @@ class DepartmentCommandServiceTest {
         void renamesDepartment() {
             when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
             when(departmentRepository.findById(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
-            when(departmentRepository.existsByNameAndDepartmentIdNot("인사기획팀", 4L)).thenReturn(false);
+            when(departmentRepository.existsSiblingNameExcludingSelf("인사기획팀", 1L, 4L)).thenReturn(false);
             when(departmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
             DepartmentResult result = commandService.rename(new RenameDepartmentCommand("ADMIN", 4L, "인사기획팀"));
@@ -178,9 +178,9 @@ class DepartmentCommandServiceTest {
         @DisplayName("수정 저장 시 유니크 위반이 나면 DEPT_NAME_DUPLICATED 로 변환한다(500 방지)")
         void mapsUniqueViolationToConflict() {
             when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
-            when(departmentRepository.existsByNameAndDepartmentIdNot("회계팀", 4L)).thenReturn(false);
+            when(departmentRepository.existsSiblingNameExcludingSelf("회계팀", 1L, 4L)).thenReturn(false);
             when(departmentRepository.save(any()))
-                    .thenThrow(new DataIntegrityViolationException("uk_department_name"));
+                    .thenThrow(new DataIntegrityViolationException("uk_department_parent_name"));
 
             assertThatThrownBy(() -> commandService.rename(new RenameDepartmentCommand("ADMIN", 4L, "회계팀")))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NAME_DUPLICATED));
@@ -199,7 +199,7 @@ class DepartmentCommandServiceTest {
         @DisplayName("다른 부서와 이름이 겹치면 DEPT_NAME_DUPLICATED")
         void rejectsDuplicateName() {
             when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
-            when(departmentRepository.existsByNameAndDepartmentIdNot("회계팀", 4L)).thenReturn(true);
+            when(departmentRepository.existsSiblingNameExcludingSelf("회계팀", 1L, 4L)).thenReturn(true);
 
             assertThatThrownBy(() -> commandService.rename(new RenameDepartmentCommand("ADMIN", 4L, "회계팀")))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NAME_DUPLICATED));

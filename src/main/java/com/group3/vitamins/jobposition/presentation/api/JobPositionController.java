@@ -5,6 +5,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ValidationExcept
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.jobposition.application.command.DeleteJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.UpdateJobPositionCommand;
+import com.group3.vitamins.jobposition.application.query.JobPositionEmployeesQuery;
 import com.group3.vitamins.jobposition.application.query.JobPositionListQuery;
 import com.group3.vitamins.jobposition.application.result.JobPositionResult;
 import com.group3.vitamins.jobposition.application.usecase.JobPositionCommandUseCase;
@@ -13,6 +14,7 @@ import com.group3.vitamins.jobposition.domain.exception.JobPositionErrorCode;
 import com.group3.vitamins.jobposition.presentation.api.request.JobPositionCreateRequest;
 import com.group3.vitamins.jobposition.presentation.api.request.JobPositionUpdateRequest;
 import com.group3.vitamins.jobposition.presentation.api.response.JobPositionDetailResponse;
+import com.group3.vitamins.jobposition.presentation.api.response.JobPositionEmployeeListResponse;
 import com.group3.vitamins.jobposition.presentation.api.response.JobPositionListResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -63,6 +65,33 @@ public class JobPositionController {
                         new JobPositionListQuery(currentRole(authentication))));
 
         return ApiResponse.success(JobPositionResponseMessage.LIST_SUCCESS, data);
+    }
+
+    @Operation(summary = "직급별 사원 목록 조회",
+            description = "해당 직급에 속한 사원을 이름 오름차순(동명이인은 사번 오름차순)으로 조회한다. "
+                    + "모집단은 직급 목록의 employeeCount 와 같다 — 시스템 계정·퇴사자·삭제 사원 제외라 목록 길이 = employeeCount. "
+                    + "직급은 목록 전체 공통이라 jobPositionId·jobPositionName 을 data 레벨에 한 번만 둔다. 페이징 없음.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "조회 성공 (0명이면 빈 배열)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ACC_ADMIN_REQUIRED — ADMIN 아님 (MASTER 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "POS_NOT_FOUND — 직급 없음")
+    })
+    @GetMapping("/{jobPositionId}/employees")
+    public ApiResponse<JobPositionEmployeeListResponse> listEmployeesByJobPosition(
+            @Parameter(description = "조회할 직급 번호")
+            @PathVariable Long jobPositionId,
+            Authentication authentication) {
+
+        JobPositionEmployeeListResponse data = JobPositionEmployeeListResponse.from(
+                jobPositionQueryUseCase.getEmployeesByJobPosition(
+                        new JobPositionEmployeesQuery(jobPositionId, currentRole(authentication))));
+
+        return ApiResponse.success(JobPositionResponseMessage.EMPLOYEE_LIST_SUCCESS, data);
     }
 
     @Operation(summary = "직급 생성",

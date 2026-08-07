@@ -1,6 +1,5 @@
 package com.group3.vitamins.notification.application.service;
 
-import com.group3.vitamins.notification.application.command.DeleteNotificationCommand;
 import com.group3.vitamins.notification.application.command.GetNotificationTargetCommand;
 import com.group3.vitamins.notification.application.command.MarkAllReadCommand;
 import com.group3.vitamins.notification.application.port.BlockRef;
@@ -30,16 +29,6 @@ public class NotificationCommandService implements NotificationCommandUseCase {
     private final NotificationRepository notificationRepository;
     private final BlockTypeLookupPort blockTypeLookupPort;
     private final NotificationTargetResolverRegistry targetResolverRegistry;
-
-    @Override
-    public void deleteNotification(DeleteNotificationCommand command) {
-        Notification notification = getOwnedNotificationOrThrow(command.notificationId(), command.requesterId());
-
-        notification.delete(LocalDateTime.now());
-        notificationRepository.save(notification);
-
-        log.info("알림 삭제 완료 - notificationId={}", command.notificationId());
-    }
 
     @Override
     public NotificationTargetResult getTarget(GetNotificationTargetCommand command) {
