@@ -5,8 +5,10 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.port.IssueQueryPort;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
+import com.group3.vitamins.issue.application.query.IssueCalendarQuery;
 import com.group3.vitamins.issue.application.query.IssueDetailQuery;
 import com.group3.vitamins.issue.application.query.IssueListQuery;
+import com.group3.vitamins.issue.application.result.IssueCalendarResult;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -177,5 +179,52 @@ class IssueQueryServiceTest {
 
         verify(issueQueryPort, never()).findAssignees(org.mockito.ArgumentMatchers.anyList());
         verify(issueQueryPort, never()).findRelatedBlocks(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    @DisplayName("포트가 돌려준 본인 담당 이슈를 캘린더 결과로 그대로 매핑한다")
+    void getMyCalendarIssues_success() {
+        IssueCalendarQuery query = new IssueCalendarQuery("EMP001");
+        IssueQueryPort.CalendarIssueResult row = new IssueQueryPort.CalendarIssueResult(
+                101L,
+                "제안서 1차 초안 작성",
+                "IN_PROGRESS",
+                "HIGH",
+                LocalDateTime.of(2026, 8, 11, 0, 0),
+                10L,
+                "입찰 진행",
+                3L,
+                "OO시 스마트도로 구축"
+        );
+        when(issueQueryPort.findMyCalendarIssues("EMP001")).thenReturn(List.of(row));
+
+        IssueCalendarResult result = service.getMyCalendarIssues(query);
+
+        assertThat(result.issues()).containsExactly(
+                new IssueCalendarResult.CalendarIssueResult(
+                        101L,
+                        "제안서 1차 초안 작성",
+                        "IN_PROGRESS",
+                        "HIGH",
+                        LocalDateTime.of(2026, 8, 11, 0, 0),
+                        10L,
+                        "입찰 진행",
+                        3L,
+                        "OO시 스마트도로 구축"
+                )
+        );
+        verify(issueQueryPort).findMyCalendarIssues("EMP001");
+        verifyNoInteractions(issueStepAccessPort);
+    }
+
+    @Test
+    @DisplayName("담당 이슈가 없으면 빈 목록을 반환한다")
+    void getMyCalendarIssues_empty() {
+        IssueCalendarQuery query = new IssueCalendarQuery("EMP001");
+        when(issueQueryPort.findMyCalendarIssues("EMP001")).thenReturn(List.of());
+
+        IssueCalendarResult result = service.getMyCalendarIssues(query);
+
+        assertThat(result.issues()).isEmpty();
     }
 }

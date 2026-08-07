@@ -5,8 +5,11 @@ import com.group3.vitamins.global.domain.common.error.exception.ValidationExcept
 import com.group3.vitamins.issue.application.command.ChangeIssueStatusCommand;
 import com.group3.vitamins.issue.application.command.CreateIssueCommand;
 import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
+import com.group3.vitamins.issue.application.command.PatchField;
+import com.group3.vitamins.issue.application.command.UpdateIssueCommand;
 import com.group3.vitamins.issue.application.port.IssueAssigneePort;
 import com.group3.vitamins.issue.application.port.IssueBlockPort;
+import com.group3.vitamins.issue.application.port.IssueQueryPort;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.result.IssueStatusResult;
@@ -22,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +40,7 @@ public class IssueCommandService implements IssueCommandUseCase {
     private final IssueStepAccessPort issueStepAccessPort;
     private final IssueAssigneePort issueAssigneePort;
     private final IssueBlockPort issueBlockPort;
+    private final IssueQueryPort issueQueryPort;
 
     @Override
     public IssueResult createIssue(CreateIssueCommand command) {
@@ -65,6 +71,45 @@ public class IssueCommandService implements IssueCommandUseCase {
         issueRepository.saveBlockLinks(saved.getIssueId(), blockIds);
 
         return toResult(saved, assignees, blocks);
+    }
+
+    @Override
+    public IssueResult updateIssue(UpdateIssueCommand command) {
+        if (!hasUpdateField(command)) {
+            throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
+        }
+
+        Issue issue = issueRepository.findActiveById(command.issueId())
+                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+
+        IssueStepAccessPort.StepAccessView step = issueStepAccessPort.requireEditable(
+                issue.getStepId(), command.requesterUserId(), command.role());
+
+        String title = resolveTitle(issue.getTitle(), command.title());
+        String content = resolve(issue.getContent(), command.content());
+        LocalDateTime dueDate = resolveDueDate(issue.getDueDate(), command.dueDate());
+        IssuePriority priority = resolvePriority(issue.getPriority(), command.priority());
+
+        List<String> assigneeIds = normalizePatchList(command.assigneeIds());
+        List<Long> blockIds = normalizePatchList(command.blockIds());
+
+        if (command.assigneeIds().present()) {
+            issueAssigneePort.validateAssignable(step.projectId(), assigneeIds);
+            issueRepository.deleteAssignees(issue.getIssueId());
+            issueRepository.saveAssignees(issue.getIssueId(), assigneeIds);
+        }
+        if (command.blockIds().present()) {
+            issueBlockPort.validateLinkable(step.stepId(), blockIds);
+            issueRepository.deleteBlockLinks(issue.getIssueId());
+            issueRepository.saveBlockLinks(issue.getIssueId(), blockIds);
+        }
+
+        if (hasGeneralField(command)) {
+            issue.updateFields(title, content, dueDate, priority);
+            issueRepository.save(issue);
+        }
+
+        return findLatestResult(issue.getIssueId());
     }
 
     @Override
@@ -151,6 +196,92 @@ public class IssueCommandService implements IssueCommandUseCase {
             throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
         }
         return values.stream().distinct().toList();
+    }
+
+    private boolean hasUpdateField(UpdateIssueCommand command) {
+        return hasGeneralField(command)
+                || command.assigneeIds().present()
+                || command.blockIds().present();
+    }
+
+    private boolean hasGeneralField(UpdateIssueCommand command) {
+        return command.title().present()
+                || command.content().present()
+                || command.dueDate().present()
+                || command.priority().present();
+    }
+
+    private String resolveTitle(String current, PatchField<String> field) {
+        if (!field.present()) {
+            return current;
+        }
+        validateTitle(field.value());
+        return field.value().trim();
+    }
+
+    private <T> T resolve(T current, PatchField<T> field) {
+        return field.present() ? field.value() : current;
+    }
+
+    private LocalDateTime resolveDueDate(LocalDateTime current, PatchField<java.time.LocalDate> field) {
+        if (!field.present()) {
+            return current;
+        }
+        return field.value() == null ? null : field.value().atStartOfDay();
+    }
+
+    private IssuePriority resolvePriority(IssuePriority current, PatchField<String> field) {
+        if (!field.present()) {
+            return current;
+        }
+        return parsePriority(field.value());
+    }
+
+    private static <T> List<T> normalizePatchList(PatchField<List<T>> field) {
+        if (!field.present()) {
+            return List.of();
+        }
+        if (field.value() == null) {
+            throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
+        }
+        return normalize(field.value());
+    }
+
+    private IssueResult findLatestResult(Long issueId) {
+        IssueResult issue = issueQueryPort.findIssue(issueId)
+                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+        Map<Long, List<IssueQueryPort.AssigneeResult>> assigneesByIssueId =
+                issueQueryPort.findAssignees(List.of(issueId)).stream()
+                        .collect(Collectors.groupingBy(IssueQueryPort.AssigneeResult::issueId));
+        Map<Long, List<IssueQueryPort.RelatedBlockResult>> blocksByIssueId =
+                issueQueryPort.findRelatedBlocks(List.of(issueId)).stream()
+                        .collect(Collectors.groupingBy(IssueQueryPort.RelatedBlockResult::issueId));
+        return toResult(issue, assigneesByIssueId, blocksByIssueId);
+    }
+
+    private IssueResult toResult(
+            IssueResult issue,
+            Map<Long, List<IssueQueryPort.AssigneeResult>> assigneesByIssueId,
+            Map<Long, List<IssueQueryPort.RelatedBlockResult>> blocksByIssueId
+    ) {
+        return new IssueResult(
+                issue.issueId(),
+                issue.stepId(),
+                issue.title(),
+                issue.content(),
+                issue.status(),
+                issue.priority(),
+                issue.dueDate(),
+                issue.completedAt(),
+                assigneesByIssueId.getOrDefault(issue.issueId(), List.of()).stream()
+                        .map(assignee -> new IssueResult.AssigneeResult(
+                                assignee.userId(), assignee.name()))
+                        .toList(),
+                blocksByIssueId.getOrDefault(issue.issueId(), List.of()).stream()
+                        .map(block -> new IssueResult.BlockResult(
+                                block.blockId(), block.title(), block.type()))
+                        .toList()
+        );
     }
 
     private IssueResult toResult(Issue issue,

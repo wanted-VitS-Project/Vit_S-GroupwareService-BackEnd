@@ -6,6 +6,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 // Python worker가 파일 인덱싱 상태를 전달하는 callback 요청 DTO
 @Schema(description = "비타메이트 파일 인덱싱 상태 callback 요청")
 public record VitamateFileIndexCallbackRequest(
+        @Schema(description = "Spring이 발급한 현재 파일 인덱싱 시도 ID. COMPLETED/FAILED callback에서는 필수", example = "550e8400-e29b-41d4-a716-446655440000")
+        String indexAttemptId,
+
         @Schema(description = "파일 인덱싱 상태", allowableValues = {"PROCESSING", "COMPLETED", "FAILED"}, example = "COMPLETED")
         String indexStatus,
 
@@ -17,6 +20,7 @@ public record VitamateFileIndexCallbackRequest(
     public HandleVitamateFileIndexCallbackCommand toCommand(Long fileVersionId) {
         return new HandleVitamateFileIndexCallbackCommand(
                 fileVersionId,
+                indexAttemptId,
                 indexStatus,
                 errorMessage
         );

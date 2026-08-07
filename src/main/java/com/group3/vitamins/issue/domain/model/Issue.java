@@ -67,6 +67,13 @@ public class Issue {
         this.completedAt = nextStatus == IssueStatus.DONE ? now : null;
     }
 
+    public void updateFields(String title, String content, LocalDateTime dueDate, IssuePriority priority) {
+        this.title = title;
+        this.content = content;
+        this.dueDate = dueDate;
+        this.priority = priority;
+    }
+
     public Long getIssueId() { return issueId; }
     public Long getStepId() { return stepId; }
     public String getTitle() { return title; }

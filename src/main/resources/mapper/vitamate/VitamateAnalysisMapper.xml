@@ -68,7 +68,9 @@
         SELECT
             va.vitamate_analysis_id AS analysisId,
             b.block_id AS blockId,
-            va.prompt AS prompt,
+            va.review_type AS reviewType,
+            va.review_category_codes AS reviewCategoryCodes,
+            va.additional_instruction AS additionalInstruction,
             va.analysis_status AS analysisStatus,
             va.result AS result,
             va.error_message AS errorMessage,
@@ -156,7 +158,9 @@
         SELECT
             va.vitamate_analysis_id AS analysisId,
             va.processing_attempt_id AS attemptId,
-            va.prompt AS prompt,
+            va.review_type AS reviewType,
+            va.review_category_codes AS reviewCategoryCodes,
+            va.additional_instruction AS additionalInstruction,
             s.project_id AS projectId,
             b.block_id AS blockId
         FROM vitamate_analysis va
@@ -219,7 +223,9 @@
             resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisHistoryRow">
         SELECT
             va.vitamate_analysis_id AS analysisId,
-            va.prompt AS prompt,
+            va.review_type AS reviewType,
+            va.review_category_codes AS reviewCategoryCodes,
+            va.additional_instruction AS additionalInstruction,
             va.analysis_status AS analysisStatus,
             va.created_at AS createdAt,
             va.completed_at AS completedAt

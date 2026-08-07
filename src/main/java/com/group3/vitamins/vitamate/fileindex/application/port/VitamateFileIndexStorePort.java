@@ -9,10 +9,20 @@ public interface VitamateFileIndexStorePort {
 
     boolean existsFileVersion(Long fileVersionId);
 
-    FileIndexStatus upsertStatus(
+    FileIndexStatusUpdateResult upsertStatus(
             Long fileVersionId,
+            String indexAttemptId,
             FileIndexStatus indexStatus,
             String errorMessage,
             LocalDateTime now
     );
+
+    // 파일 인덱싱 상태 저장 결과입니다. attempt가 어긋나면 accepted=false로 늦은 callback을 무시합니다.
+    record FileIndexStatusUpdateResult(
+            boolean accepted,
+            String indexAttemptId,
+            FileIndexStatus indexStatus,
+            String reason
+    ) {
+    }
 }

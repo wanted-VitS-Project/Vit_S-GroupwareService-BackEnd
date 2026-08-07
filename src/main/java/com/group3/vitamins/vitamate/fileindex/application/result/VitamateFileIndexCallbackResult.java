@@ -4,7 +4,8 @@ package com.group3.vitamins.vitamate.fileindex.application.result;
 public record VitamateFileIndexCallbackResult(
         boolean accepted,
         Long fileVersionId,
+        String indexAttemptId,
         String indexStatus,
         String reason
-) {
+)    {
 }

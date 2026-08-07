@@ -1,14 +1,19 @@
 package com.group3.vitamins.issue.presentation.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
+import com.group3.vitamins.issue.application.query.IssueCalendarQuery;
 import com.group3.vitamins.issue.application.query.IssueDetailQuery;
+import com.group3.vitamins.issue.application.result.IssueCalendarResult;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.result.IssueStatusResult;
 import com.group3.vitamins.issue.application.usecase.IssueCommandUseCase;
 import com.group3.vitamins.issue.application.usecase.IssueQueryUseCase;
 import com.group3.vitamins.issue.presentation.api.request.IssueStatusChangeRequest;
+import com.group3.vitamins.issue.presentation.api.request.IssueUpdateRequest;
+import com.group3.vitamins.issue.presentation.api.response.IssueCalendarResponse;
 import com.group3.vitamins.issue.presentation.api.response.IssueDetailResponse;
 import com.group3.vitamins.issue.presentation.api.response.IssueStatusChangeResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -63,6 +68,63 @@ public class IssueManagementController {
 
         return ResponseEntity.ok(ApiResponse.success(
                 IssueResponseMessage.DETAIL_SUCCESS,
+                IssueDetailResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "담당 이슈 캘린더 조회",
+            description = "로그인 사용자가 담당자로 지정된, 완료되지 않은 이슈 전체를 조회한다. "
+                    + "마이페이지 개인 캘린더에서 사용하며 월 이동은 FE가 응답 데이터로 분기 처리한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "담당 이슈 캘린더 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료")
+    })
+    @GetMapping("/calendar")
+    public ResponseEntity<ApiResponse<IssueCalendarResponse>> getMyCalendarIssues(
+            Authentication authentication
+    ) {
+        IssueCalendarResult result = issueQueryUseCase.getMyCalendarIssues(
+                new IssueCalendarQuery(authentication.getName()));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.CALENDAR_SUCCESS,
+                IssueCalendarResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "이슈 부분 수정",
+            description = "이슈의 제목, 설명, 마감일, 우선순위, 담당자, 연결 Block을 전달한 필드만 부분 수정한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이슈 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "ISS_INVALID_REQUEST / ISS_ASSIGNEE_NOT_PROJECT_MEMBER / ISS_BLOCK_STEP_MISMATCH"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ISS_EDIT_PERMISSION_REQUIRED — Step 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "ISS_NOT_FOUND / ISS_ASSIGNEE_NOT_FOUND / ISS_BLOCK_NOT_FOUND")
+    })
+    @PatchMapping("/{issueId}")
+    public ResponseEntity<ApiResponse<IssueDetailResponse>> updateIssue(
+            @Parameter(description = "수정할 이슈 ID")
+            @PathVariable Long issueId,
+            @RequestBody(required = false) JsonNode request,
+            Authentication authentication
+    ) {
+        IssueResult result = issueCommandUseCase.updateIssue(
+                IssueUpdateRequest.from(request)
+                        .toCommand(issueId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.UPDATE_SUCCESS,
                 IssueDetailResponse.from(result)
         ));
     }

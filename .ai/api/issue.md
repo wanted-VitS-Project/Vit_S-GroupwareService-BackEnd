@@ -1,7 +1,7 @@
 # 🧩 Issue API
 
 **상태**: `✅ 확정`
-**최종 업데이트**: 2026-08-06 · **담당**: 김용준
+**최종 업데이트**: 2026-08-07 · **담당**: 김용준
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -17,6 +17,7 @@
 | 이슈 부분 수정 | PATCH | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
 | 이슈 상태 변경 | PATCH | `/api/v1/issues/{issueId}/status` | 스텝 EDITOR |
 | 이슈 삭제 | DELETE | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
+| 담당 이슈 캘린더 조회 | GET | `/api/v1/issues/calendar` | 본인 담당 이슈만 |
 
 ## 공통 응답 형식
 
@@ -70,6 +71,9 @@
 | `null` | 허용하지 않음 |
 
 `assigneeIds`와 `blockIds`는 PATCH에서 **추가분이 아니라 최종 전체 목록**이다.
+
+`assigneeIds`는 `GET /api/v1/projects/{projectId}/members` 응답의 `members[].userId`를 사용한다.
+`blockIds`는 `GET /api/v1/steps/{stepId}/blocks/options` 응답의 `blocks[].blockId`를 사용한다.
 
 ---
 
@@ -198,7 +202,7 @@ Step 진입
 
 ```bash
 GET /api/v1/projects/{projectId}/members
-GET /api/v1/steps/{stepId}/blocks
+GET /api/v1/steps/{stepId}/blocks/options
 ```
 
 **Block 연결 이슈 팝업**
@@ -340,7 +344,7 @@ Step 존재 및 접근 권한 확인
 |---|---|:---:|---|
 | `title` | String | N | 제목. 전달 시 빈 값 불가, 최대 200자 |
 | `content` | String | N | 내용. 명시적 `null`이면 내용 삭제 |
-| `dueDate` | String | N | 마감 일시. 명시적 `null`이면 마감일 해제 |
+| `dueDate` | LocalDate | N | 마감일. 명시적 `null`이면 마감일 해제 |
 | `priority` | String | N | `LOW` · `MEDIUM` · `HIGH` |
 | `assigneeIds` | List<String> | N | 최종 담당자 전체 목록 |
 | `blockIds` | List<Long> | N | 최종 관련 Block 전체 목록 |
@@ -507,6 +511,106 @@ Issue 존재 및 삭제 여부 확인
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 이미 논리 삭제됨 |
+
+---
+
+## 7. 담당 이슈 캘린더 조회
+
+| 항목 | 내용 |
+|---|---|
+| Method · URL | `GET /api/v1/issues/calendar` |
+| 인증 필요 | Y · 로그인 사용자 본인 담당 이슈만 조회 (별도 스텝 접근 권한 검사 없음) |
+| 요구사항 | 마이페이지 개인 캘린더 — 요구사항 번호 미부여 |
+
+로그인 사용자가 담당자로 지정된, 완료되지 않은 이슈 전체를 한 번에 조회한다. 마이페이지 개인 캘린더에서 날짜별 마킹 용도로 사용하며, 월 이동 등 기간 분기는 FE가 이미 받은 데이터로 처리한다(월 이동마다 재호출하지 않는다).
+
+`issue_assign.user_id`가 본인이고 `status`가 `DONE`이 아닌 이슈만 반환한다. 프로젝트별 색상 매핑은 FE에서 `projectId` 기준으로 처리한다(BE는 색상 값을 내려주지 않는다).
+
+**Query Parameter** — 없음
+
+```bash
+GET /api/v1/issues/calendar
+```
+
+⛔ 페이징이 없다. 본인 담당 이슈 중 완료되지 않은 것 전체를 반환한다.
+
+⛔ `status`가 `DONE`인 이슈는 조회 대상에서 제외한다.
+
+⛔ `dueDate`가 없는 이슈는 캘린더에 표시할 날짜가 없으므로 조회 대상에서 제외한다.
+
+⛔ 이슈 선택 후 상세 화면 진입은 기존 `GET /api/v1/issues/{issueId}`를 그대로 호출한다. 이 API는 별도 필드를 추가하지 않는다.
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.issues` | List | 조회된 이슈 목록 |
+| `data.issues[].issueId` | Long | 이슈 번호 |
+| `data.issues[].title` | String | 이슈 제목 |
+| `data.issues[].status` | String | `TODO` · `IN_PROGRESS` (`DONE`은 반환하지 않음) |
+| `data.issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
+| `data.issues[].dueDate` | LocalDate | 마감일 |
+| `data.issues[].stepId` | Long | 소속 Step 번호 |
+| `data.issues[].stepName` | String | 소속 Step명 |
+| `data.issues[].projectId` | Long | 소속 Project 번호 |
+| `data.issues[].projectName` | String | 소속 Project명 |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "담당 이슈 캘린더 조회 성공",
+  "data": {
+    "issues": [
+      {
+        "issueId": 101,
+        "title": "제안서 1차 초안 작성",
+        "status": "IN_PROGRESS",
+        "priority": "HIGH",
+        "dueDate": "2026-08-11",
+        "stepId": 10,
+        "stepName": "입찰 진행",
+        "projectId": 3,
+        "projectName": "OO시 스마트도로 구축"
+      }
+    ]
+  }
+}
+```
+
+조회 결과가 없으면 `200 OK`와 빈 배열을 반환한다.
+
+### FE 처리 흐름
+
+```text
+마이페이지 캘린더 진입
+→ 최초 1회 캘린더 조회 API 호출 (본인 담당 · 미완료 이슈 전체)
+→ dueDate 기준으로 날짜별 이슈 마킹
+→ 월 이동 시 API 재호출 없이, 이미 받은 데이터에서 해당 월만 필터링해 표시
+→ projectId 기준으로 프로젝트별 색상 매핑, 하단에 색상 범례 표시
+→ 날짜 선택 시 해당 날짜의 이슈 목록 표시
+→ 이슈 선택 시 기존 상세 조회 API 호출
+```
+
+```bash
+GET /api/v1/issues/{issueId}
+```
+
+### BE 처리 흐름
+
+```text
+로그인 사용자(userId) 확인
+→ issue_assign.user_id = 본인 AND status != DONE 인 이슈 조회 (issue ⋈ issue_assign ⋈ step ⋈ project)
+→ 삭제되지 않은 데이터만 응답
+```
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 담당 이슈 캘린더 조회 성공 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+
+> 확정된 결정: 조회 범위는 "본인 담당(`issue_assign`) + 미완료(`status != DONE`)"이다. 이미 종료된 프로젝트라도 미완료 이슈가 남아있으면 캘린더에 계속 노출된다(프로젝트 상태 기준 필터는 도입하지 않음).
 
 ---
 
