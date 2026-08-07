@@ -11,9 +11,8 @@ import lombok.RequiredArgsConstructor;
  * 파일은 스텝 권한을 따르므로 403 도 파일 전용 코드({@code FILE_ACCESS_PERMISSION_REQUIRED}·
  * {@code FILE_EDIT_PERMISSION_REQUIRED})를 쓴다 — job-position 처럼 account 코드를 재사용하지 않는다.
  *
- * <p>⏸️ §6 복구·§7 영구삭제(휴지통 화면 대기)·§11 버전목록(#138) 의 코드
- * ({@code FILE_NOT_DELETED}·{@code FILE_CONFIRM_TEXT_MISMATCH}·{@code FILE_APPROVAL_REFERENCED} 등)는
- * 그 엔드포인트 구현 시점에 추가한다 — 미구현 코드는 지어내지 않는다.
+ * <p>§7 영구삭제(2026-08-07 구현)에서 {@code FILE_NOT_DELETED}·{@code FILE_CONFIRM_TEXT_MISMATCH}·
+ * {@code FILE_APPROVAL_REFERENCED} 를 추가했다. §6 복구는 그 엔드포인트 구현 시점에 채운다.
  */
 @Getter
 @RequiredArgsConstructor
@@ -62,6 +61,14 @@ public enum FileErrorCode implements ErrorCode {
             "이미 휴지통에 있는 문서입니다."),
     FILE_APPROVAL_IN_PROGRESS("FILE_APPROVAL_IN_PROGRESS",
             "진행 중인 결재의 대상이라 삭제할 수 없습니다."),
+
+    // --- 영구 삭제 (§7) ---
+    FILE_NOT_DELETED("FILE_NOT_DELETED",
+            "휴지통에 있는 문서만 영구 삭제할 수 있습니다."),
+    FILE_CONFIRM_TEXT_MISMATCH("FILE_CONFIRM_TEXT_MISMATCH",
+            "확인 문자가 일치하지 않습니다."),
+    FILE_APPROVAL_REFERENCED("FILE_APPROVAL_REFERENCED",
+            "결재가 이 문서의 버전을 참조하고 있어 영구 삭제할 수 없습니다."),
 
     // --- 미리보기 ---
     FILE_PREVIEW_NOT_SUPPORTED("FILE_PREVIEW_NOT_SUPPORTED",

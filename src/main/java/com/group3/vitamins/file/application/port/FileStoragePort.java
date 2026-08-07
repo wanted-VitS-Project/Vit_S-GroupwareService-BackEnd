@@ -1,6 +1,7 @@
 package com.group3.vitamins.file.application.port;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -23,6 +24,12 @@ public interface FileStoragePort {
 
     /** 객체 바이트를 가져온다(§2 PDF 페이지 수 추출용 서버 다운로드). PDF 만 대상이라 크기가 제한적이다. */
     byte[] getObject(String storageKey);
+
+    /**
+     * 여러 객체를 영구 삭제한다(§7 영구삭제 — 문서의 전 버전 저장소 객체 제거). 실제로 삭제된 객체 수를 돌려준다.
+     * ⛔ <b>일부/전체 실패해도 예외를 던지지 않는다</b> — DB 삭제는 이미 끝났고 실패 키는 정리 대상으로 남긴다(§7).
+     */
+    int deleteObjects(Collection<String> storageKeys);
 
     /** presigned URL 과 만료 시각. */
     record PresignedUrl(String url, Instant expiresAt) {
