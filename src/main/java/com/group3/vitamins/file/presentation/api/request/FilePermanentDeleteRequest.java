@@ -5,7 +5,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /** 영구 삭제 요청(§7). 확인 문자는 정확히 {@code "영구 삭제"} 여야 한다. */
 public record FilePermanentDeleteRequest(
-        @Schema(description = "영구 삭제 확인 문자. 정확히 \"영구 삭제\" 여야 한다.", example = "영구 삭제")
+        @Schema(description = "영구 삭제 확인 문자. 정확히 \"영구 삭제\" 여야 한다.", example = "영구 삭제",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String confirmText
 ) {
     public PermanentDeleteFileCommand toCommand(Long fileId, String requesterUserId, String role) {

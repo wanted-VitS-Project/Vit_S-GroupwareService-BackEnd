@@ -3,6 +3,7 @@ package com.group3.vitamins.file.infrastructure.storage;
 import com.group3.vitamins.file.application.port.FileStoragePort;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
@@ -105,29 +106,35 @@ public class S3FileStorageAdapter implements FileStoragePort {
                 .build()).asByteArray();
     }
 
+    /** S3 DeleteObjects 요청당 최대 객체 수. */
+    private static final int DELETE_BATCH_SIZE = 1000;
+
     @Override
     public int deleteObjects(Collection<String> storageKeys) {
         if (storageKeys == null || storageKeys.isEmpty()) {
             return 0;
         }
-        List<ObjectIdentifier> objects = storageKeys.stream()
+        List<String> keys = storageKeys.stream()
                 .filter(Objects::nonNull)
                 .distinct()
-                .map(key -> ObjectIdentifier.builder().key(key).build())
                 .toList();
-        if (objects.isEmpty()) {
-            return 0;
+
+        int deleted = 0;
+        // DeleteObjects 는 요청당 최대 1000개 — 청크로 나눠 보낸다. 한 배치가 실패해도 다음 배치는 계속 시도한다.
+        for (int from = 0; from < keys.size(); from += DELETE_BATCH_SIZE) {
+            List<ObjectIdentifier> batch = keys.subList(from, Math.min(from + DELETE_BATCH_SIZE, keys.size())).stream()
+                    .map(key -> ObjectIdentifier.builder().key(key).build())
+                    .toList();
+            try {
+                DeleteObjectsResponse res = s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                        .bucket(bucket)
+                        .delete(Delete.builder().objects(batch).quiet(false).build())
+                        .build());
+                deleted += res.deleted().size();
+            } catch (SdkException e) {
+                // 저장소 삭제 실패는 삼킨다(네트워크·자격·S3 오류 포함) — DB 는 이미 지웠고 남은 키는 정리 대상이다(§7).
+            }
         }
-        try {
-            // 배치 삭제(최대 1000). 존재하지 않는 키는 성공으로 취급된다.
-            DeleteObjectsResponse res = s3Client.deleteObjects(DeleteObjectsRequest.builder()
-                    .bucket(bucket)
-                    .delete(Delete.builder().objects(objects).quiet(false).build())
-                    .build());
-            return res.deleted().size();
-        } catch (S3Exception e) {
-            // 저장소 삭제 실패는 삼킨다 — DB 는 이미 지웠고 남은 키는 정리 대상이다(§7).
-            return 0;
-        }
+        return deleted;
     }
 }

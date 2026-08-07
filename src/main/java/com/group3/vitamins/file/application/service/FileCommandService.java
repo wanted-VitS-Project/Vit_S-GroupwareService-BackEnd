@@ -25,6 +25,8 @@ import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -126,10 +128,26 @@ public class FileCommandService implements FileCommandUseCase {
         fileVersionRepository.deleteByFileId(command.fileId());
         fileRepository.deleteById(command.fileId());
 
-        // 저장소 객체 삭제 — 일부 실패해도 DB 삭제는 유지한다(§7). 실패 키는 정리 대상.
-        int storageDeleted = fileStoragePort.deleteObjects(storageKeys);
+        // 저장소 객체 삭제는 DB 커밋 후에 실행한다 — 커밋이 실패하면 S3 를 건드리지 않아
+        // "S3 는 지웠는데 DB 는 롤백" 유실을 막는다(§7). 커밋 뒤 S3 실패는 허용(DB 는 지워졌고 남은 키는 정리 대상).
+        runAfterCommit(() -> fileStoragePort.deleteObjects(storageKeys));
 
-        return new FilePermanentDeleteResult(command.fileId(), versions.size(), storageDeleted);
+        // storageDeletedCount = 삭제를 요청한 객체 수. 실제 삭제는 커밋 후라 응답 시점엔 알 수 없다.
+        return new FilePermanentDeleteResult(command.fileId(), versions.size(), storageKeys.size());
+    }
+
+    /** 트랜잭션이 있으면 커밋 성공 후 실행하고, 없으면(예: 단위 테스트) 즉시 실행한다. */
+    private void runAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     private String validateName(String rawName) {

@@ -9,7 +9,7 @@ public record FilePermanentDeleteResponse(
         Long fileId,
         @Schema(description = "삭제된 버전 수", example = "3")
         int deletedVersionCount,
-        @Schema(description = "저장소에서 실제 삭제된 객체 수(일부 실패 시 버전 수보다 적을 수 있다)", example = "3")
+        @Schema(description = "저장소 삭제를 요청한 객체 수. 실제 삭제는 커밋 후 best-effort 로 수행된다(실패 키는 정리 대상)", example = "3")
         int storageDeletedCount
 ) {
     public static FilePermanentDeleteResponse from(FilePermanentDeleteResult result) {

@@ -17,7 +17,7 @@
 | 버전 배지 | **v1 부터 항상 표시** (이전 "versionCount=1 이면 숨김" 규칙 폐기) |
 | `previewable` 판정 | **확장자만**(pdf 여부). page_count 추출 성공 여부는 보지 않는다 |
 | 미리보기 미지원 파일 | 계약 변경 없음 — §10 이 `FILE_PREVIEW_NOT_SUPPORTED`, FE 가 "미지원 파일" 안내 |
-| 영구삭제(§7) 차단 범위 | 결재(`approval_document`) **+ AI 분석(`vitamate_analysis_document`)** 참조까지. `file_index`·`document_chunk` 는 파생이라 함께 정리 |
+| 영구삭제(§7) 차단 범위 | **결재(`approval_document`) 참조만** 차단(진행 중·완료 모두 · 409). AI 분석·인덱스(`vitamate_analysis_document`·`vitamate_analysis_citation`·`file_index`·`document_chunk`)는 **차단이 아니라 `FileDerivedDataCleanupPort` 로 함께 정리**한다 (2026-08-07 · 배정현 요청 반영 — 이전 "AI 참조도 차단" 정책 폐기) |
 | `file_index.index_status` | **Spring DB 정본 · Python callback 으로 갱신** · 값 `PENDING·PROCESSING·COMPLETED·FAILED` |
 | §11 버전목록 스코프 | **프로젝트 전체** — 경로 `GET /projects/{projectId}/file-versions` (블록 단위 폐기) |
 | 업로드 대상 블록(§1) | **`FILE` + `APPROVAL`** — 결재 블록 드롭존도 공용 파일 API 재사용. `block_file`+`approval_document` **이중 링크**. **단 §3 목록은 `FILE` 전용**(결재 파일은 결재 상세에서 조회) |
@@ -347,7 +347,7 @@
 ⛔ **휴지통에 있는 문서만 대상이다.** 목록에서 바로 영구 삭제할 수 없다.
 ⛔ **모든 버전의 저장소 객체를 제거한다.** 되돌릴 수 없다 (`FILE-025`).
 ⛔ **확인 문자를 서버가 검증한다.** 정확히 `영구 삭제` 여야 한다 (`FILE-023`).
-⛔ **저장소 삭제가 일부 실패해도 DB 는 지운다.** 사용자를 기다리게 하지 않기 위해서이며, 실패한 키는 정리 대상으로 남긴다.
+⛔ **저장소 삭제는 DB 커밋 후 best-effort 로 실행한다.** DB 커밋이 실패하면 S3 를 건드리지 않아 "S3 는 지웠는데 DB 는 롤백" 유실을 막고, 커밋 후 S3 가 일부 실패해도 DB 삭제는 유지한다(실패 키는 정리 대상). 그래서 `data.storageDeletedCount` 는 **삭제를 요청한 객체 수**다(응답 시점엔 실제 삭제 완료 수를 알 수 없다).
 
 ⭐ **DB 삭제 전에 파생데이터 정리 포트를 선호출한다** (2026-08-07 추가) — `file`·`file_version` 물리 삭제 **직전**에 `FileDerivedDataCleanupPort.cleanupByFileId(fileId)` 를 호출한다. 타 도메인(비타메이트)이 `file_id` 기준으로 파생 데이터(`file_index`·`document_chunk`·`vitamate_analysis_document`·`vitamate_analysis_citation`)를 먼저 정리한다. **파일 도메인은 비타메이트 내부 테이블을 알 필요 없이 포트만 호출**하고, 구현체는 비타메이트가 소유한다(`VitamateFileDerivedDataCleanupAdapter`, 구현 완료). 같은 트랜잭션에서 실행돼 FK 순서(파생 → `file_version` → `file`)를 지킨다.
 
