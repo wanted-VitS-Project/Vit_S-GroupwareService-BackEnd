@@ -25,6 +25,7 @@ public class VitamateFileIndexDispatchService implements DispatchVitamateFileInd
 
     private final VitamateFileIndexStorePort fileIndexStorePort;
     private final VitamateFileIndexJobPublisherPort jobPublisherPort;
+    private final VitamateFileIndexFailureRecorder failureRecorder;
 
     @Override
     public void handle(DispatchVitamateFileIndexCommand command) {
@@ -68,13 +69,8 @@ public class VitamateFileIndexDispatchService implements DispatchVitamateFileInd
         } catch (RuntimeException e) {
             log.error("Failed to publish vitamate file index job. fileVersionId={}, reason=queue_publish_failed",
                     fileVersionId, e);
-            fileIndexStorePort.upsertStatus(
-                    fileVersionId,
-                    null,
-                    FileIndexStatus.FAILED,
-                    "파일 인덱싱 작업 큐 발행에 실패했습니다.",
-                    LocalDateTime.now()
-            );
+            // REQUIRES_NEW 별도 빈으로 분리 — 호출 경로(동기/afterCommit)와 무관하게 항상 독립 커밋된다.
+            failureRecorder.markFailed(fileVersionId, "파일 인덱싱 작업 큐 발행에 실패했습니다.");
         }
     }
 }

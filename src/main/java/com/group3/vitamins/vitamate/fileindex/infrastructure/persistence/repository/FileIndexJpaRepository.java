@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 // file_index 저장과 file_version 존재 확인을 담당하는 JPA repository입니다.
@@ -94,4 +95,15 @@ public interface FileIndexJpaRepository extends JpaRepository<FileIndexEntity, L
             @Param("fileVersionId") Long fileVersionId,
             @Param("indexAttemptId") String indexAttemptId
     );
+
+    // PENDING으로 등록됐지만 오래 방치된 행을 찾는다 — dispatch 트랜잭션이 커밋된 뒤 큐 발행
+    // 전에 프로세스가 죽으면(afterCommit 유실) 이 상태로 영원히 멈출 수 있어, 재발행 스케줄러가 사용한다.
+    @Query("""
+        SELECT f.fileVersionId
+          FROM FileIndexEntity f
+         WHERE f.indexStatus = com.group3.vitamins.vitamate.fileindex.domain.model.FileIndexStatus.PENDING
+           AND f.updatedAt < :before
+           AND f.deletedAt IS NULL
+        """)
+    List<Long> findStalePendingFileVersionIds(@Param("before") LocalDateTime before);
 }

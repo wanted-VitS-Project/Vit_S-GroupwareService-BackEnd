@@ -20,7 +20,7 @@ public record VitamateAnalysisJobResponse(
         @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COMMON\", \"COST_RESULT\"]")
         List<String> reviewCategoryCodes,
 
-        @Schema(description = "템플릿에 덧붙일 사용자 추가 요청")
+        @Schema(description = "사용자가 기본 템플릿을 확인·보완해 확정한 최종 프롬프트. worker가 그대로 사용한다")
         String prompt,
 
         @Schema(description = "분석 요청 당시 선택한 검토 템플릿 스냅샷")

@@ -22,7 +22,7 @@ public record VitamateAnalysisResponse(
         @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COST_RESULT\", \"COST_OVERVIEW\"]")
         List<String> reviewCategoryCodes,
 
-        @Schema(description = "사용자 추가 요청. 없으면 null", example = "금액과 부가세 포함 여부를 특히 확인해줘.")
+        @Schema(description = "사용자가 화면 기본 프롬프트를 확인·보완해 확정한 최종 검토 프롬프트", example = "금액과 부가세 포함 여부를 특히 확인해줘.")
         String prompt,
 
         @Schema(description = "분석 요청 당시 카테고리별 검토 템플릿 버전 목록")

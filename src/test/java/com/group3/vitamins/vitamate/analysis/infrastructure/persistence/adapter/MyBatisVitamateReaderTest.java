@@ -52,6 +52,7 @@ class MyBatisVitamateReaderTest {
 
         assertThat(detail.reviewCategoryCodes())
                 .containsExactly("COST_RESULT", "COST_OVERVIEW");
+        assertThat(detail.prompt()).isEqualTo("합계를 중심으로 검토해주세요.");
         assertThat(detail.templateVersions())
                 .extracting(
                         VitamateAnalysisReaderPort.TemplateVersion::categoryCode,

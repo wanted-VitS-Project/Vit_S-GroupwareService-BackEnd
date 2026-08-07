@@ -613,6 +613,7 @@ GET /internal/v1/vitamate/analyses/501/jobs/9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138
     {
       "fileVersionId": 102,
       "fileName": "제안요청서_첨부.pdf",
+      "documentRole": "TARGET",
       "chunks": []
     }
   ]

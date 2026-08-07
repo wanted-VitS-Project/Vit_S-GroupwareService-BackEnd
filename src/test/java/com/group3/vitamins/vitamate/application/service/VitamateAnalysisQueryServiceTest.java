@@ -70,6 +70,7 @@ class VitamateAnalysisQueryServiceTest {
                     .satisfies(document -> {
                         assertThat(document.fileVersionId()).isEqualTo(101L);
                         assertThat(document.fileName()).isEqualTo("proposal.pdf");
+                        assertThat(document.documentRole()).isEqualTo("TARGET");
                     });
             assertThat(result.citations())
                     .hasSize(1)
