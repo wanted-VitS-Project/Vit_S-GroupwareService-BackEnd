@@ -44,6 +44,9 @@ public record NotificationRequestedEvent(
         if (title.isBlank()) {
             throw new IllegalArgumentException("title must not be blank");
         }
+        // 빈 Map 은 "없음"과 같은 의미라 먼저 null 로 눕힌다 — 아래 검증이 한 가지 형태만 보게 한다
+        targetContext = (targetContext == null || targetContext.isEmpty()) ? null : Map.copyOf(targetContext);
+
         // GEN-005 — 부분 입력 차단(DB ck_notification_target 제약과 동일 규칙을 발행 시점에 먼저 막는다)
         if ((targetType == null) != (targetId == null)) {
             throw new IllegalArgumentException(
@@ -52,8 +55,11 @@ public record NotificationRequestedEvent(
         if (targetType != null && targetType.isBlank()) {
             throw new IllegalArgumentException("targetType must not be blank");
         }
-
-        targetContext = (targetContext == null || targetContext.isEmpty()) ? null : Map.copyOf(targetContext);
+        // 대상이 없는데 부가 식별값만 있으면 어디에도 쓰이지 않는 값이 영속된다(조회는 type=NONE 을 준다)
+        if (targetType == null && targetContext != null) {
+            throw new IllegalArgumentException(
+                    "targetContext requires a target (targetType/targetId)");
+        }
     }
 
     /** 이동 대상이 있는 알림 */

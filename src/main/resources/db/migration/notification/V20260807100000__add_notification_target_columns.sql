@@ -19,10 +19,14 @@ ALTER TABLE notification
         COMMENT '이동에 필요한 부가 식별값 스냅샷 (예: {"revisionId": 56}) · 표시용 데이터는 넣지 않는다'
         AFTER target_id;
 
--- 부분 입력(타입만 있고 대상이 없는 등) 차단. MySQL 8.0.16+ 부터 실제로 강제된다.
+-- 부분 입력 차단. MySQL 8.0.16+ 부터 실제로 강제된다.
+-- NotificationRequestedEvent 의 검증과 같은 규칙이다 — 이벤트에서 먼저 막고, DB 가 최후 방어선이다.
 ALTER TABLE notification
     ADD CONSTRAINT ck_notification_target
         CHECK (
-            (target_type IS NULL AND target_id IS NULL)
-            OR (target_type IS NOT NULL AND target_id IS NOT NULL)
+            -- 이동 대상 없음: 부가 식별값도 함께 없어야 한다.
+            -- (대상이 없으면 조회가 type=NONE 을 주므로 target_context 는 어디에도 안 쓰인다)
+            (target_type IS NULL AND target_id IS NULL AND target_context IS NULL)
+            -- 이동 대상 있음: 타입은 공백일 수 없고(해석 불가능), target_context 는 선택
+            OR (target_type IS NOT NULL AND target_id IS NOT NULL AND target_type <> '')
         );
