@@ -9,9 +9,9 @@
             resultType="com.group3.vitamins.project.infrastructure.adapter.StepStatRow">
         SELECT COUNT(*) AS totalCount,
                COALESCE(SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END), 0) AS doneCount
-          FROM step
-         WHERE project_id = #{projectId}
-           AND deleted_at IS NULL
+        FROM step
+        WHERE project_id = #{projectId}
+          AND deleted_at IS NULL
     </select>
 
 </mapper>

@@ -9,7 +9,7 @@ public record MemberAddRequest(
         @Schema(description = "추가할 사원 사번 (한 명씩)", example = "E2024007")
         String userId,
 
-        @Schema(description = "권한 등급 (VIEWER · EDITOR · NONE)", example = "VIEWER")
+        @Schema(description = "권한 등급 (VIEWER · EDITOR)", example = "VIEWER")
         String permission
 ) {
 

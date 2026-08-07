@@ -8,9 +8,9 @@
     <select id="findByIds"
             resultType="com.group3.vitamins.project.infrastructure.adapter.BusinessCategoryRow">
         SELECT business_category_id AS categoryId, name, code
-          FROM business_category
-         WHERE deleted_at IS NULL
-           AND business_category_id IN
+        FROM business_category
+        WHERE deleted_at IS NULL
+        AND business_category_id IN
         <foreach collection="categoryIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>

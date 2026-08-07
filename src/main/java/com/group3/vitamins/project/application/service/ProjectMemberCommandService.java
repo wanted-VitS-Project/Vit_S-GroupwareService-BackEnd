@@ -8,6 +8,7 @@ import com.group3.vitamins.project.application.command.AddMemberCommand;
 import com.group3.vitamins.project.application.command.ChangeMemberPermissionCommand;
 import com.group3.vitamins.project.application.command.RemoveMemberCommand;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.port.StepPermissionCleanupPort;
 import com.group3.vitamins.project.application.result.MemberResult;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectMemberCommandUseCase;
@@ -29,6 +30,7 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
     private final ProjectAccessUseCase projectAccessUseCase;
     private final ProjectMemberRepository projectMemberRepository;
     private final EmployeeLookupPort employeeLookupPort;
+    private final StepPermissionCleanupPort stepPermissionCleanupPort;
 
     /** 참여자를 한 명 추가한다. 응답에 쓸 이름을 조회하면서 사원 존재 여부도 함께 판정한다. */
     @Override
@@ -81,7 +83,7 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
                 null, updated.getPermission().name());
     }
 
-    /** 참여자를 프로젝트에서 제거한다. */
+    /** 참여자를 프로젝트에서 제거한다. 스텝 권한 오버라이드도 함께 지운다. */
     @Override
     public void removeMember(RemoveMemberCommand command) {
         //권한 검증
@@ -93,6 +95,10 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
 
         //자기자신 권한 수정 불가
         requireNotSelf(member, command.requesterUserId());
+
+        //스텝 오버라이드 정리
+        stepPermissionCleanupPort.deleteByProjectIdAndUserId(
+                member.getProjectId(), member.getUserId());
 
         //프로젝트 제거
         projectMemberRepository.deleteById(member.getProjectMemberId());
@@ -112,15 +118,20 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
         }
     }
 
-    /** 요청 문자열을 권한 등급으로 바꾼다. VIEWER·EDITOR·NONE 이 아니면 거부한다. */
+    /** 요청 문자열을 권한 등급으로 바꾼다. VIEWER·EDITOR 가 아니면 거부한다. */
     private MemberPermission parsePermission(String permission) {
         if (permission == null) {
             throw new ValidationException(ProjectErrorCode.MEMBER_PERMISSION_INVALID);
         }
+        MemberPermission parsed;
         try {
-            return MemberPermission.valueOf(permission);
+            parsed = MemberPermission.valueOf(permission);
         } catch (IllegalArgumentException e) {
             throw new ValidationException(ProjectErrorCode.MEMBER_PERMISSION_INVALID);
         }
+        if (parsed == MemberPermission.NONE) {
+            throw new ValidationException(ProjectErrorCode.MEMBER_PERMISSION_INVALID);
+        }
+        return parsed;
     }
 }

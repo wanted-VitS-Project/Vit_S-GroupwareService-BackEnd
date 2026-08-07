@@ -23,6 +23,4 @@
         ORDER BY e.name ASC, pm.user_id ASC
     </select>
 
-
-
 </mapper>

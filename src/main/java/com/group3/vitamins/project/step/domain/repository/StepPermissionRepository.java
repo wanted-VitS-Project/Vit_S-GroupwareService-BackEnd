@@ -17,4 +17,7 @@ public interface StepPermissionRepository {
 
     /** 단건 오버라이드. 없으면 empty. */
     Optional<MemberPermission> findOverride(Long stepId, String userId);
+
+    /** 프로젝트에 속한 스텝들에서 그 사용자의 오버라이드를 전부 지운다. 참여자 제거 시 호출된다. */
+    void deleteByProjectIdAndUserId(Long projectId, String userId);
 }

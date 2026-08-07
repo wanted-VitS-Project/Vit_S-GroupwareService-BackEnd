@@ -22,30 +22,20 @@
           AND b.type = 'AI'
           AND b.deleted_at IS NULL
           AND vb.deleted_at IS NULL
-          AND (
-            EXISTS (
-                SELECT 1
-                FROM step_permission sp
-                WHERE sp.step_id = b.step_id
-                  AND sp.user_id = #{userId}
-                  AND sp.permission != 'NONE'
-            )
-                OR (
-                NOT EXISTS (
-                    SELECT 1
-                    FROM step_permission sp
-                    WHERE sp.step_id = b.step_id
-                      AND sp.user_id = #{userId}
-                )
-                    AND EXISTS (
-                    SELECT 1
-                    FROM project_member pm
-                    WHERE pm.project_id = s.project_id
-                      AND pm.user_id = #{userId}
-                      AND pm.permission != 'NONE'
-                )
-                )
-            )
+          AND EXISTS (
+            SELECT 1
+            FROM project_member pm
+            WHERE pm.project_id = s.project_id
+              AND pm.user_id = #{userId}
+              AND pm.permission != 'NONE'
+        )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM step_permission sp
+            WHERE sp.step_id = b.step_id
+              AND sp.user_id = #{userId}
+              AND sp.permission = 'NONE'
+        )
     </select>
 
     <select id="countCompletedFileVersionsInProject" resultType="int">
@@ -88,30 +78,20 @@
           AND va.deleted_at IS NULL
           AND vb.deleted_at IS NULL
           AND b.deleted_at IS NULL
-          AND (
-            EXISTS (
-                SELECT 1
-                FROM step_permission sp
-                WHERE sp.step_id = b.step_id
-                  AND sp.user_id = #{userId}
-                  AND sp.permission != 'NONE'
-            )
-                OR (
-                NOT EXISTS (
-                    SELECT 1
-                    FROM step_permission sp
-                    WHERE sp.step_id = b.step_id
-                      AND sp.user_id = #{userId}
-                )
-                    AND EXISTS (
-                    SELECT 1
-                    FROM project_member pm
-                    WHERE pm.project_id = s.project_id
-                      AND pm.user_id = #{userId}
-                      AND pm.permission != 'NONE'
-                )
-                )
-            )
+          AND EXISTS (
+            SELECT 1
+            FROM project_member pm
+            WHERE pm.project_id = s.project_id
+              AND pm.user_id = #{userId}
+              AND pm.permission != 'NONE'
+        )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM step_permission sp
+            WHERE sp.step_id = b.step_id
+              AND sp.user_id = #{userId}
+              AND sp.permission = 'NONE'
+        )
     </select>
 
     <select id="findAnalysisDocuments"

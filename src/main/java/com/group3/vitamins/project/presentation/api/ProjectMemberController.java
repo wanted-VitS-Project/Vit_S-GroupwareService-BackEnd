@@ -2,11 +2,17 @@ package com.group3.vitamins.project.presentation.api;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
+import com.group3.vitamins.project.application.command.RemoveMemberCommand;
 import com.group3.vitamins.project.application.query.MemberListQuery;
+import com.group3.vitamins.project.application.result.MemberResult;
 import com.group3.vitamins.project.application.result.MemberSummary;
 import com.group3.vitamins.project.application.usecase.ProjectMemberCommandUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectMemberQueryUseCase;
+import com.group3.vitamins.project.presentation.api.request.MemberAddRequest;
+import com.group3.vitamins.project.presentation.api.request.MemberPermissionUpdateRequest;
+import com.group3.vitamins.project.presentation.api.response.MemberAddResponse;
 import com.group3.vitamins.project.presentation.api.response.MemberListResponse;
+import com.group3.vitamins.project.presentation.api.response.MemberPermissionUpdateResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -14,23 +20,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import com.group3.vitamins.project.application.command.RemoveMemberCommand;
-import com.group3.vitamins.project.application.result.MemberResult;
-import com.group3.vitamins.project.application.usecase.ProjectMemberCommandUseCase;
-import com.group3.vitamins.project.presentation.api.request.MemberAddRequest;
-import com.group3.vitamins.project.presentation.api.request.MemberPermissionUpdateRequest;
-import com.group3.vitamins.project.presentation.api.response.MemberAddResponse;
-import com.group3.vitamins.project.presentation.api.response.MemberPermissionUpdateResponse;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(name = "ProjectMember - 프로젝트 참여자", description = "참여자 조회 / 추가 / 권한 변경 / 제거 (담당: 동훈)")
 @RestController
@@ -43,7 +42,7 @@ public class ProjectMemberController {
 
     @Operation(summary = "참여자 목록 조회",
             description = "프로젝트 참여자를 이름 오름차순(동명이인은 사번 오름차순)으로 조회한다. "
-                    + "permission 이 NONE 인 참여자도 포함된다 — 참여자 관리 화면에서 권한을 되돌려야 하기 때문이다. "
+                    + "permission 은 VIEWER · EDITOR 두 값뿐이다 — 차단은 참여자 제거로 표현한다. "
                     + "부서가 배정되지 않은 사원은 department 가 null 이다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
@@ -71,7 +70,7 @@ public class ProjectMemberController {
 
     @Operation(summary = "참여자 추가",
             description = "참여자를 한 명씩 추가한다. 팀·부서 일괄 추가는 지원하지 않는다(PRJ-009 · INV-07). "
-                    + "permission 은 VIEWER · EDITOR · NONE 만 허용된다.")
+                    + "permission 은 VIEWER · EDITOR 만 허용된다. NONE 을 보내면 400 이다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
                     description = "참여자 추가 성공"),
@@ -102,7 +101,7 @@ public class ProjectMemberController {
     }
 
     @Operation(summary = "참여자 권한 변경",
-            description = "참여자 권한을 VIEWER · EDITOR · NONE 으로 바꾼다. "
+            description = "참여자 권한을 VIEWER · EDITOR 로 바꾼다. NONE 을 보내면 400 이다. "
                     + "자기 자신의 권한 행은 EDITOR 여도 변경할 수 없다(PRJ-011 · INV-10).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
