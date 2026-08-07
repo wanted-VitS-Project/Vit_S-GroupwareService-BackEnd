@@ -55,7 +55,7 @@ class VitamateAnalysisQueryServiceTest {
             assertThat(result.blockId()).isEqualTo(10L);
             assertThat(result.reviewType()).isEqualTo("COST_REPORT");
             assertThat(result.reviewCategoryCodes()).containsExactly("COST_RESULT", "COST_OVERVIEW");
-            assertThat(result.additionalInstruction()).isEqualTo("금액 산식도 확인해줘.");
+            assertThat(result.prompt()).isEqualTo("금액 산식도 확인해줘.");
             assertThat(result.templateVersions())
                     .containsExactly(
                             new VitamateAnalysisDetailResult.TemplateVersion("COST_RESULT", "COST_REPORT_V1"),
@@ -158,7 +158,8 @@ class VitamateAnalysisQueryServiceTest {
                 LocalDateTime.of(2026, 8, 4, 14, 8),
                 List.of(new VitamateAnalysisReaderPort.Document(
                         101L,
-                        "proposal.pdf"
+                        "proposal.pdf",
+                        "TARGET"
                 )),
                 List.of(new VitamateAnalysisReaderPort.Citation(
                         1,

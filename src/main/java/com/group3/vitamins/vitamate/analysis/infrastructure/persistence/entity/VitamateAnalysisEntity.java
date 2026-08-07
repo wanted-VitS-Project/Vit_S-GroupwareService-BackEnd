@@ -54,13 +54,6 @@ public class VitamateAnalysisEntity {
     private String reviewCategoryCodes;
 
     @Lob
-    @Column(name = "additional_instruction", columnDefinition = "TEXT")
-    private String additionalInstruction;
-
-    @Column(name = "prompt_template_version", length = 50)
-    private String promptTemplateVersion;
-
-    @Lob
     @Column(name = "result", columnDefinition = "LONGTEXT")
     private String result;
 
@@ -108,8 +101,6 @@ public class VitamateAnalysisEntity {
             String prompt,
             String reviewType,
             String reviewCategoryCodes,
-            String additionalInstruction,
-            String promptTemplateVersion,
             LocalDateTime requestedAt
     ) {
         VitamateAnalysisEntity entity = new VitamateAnalysisEntity();
@@ -120,8 +111,6 @@ public class VitamateAnalysisEntity {
         entity.prompt = prompt;
         entity.reviewType = reviewType;
         entity.reviewCategoryCodes = reviewCategoryCodes;
-        entity.additionalInstruction = additionalInstruction;
-        entity.promptTemplateVersion = promptTemplateVersion;
         entity.analysisStatus = AnalysisStatus.PENDING;
         entity.createdAt = requestedAt;
         entity.updatedAt = requestedAt;

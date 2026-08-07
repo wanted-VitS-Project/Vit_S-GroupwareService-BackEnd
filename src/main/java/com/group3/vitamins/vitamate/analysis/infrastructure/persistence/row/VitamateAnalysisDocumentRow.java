@@ -10,4 +10,5 @@ public class VitamateAnalysisDocumentRow {
 
     private Long fileVersionId;
     private String fileName;
+    private String documentRole;
 }

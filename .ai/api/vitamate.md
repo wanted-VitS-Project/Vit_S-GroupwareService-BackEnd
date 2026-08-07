@@ -149,7 +149,7 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 
 비타메이트는 사용자가 자유 프롬프트를 처음부터 작성하는 구조가 아니라,
 서비스가 제공하는 검토 템플릿을 기준으로 문서를 검토한다.
-사용자는 검토 유형과 세부 카테고리를 선택하고, 필요한 보완 요청만 `additionalInstruction`에 입력한다.
+사용자는 검토 유형과 세부 카테고리를 선택하고, 화면에 표시된 기본 프롬프트를 확인·보완한 최종값을 `prompt`로 전송한다.
 
 **Request**
 
@@ -157,10 +157,11 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 |------|---------|------|------|------|
 | Header | `Idempotency-Key` | String | Y | 같은 사용자 동작의 재시도 중복 방지 키 |
 | Path | `blockId` | Long | Y | 비타메이트 AI 블록 ID |
-| Body | `fileVersionIds` | Long[] | Y | 분석할 파일 버전 ID 목록 |
+| Body | `referenceFileVersionIds` | Long[] | Y | 비교 기준으로 사용할 파일 버전 ID 목록 |
+| Body | `targetFileVersionIds` | Long[] | Y | 실제 검토할 대상 파일 버전 ID 목록 |
 | Body | `reviewType` | String | Y | 검토 템플릿 목록 조회 API의 `reviewType` 값 |
 | Body | `reviewCategoryCodes` | String[] | Y | 검토 템플릿 목록 조회 API에서 선택한 세부 카테고리 코드 목록 |
-| Body | `additionalInstruction` | String | N | 사용자가 템플릿에 덧붙이는 추가 요청. 템플릿과 보안 규칙을 덮어쓸 수 없음 |
+| Body | `prompt` | String | Y | 화면 기본 프롬프트를 사용자가 보완해 확정한 최종 검토 요청 |
 
 검토 유형과 카테고리 기준:
 
@@ -169,19 +170,20 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 | 정본 | `GET /api/v1/vitamate/review-templates` 응답의 활성 템플릿 목록 |
 | 검토 유형 | `reviewTypes[].reviewType` 중 하나만 허용 |
 | 세부 카테고리 | 선택한 `reviewType`의 `categories[].categoryCode`만 허용 |
-| 프롬프트 전문 | 요청자가 직접 보내지 않는다. Spring Boot가 선택값을 검증하고 내부 작업 조회 응답에 서버 템플릿을 포함한다 |
+| 최종 프롬프트 | 프론트가 서버 기본 템플릿을 표시하고, 사용자가 확인·보완한 최종값을 `prompt`로 전송한다 |
 
 **Request 예시**
 
 ```json
 {
-  "fileVersionIds": [101, 102],
+  "referenceFileVersionIds": [101],
+  "targetFileVersionIds": [201, 202],
   "reviewType": "COST_REPORT",
   "reviewCategoryCodes": [
     "COST_RESULT",
     "COST_OVERVIEW"
   ],
-  "additionalInstruction": "금액과 부가세 포함 여부를 특히 확인해줘."
+  "prompt": "기준 문서와 다른 금액 및 부가세 항목을 출처와 함께 정리해줘."
 }
 ```
 
@@ -198,24 +200,25 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 | 항목 | 규칙 |
 |------|------|
 | 스텝 권한 | `blockId → block → step` 기준으로 요청자의 스텝 접근 권한 검증 |
-| 파일 범위 | 모든 `fileVersionIds`는 `blockId`가 속한 프로젝트의 파일이어야 함 |
-| 빈 목록 | `fileVersionIds`가 비어 있으면 400 |
+| 파일 범위 | 모든 기준·대상 파일은 `blockId`가 속한 프로젝트의 파일이어야 함 |
+| 빈 목록 | `referenceFileVersionIds`, `targetFileVersionIds` 중 하나라도 비어 있으면 400 |
+| 역할 중복 | 같은 `fileVersionId`가 기준과 대상 양쪽에 있으면 400 |
 | 중복 ID | 같은 `fileVersionId`가 중복되면 400 |
 | 다른 프로젝트 파일 | 403 또는 404. 다른 프로젝트 파일의 존재 여부를 노출하지 않음 |
 | 검토 유형 | 지원하지 않는 `reviewType`이면 400 |
 | 검토 카테고리 | `reviewCategoryCodes`가 비어 있거나 활성 템플릿 목록에 없거나 `reviewType`에 속하지 않는 코드가 있으면 400 |
-| 추가 요청 | 선택값이다. 값이 있더라도 보안 규칙과 서비스 템플릿을 덮어쓸 수 없다 |
+| 최종 프롬프트 | 필수값이며 공백일 수 없다. 값이 있더라도 보안 규칙과 서비스 템플릿을 덮어쓸 수 없다 |
 
 템플릿 적용 규칙:
 
 | 항목 | 규칙 |
 |------|------|
 | 템플릿 소유 | 검토 템플릿은 Spring Boot DB가 정본이다 |
-| 사용자 입력 범위 | 사용자는 카테고리를 선택하고 추가 요청만 입력한다 |
-| 우선순위 | 보안 규칙 > 서비스 검토 템플릿 > 사용자 추가 요청 |
+| 사용자 입력 범위 | 사용자는 카테고리를 선택하고 화면 기본 프롬프트를 확인·보완한다 |
+| 우선순위 | 보안 규칙 > 서비스 검토 템플릿 > 사용자가 확정한 최종 프롬프트 |
 | 템플릿 전달 | Python worker는 분석 작업 조회 응답의 `reviewTemplates`만 사용한다 |
 | 템플릿 버전 | Spring Boot는 선택한 템플릿 버전을 분석 요청 스냅샷 또는 내부 작업 응답에 포함하고, Python worker는 적용 버전을 결과 생성 로그에 남긴다 |
-| 금지 | 사용자의 `additionalInstruction`이 보안 규칙이나 검토 기준을 무시하도록 지시해도 따르지 않는다 |
+| 금지 | 사용자의 `prompt`가 보안 규칙이나 검토 기준을 무시하도록 지시해도 따르지 않는다 |
 
 재시도 중복 방지:
 
@@ -255,7 +258,7 @@ analysisId
 ```
 
 권한이 없거나 분석이 요청자의 접근 범위 밖이면 `403` 또는 `404`를 반환하고,
-전체 분석 본문(`additionalInstruction`, `result`, `documents`, `citations`)은 반환하지 않는다.
+전체 분석 본문(`prompt`, `result`, `documents`, `citations`)은 반환하지 않는다.
 다른 프로젝트 분석의 존재 여부를 숨겨야 하는 경우에는 `404`를 우선 사용한다.
 
 **Response — `200`**
@@ -266,7 +269,7 @@ analysisId
 | `blockId` | Long | 비타메이트 블록 ID |
 | `reviewType` | String | 검토 유형 |
 | `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
-| `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
+| `prompt` | String | 사용자가 확정해 요청 당시 저장한 최종 프롬프트 |
 | `templateVersions` | Object[] | 분석 요청 당시 저장된 카테고리별 템플릿 버전 목록. 템플릿 도입 전 레거시 분석은 `[]` |
 | `analysisStatus` | String | `PENDING/PROCESSING/COMPLETED/FAILED` |
 | `result` | String | 분석 결과 |
@@ -289,7 +292,7 @@ analysisId
 |------|------|
 | 신규 분석 | 선택한 카테고리마다 `categoryCode`, `templateVersion`을 한 건씩 반환한다 |
 | 카테고리별 버전이 다른 분석 | 단일 버전으로 합치지 않고 카테고리별 실제 버전을 그대로 반환한다 |
-| 템플릿 도입 전 레거시 분석 | `reviewType = null`, `reviewCategoryCodes = []`, `additionalInstruction = null`, `templateVersions = []`로 반환한다 |
+| 템플릿 도입 전 레거시 분석 | `reviewType = null`, `reviewCategoryCodes = []`, `prompt = null`, `templateVersions = []`로 반환한다 |
 | 보안 | 사용자 조회 응답에는 내부 `promptTemplate` 본문을 반환하지 않는다 |
 
 레거시 분석도 권한 검증을 통과하면 기존 `result`, `documents`, `citations`를 그대로 조회할 수 있다.
@@ -319,6 +322,7 @@ analysisId
 |---------|------|------|
 | `fileVersionId` | Long | 파일 버전 ID |
 | `fileName` | String | 파일명 |
+| `documentRole` | String | 문서 역할. `REFERENCE` 또는 `TARGET` |
 
 **citations**
 
@@ -353,7 +357,7 @@ analysisId
 | `analysisId` | Long | 분석 ID |
 | `reviewType` | String | 검토 유형 |
 | `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
-| `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
+| `prompt` | String | 사용자가 확정한 최종 프롬프트 |
 | `analysisStatus` | String | 처리 상태 |
 | `createdAt` | LocalDateTime | 요청 시각 |
 | `completedAt` | LocalDateTime | 완료 시각 |
@@ -407,7 +411,7 @@ Client
 
 | 항목 | 규칙 |
 |------|------|
-| 최소 메시지 | 큐에는 큰 문서 본문, 템플릿 전문, 사용자 추가 요청 전문, 분석 결과 전문을 넣지 않는다 |
+| 최소 메시지 | 큐에는 큰 문서 본문, 템플릿 전문, 사용자 최종 프롬프트, 분석 결과 전문을 넣지 않는다 |
 | 입력 조회 | Python worker는 `analysisId`, `attemptId`로 Spring 내부 API를 호출해 분석 입력을 조회한다 |
 | 중복 소비 | 같은 메시지가 중복 소비되어도 `attemptId` 조건으로 늦은 결과 저장을 막는다 |
 | 재시도 | 일시 장애만 최대 3회 재시도한다 |
@@ -432,7 +436,7 @@ Client
 | 항목 | 규칙 |
 |------|------|
 | 문서 원문 | 로그에 남기지 않는다 |
-| 템플릿 전문/추가 요청 전문 | 로그에 남기지 않는다 |
+| 템플릿 전문/최종 프롬프트 | 로그에 남기지 않는다 |
 | 분석 결과 전문 | 로그에 남기지 않는다 |
 | S3 storage key 전체 | 로그에 남기지 않는다 |
 | 내부 토큰 | 로그에 남기지 않는다 |
@@ -477,7 +481,7 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 | `attemptId` | String | 현재 워커 실행 토큰. 늦은 응답 저장 방지용 UUID |
 | `reviewType` | String | 검토 유형 |
 | `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
-| `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
+| `prompt` | String | 사용자가 기본 템플릿을 확인·보완해 확정한 최종 프롬프트 |
 | `reviewTemplates` | Object[] | Spring Boot가 검증한 선택 템플릿 목록 |
 | `searchScope` | Object | 검색 범위 |
 | `documents` | Object[] | 선택 문서와 청크 후보 |
@@ -541,6 +545,7 @@ Python worker가 큐 메시지를 소비한 뒤 분석 입력을 조회하는 �
 |---------|------|------|
 | `fileVersionId` | Long | 파일 버전 ID |
 | `fileName` | String | 파일명 |
+| `documentRole` | String | 문서 역할. `REFERENCE` 또는 `TARGET` |
 | `chunks` | Object[] | 검색 후보 청크 |
 
 **chunks**
@@ -569,7 +574,7 @@ GET /internal/v1/vitamate/analyses/501/jobs/9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138
     "COST_RESULT",
     "COST_OVERVIEW"
   ],
-  "additionalInstruction": "금액과 부가세 포함 여부를 특히 확인해줘.",
+  "prompt": "기준 문서와 비교하여 금액과 부가세 포함 여부를 특히 확인해줘.",
   "reviewTemplates": [
     {
       "reviewType": "COST_REPORT",
@@ -595,6 +600,7 @@ GET /internal/v1/vitamate/analyses/501/jobs/9f6c3e6b-8974-4f8d-8c88-2e1d3e0d3138
     {
       "fileVersionId": 101,
       "fileName": "제안요청서.pdf",
+      "documentRole": "REFERENCE",
       "chunks": [
         {
           "documentChunkId": 9001,

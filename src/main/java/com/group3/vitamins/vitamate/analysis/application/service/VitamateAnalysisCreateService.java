@@ -16,6 +16,7 @@ import com.group3.vitamins.vitamate.analysis.application.support.VitamateRequest
 import com.group3.vitamins.vitamate.analysis.application.usecase.CreateVitamateAnalysisUseCase;
 import com.group3.vitamins.vitamate.analysis.application.usecase.DispatchVitamateAnalysisJobUseCase;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.vitamate.analysis.domain.model.AnalysisDocumentRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -53,7 +54,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
 
         String reviewType = normalizeRequired(command.reviewType());
         List<String> reviewCategoryCodes = normalizeReviewCategoryCodes(command.reviewCategoryCodes());
-        String additionalInstruction = normalizeOptional(command.additionalInstruction());
+        String prompt = normalizeRequired(command.prompt());
         List<ReviewTemplate> reviewTemplates = findSelectedTemplates(reviewType, reviewCategoryCodes);
 
         VitamateBlockReaderPort.VitamateBlockContext blockContext = blockReader.findAccessibleVitamateBlock(
@@ -61,14 +62,16 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
                 command.requestedBy()
         ).orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_BLOCK_NOT_FOUND));
 
-        validateFileVersions(blockContext.projectId(), command.fileVersionIds());
+        List<Long> allFileVersionIds = mergeFileVersionIds(command);
+        validateFileVersions(blockContext.projectId(), allFileVersionIds);
 
         String requestHash = requestHashGenerator.generate(
                 command.blockId(),
-                command.fileVersionIds(),
+                command.referenceFileVersionIds(),
+                command.targetFileVersionIds(),
                 reviewType,
                 reviewCategoryCodes,
-                additionalInstruction
+                prompt
         );
 
         Optional<ExistingAnalysis> existingAnalysis = analysisStore.findExistingAnalysis(
@@ -90,11 +93,9 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
                             command.requestedBy(),
                             command.idempotencyKey(),
                             requestHash,
-                            createPromptSummary(reviewType, reviewCategoryCodes, additionalInstruction),
+                            prompt,
                             reviewType,
                             joinCategoryCodes(reviewCategoryCodes),
-                            additionalInstruction,
-                            createPromptTemplateVersion(reviewTemplates),
                             LocalDateTime.now()
                     )
             );
@@ -107,7 +108,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
             );
         }
 
-        analysisStore.saveAnalysisDocuments(result.analysisId(), command.fileVersionIds());
+        analysisStore.saveAnalysisDocuments(result.analysisId(), toAnalysisDocuments(command));
         analysisStore.saveAnalysisTemplates(result.analysisId(), toNewAnalysisTemplates(reviewTemplates));
 
         dispatchAfterCommit(result.analysisId());
@@ -171,14 +172,17 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
                 || isBlank(command.requestedBy())
                 || isBlank(command.idempotencyKey())
                 || isBlank(command.reviewType())
-                || command.fileVersionIds() == null
-                || command.fileVersionIds().isEmpty()
+                || command.referenceFileVersionIds() == null
+                || command.referenceFileVersionIds().isEmpty()
+                || command.targetFileVersionIds() == null
+                || command.targetFileVersionIds().isEmpty()
+                || isBlank(command.prompt())
                 || command.reviewCategoryCodes() == null
                 || command.reviewCategoryCodes().isEmpty()) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
 
-        if (command.fileVersionIds().stream().anyMatch(fileVersionId -> fileVersionId == null)) {
+        if (mergeFileVersionIds(command).stream().anyMatch(fileVersionId -> fileVersionId == null)) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
 
@@ -186,10 +190,43 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
 
-        int distinctFileCount = new HashSet<>(command.fileVersionIds()).size();
-        if (distinctFileCount != command.fileVersionIds().size()) {
+        List<Long> allFileVersionIds = mergeFileVersionIds(command);
+        int distinctFileCount = new HashSet<>(allFileVersionIds).size();
+        if (distinctFileCount != allFileVersionIds.size()) {
             throw new ValidationException(VitamateErrorCode.VITAMATE_INVALID_REQUEST);
         }
+    }
+
+    // 기준 문서와 검토 대상 문서를 역할과 함께 저장할 값으로 변환합니다.
+    private List<VitamateAnalysisStorePort.NewAnalysisDocument> toAnalysisDocuments(
+            CreateVitamateAnalysisCommand command
+    ) {
+        List<VitamateAnalysisStorePort.NewAnalysisDocument> documents = new ArrayList<>();
+        command.referenceFileVersionIds().forEach(fileVersionId -> documents.add(
+                new VitamateAnalysisStorePort.NewAnalysisDocument(
+                        fileVersionId,
+                        AnalysisDocumentRole.REFERENCE.name()
+                )
+        ));
+        command.targetFileVersionIds().forEach(fileVersionId -> documents.add(
+                new VitamateAnalysisStorePort.NewAnalysisDocument(
+                        fileVersionId,
+                        AnalysisDocumentRole.TARGET.name()
+                )
+        ));
+        return documents;
+    }
+
+    // 두 역할의 파일 목록을 프로젝트 범위 검증용 단일 목록으로 합칩니다.
+    private List<Long> mergeFileVersionIds(CreateVitamateAnalysisCommand command) {
+        List<Long> fileVersionIds = new ArrayList<>();
+        if (command.referenceFileVersionIds() != null) {
+            fileVersionIds.addAll(command.referenceFileVersionIds());
+        }
+        if (command.targetFileVersionIds() != null) {
+            fileVersionIds.addAll(command.targetFileVersionIds());
+        }
+        return fileVersionIds;
     }
 
     // 카테고리 코드의 blank와 중복을 제거하지 않고 오류로 잡아낸 뒤 표준 문자열로 변환합니다.
@@ -223,19 +260,6 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         return templates;
     }
 
-    // 분석 요청에 사용한 템플릿 버전이 여러 개면 혼합 버전으로 저장합니다.
-    private String createPromptTemplateVersion(List<ReviewTemplate> reviewTemplates) {
-        Set<String> versions = reviewTemplates.stream()
-                .map(ReviewTemplate::templateVersion)
-                .collect(Collectors.toSet());
-
-        if (versions.size() == 1) {
-            return versions.iterator().next();
-        }
-
-        return "MULTI_VERSION";
-    }
-
     // 선택된 템플릿을 저장 포트의 스냅샷 입력값으로 변환합니다.
     private List<VitamateAnalysisStorePort.NewAnalysisTemplate> toNewAnalysisTemplates(List<ReviewTemplate> templates) {
         return templates.stream()
@@ -256,21 +280,6 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
     }
 
     // 기존 prompt 컬럼에는 프롬프트 전문이 아니라 요청 요약만 남깁니다.
-    private String createPromptSummary(
-            String reviewType,
-            List<String> reviewCategoryCodes,
-            String additionalInstruction
-    ) {
-        String summary = "reviewType=" + reviewType
-                + "; categories=" + joinCategoryCodes(reviewCategoryCodes);
-
-        if (additionalInstruction == null) {
-            return summary;
-        }
-
-        return summary + "; additionalInstruction=" + additionalInstruction;
-    }
-
     // 필수 문자열 요청값을 trim한 표준값으로 변환합니다.
     private String normalizeRequired(String value) {
         if (isBlank(value)) {
@@ -281,14 +290,6 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
     }
 
     // 사용자가 추가 요청을 비워 보낸 경우 null로 통일합니다.
-    private String normalizeOptional(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-
-        return value.trim();
-    }
-
     // 선택한 모든 파일 버전이 같은 프로젝트의 완료된 파일인지 확인합니다.
     private void validateFileVersions(Long projectId, List<Long> fileVersionIds) {
         if (!fileReader.existsAllCompletedFileVersionsInProject(projectId, fileVersionIds)) {

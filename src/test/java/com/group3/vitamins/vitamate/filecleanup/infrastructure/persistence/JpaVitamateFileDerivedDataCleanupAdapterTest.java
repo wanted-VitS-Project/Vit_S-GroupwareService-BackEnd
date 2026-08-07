@@ -198,9 +198,9 @@ class JpaVitamateFileDerivedDataCleanupAdapterTest {
         jdbcTemplate.update("""
                 INSERT INTO vitamate_analysis_document (
                     vitamate_analysis_document_id, vitamate_analysis_id,
-                    file_version_id, created_at, deleted_at
+                    file_version_id, document_role, created_at, deleted_at
                 )
-                VALUES (?, ?, ?, ?, null)
+                VALUES (?, ?, ?, 'TARGET', ?, null)
                 """,
                 analysisDocumentId,
                 analysisId,
