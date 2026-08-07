@@ -17,6 +17,7 @@
 | 상태 | 기능 | METHOD | URL | 권한 |
 |------|------|--------|-----|------|
 | ✅ 확정 | 이미지 항목 조회(다음/이전) | GET | `/api/v1/blocks/images/{imgBlockId}/items/{currentOrderIndex}?direction={prev\|next}` | 접근 권한 보유자 |
+| ✅ 확정 | 이미지 항목 전체 조회 | GET | `/api/v1/blocks/images/{imgBlockId}/items` | 편집 권한 보유자 |
 | ✅ 확정 | 이미지 다운로드 | GET | `/api/v1/blocks/images/{imgBlockId}/download?imgId={imgId}` | 접근 권한 보유자 |
 | ✅ 확정 | 이미지 휴지통 조회 | GET | `/api/v1/projects/{projectId}/images/trash` | 프로젝트 접근 권한 보유자 |
 | ✅ 확정 | 이미지 항목 생성 | POST | `/api/v1/blocks/images/{imgBlockId}/items` | 편집 권한 보유자 |
@@ -107,6 +108,80 @@
 > ⚠️ **`currentOrderIndex` 자체가 그 블록의 실제 활성 이미지를 가리키는지 먼저 검증한다.** 이 검증이 없으면 "다음이 없다"(순환 대상)와 "애초에 존재하지 않는 orderIndex를 보냈다"를 구분할 방법이 없어서, 예를 들어 이미지가 3장(orderIndex 1~3)뿐인데 `currentOrderIndex=999`로 조회해도 조용히 1번 이미지가 나가버리는 버그가 있었다(2026-08-06 발견·수정). 존재하지 않는 `currentOrderIndex`는 `404 IMG-006`으로 거부한다.
 >
 > **프론트 캐싱 관련**: 위 "이미지 목록/다음 이미지 조회 API를 나중에 추가할 때 주의" 콜아웃 참고 — 이 API도 캐싱하지 말고 다음/이전 클릭마다 매번 호출해야 한다.
+
+---
+
+### 이미지 항목 전체 조회 `GET /api/v1/blocks/images/{imgBlockId}/items`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `imgBlockId` | Long | Y | 조회할 이미지 블록 ID |
+
+**Request Body**: 없음
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.totalCount` | Int | 해당 블록의 전체(활성) 이미지 개수 |
+| `data.images` | List<Object> | 이미지 목록 (`orderIndex` 오름차순) |
+| `data.images[].imgId` | Long | 이미지 ID |
+| `data.images[].originalName` | String | 원본 파일명 |
+| `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
+| `data.images[].caption` | String | 이미지 캡션 |
+| `data.images[].orderIndex` | Int | 이미지 정렬 번호 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "이미지 항목 전체 조회 성공",
+  "data": {
+    "totalCount": 2,
+    "images": [
+      { "imgId": 10, "originalName": "image1.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "orderIndex": 1 },
+      { "imgId": 11, "originalName": "image2.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "orderIndex": 2 }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "이미지 항목 전체 조회 성공" |
+| 403 | Forbidden | `IMG-002` | "편집 권한이 없습니다." |
+| 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
+| 404 | Not Found | `IMG-003` | "존재하지 않는 블록입니다." |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
+
+> 📌 **왜 추가했나 (2026-08-07)** — 수정 API(PATCH)가 "이미지 전체 목록을 다시 받는" 구조인데, 프론트가
+> 그 전체 목록을 알 방법이 없었다(순차 조회는 한 장씩만 준다). 수정 화면을 그리려면 목록 통째가 필요해서 신설.
+>
+> ⚠️ **이 조회만 편집 권한이다 (`IMG-002`)** — 순차 조회·다운로드는 접근(VIEW) 권한(`IMG-007`)인데,
+> 이 API는 수정을 위한 조회라 편집 권한으로 맞췄다(2026-08-07 담당자 결정).
+>
+> **새 에러 코드 없음** — 403 `IMG-002`·404 `IMG-003` 둘 다 생성·수정 API에서 이미 쓰던 코드 재사용.
+>
+> **이미지가 0장이면 404가 아니라 빈 배열 + `totalCount: 0`** — 목록 조회라 휴지통 조회·모아보기와 동일한
+> 원칙을 적용했다(§휴지통 조회의 `IMG-006` 제거 사유와 같음). 404는 블록 자체가 없을 때만 난다.
+>
+> ⚠️ **`imageUrl`은 매 요청 새로 서명한다** — presigned URL 1시간 만료(§S3 저장 정책). 프론트는 이 목록을
+> 오래 캐싱하면 안 되고, 수정 화면을 다시 열 때마다 새로 조회해야 한다.
+>
+> **구현 메모** — 기존 `ImageRepository.findAllActiveByImgBlockId`를 그대로 재사용했고, 정렬 계약을 위해
+> 그 JPQL에 `ORDER BY orderIndex ASC`를 추가했다(다른 사용처인 수정 API 대조용 Map·zip 다운로드는 순서에
+> 의존하지 않아 영향 없음 — zip 안 파일 순서가 정렬 순서로 고정되는 부수 효과만 있다).
 
 ---
 
