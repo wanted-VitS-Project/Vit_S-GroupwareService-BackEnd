@@ -8,6 +8,8 @@ public record CreateVitamateAnalysisCommand(
         String requestedBy,
         String idempotencyKey,
         List<Long> fileVersionIds,
-        String prompt
+        String reviewType,
+        List<String> reviewCategoryCodes,
+        String additionalInstruction
 ) {
 }

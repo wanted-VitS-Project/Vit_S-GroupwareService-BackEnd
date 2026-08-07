@@ -31,8 +31,14 @@ public record VitamateAnalysisHistoryResponse(
             @Schema(description = "분석 ID", example = "501")
             Long analysisId,
 
-            @Schema(description = "분석 프롬프트", example = "핵심 기술 요구사항과 위험 요소를 정리해줘.")
-            String prompt,
+            @Schema(description = "검토 유형", example = "COST_REPORT")
+            String reviewType,
+
+            @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COMMON\", \"COST_RESULT\"]")
+            List<String> reviewCategoryCodes,
+
+            @Schema(description = "사용자 추가 요청. 없으면 null", example = "금액과 부가세 포함 여부를 특히 확인해줘.")
+            String additionalInstruction,
 
             @Schema(description = "분석 상태", example = "COMPLETED")
             String analysisStatus,
@@ -48,7 +54,9 @@ public record VitamateAnalysisHistoryResponse(
         private static Item from(VitamateAnalysisHistoryResult.Item item) {
             return new Item(
                     item.analysisId(),
-                    item.prompt(),
+                    item.reviewType(),
+                    item.reviewCategoryCodes(),
+                    item.additionalInstruction(),
                     item.analysisStatus(),
                     item.createdAt(),
                     item.completedAt()

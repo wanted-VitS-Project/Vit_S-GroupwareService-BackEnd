@@ -91,4 +91,34 @@
          ORDER BY ib.issue_id DESC, ib.issue_block_id ASC
     </select>
 
+    <select id="findMyCalendarIssues"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueCalendarRow">
+        SELECT i.issue_id AS issueId,
+               i.title AS title,
+               CASE i.status
+                    WHEN 'TO_DO' THEN 'TODO'
+                    ELSE i.status
+               END AS status,
+               i.priority AS priority,
+               i.due_date AS dueDate,
+               s.step_id AS stepId,
+               s.name AS stepName,
+               p.project_id AS projectId,
+               p.name AS projectName
+          FROM issue i
+          JOIN issue_assign ia
+            ON ia.issue_id = i.issue_id
+           AND ia.user_id = #{userId}
+          JOIN step s
+            ON s.step_id = i.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.deleted_at IS NULL
+         WHERE i.deleted_at IS NULL
+           AND i.status != 'DONE'
+           AND i.due_date IS NOT NULL
+         ORDER BY i.due_date ASC, i.issue_id DESC
+    </select>
+
 </mapper>

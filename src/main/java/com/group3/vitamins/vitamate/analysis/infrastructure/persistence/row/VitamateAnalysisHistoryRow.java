@@ -11,7 +11,9 @@ import java.time.LocalDateTime;
 public class VitamateAnalysisHistoryRow {
 
     private Long analysisId;
-    private String prompt;
+    private String reviewType;
+    private String reviewCategoryCodes;
+    private String additionalInstruction;
     private String analysisStatus;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
