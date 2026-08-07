@@ -71,7 +71,6 @@
             va.review_type AS reviewType,
             va.review_category_codes AS reviewCategoryCodes,
             va.additional_instruction AS additionalInstruction,
-            va.prompt_template_version AS promptTemplateVersion,
             va.analysis_status AS analysisStatus,
             va.result AS result,
             va.error_message AS errorMessage,

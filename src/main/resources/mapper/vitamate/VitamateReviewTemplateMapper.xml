@@ -28,6 +28,9 @@
             vrt.template_version AS templateVersion,
             vrt.sort_order AS sortOrder
         FROM vitamate_review_template vrt
+        JOIN vitamate_review_type vrty
+          ON vrty.review_type = vrt.review_type
+         AND vrty.enabled = TRUE
         WHERE vrt.enabled = TRUE
         ORDER BY vrt.review_type ASC, vrt.sort_order ASC, vrt.category_code ASC
     </select>
@@ -44,6 +47,9 @@
             vrt.template_version AS templateVersion,
             vrt.sort_order AS sortOrder
         FROM vitamate_review_template vrt
+        JOIN vitamate_review_type vrty
+          ON vrty.review_type = vrt.review_type
+         AND vrty.enabled = TRUE
         WHERE vrt.enabled = TRUE
           AND vrt.review_type = #{reviewType}
           AND vrt.category_code IN

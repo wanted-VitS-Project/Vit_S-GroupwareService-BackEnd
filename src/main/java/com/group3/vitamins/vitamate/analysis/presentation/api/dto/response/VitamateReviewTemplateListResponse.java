@@ -25,7 +25,7 @@ public record VitamateReviewTemplateListResponse(
             @Schema(description = "검토 유형 코드", example = "COST_REPORT")
             String reviewType,
 
-            @Schema(description = "검토 유형 이름", example = "원가계산 검토")
+            @Schema(description = "검토 유형 이름", example = "원가계산보고서 검토")
             String reviewTypeName,
 
             @Schema(description = "검토 유형 설명", example = "원가계산 결과와 산출내역을 기준으로 문서를 검토합니다.")
@@ -52,7 +52,7 @@ public record VitamateReviewTemplateListResponse(
             @Schema(description = "검토 카테고리 코드", example = "COST_RESULT")
             String categoryCode,
 
-            @Schema(description = "검토 카테고리 이름", example = "I. 원가계산 결과")
+            @Schema(description = "검토 카테고리 이름", example = "원가계산 결과")
             String categoryName,
 
             @Schema(description = "사용자 작성 가이드", example = "원가 총액과 항목별 합계가 일관되는지 검토합니다.")

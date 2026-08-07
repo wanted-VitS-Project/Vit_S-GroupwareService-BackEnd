@@ -50,6 +50,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
         return Optional.ofNullable(mapper.findAccessibleAnalysis(analysisId, userId))
                 .map(analysis -> toAnalysisDetail(
                         analysis,
+                        templateMapper.findAnalysisTemplateSnapshots(analysisId),
                         mapper.findAnalysisDocuments(analysisId),
                         mapper.findAnalysisCitations(analysisId)
                 ));
@@ -101,6 +102,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
     // 분석 본문 Row와 하위 Row들을 application 포트 결과로 조립한다.
     private VitamateAnalysisDetail toAnalysisDetail(
             VitamateAnalysisRow analysis,
+            List<VitamateReviewTemplateRow> templates,
             List<VitamateAnalysisDocumentRow> documents,
             List<VitamateAnalysisCitationRow> citations
     ) {
@@ -110,7 +112,12 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 analysis.getReviewType(),
                 toCategoryCodes(analysis.getReviewCategoryCodes()),
                 analysis.getAdditionalInstruction(),
-                analysis.getPromptTemplateVersion(),
+                templates.stream()
+                        .map(template -> new TemplateVersion(
+                                template.getCategoryCode(),
+                                template.getTemplateVersion()
+                        ))
+                        .toList(),
                 analysis.getAnalysisStatus(),
                 analysis.getResult(),
                 analysis.getErrorMessage(),

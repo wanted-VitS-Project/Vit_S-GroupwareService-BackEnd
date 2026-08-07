@@ -12,7 +12,7 @@ public record VitamateAnalysisDetailResult(
         String reviewType,
         List<String> reviewCategoryCodes,
         String additionalInstruction,
-        String promptTemplateVersion,
+        List<TemplateVersion> templateVersions,
         String analysisStatus,
         String result,
         String errorMessage,
@@ -30,7 +30,9 @@ public record VitamateAnalysisDetailResult(
                 detail.reviewType(),
                 detail.reviewCategoryCodes(),
                 detail.additionalInstruction(),
-                detail.promptTemplateVersion(),
+                detail.templateVersions().stream()
+                        .map(TemplateVersion::from)
+                        .toList(),
                 detail.analysisStatus(),
                 detail.result(),
                 detail.errorMessage(),
@@ -54,6 +56,19 @@ public record VitamateAnalysisDetailResult(
             return new Document(
                     document.fileVersionId(),
                     document.fileName()
+            );
+        }
+    }
+
+    public record TemplateVersion(
+            String categoryCode,
+            String templateVersion
+    ) {
+        // 요청 당시 카테고리별 템플릿 버전을 조회 결과로 변환합니다.
+        private static TemplateVersion from(VitamateAnalysisReaderPort.TemplateVersion templateVersion) {
+            return new TemplateVersion(
+                    templateVersion.categoryCode(),
+                    templateVersion.templateVersion()
             );
         }
     }

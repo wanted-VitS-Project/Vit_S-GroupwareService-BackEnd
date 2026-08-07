@@ -19,14 +19,14 @@ public record VitamateAnalysisResponse(
         @Schema(description = "검토 유형", example = "COST_REPORT")
         String reviewType,
 
-        @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COMMON\", \"COST_RESULT\"]")
+        @Schema(description = "선택한 검토 카테고리 코드 목록", example = "[\"COST_RESULT\", \"COST_OVERVIEW\"]")
         List<String> reviewCategoryCodes,
 
         @Schema(description = "사용자 추가 요청. 없으면 null", example = "금액과 부가세 포함 여부를 특히 확인해줘.")
         String additionalInstruction,
 
-        @Schema(description = "Python worker가 적용한 검토 템플릿 버전", example = "COST_REPORT_V1")
-        String promptTemplateVersion,
+        @Schema(description = "분석 요청 당시 카테고리별 검토 템플릿 버전 목록")
+        List<TemplateVersion> templateVersions,
 
         @Schema(description = "분석 상태", example = "COMPLETED")
         String analysisStatus,
@@ -58,7 +58,9 @@ public record VitamateAnalysisResponse(
                 result.reviewType(),
                 result.reviewCategoryCodes(),
                 result.additionalInstruction(),
-                result.promptTemplateVersion(),
+                result.templateVersions().stream()
+                        .map(TemplateVersion::from)
+                        .toList(),
                 result.analysisStatus(),
                 result.result(),
                 result.errorMessage(),
@@ -71,6 +73,22 @@ public record VitamateAnalysisResponse(
                         .map(Citation::from)
                         .toList()
         );
+    }
+
+    public record TemplateVersion(
+            @Schema(description = "검토 카테고리 코드", example = "COST_RESULT")
+            String categoryCode,
+
+            @Schema(description = "분석 요청 당시 적용한 템플릿 버전", example = "COST_REPORT_V1")
+            String templateVersion
+    ) {
+        // application의 카테고리별 템플릿 버전을 HTTP 응답 값으로 변환합니다.
+        private static TemplateVersion from(VitamateAnalysisDetailResult.TemplateVersion templateVersion) {
+            return new TemplateVersion(
+                    templateVersion.categoryCode(),
+                    templateVersion.templateVersion()
+            );
+        }
     }
 
     public record Document(

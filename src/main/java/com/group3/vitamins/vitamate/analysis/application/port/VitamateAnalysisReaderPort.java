@@ -22,7 +22,7 @@ public interface VitamateAnalysisReaderPort {
             String reviewType,
             List<String> reviewCategoryCodes,
             String additionalInstruction,
-            String promptTemplateVersion,
+            List<TemplateVersion> templateVersions,
             String analysisStatus,
             String result,
             String errorMessage,
@@ -30,6 +30,12 @@ public interface VitamateAnalysisReaderPort {
             LocalDateTime completedAt,
             List<Document> documents,
             List<Citation> citations
+    ) {
+    }
+
+    record TemplateVersion(
+            String categoryCode,
+            String templateVersion
     ) {
     }
 

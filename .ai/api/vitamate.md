@@ -267,7 +267,7 @@ analysisId
 | `reviewType` | String | 검토 유형 |
 | `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
 | `additionalInstruction` | String | 사용자가 입력한 추가 요청 |
-| `promptTemplateVersion` | String | Python worker가 적용한 검토 템플릿 버전. 처리 전에는 `null` 가능 |
+| `templateVersions` | Object[] | 분석 요청 당시 저장된 카테고리별 템플릿 버전 목록. 템플릿 도입 전 레거시 분석은 `[]` |
 | `analysisStatus` | String | `PENDING/PROCESSING/COMPLETED/FAILED` |
 | `result` | String | 분석 결과 |
 | `errorMessage` | String | 실패 메시지 |
@@ -275,6 +275,24 @@ analysisId
 | `completedAt` | LocalDateTime | 처리 종료 시각. 실패 시에도 값 존재 |
 | `documents` | Object[] | 분석 대상 문서 목록 |
 | `citations` | Object[] | 분석 근거 목록 |
+
+**templateVersions**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `categoryCode` | String | 요청 당시 선택한 검토 카테고리 코드 |
+| `templateVersion` | String | 해당 카테고리에 적용된 템플릿 버전 |
+
+템플릿 버전 반환 규칙:
+
+| 상황 | 규칙 |
+|------|------|
+| 신규 분석 | 선택한 카테고리마다 `categoryCode`, `templateVersion`을 한 건씩 반환한다 |
+| 카테고리별 버전이 다른 분석 | 단일 버전으로 합치지 않고 카테고리별 실제 버전을 그대로 반환한다 |
+| 템플릿 도입 전 레거시 분석 | `reviewType = null`, `reviewCategoryCodes = []`, `additionalInstruction = null`, `templateVersions = []`로 반환한다 |
+| 보안 | 사용자 조회 응답에는 내부 `promptTemplate` 본문을 반환하지 않는다 |
+
+레거시 분석도 권한 검증을 통과하면 기존 `result`, `documents`, `citations`를 그대로 조회할 수 있다.
 
 상태별 null 규칙:
 
