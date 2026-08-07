@@ -1,7 +1,7 @@
 # 🔔 Notification API — 알림
 
 **상태**: `✅ 확정` — 노션 원본 4개 전부 대조 완료(2026-08-05). 이탈 금지 규칙 전면 적용(`../API.md` §0)
-**최종 업데이트**: 2026-08-06 (개별 삭제 API 폐지, 3개월 자동 정리 배치로 대체 — `RET-001`) · 2026-08-05 · **담당**: 이강욱
+**최종 업데이트**: 2026-08-07 (이동 대상 판정 방식 변경 — block 경유 → 발행 도메인이 직접 지정. 응답 형태 동일, 404 사유만 축소) · 2026-08-06 (개별 삭제 API 폐지 → `RET-001`) · **담당**: 이강욱
 **노션**: 확인 필요 — **삭제 API(구 #2) 제거를 노션에도 반영하고 프론트에 공유할 것.** 나머지는 노션 링크 채워넣기, 검토 중 발견한 수정사항(아래 각 절 참고) 반영 여부 재확인
 **범위**: 알림 REST API 3개(목록조회·이동대상조회·전체읽음처리). 생성 이벤트 인프라(`#27`)와 자동 정리 배치(`RET-001`)는 REST 엔드포인트가 없어 여기 없음(맨 아래 "참고" 절 참고)
 
@@ -21,7 +21,8 @@
 ⭐ **알림 생성 공개 API는 없다**(`INV-01`) — `#27`(이벤트 인프라)이 내부적으로만 생성한다.
 ⭐ **알림 삭제 공개 API도 없다**(2026-08-06 변경) — 3개월 자동 정리 배치(`RET-001`)만 있다.
 ⭐ **`userId`는 `String`이다**(`employee.user_id`, 사번). `notificationId`는 `long`.
-⭐ **도메인 무관 구조**(`INV-02`/`INV-04`) — 응답에 `approvalId` 같은 도메인 전용 필드를 두지 않는다. `blockId` 하나와 `type`/`targetId`/`extra`로만 표현한다.
+⭐ **도메인 무관 구조**(`INV-02`/`INV-04`) — 응답에 `approvalId` 같은 도메인 전용 필드를 두지 않는다. `type`/`targetId`/`extra`로만 표현한다.
+⭐ **`blockId` 필드는 제거됐다**(2026-08-07) — 이동 대상 판정이 `target_type`/`target_id`로 바뀌면서 쓰이는 곳이 없어졌다. DB 컬럼·FK도 함께 삭제.
 
 ---
 
@@ -47,7 +48,6 @@
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `data.content[].notificationId` | long | 알림 구분 번호 |
-| `data.content[].blockId` | long, nullable | 연결된 블록 |
 | `data.content[].notificationType` | String | 알림 유형(예: `APPROVAL_REQUESTED`/`APPROVAL_REJECTED`/`APPROVAL_COMPLETED`) |
 | `data.content[].title` | String | 알림 제목 |
 | `data.content[].message` | String | 알림 내용 |
@@ -66,7 +66,6 @@
     "content": [
       {
         "notificationId": 301,
-        "blockId": 101,
         "notificationType": "APPROVAL_REQUESTED",
         "title": "결재 요청",
         "message": "출장비 정산 결재 요청이 도착했습니다.",
@@ -95,7 +94,7 @@
 |------|------|
 | Method · URL | `GET /api/v1/notifications/{notificationId}/target` |
 | 인증 필요 | Y · 본인 알림만 |
-| 요구사항 | VIW-006~008 · ACT-004 |
+| 요구사항 | VIW-006~010 · ACT-004 |
 
 **Request**
 
@@ -130,9 +129,11 @@
 | 200 | OK | – | 조회 성공(매핑 없어도 `type=NONE`으로 200) |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 로그인이 필요합니다 |
 | 403 | Forbidden | `NOTIFICATION_FORBIDDEN` | 다른 사용자의 알림 조회 시도 |
-| 404 | Not Found | `NOTIFICATION_NOT_FOUND` | 알림을 찾을 수 없음(연결된 block 삭제 포함) |
+| 404 | Not Found | `NOTIFICATION_NOT_FOUND` | 알림 자체가 없거나 이미 삭제됨 |
 
-**비즈니스 규칙**: 수신자 본인만 조회 가능 · **도메인 독립성** — 이 API는 알림 도메인 소유이며 특정 도메인에 종속되지 않는다. `type`은 개방형 값이고 결재는 그중 하나일 뿐이다(새 도메인 추가 시 이 API 자체는 수정 불필요, `INV-02`) · `notification.block_id` → `block.type`을 거쳐 판정(VIW-007), `block_id`가 없거나 아직 이동 로직이 없는 타입이면 `type=NONE`(에러 아님) · 조회 성공 시 **자동으로 읽음 처리**됨(`read_at` 기록, ACT-004) · 원본 업무 페이지로 바로 가지 않고 결재관리 상세로만 이동(VIW-008, 프론트 라우팅 규칙).
+**비즈니스 규칙**: 수신자 본인만 조회 가능 · **도메인 독립성** — 이 API는 알림 도메인 소유이며 특정 도메인에 종속되지 않는다. `type`은 개방형 값이고 결재는 그중 하나일 뿐이다(새 도메인 추가 시 이 API 자체는 수정 불필요, `INV-02`) · 알림에 저장된 `target_type`/`target_id`/`target_context`를 **그대로** 반환하며, 값이 없으면 `type=NONE`(에러 아님, VIW-007) · **대상의 존재 여부·조회 권한은 검증하지 않는다** — 실제 도메인 페이지 API가 자기 정책으로 검증한다(VIW-009). 따라서 대상이 삭제됐어도 이 API는 200으로 이동 정보를 반환한다 · `extra`는 알림 **생성 시점 스냅샷**이라 클릭 시점에 재조회하지 않는다(VIW-010) · 조회 성공 시 **자동으로 읽음 처리**됨(`read_at` 기록, ACT-004) · 원본 업무 페이지로 바로 가지 않고 결재관리 상세로만 이동(VIW-008, 프론트 라우팅 규칙).
+
+> ⚠️ **2026-08-07 변경** — 이전에는 `notification.block_id` → `block.type`을 거쳐 이동 대상을 판정했다. 이 방식은 "블록 자체가 그 도메인인" 결재에만 통해서 이슈·프로젝트 알림은 영구히 `type=NONE`이 되는 구조적 결함이 있었다. 이제 발행 도메인이 이동 대상을 직접 지정한다. **이 응답의 형태는 그대로**이고 404 사유만 좁아졌다(연결 block 삭제는 더 이상 404 사유가 아님). 단 **목록 조회 응답에서는 `blockId` 필드가 제거**됐다 — 이동 정보는 이 API가 전담한다.
 
 ---
 
@@ -172,7 +173,7 @@
 | 항목 | 내용 |
 |---|---|
 | 요구사항 | GEN-001~004 |
-| 이벤트 클래스 | `NotificationRequestedEvent(recipientUserId, notificationType, title, message, blockId)` |
+| 이벤트 클래스 | `NotificationRequestedEvent(recipientUserId, notificationType, title, message, targetType, targetId, targetContext)` |
 | 패키지 | `notification.domain.event`(자기 도메인 소유, `global` 아님) |
 | 처리 방식 | `@TransactionalEventListener(phase = AFTER_COMMIT)` — 발행 트랜잭션 커밋 후에만 `notification` row 생성 |
 | 결재 쪽 발행 지점 | 상신(`SUB-003`) · 재상신(`SUB-010`, 상신 재사용) · 승인(`PRC-004`/`PRC-004-1`) · 반려(`PRC-008`) |

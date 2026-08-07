@@ -11,11 +11,13 @@ public class NotificationMapper {
     public static Notification toDomain(NotificationJpaEntity entity) {
         return Notification.restore(
                 entity.getNotificationId(),
-                entity.getBlockId(),
                 entity.getUserId(),
                 entity.getNotificationType(),
                 entity.getTitle(),
                 entity.getMessage(),
+                entity.getTargetType(),
+                entity.getTargetId(),
+                entity.getTargetContext(),
                 entity.getReadAt(),
                 entity.getDeletedAt(),
                 entity.getCreatedAt()
@@ -26,11 +28,13 @@ public class NotificationMapper {
     public static NotificationJpaEntity toEntity(Notification domain) {
         return new NotificationJpaEntity(
                 domain.getNotificationId(),
-                domain.getBlockId(),
                 domain.getUserId(),
                 domain.getNotificationType(),
                 domain.getTitle(),
                 domain.getMessage(),
+                domain.getTargetType(),
+                domain.getTargetId(),
+                domain.getTargetContext(),
                 domain.getReadAt(),
                 domain.getDeletedAt(),
                 domain.getCreatedAt()

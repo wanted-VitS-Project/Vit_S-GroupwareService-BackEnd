@@ -46,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -62,6 +63,9 @@ import java.util.stream.Collectors;
 @Transactional
 @Slf4j
 public class ApprovalCommandService implements ApprovalCommandUseCase {
+
+    /** 알림 이동 대상 유형(NOTI-V1 GEN-005). 알림 도메인이 아니라 <b>결재가 자기 이름을 정한다</b> */
+    private static final String NOTIFICATION_TARGET_TYPE = "APPROVAL";
 
     private final ApprovalRevisionEligibilityPolicy revisionEligibilityPolicy;
     private final ApprovalLineEligibilityPolicy lineEligibilityPolicy;
@@ -314,12 +318,9 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         Long firstActiveLineId = activatedLines.get(0).getLineId();
 
         // SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행
-        domainEventPublisher.publish(NotificationRequestedEvent.of(
-                activatedLines.get(0).getApproverId(),
-                "APPROVAL_REQUESTED",
-                "결재 요청",
+        publishApprovalNotification(activatedLines.get(0).getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
                 submittedRevision.getTitle() + " 결재 요청이 도착했습니다.",
-                approval.getBlockId()));
+                approval, submittedRevision.getRevisionId());
 
         log.info("결재 상신 완료 - approvalId={}, revisionId={}, firstActiveLineId={}",
                 command.approvalId(), command.revisionId(), firstActiveLineId);
@@ -358,16 +359,14 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
             // PRC-002 — 다음 결재선 활성화 + 그 결재자에게 요청 알림(SUB-003과 동일 패턴)
             ApprovalLine activated = approvalRepository.activateLine(nextLine.get().getLineId());
             nextActiveLineId = activated.getLineId();
-            domainEventPublisher.publish(NotificationRequestedEvent.of(
-                    activated.getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
-                    revision.getTitle() + " 결재 요청이 도착했습니다.", approval.getBlockId()));
+            publishApprovalNotification(activated.getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
+                    revision.getTitle() + " 결재 요청이 도착했습니다.", approval, revision.getRevisionId());
         } else {
             // PRC-002 — 마지막 순번 승인 → 회차·결재 모두 COMPLETED 종료 + 기안자에게 완료 알림
             approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.COMPLETED);
             approvalCompleted = true;
-            domainEventPublisher.publish(NotificationRequestedEvent.of(
-                    approval.getDrafterId(), "APPROVAL_COMPLETED", "결재 완료",
-                    revision.getTitle() + " 결재가 완료되었습니다.", approval.getBlockId()));
+            publishApprovalNotification(approval.getDrafterId(), "APPROVAL_COMPLETED", "결재 완료",
+                    revision.getTitle() + " 결재가 완료되었습니다.", approval, revision.getRevisionId());
         }
 
         log.info("결재 승인 완료 - lineId={}, nextActiveLineId={}, approvalCompleted={}",
@@ -402,9 +401,8 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.REJECTED);
 
         // PRC-008 — 기안자에게만 반려 알림
-        domainEventPublisher.publish(NotificationRequestedEvent.of(
-                approval.getDrafterId(), "APPROVAL_REJECTED", "결재 반려",
-                revision.getTitle() + " 결재가 반려되었습니다.", approval.getBlockId()));
+        publishApprovalNotification(approval.getDrafterId(), "APPROVAL_REJECTED", "결재 반려",
+                revision.getTitle() + " 결재가 반려되었습니다.", approval, revision.getRevisionId());
 
         log.info("결재 반려 완료 - lineId={}", command.lineId());
 
@@ -428,6 +426,20 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
     private String resourceName(String value) {
         return isBlank(value) ? null : value;
+    }
+
+    /**
+     * 결재 알림 발행 공통부(SUB-003 · PRC-002 · PRC-008).
+     *
+     * <p>이동 대상을 결재가 직접 지정한다(NOTI-V1 GEN-005). {@code revisionId} 는 <b>알림 생성 시점 값을
+     * 스냅샷</b>으로 넘긴다(VIW-010) — 상신·승인·반려마다 각각 별도 알림이 생기므로, 각 알림은 그 사건
+     * 당시의 회차를 가리켜야 메시지와 목적지가 일치한다. 클릭 시점에 최신 회차를 다시 찾지 않는다.
+     */
+    private void publishApprovalNotification(String recipientUserId, String notificationType, String title,
+                                             String message, Approval approval, Long revisionId) {
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                recipientUserId, notificationType, title, message,
+                NOTIFICATION_TARGET_TYPE, approval.getApprovalId(), Map.of("revisionId", revisionId)));
     }
 
     private List<ApprovalLineView> zipLinesWithEmployees(List<ApprovalLine> lines, List<EmployeeSummary> employees) {
