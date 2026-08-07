@@ -324,7 +324,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         // SUB-003 — 첫 ACTIVE 결재자(firstActiveLineId 의 approverId)에게 알림 이벤트 발행
         publishApprovalNotification(activatedLines.get(0).getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
                 submittedRevision.getTitle() + " 결재 요청이 도착했습니다.",
-                approval, submittedRevision.getRevisionId());
+                approval.getApprovalId(), submittedRevision.getRevisionId());
 
         log.info("결재 상신 완료 - approvalId={}, revisionId={}, firstActiveLineId={}",
                 command.approvalId(), command.revisionId(), firstActiveLineId);
@@ -364,13 +364,13 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
             ApprovalLine activated = approvalRepository.activateLine(nextLine.get().getLineId());
             nextActiveLineId = activated.getLineId();
             publishApprovalNotification(activated.getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
-                    revision.getTitle() + " 결재 요청이 도착했습니다.", approval, revision.getRevisionId());
+                    revision.getTitle() + " 결재 요청이 도착했습니다.", approval.getApprovalId(), revision.getRevisionId());
         } else {
             // PRC-002 — 마지막 순번 승인 → 회차·결재 모두 COMPLETED 종료 + 기안자에게 완료 알림
             approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.COMPLETED);
             approvalCompleted = true;
             publishApprovalNotification(approval.getDrafterId(), "APPROVAL_COMPLETED", "결재 완료",
-                    revision.getTitle() + " 결재가 완료되었습니다.", approval, revision.getRevisionId());
+                    revision.getTitle() + " 결재가 완료되었습니다.", approval.getApprovalId(), revision.getRevisionId());
         }
 
         log.info("결재 승인 완료 - lineId={}, nextActiveLineId={}, approvalCompleted={}",
@@ -406,7 +406,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         // PRC-008 — 기안자에게만 반려 알림
         publishApprovalNotification(approval.getDrafterId(), "APPROVAL_REJECTED", "결재 반려",
-                revision.getTitle() + " 결재가 반려되었습니다.", approval, revision.getRevisionId());
+                revision.getTitle() + " 결재가 반려되었습니다.", approval.getApprovalId(), revision.getRevisionId());
 
         log.info("결재 반려 완료 - lineId={}", command.lineId());
 
@@ -440,10 +440,10 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
      * 당시의 회차를 가리켜야 메시지와 목적지가 일치한다. 클릭 시점에 최신 회차를 다시 찾지 않는다.
      */
     private void publishApprovalNotification(String recipientUserId, String notificationType, String title,
-                                             String message, Approval approval, Long revisionId) {
+                                             String message, Long approvalId, Long revisionId) {
         domainEventPublisher.publish(NotificationRequestedEvent.of(
                 recipientUserId, notificationType, title, message,
-                NOTIFICATION_TARGET_TYPE, approval.getApprovalId(), Map.of("revisionId", revisionId)));
+                NOTIFICATION_TARGET_TYPE, approvalId, Map.of("revisionId", revisionId)));
     }
 
     private String approverDisplayName(String approverId) {

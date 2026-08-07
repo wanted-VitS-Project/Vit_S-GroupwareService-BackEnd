@@ -199,17 +199,70 @@
 
 ---
 
+## 📌 타 도메인 연동 가이드 — 알림을 보내려면
+
+> **다른 도메인 담당자가 읽어야 할 부분.** 알림을 보내려면 **이벤트 발행 한 줄**이면 된다.
+> 알림 도메인 코드도, 공용 파일도 건드리지 않는다(`GEN-003` · `INV-02`).
+
+### 1. 이동 대상이 있는 알림 (클릭하면 그 화면으로 감)
+
+```java
+private final DomainEventPublisher domainEventPublisher;   // 주입
+
+// ⚠️ 반드시 @Transactional 메서드 안에서, 실제 데이터 변경이 끝난 뒤에 발행한다
+domainEventPublisher.publish(NotificationRequestedEvent.of(
+        수신자사번,                       // "EMP003"
+        "PROJECT_INVITED",              // notificationType — 자유 문자열
+        "프로젝트 초대",                  // 알림 제목
+        project.getName() + "에 초대되었습니다.",   // 알림 내용
+        "PROJECT",                      // targetType — 자기 도메인 이름
+        project.getProjectId(),         // targetId — 자기 PK
+        null));                         // targetContext — 부가 식별값 없으면 null
+```
+
+### 2. 이동 대상이 없는 알림 (시스템 공지 등)
+
+```java
+domainEventPublisher.publish(NotificationRequestedEvent.of(
+        수신자사번, "SYSTEM_NOTICE", "점검 안내", "8월 10일 02:00~04:00 점검 예정입니다."));
+```
+
+이 경우 이동 대상 조회는 `type=NONE`을 반환한다(에러 아님). 목록·읽음·삭제는 동일하게 동작한다.
+
+### 지켜야 할 규칙
+
+| 규칙 | 안 지키면 |
+|---|---|
+| **`@Transactional` 메서드 안에서 발행** | 트랜잭션 밖에서 발행하면 `AFTER_COMMIT` 리스너가 **아예 실행되지 않는다.** 에러도 안 나고 알림만 조용히 사라져서 원인 찾기 어렵다 ⚠️ |
+| `targetType`·`targetId`는 **둘 다 넣거나 둘 다 빼기** | `IllegalArgumentException` (DB `CHECK` 제약으로도 막힘) |
+| `targetContext`는 **대상이 있을 때만** | 위와 동일하게 거부됨 |
+| `targetContext`에는 **이동에 필요한 값만** | 제목 같은 표시용 데이터를 넣으면 이동 데이터와 섞이고 도메인마다 JSON이 비대해진다. 표시 내용은 `title`/`message`가 담당 |
+
+### 알아둘 것
+
+- `notificationType`·`targetType`은 **미리 등록할 필요가 없다.** 처음 보는 값이어도 그대로 저장·응답된다.
+- 수신자 **1명당 1건**이다(`GEN-004`). 여러 명에게 보내려면 사람 수만큼 발행한다.
+- `targetContext`는 **생성 시점 스냅샷**이다(`VIW-010`). 클릭 시점에 재조회하지 않으므로, 그 사건 당시의 값을 넣어야 알림 문구와 목적지가 일치한다.
+- 프론트는 응답의 `type`/`targetId`/`extra`로 이동한다. 백엔드가 URL을 만들어 주지는 않는다.
+
+### 레퍼런스 구현
+
+`approval/application/service/ApprovalCommandService`의 `publishApprovalNotification()` 과 그 호출부 4곳
+(상신 · 승인 시 다음 결재자 · 승인 완료 · 반려)을 참고하면 된다.
+
+---
+
 ## 참고 — `#27` 생성 이벤트 인프라 (REST API 아님)
 
 | 항목 | 내용 |
 |---|---|
-| 요구사항 | GEN-001~004 |
+| 요구사항 | GEN-001~005 |
 | 이벤트 클래스 | `NotificationRequestedEvent(recipientUserId, notificationType, title, message, targetType, targetId, targetContext)` |
 | 패키지 | `notification.domain.event`(자기 도메인 소유, `global` 아님) |
-| 처리 방식 | `@TransactionalEventListener(phase = AFTER_COMMIT)` — 발행 트랜잭션 커밋 후에만 `notification` row 생성 |
-| 결재 쪽 발행 지점 | 상신(`SUB-003`) · 재상신(`SUB-010`, 상신 재사용) · 승인(`PRC-004`/`PRC-004-1`) · 반려(`PRC-008`) |
+| 처리 방식 | `@TransactionalEventListener(phase = AFTER_COMMIT)` + `@Transactional(REQUIRES_NEW)` — 발행 트랜잭션 커밋 후에만 `notification` row 생성 |
+| 결재 쪽 발행 지점 | 상신(`SUB-003`) · 승인 시 다음 결재자(`PRC-002`) · 승인 완료(`PRC-002`) · 반려(`PRC-008`). **재상신은 별도 발행 없음** — 새 회차를 만든 뒤 사용자가 상신을 호출할 때 발행된다 |
 
-이 부분은 REST 엔드포인트가 없어 `.ai/api/README.md`의 "노션 반영 필요" 게이트 대상이 아니다 — `NOTI-V1.md` GEN-001~004만으로 바로 구현 가능하다.
+이 부분은 REST 엔드포인트가 없어 `.ai/api/README.md`의 "노션 반영 필요" 게이트 대상이 아니다.
 
 ---
 
