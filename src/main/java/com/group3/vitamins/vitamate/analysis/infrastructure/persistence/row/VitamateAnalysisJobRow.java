@@ -10,7 +10,9 @@ public class VitamateAnalysisJobRow {
 
     private Long analysisId;
     private String attemptId;
-    private String prompt;
+    private String reviewType;
+    private String reviewCategoryCodes;
+    private String additionalInstruction;
     private Long projectId;
     private Long blockId;
 }

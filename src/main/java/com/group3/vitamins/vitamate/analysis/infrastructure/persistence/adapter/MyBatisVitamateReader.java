@@ -4,11 +4,13 @@ import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisRe
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateBlockReaderPort;
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateFileReaderPort;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper.VitamateAnalysisMapper;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper.VitamateReviewTemplateMapper;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,6 +23,7 @@ import java.util.Optional;
 public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateFileReaderPort, VitamateAnalysisReaderPort {
 
     private final VitamateAnalysisMapper mapper;
+    private final VitamateReviewTemplateMapper templateMapper;
 
     // 요청자가 접근할 수 있는 AI 블록인지 확인하고 프로젝트 컨텍스트를 조회한다.
     @Override
@@ -47,6 +50,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
         return Optional.ofNullable(mapper.findAccessibleAnalysis(analysisId, userId))
                 .map(analysis -> toAnalysisDetail(
                         analysis,
+                        templateMapper.findAnalysisTemplateSnapshots(analysisId),
                         mapper.findAnalysisDocuments(analysisId),
                         mapper.findAnalysisCitations(analysisId)
                 ));
@@ -58,6 +62,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
         return Optional.ofNullable(mapper.findProcessingAnalysisJob(analysisId, attemptId))
                 .map(job -> toAnalysisJobDetail(
                         job,
+                        templateMapper.findAnalysisTemplateSnapshots(analysisId),
                         mapper.findAnalysisJobDocuments(analysisId),
                         mapper.findAnalysisJobChunks(analysisId)
                 ));
@@ -75,7 +80,9 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
     private VitamateAnalysisHistory toAnalysisHistory(VitamateAnalysisHistoryRow row) {
         return new VitamateAnalysisHistory(
                 row.getAnalysisId(),
-                row.getPrompt(),
+                row.getReviewType(),
+                toCategoryCodes(row.getReviewCategoryCodes()),
+                row.getAdditionalInstruction(),
                 row.getAnalysisStatus(),
                 row.getCreatedAt(),
                 row.getCompletedAt()
@@ -95,13 +102,22 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
     // 분석 본문 Row와 하위 Row들을 application 포트 결과로 조립한다.
     private VitamateAnalysisDetail toAnalysisDetail(
             VitamateAnalysisRow analysis,
+            List<VitamateReviewTemplateRow> templates,
             List<VitamateAnalysisDocumentRow> documents,
             List<VitamateAnalysisCitationRow> citations
     ) {
         return new VitamateAnalysisDetail(
                 analysis.getAnalysisId(),
                 analysis.getBlockId(),
-                analysis.getPrompt(),
+                analysis.getReviewType(),
+                toCategoryCodes(analysis.getReviewCategoryCodes()),
+                analysis.getAdditionalInstruction(),
+                templates.stream()
+                        .map(template -> new TemplateVersion(
+                                template.getCategoryCode(),
+                                template.getTemplateVersion()
+                        ))
+                        .toList(),
                 analysis.getAnalysisStatus(),
                 analysis.getResult(),
                 analysis.getErrorMessage(),
@@ -138,6 +154,7 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
     // 분석 작업 기본 정보, 선택 문서, 후보 청크를 Python worker 입력 값으로 조립한다.
     private VitamateAnalysisJobDetail toAnalysisJobDetail(
             VitamateAnalysisJobRow job,
+            List<VitamateReviewTemplateRow> templateRows,
             List<VitamateAnalysisJobDocumentRow> documents,
             List<VitamateAnalysisJobChunkRow> chunks
     ) {
@@ -149,7 +166,12 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
         return new VitamateAnalysisJobDetail(
                 job.getAnalysisId(),
                 job.getAttemptId(),
-                job.getPrompt(),
+                job.getReviewType(),
+                toCategoryCodes(job.getReviewCategoryCodes()),
+                job.getAdditionalInstruction(),
+                templateRows.stream()
+                        .map(this::toJobReviewTemplate)
+                        .toList(),
                 new JobSearchScope(
                         job.getProjectId(),
                         job.getBlockId(),
@@ -158,6 +180,17 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 documents.stream()
                         .map(document -> toJobDocument(document, chunksByFileVersionId))
                         .toList()
+        );
+    }
+
+    // 템플릿 스냅샷 Row를 Python worker 입력 값으로 변환한다.
+    private JobReviewTemplate toJobReviewTemplate(VitamateReviewTemplateRow row) {
+        return new JobReviewTemplate(
+                row.getReviewType(),
+                row.getCategoryCode(),
+                row.getCategoryName(),
+                row.getPromptTemplate(),
+                row.getTemplateVersion()
         );
     }
 
@@ -194,5 +227,17 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
                 row.getPageNumber(),
                 row.getExcerpt()
         );
+    }
+
+    // DB에 쉼표로 저장된 검토 카테고리 코드를 응답용 목록으로 복원합니다.
+    private List<String> toCategoryCodes(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(code -> !code.isBlank())
+                .toList();
     }
 }

@@ -6,10 +6,12 @@ import com.group3.vitamins.vitamate.analysis.domain.model.AnalysisStatus;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisCitationEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisDocumentEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisEntity;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisTemplateEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.DocumentChunkJpaRepository;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisCitationJpaRepository;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisDocumentJpaRepository;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisJpaRepository;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisTemplateJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +29,7 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStorePort {
 
     private final VitamateAnalysisJpaRepository analysisRepository;
     private final VitamateAnalysisDocumentJpaRepository documentRepository;
+    private final VitamateAnalysisTemplateJpaRepository templateRepository;
     private final VitamateAnalysisCitationJpaRepository citationRepository;
     private final DocumentChunkJpaRepository chunkRepository;
 
@@ -50,6 +53,10 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStorePort {
                 analysis.idempotencyKey(),
                 analysis.requestHash(),
                 analysis.prompt(),
+                analysis.reviewType(),
+                analysis.reviewCategoryCodes(),
+                analysis.additionalInstruction(),
+                analysis.promptTemplateVersion(),
                 analysis.requestedAt()
         ));
 
@@ -72,6 +79,30 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStorePort {
                 .toList();
 
         documentRepository.saveAll(documents);
+    }
+
+    // 분석 요청에서 선택한 템플릿을 요청 당시 값으로 고정해 저장한다.
+    @Override
+    public void saveAnalysisTemplates(Long analysisId, List<NewAnalysisTemplate> templates) {
+        if (templates == null || templates.isEmpty()) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<VitamateAnalysisTemplateEntity> templateEntities = templates.stream()
+                .map(template -> VitamateAnalysisTemplateEntity.of(
+                        analysisId,
+                        template.reviewType(),
+                        template.categoryCode(),
+                        template.categoryName(),
+                        template.promptTemplate(),
+                        template.templateVersion(),
+                        template.sortOrder(),
+                        now
+                ))
+                .toList();
+
+        templateRepository.saveAll(templateEntities);
     }
 
     // PENDING 상태의 분석 요청을 PROCESSING 상태로 변경한다.

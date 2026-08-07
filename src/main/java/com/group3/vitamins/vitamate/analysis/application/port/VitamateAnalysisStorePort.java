@@ -18,6 +18,9 @@ public interface VitamateAnalysisStorePort {
     // 분석 요청과 선택된 파일 버전들을 연결해 저장한다.
     void saveAnalysisDocuments(Long analysisId, List<Long> fileVersionIds);
 
+    // 분석 요청 당시 선택된 검토 템플릿 스냅샷을 저장한다.
+    void saveAnalysisTemplates(Long analysisId, List<NewAnalysisTemplate> templates);
+
     boolean markProcessing(Long analysisId, String attemptId, LocalDateTime startedAt, LocalDateTime leaseExpiresAt);
 
     boolean markCompleted(Long analysisId, String attemptId, String result, LocalDateTime completedAt);
@@ -47,7 +50,21 @@ public interface VitamateAnalysisStorePort {
             String idempotencyKey,
             String requestHash,
             String prompt,
+            String reviewType,
+            String reviewCategoryCodes,
+            String additionalInstruction,
+            String promptTemplateVersion,
             LocalDateTime requestedAt
+    ) {
+    }
+
+    record NewAnalysisTemplate(
+            String reviewType,
+            String categoryCode,
+            String categoryName,
+            String promptTemplate,
+            String templateVersion,
+            Integer sortOrder
     ) {
     }
 
