@@ -183,14 +183,32 @@ class IssueQueryMapperTest {
     }
 
     @Test
-    @DisplayName("Step 또는 Project가 삭제됐으면 조회하지 않는다")
-    void findMyCalendarIssues_excludesDeletedStepOrProject() throws Exception {
+    @DisplayName("Project가 삭제됐으면 조회하지 않는다")
+    void findMyCalendarIssues_excludesDeletedProject() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession()) {
             insertProject(session, 3L, "삭제된 프로젝트", LocalDateTime.of(2026, 7, 1, 0, 0));
             insertStep(session, 10L, 3L, "삭제된 프로젝트의 스텝", null);
             insertIssue(session, 105L, 10L, "삭제된 프로젝트 이슈", null,
                     "TO_DO", "HIGH", LocalDateTime.of(2026, 8, 13, 0, 0), null, null);
             insertAssignee(session, 5L, 105L, "EMP001");
+            session.commit();
+
+            List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
+                    .findMyCalendarIssues("EMP001");
+
+            assertThat(rows).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("Step이 삭제됐으면 Project가 살아있어도 조회하지 않는다")
+    void findMyCalendarIssues_excludesDeletedStep() throws Exception {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertProject(session, 4L, "정상 프로젝트", null);
+            insertStep(session, 11L, 4L, "삭제된 스텝", LocalDateTime.of(2026, 7, 2, 0, 0));
+            insertIssue(session, 106L, 11L, "삭제된 스텝의 이슈", null,
+                    "TO_DO", "HIGH", LocalDateTime.of(2026, 8, 14, 0, 0), null, null);
+            insertAssignee(session, 6L, 106L, "EMP001");
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
