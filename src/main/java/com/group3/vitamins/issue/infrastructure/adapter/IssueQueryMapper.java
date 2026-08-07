@@ -19,4 +19,6 @@ public interface IssueQueryMapper {
     List<IssueAssigneeRow> findAssignees(@Param("issueIds") Collection<Long> issueIds);
 
     List<IssueRelatedBlockRow> findRelatedBlocks(@Param("issueIds") Collection<Long> issueIds);
+
+    List<IssueCalendarRow> findMyCalendarIssues(@Param("userId") String userId);
 }
