@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
-// 비타메이트 분석 요청 API의 요청 본문
+// 비타메이트 분석 요청 API의 요청 본문입니다.
 @Schema(description = "비타메이트 분석 요청")
 public record CreateVitamateAnalysisRequest(
 
@@ -15,8 +15,15 @@ public record CreateVitamateAnalysisRequest(
         @NotEmpty(message = "분석할 문서를 선택해 주세요.")
         List<@NotNull(message = "파일 버전 ID는 null일 수 없습니다.") Long> fileVersionIds,
 
-        @Schema(description = "분석 요청 프롬프트", example = "핵심 기술 요구사항과 위험 요소를 정리해줘.")
-        @NotBlank(message = "프롬프트를 입력해 주세요.")
-        String prompt
+        @Schema(description = "검토 유형", example = "COST_REPORT")
+        @NotBlank(message = "검토 유형을 선택해 주세요.")
+        String reviewType,
+
+        @Schema(description = "검토 카테고리 코드 목록", example = "[\"COST_RESULT\", \"COST_STATEMENT\"]")
+        @NotEmpty(message = "검토 카테고리를 하나 이상 선택해 주세요.")
+        List<@NotBlank(message = "검토 카테고리 코드는 비어 있을 수 없습니다.") String> reviewCategoryCodes,
+
+        @Schema(description = "템플릿에 덧붙일 사용자 추가 요청", example = "금액과 부가세 포함 여부를 특히 확인해줘.")
+        String additionalInstruction
 ) {
 }

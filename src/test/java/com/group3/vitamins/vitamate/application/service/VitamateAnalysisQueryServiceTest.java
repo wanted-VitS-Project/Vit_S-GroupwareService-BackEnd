@@ -53,7 +53,14 @@ class VitamateAnalysisQueryServiceTest {
 
             assertThat(result.analysisId()).isEqualTo(ANALYSIS_ID);
             assertThat(result.blockId()).isEqualTo(10L);
-            assertThat(result.prompt()).isEqualTo("Summarize core requirements.");
+            assertThat(result.reviewType()).isEqualTo("COST_REPORT");
+            assertThat(result.reviewCategoryCodes()).containsExactly("COST_RESULT", "COST_OVERVIEW");
+            assertThat(result.additionalInstruction()).isEqualTo("금액 산식도 확인해줘.");
+            assertThat(result.templateVersions())
+                    .containsExactly(
+                            new VitamateAnalysisDetailResult.TemplateVersion("COST_RESULT", "COST_REPORT_V1"),
+                            new VitamateAnalysisDetailResult.TemplateVersion("COST_OVERVIEW", "COST_REPORT_V2")
+                    );
             assertThat(result.analysisStatus()).isEqualTo("COMPLETED");
             assertThat(result.result()).isEqualTo("analysis result");
             assertThat(result.errorMessage()).isNull();
@@ -137,7 +144,13 @@ class VitamateAnalysisQueryServiceTest {
         return new VitamateAnalysisReaderPort.VitamateAnalysisDetail(
                 ANALYSIS_ID,
                 10L,
-                "Summarize core requirements.",
+                "COST_REPORT",
+                List.of("COST_RESULT", "COST_OVERVIEW"),
+                "금액 산식도 확인해줘.",
+                List.of(
+                        new VitamateAnalysisReaderPort.TemplateVersion("COST_RESULT", "COST_REPORT_V1"),
+                        new VitamateAnalysisReaderPort.TemplateVersion("COST_OVERVIEW", "COST_REPORT_V2")
+                ),
                 "COMPLETED",
                 "analysis result",
                 null,
