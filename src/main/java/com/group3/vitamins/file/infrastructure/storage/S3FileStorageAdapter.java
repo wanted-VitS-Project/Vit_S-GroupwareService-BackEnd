@@ -130,9 +130,11 @@ public class S3FileStorageAdapter implements FileStoragePort {
                         .bucket(bucket)
                         .delete(Delete.builder().objects(batch).quiet(false).build())
                         .build());
+                // 실제 삭제된 것만 집계한다. 개별 실패(res.errors())·아래 배치 실패의 키는 지금은 재시도하지 않는다 —
+                // best-effort(§7). 고아 S3 객체의 내구성 있는 회수는 정기 reconciliation 배치로 분리(STATE 백로그).
                 deleted += res.deleted().size();
             } catch (SdkException e) {
-                // 저장소 삭제 실패는 삼킨다(네트워크·자격·S3 오류 포함) — DB 는 이미 지웠고 남은 키는 정리 대상이다(§7).
+                // 네트워크·자격·S3 오류 포함. DB 는 이미 커밋됐고 남은 키는 정리 대상(백로그 reconciliation).
             }
         }
         return deleted;

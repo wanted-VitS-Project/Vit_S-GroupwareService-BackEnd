@@ -103,9 +103,9 @@ public class FileController {
 
     @Operation(summary = "영구 삭제",
             description = "휴지통에 있는 문서를 되돌릴 수 없이 지운다. DB(문서·전 버전)를 지운 뒤 저장소(S3) 객체를 "
-                    + "커밋 후 best-effort 로 제거한다 — 일부 실패 시 storageDeletedCount 가 버전 수보다 작을 수 있으며, "
-                    + "실패한 키는 후속 정리 대상이다. 확인 문자로 정확히 \"영구 삭제\" 를 보내야 하며, 완료된 결재까지 포함해 "
-                    + "이 문서의 버전을 참조하는 결재가 있으면 삭제할 수 없다. 스텝 EDITOR 권한이 필요하다.")
+                    + "커밋 후 best-effort 로 제거한다. storageDeletedCount 는 삭제를 요청한 객체 수이며(실제 삭제 완료 수가 "
+                    + "아니다 — 저장소 삭제는 커밋 후 비동기이고 실패 키는 후속 정리 대상이다). 확인 문자로 정확히 \"영구 삭제\" 를 "
+                    + "보내야 하며, 완료된 결재까지 포함해 이 문서의 버전을 참조하는 결재가 있으면 삭제할 수 없다. 스텝 EDITOR 권한이 필요하다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "영구 삭제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "FILE_NOT_DELETED — 휴지통에 없음 / FILE_CONFIRM_TEXT_MISMATCH — 확인 문자 불일치"),
