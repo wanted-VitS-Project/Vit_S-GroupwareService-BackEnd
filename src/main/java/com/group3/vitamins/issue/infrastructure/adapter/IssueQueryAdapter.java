@@ -63,6 +63,23 @@ public class IssueQueryAdapter implements IssueQueryPort {
                 .toList();
     }
 
+    @Override
+    public List<CalendarIssueResult> findMyCalendarIssues(String userId) {
+        return issueQueryMapper.findMyCalendarIssues(userId).stream()
+                .map(row -> new CalendarIssueResult(
+                        row.issueId(),
+                        row.title(),
+                        row.status(),
+                        row.priority(),
+                        row.dueDate(),
+                        row.stepId(),
+                        row.stepName(),
+                        row.projectId(),
+                        row.projectName()
+                ))
+                .toList();
+    }
+
     private IssueResult toResultWithoutRelations(IssueRow row) {
         return new IssueResult(
                 row.issueId(),

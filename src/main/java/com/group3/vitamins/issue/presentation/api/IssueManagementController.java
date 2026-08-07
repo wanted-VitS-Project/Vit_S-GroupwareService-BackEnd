@@ -4,13 +4,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
+import com.group3.vitamins.issue.application.query.IssueCalendarQuery;
 import com.group3.vitamins.issue.application.query.IssueDetailQuery;
+import com.group3.vitamins.issue.application.result.IssueCalendarResult;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.result.IssueStatusResult;
 import com.group3.vitamins.issue.application.usecase.IssueCommandUseCase;
 import com.group3.vitamins.issue.application.usecase.IssueQueryUseCase;
 import com.group3.vitamins.issue.presentation.api.request.IssueStatusChangeRequest;
 import com.group3.vitamins.issue.presentation.api.request.IssueUpdateRequest;
+import com.group3.vitamins.issue.presentation.api.response.IssueCalendarResponse;
 import com.group3.vitamins.issue.presentation.api.response.IssueDetailResponse;
 import com.group3.vitamins.issue.presentation.api.response.IssueStatusChangeResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -66,6 +69,30 @@ public class IssueManagementController {
         return ResponseEntity.ok(ApiResponse.success(
                 IssueResponseMessage.DETAIL_SUCCESS,
                 IssueDetailResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "담당 이슈 캘린더 조회",
+            description = "로그인 사용자가 담당자로 지정된, 완료되지 않은 이슈 전체를 조회한다. "
+                    + "마이페이지 개인 캘린더에서 사용하며 월 이동은 FE가 응답 데이터로 분기 처리한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "담당 이슈 캘린더 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료")
+    })
+    @GetMapping("/calendar")
+    public ResponseEntity<ApiResponse<IssueCalendarResponse>> getMyCalendarIssues(
+            Authentication authentication
+    ) {
+        IssueCalendarResult result = issueQueryUseCase.getMyCalendarIssues(
+                new IssueCalendarQuery(authentication.getName()));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.CALENDAR_SUCCESS,
+                IssueCalendarResponse.from(result)
         ));
     }
 

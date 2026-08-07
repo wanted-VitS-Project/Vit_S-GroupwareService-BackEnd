@@ -4,8 +4,10 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.port.IssueQueryPort;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
+import com.group3.vitamins.issue.application.query.IssueCalendarQuery;
 import com.group3.vitamins.issue.application.query.IssueDetailQuery;
 import com.group3.vitamins.issue.application.query.IssueListQuery;
+import com.group3.vitamins.issue.application.result.IssueCalendarResult;
 import com.group3.vitamins.issue.application.result.IssueListResult;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.usecase.IssueQueryUseCase;
@@ -67,6 +69,26 @@ public class IssueQueryService implements IssueQueryUseCase {
                         .collect(Collectors.groupingBy(IssueQueryPort.RelatedBlockResult::issueId));
 
         return withRelations(issue, assigneesByIssueId, blocksByIssueId);
+    }
+
+    @Override
+    public IssueCalendarResult getMyCalendarIssues(IssueCalendarQuery query) {
+        List<IssueQueryPort.CalendarIssueResult> rows =
+                issueQueryPort.findMyCalendarIssues(query.requesterUserId());
+
+        return new IssueCalendarResult(rows.stream()
+                .map(row -> new IssueCalendarResult.CalendarIssueResult(
+                        row.issueId(),
+                        row.title(),
+                        row.status(),
+                        row.priority(),
+                        row.dueDate(),
+                        row.stepId(),
+                        row.stepName(),
+                        row.projectId(),
+                        row.projectName()
+                ))
+                .toList());
     }
 
     private void validateBlockFilter(Long stepId, Long blockId) {
