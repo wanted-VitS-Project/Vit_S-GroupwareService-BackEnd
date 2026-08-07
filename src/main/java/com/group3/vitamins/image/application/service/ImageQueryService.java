@@ -5,6 +5,7 @@ import com.group3.vitamins.image.application.policy.ImageEligibilityPolicy;
 import com.group3.vitamins.image.application.port.ImageStoragePort;
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
 import com.group3.vitamins.image.application.query.GetImageItemQuery;
+import com.group3.vitamins.image.application.query.GetImageItemsQuery;
 import com.group3.vitamins.image.application.query.GetImageTrashQuery;
 import com.group3.vitamins.image.application.query.GetProjectImagesQuery;
 import com.group3.vitamins.image.application.usecase.ImageQueryUseCase;
@@ -30,17 +31,20 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * 이미지 읽기 전용 API 3종 — 전부 편집 권한이 아니라 접근(VIEWER 이상) 권한만 있으면 된다.
+ * 이미지 읽기 전용 API — 권한 기준이 종류마다 다르니 주의할 것.
  *
  * <p>1) "다음"/"이전" 버튼으로 이미지를 한 장씩 순차 조회. 마지막에서 "다음"을 누르면 첫 이미지로,
  * 처음에서 "이전"을 누르면 마지막 이미지로 순환한다 — 프론트가 이미지 목록을 캐싱하지 않고 매번
- * 이 API를 호출하는 걸 전제로 한다 (`.ai/api/image.md` §다음 이미지 조회 API 참고).
+ * 이 API를 호출하는 걸 전제로 한다 (`.ai/api/image.md` §다음 이미지 조회 API 참고). 접근(VIEWER 이상) 권한.
  *
- * <p>2) 이미지 다운로드 — imgId 지정 시 그 이미지 한 장, 없으면 블록에 속한 활성 이미지 전체를
- * zip으로 묶어 응답한다.
+ * <p>2) 이미지 항목 전체 조회 — 한 블록의 활성 이미지 전부를 한 번에 돌려준다. 수정 화면이 목록을
+ * 통째로 그리기 위한 조회라, 다른 조회들과 달리 **편집 권한**을 요구한다(2026-08-07 담당자 결정).
  *
- * <p>3) 이미지 휴지통 — 프로젝트에 속한 삭제된 이미지 전체 조회. 앞의 둘과 달리 블록 단위가 아니라
- * 프로젝트 단위 조회라 {@link ImageEligibilityPolicy} 대신 {@link ProjectAccessUseCase}로 권한을 확인한다.
+ * <p>3) 이미지 다운로드 — imgId 지정 시 그 이미지 한 장, 없으면 블록에 속한 활성 이미지 전체를
+ * zip으로 묶어 응답한다. 접근 권한.
+ *
+ * <p>4) 이미지 휴지통 · 프로젝트 이미지 모아보기 — 블록 단위가 아니라 프로젝트 단위 조회라
+ * {@link ImageEligibilityPolicy} 대신 {@link ProjectAccessUseCase}로 권한을 확인한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -105,6 +109,38 @@ public class ImageQueryService implements ImageQueryUseCase {
     private NotFoundException noActiveItem(Long imgBlockId) {
         log.warn("조회할 이미지 항목 없음 - imgBlockId={}", imgBlockId);
         return new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+    }
+
+    /**
+     * 이미지 항목 전체 조회 — 블록의 활성 이미지 전부를 orderIndex 오름차순으로 돌려준다.
+     *
+     * <p>수정 화면이 "현재 목록 전체"를 받아 그린 뒤 그대로 수정 API(PATCH)로 되돌려 보내는 구조라
+     * 조회지만 **편집 권한**을 요구한다(2026-08-07 담당자 결정) — 순차 조회(getItem)·다운로드가
+     * 접근 권한인 것과 다르다.
+     *
+     * <p>이미지가 0장이어도 404가 아니라 빈 배열 + totalCount=0으로 응답한다(휴지통·모아보기 조회와
+     * 동일한 목록 조회 원칙). 블록 자체가 없을 때만 404다.
+     */
+    @Override
+    public ImageItemsView getItems(GetImageItemsQuery query) {
+        log.info("이미지 항목 전체 조회 요청 - imgBlockId={}, userId={}", query.imgBlockId(), query.userId());
+
+        eligibilityPolicy.assertBlockActiveOrThrowReadOnly(query.imgBlockId());
+        eligibilityPolicy.assertEditPermission(query.imgBlockId(), query.userId(), query.role());
+
+        List<BlockImageView> images = imageRepository.findAllActiveByImgBlockId(query.imgBlockId()).stream()
+                .map(item -> new BlockImageView(
+                        item.getImgId(),
+                        item.getOriginalName(),
+                        // DB에 저장된 건 S3 키다 — presigned URL은 1시간 만료라 응답 시점에 매번 새로 서명한다.
+                        imageStoragePort.presignViewUrl(item.getImageUrl()),
+                        item.getCaption(),
+                        item.getOrderIndex()))
+                .toList();
+
+        log.info("이미지 항목 전체 조회 완료 - imgBlockId={}, count={}", query.imgBlockId(), images.size());
+
+        return new ImageItemsView(images.size(), images);
     }
 
     /** 이미지 다운로드 — imgId가 있으면 그 이미지 한 장(원본 파일명), 없으면 블록 전체를 zip으로(블록명). */
