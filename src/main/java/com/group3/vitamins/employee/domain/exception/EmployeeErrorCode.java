@@ -40,7 +40,8 @@ public enum EmployeeErrorCode implements ErrorCode {
             "이미 퇴사 처리된 사원입니다."),
 
     // ── 엑셀 일괄 등록 (employee.md §6~§8) ──
-    // 파일 없음·형식·5MB 초과는 파일을 열기 전에 아는 400 이다. 파일을 연 뒤의 <b>행별</b> 오류는
+    // 파일 누락·5MB 초과는 업로드 단계(열기 전)의 400 이다. 형식 오류는 확장자(열기 전)뿐 아니라
+    // 파싱 실패(손상 파일 등, 열기·파싱 중)에서도 나는 400 이다. 파일을 연 뒤의 <b>행별</b> 오류는
     // /bulk/validate 와 /bulk(skipErrors=true) 에서 200 + data.errors 로 나간다.
     EMP_FILE_REQUIRED("EMP_FILE_REQUIRED",
             "업로드할 파일이 없습니다."),
