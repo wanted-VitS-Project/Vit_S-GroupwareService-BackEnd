@@ -11,6 +11,7 @@ import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CreationHelper;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.DisplayName;
@@ -77,6 +78,31 @@ class PoiEmployeeExcelAdapterTest {
 
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).userId()).isEqualTo("EMP001");
+    }
+
+    @Test
+    @DisplayName(".xls(HSSF) 바이너리도 동일하게 파싱한다")
+    void readsXlsBinary() throws IOException {
+        byte[] file;
+        try (Workbook wb = new HSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("사원");
+            Row header = sheet.createRow(0);
+            for (int i = 0; i < EmployeeBulkColumns.HEADERS.size(); i++) {
+                header.createCell(i).setCellValue(EmployeeBulkColumns.HEADERS.get(i));
+            }
+            Row data = sheet.createRow(1);
+            data.createCell(EmployeeBulkColumns.USER_ID).setCellValue("EMP001");
+            data.createCell(EmployeeBulkColumns.NAME).setCellValue("홍길동");
+            data.createCell(EmployeeBulkColumns.ROLE).setCellValue("MEMBER");
+            wb.write(out);
+            file = out.toByteArray();
+        }
+
+        List<ParsedEmployeeRow> rows = parserAdapter.parse(file);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).userId()).isEqualTo("EMP001");
+        assertThat(rows.get(0).name()).isEqualTo("홍길동");
     }
 
     @Test

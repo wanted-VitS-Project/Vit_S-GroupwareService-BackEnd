@@ -1,5 +1,6 @@
 package com.group3.vitamins.employee.application;
 
+import com.group3.vitamins.account.application.port.MailDeliveryException;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.employee.application.command.RegisterBulkCommand;
 import com.group3.vitamins.employee.application.command.ValidateBulkCommand;
@@ -15,7 +16,6 @@ import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
 import com.group3.vitamins.employee.application.service.EmployeeBulkService;
 import com.group3.vitamins.employee.application.service.EmployeeRegistrationWriter;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
-import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +27,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,7 +47,6 @@ class EmployeeBulkServiceTest {
     private EmployeeExcelTemplatePort templatePort;
     private EmployeeExcelParserPort parserPort;
     private EmployeeBulkReferenceQueryPort referencePort;
-    private EmployeeRepository employeeRepository;
     private EmployeeRegistrationWriter registrationWriter;
     private TempPasswordGenerator tempPasswordGenerator;
     private ThrottledPasswordEncoder passwordEncoder;
@@ -58,19 +58,18 @@ class EmployeeBulkServiceTest {
         templatePort = Mockito.mock(EmployeeExcelTemplatePort.class);
         parserPort = Mockito.mock(EmployeeExcelParserPort.class);
         referencePort = Mockito.mock(EmployeeBulkReferenceQueryPort.class);
-        employeeRepository = Mockito.mock(EmployeeRepository.class);
         registrationWriter = Mockito.mock(EmployeeRegistrationWriter.class);
         tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
         service = new EmployeeBulkService(
                 new EmployeeAdminPolicy(), templatePort, parserPort, referencePort,
-                employeeRepository, registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort);
+                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort);
 
-        // 기본 스텁 — 개발팀/대리는 존재, 사번은 DB 에 없음, 해싱·비번은 고정
+        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 해싱·비번은 고정
         when(referencePort.resolveDepartmentIdsByName(any())).thenReturn(Map.of("개발팀", 10L));
         when(referencePort.resolveJobPositionIdsByName(any())).thenReturn(Map.of("대리", 5L));
-        when(employeeRepository.existsById(anyString())).thenReturn(false);
+        when(referencePort.findExistingUserIds(any())).thenReturn(Set.of());
         when(tempPasswordGenerator.generate()).thenReturn("Temp1234!");
         when(passwordEncoder.encode(anyString())).thenReturn("HASHED");
     }
@@ -110,7 +109,9 @@ class EmployeeBulkServiceTest {
                 .isInstanceOf(DomainException.class);
         assertThatThrownBy(() -> service.validate(new ValidateBulkCommand("MASTER", new byte[]{1}, "a.xlsx", 1)))
                 .isInstanceOf(DomainException.class);
-        verify(parserPort, never()).parse(any());
+        assertThatThrownBy(() -> service.register(new RegisterBulkCommand("MASTER", new byte[]{1}, "a.xlsx", 1, true)))
+                .isInstanceOf(DomainException.class);
+        verify(parserPort, never()).parse(any());  // 권한에서 막혀 파싱까지 가지 않는다
     }
 
     @Test
@@ -141,11 +142,30 @@ class EmployeeBulkServiceTest {
         }
 
         @Test
-        @DisplayName("5MB 를 초과하면 EMP_FILE_SIZE_EXCEEDED")
+        @DisplayName("신고 size 가 5MB 를 초과하면 EMP_FILE_SIZE_EXCEEDED")
         void size() {
             long over = 5L * 1024 * 1024 + 1;
             assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[]{1}, "a.xlsx", over)))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED));
+        }
+
+        @Test
+        @DisplayName("실제 content 길이가 5MB 를 초과하면 size 가 작아도 EMP_FILE_SIZE_EXCEEDED")
+        void contentLengthExceeds() {
+            byte[] big = new byte[5 * 1024 * 1024 + 1];
+            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, big, "a.xlsx", 100L)))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED));
+        }
+
+        @Test
+        @DisplayName("행 수가 상한(1000)을 초과하면 EMP_ROW_LIMIT_EXCEEDED")
+        void rowLimit() {
+            List<ParsedEmployeeRow> tooMany = new java.util.ArrayList<>();
+            for (int i = 0; i < 1001; i++) {
+                tooMany.add(valid(i + 2, "EMP" + i, null));
+            }
+            assertThatThrownBy(() -> service.validate(validateCmd(tooMany)))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_ROW_LIMIT_EXCEEDED));
         }
     }
 
@@ -158,7 +178,7 @@ class EmployeeBulkServiceTest {
         @Test
         @DisplayName("유효 행은 통과하고 각 오류 유형을 정확히 분류한다")
         void classifiesErrors() {
-            when(employeeRepository.existsById("EMP_DB")).thenReturn(true);
+            when(referencePort.findExistingUserIds(any())).thenReturn(Set.of("EMP_DB"));
             List<ParsedEmployeeRow> rows = List.of(
                     valid(2, "EMP100", "a@b.com"),                                   // 유효
                     row(3, null, "김", "개발팀", null, "2026-01-01", null, "MEMBER"),  // 사번 누락
@@ -283,6 +303,21 @@ class EmployeeBulkServiceTest {
             assertThat(r.failedCount()).isEqualTo(1);
             assertThat(r.errors()).singleElement()
                     .satisfies(e -> assertThat(e.validation()).isEqualTo(BulkValidation.USER_ID_DUPLICATED));
+        }
+
+        @Test
+        @DisplayName("메일 발송이 실패해도 등록은 성공으로 유지하고 emailSentCount 만 줄인다")
+        void mailFailureDoesNotFailRegistration() {
+            Mockito.doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
+                    .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString());
+            List<ParsedEmployeeRow> rows = List.of(valid(2, "EMP100", "a@b.com"));
+
+            BulkRegisterResult r = service.register(registerCmd(rows, false));
+
+            assertThat(r.registeredCount()).isEqualTo(1);   // 사원·계정은 만들어졌다
+            assertThat(r.failedCount()).isZero();
+            assertThat(r.emailSentCount()).isZero();        // 메일만 실패
+            verify(registrationWriter, times(1)).register(any(), anyString(), anyString());
         }
     }
 }

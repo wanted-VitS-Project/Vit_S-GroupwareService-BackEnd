@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +28,14 @@ public class EmployeeBulkReferenceQueryAdapter implements EmployeeBulkReferenceQ
     @Override
     public Map<String, Long> resolveJobPositionIdsByName(Collection<String> names) {
         return toMap(names, mapper::findJobPositionIdsByName);
+    }
+
+    @Override
+    public Set<String> findExistingUserIds(Collection<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(mapper.findExistingUserIds(userIds));
     }
 
     private Map<String, Long> toMap(Collection<String> names,

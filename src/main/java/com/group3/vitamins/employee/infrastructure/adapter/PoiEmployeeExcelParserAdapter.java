@@ -5,6 +5,7 @@ import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
 import com.group3.vitamins.employee.application.support.EmployeeBulkColumns;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.DateUtil;
@@ -26,6 +27,7 @@ import java.util.List;
  * {@link EmployeeExcelParserPort} 구현 — POI {@code WorkbookFactory} 로 .xlsx·.xls 를 모두 읽는다 (employee.md §7·§8).
  * 첫 시트만 사용하고, 헤더(0행) 다음부터 데이터로 본다. 완전히 빈 행은 건너뛴다.
  */
+@Slf4j
 @Component
 public class PoiEmployeeExcelParserAdapter implements EmployeeExcelParserPort {
 
@@ -54,6 +56,8 @@ public class PoiEmployeeExcelParserAdapter implements EmployeeExcelParserPort {
             return rows;
         } catch (IOException | RuntimeException e) {
             // 확장자는 맞지만 내용이 엑셀이 아니거나 손상된 경우 — 파일 형식 오류(400)로 변환한다(파일 열기 실패).
+            // ⚠️ RuntimeException 까지 잡으므로 파싱 로직의 버그(NPE 등)도 여기로 온다 — 원인을 로그로 남겨 은폐를 막는다.
+            log.warn("엑셀 파싱 실패 - 파일 형식 오류로 변환", e);
             throw new ValidationException(EmployeeErrorCode.EMP_FILE_TYPE_INVALID, e);
         }
     }

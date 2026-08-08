@@ -36,6 +36,7 @@ public class EmployeeBulkController {
 
     private static final MediaType XLSX =
             MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    private static final long MAX_FILE_SIZE = 5L * 1024 * 1024; // 5MB (서비스 검증과 동일)
 
     private final EmployeeBulkUseCase employeeBulkUseCase;
 
@@ -69,7 +70,8 @@ public class EmployeeBulkController {
     })
     @PostMapping(value = "/bulk/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<BulkValidateResponse> validateBulk(
-            @RequestParam("file") MultipartFile file,
+            // required=false 라야 파일 part 누락 시 Spring 이 컨트롤러 前에 튕기지 않고 서비스가 EMP_FILE_REQUIRED 로 판정한다.
+            @RequestParam(value = "file", required = false) MultipartFile file,
             Authentication authentication) {
 
         BulkValidateResult result = employeeBulkUseCase.validate(toValidateCommand(file, authentication));
@@ -93,7 +95,7 @@ public class EmployeeBulkController {
     })
     @PostMapping(value = "/bulk", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<BulkRegisterResponse> registerBulk(
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(value = "skipErrors", defaultValue = "false") boolean skipErrors,
             Authentication authentication) {
 
@@ -112,7 +114,7 @@ public class EmployeeBulkController {
             // 파일 없음은 서비스가 EMP_FILE_REQUIRED 로 판정한다(빈 커맨드).
             return new ValidateBulkCommand(role, null, null, 0);
         }
-        return new ValidateBulkCommand(role, readBytes(file), file.getOriginalFilename(), file.getSize());
+        return new ValidateBulkCommand(role, readBytesWithinLimit(file), file.getOriginalFilename(), file.getSize());
     }
 
     private RegisterBulkCommand toRegisterCommand(MultipartFile file, boolean skipErrors, Authentication authentication) {
@@ -120,10 +122,14 @@ public class EmployeeBulkController {
         if (file == null || file.isEmpty()) {
             return new RegisterBulkCommand(role, null, null, 0, skipErrors);
         }
-        return new RegisterBulkCommand(role, readBytes(file), file.getOriginalFilename(), file.getSize(), skipErrors);
+        return new RegisterBulkCommand(role, readBytesWithinLimit(file), file.getOriginalFilename(), file.getSize(), skipErrors);
     }
 
-    private byte[] readBytes(MultipartFile file) {
+    /** 5MB 초과면 바이트를 읽기 전에 막는다(멀티파트 전역 상한 20MB 라 읽어오면 그만큼 메모리를 쓴다). */
+    private byte[] readBytesWithinLimit(MultipartFile file) {
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new ValidationException(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED);
+        }
         try {
             return file.getBytes();
         } catch (IOException e) {

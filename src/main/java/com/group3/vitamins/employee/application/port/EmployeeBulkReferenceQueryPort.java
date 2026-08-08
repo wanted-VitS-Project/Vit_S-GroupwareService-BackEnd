@@ -2,6 +2,7 @@ package com.group3.vitamins.employee.application.port;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 엑셀 일괄 등록(employee.md §7·§8)에서 <b>부서명·직급명 → ID</b> 를 해석하는 아웃바운드 포트.
@@ -20,4 +21,10 @@ public interface EmployeeBulkReferenceQueryPort {
 
     /** 직급명 → 직급 ID. 직급명은 전역 유니크라 그대로 매핑한다. 없는 이름은 맵에 빠진다(직급은 선택값 → null 등록). */
     Map<String, Long> resolveJobPositionIdsByName(Collection<String> names);
+
+    /**
+     * 요청 사번 중 <b>이미 등록된(존재하는)</b> 사번 집합 — DB 기존 사번 판정용. 행마다 existsById 를 호출하면 N+1 이라
+     * 부서·직급처럼 한 번에 조회한다. soft delete 된 사원의 사번도 PK 를 점유하므로 존재로 본다(deleted_at 무관).
+     */
+    Set<String> findExistingUserIds(Collection<String> userIds);
 }

@@ -51,7 +51,11 @@ public enum EmployeeErrorCode implements ErrorCode {
             "파일 크기가 5MB를 초과했습니다."),
 
     EMP_HAS_ERRORS("EMP_HAS_ERRORS",
-            "오류 행이 있어 등록할 수 없습니다. 오류 제외 등록을 사용하세요.");
+            "오류 행이 있어 등록할 수 없습니다. 오류 제외 등록을 사용하세요."),
+
+    // 행별 Argon2 해싱·메일 발송이 있어 요청 스레드를 오래 잡지 않도록 파일 단위로 상한을 둔다(방어).
+    EMP_ROW_LIMIT_EXCEEDED("EMP_ROW_LIMIT_EXCEEDED",
+            "한 번에 등록할 수 있는 행 수를 초과했습니다.");
 
     private final String code;
     private final String message;

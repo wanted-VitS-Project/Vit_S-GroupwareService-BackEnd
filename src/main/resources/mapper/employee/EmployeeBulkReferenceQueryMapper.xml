@@ -35,4 +35,14 @@
         </foreach>
     </select>
 
+    <!-- 요청 사번 중 이미 존재하는 사번(DB 기존 판정). PK 조회라 soft delete 무관(deleted_at 안 봄 = existsById 와 동일). -->
+    <select id="findExistingUserIds" resultType="string">
+        SELECT user_id
+          FROM employee
+         WHERE user_id IN
+        <foreach collection="userIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
 </mapper>

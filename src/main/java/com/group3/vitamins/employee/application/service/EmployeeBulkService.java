@@ -20,7 +20,6 @@ import com.group3.vitamins.employee.application.result.ResolvedEmployeeRow;
 import com.group3.vitamins.employee.application.usecase.EmployeeBulkUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
-import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +52,9 @@ import java.util.stream.Collectors;
 public class EmployeeBulkService implements EmployeeBulkUseCase {
 
     private static final long MAX_FILE_SIZE = 5L * 1024 * 1024; // 5MB
+    // 행마다 Argon2 해싱·동기 메일이 있어 요청 스레드를 오래 잡지 않도록 파일 단위 행 수 상한을 둔다(방어).
+    // 30명 규모 회사엔 넉넉하다. 초과분은 파일을 나눠 올린다. 장기적으로는 비동기 작업화 검토(백로그).
+    private static final int MAX_ROWS = 1000;
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("xlsx", "xls");
     private static final Set<String> ASSIGNABLE_ROLES = Set.of("MASTER", "MEMBER");
     private static final String ROLE_ADMIN = "ADMIN";
@@ -70,7 +72,6 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     private final EmployeeExcelTemplatePort excelTemplatePort;
     private final EmployeeExcelParserPort excelParserPort;
     private final EmployeeBulkReferenceQueryPort bulkReferenceQueryPort;
-    private final EmployeeRepository employeeRepository;
     private final EmployeeRegistrationWriter registrationWriter;
     private final TempPasswordGenerator tempPasswordGenerator;
     private final ThrottledPasswordEncoder passwordEncoder;
@@ -158,6 +159,11 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
         validateFileMeta(content, filename, size);
         List<ParsedEmployeeRow> rows = excelParserPort.parse(content);
 
+        // 행 수 상한(방어) — 초과하면 등록 루프(행별 Argon2·메일)에 들어가기 전에 파일 단위로 막는다.
+        if (rows.size() > MAX_ROWS) {
+            throw new ValidationException(EmployeeErrorCode.EMP_ROW_LIMIT_EXCEEDED);
+        }
+
         // 파일 내 사번 등장 수 · 최초 등장 행 (중복 판정용)
         Map<String, Long> userIdCounts = rows.stream()
                 .map(ParsedEmployeeRow::userId).filter(Objects::nonNull)
@@ -169,16 +175,18 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             }
         }
 
-        // 부서명·직급명 → ID 배치 해석 (N+1 회피)
+        // 부서명·직급명·기존 사번 → 배치 해석 (모두 N+1 회피)
         Map<String, Long> deptIds = bulkReferenceQueryPort.resolveDepartmentIdsByName(
                 distinct(rows, ParsedEmployeeRow::department));
         Map<String, Long> posIds = bulkReferenceQueryPort.resolveJobPositionIdsByName(
                 distinct(rows, ParsedEmployeeRow::jobPosition));
+        Set<String> existingUserIds = bulkReferenceQueryPort.findExistingUserIds(
+                distinct(rows, ParsedEmployeeRow::userId));
 
         List<ResolvedEmployeeRow> validRows = new ArrayList<>();
         List<BulkRowError> errors = new ArrayList<>();
         for (ParsedEmployeeRow row : rows) {
-            BulkRowError error = validateRow(row, userIdCounts, firstRowByUserId, deptIds);
+            BulkRowError error = validateRow(row, userIdCounts, firstRowByUserId, deptIds, existingUserIds);
             if (error != null) {
                 errors.add(error);
             } else {
@@ -192,7 +200,8 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
 
     /** 행 하나를 우선순위대로 검증해 첫 오류를 돌려준다(없으면 null = 유효). */
     private BulkRowError validateRow(ParsedEmployeeRow row, Map<String, Long> counts,
-                                     Map<String, Integer> firstRow, Map<String, Long> deptIds) {
+                                     Map<String, Integer> firstRow, Map<String, Long> deptIds,
+                                     Set<String> existingUserIds) {
         // 1) 필수값·길이·형식 (REQUIRED_COLUMN 버킷)
         if (row.userId() == null) {
             return err(row, BulkValidation.REQUIRED_COLUMN, "필수 컬럼 누락: 사번");
@@ -240,7 +249,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             return err(row, BulkValidation.USER_ID_DUPLICATED,
                     "파일 내 사번 중복 (" + firstRow.get(row.userId()) + "행)");
         }
-        if (employeeRepository.existsById(row.userId())) {
+        if (existingUserIds.contains(row.userId())) {
             return err(row, BulkValidation.USER_ID_DUPLICATED, "이미 등록된 사번입니다");
         }
 
@@ -268,7 +277,9 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
         if (!hasAllowedExtension(filename)) {
             throw new ValidationException(EmployeeErrorCode.EMP_FILE_TYPE_INVALID);
         }
-        if (size > MAX_FILE_SIZE) {
+        // size(신고값)와 실제 바이트 길이를 함께 본다 — size 를 속이거나 컨트롤러가 20MB 까지 읽어온 뒤라도
+        // 5MB 초과 본문은 여기서 막는다.
+        if (size > MAX_FILE_SIZE || content.length > MAX_FILE_SIZE) {
             throw new ValidationException(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED);
         }
     }
