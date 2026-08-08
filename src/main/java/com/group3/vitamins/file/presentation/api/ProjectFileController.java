@@ -1,6 +1,7 @@
 package com.group3.vitamins.file.presentation.api;
 
 import com.group3.vitamins.file.application.usecase.FileQueryUseCase;
+import com.group3.vitamins.file.presentation.api.response.ProjectFileListResponse;
 import com.group3.vitamins.file.presentation.api.response.ProjectFileResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
@@ -35,16 +36,17 @@ public class ProjectFileController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "PROJECT_NOT_FOUND — 프로젝트 없음")
     })
     @GetMapping("/{projectId}/files")
-    public ApiResponse<List<ProjectFileResponse>> getProjectFiles(
+    public ApiResponse<ProjectFileListResponse> getProjectFiles(
             @PathVariable Long projectId,
             Authentication authentication
     ) {
-        List<ProjectFileResponse> data = fileQueryUseCase.getProjectFiles(
+        // ⚠️ 계약이 data.files[] 라 배열을 files 로 감싼다(이미지 모아보기와 구조 통일). data 로 바로 내리면 프론트가 못 읽는다.
+        List<ProjectFileResponse> files = fileQueryUseCase.getProjectFiles(
                         projectId, authentication.getName(), RequesterRole.from(authentication))
                 .stream()
                 .map(ProjectFileResponse::from)
                 .toList();
 
-        return ApiResponse.success(FileResponseMessage.PROJECT_FILES, data);
+        return ApiResponse.success(FileResponseMessage.PROJECT_FILES, new ProjectFileListResponse(files));
     }
 }
