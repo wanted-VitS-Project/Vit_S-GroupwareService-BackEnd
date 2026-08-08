@@ -31,6 +31,16 @@
          LIMIT 1
     </select>
 
+    <!-- 문서→블록→스텝의 step_id. block.deleted_at 을 보지 않는다 — §6 복구는 블록이 삭제돼도 되므로 -->
+    <!-- 삭제된 블록의 스텝으로도 권한을 판정해야 한다. block_file 행은 블록이 죽어도 남는다. -->
+    <select id="findStepIdByFileIdIncludingDeletedBlock" resultType="long">
+        SELECT b.step_id
+          FROM block_file bf
+          JOIN block b ON b.block_id = bf.block_id
+         WHERE bf.file_id = #{fileId}
+         LIMIT 1
+    </select>
+
     <!-- 완료된 버전 목록(§8 이력) — 차수 내림차순. 실패·미완료·삭제 버전 제외. -->
     <select id="findCompletedVersions"
             resultType="com.group3.vitamins.file.application.result.FileVersionProjection">

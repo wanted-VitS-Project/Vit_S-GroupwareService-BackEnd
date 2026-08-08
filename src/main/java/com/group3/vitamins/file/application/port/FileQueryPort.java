@@ -23,6 +23,13 @@ public interface FileQueryPort {
     /** 문서가 연결된 블록 ID(권한 판정 경로 fileId→block→step). 파일 1 : 블록 1. 링크 없으면 empty. */
     Optional<Long> findBlockIdByFileId(Long fileId);
 
+    /**
+     * 문서가 매달린 블록의 스텝 ID — <b>블록이 soft delete 됐어도</b> 돌려준다(§6 복구용).
+     * 블록이 삭제돼도 복구는 성공해야 하므로, 삭제된 블록의 스텝으로도 권한을 판정할 수 있어야 한다.
+     * block_file 링크가 없으면 empty.
+     */
+    Optional<Long> findStepIdByFileIdIncludingDeletedBlock(Long fileId);
+
     /** 문서의 완료된 버전 목록(§8 이력) — 차수 내림차순. 실패·미완료 버전은 제외. */
     List<FileVersionProjection> findCompletedVersions(Long fileId);
 

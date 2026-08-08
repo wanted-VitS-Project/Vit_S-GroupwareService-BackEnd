@@ -2,6 +2,7 @@ package com.group3.vitamins.file.application.service;
 
 import com.group3.vitamins.file.application.command.PermanentDeleteFileCommand;
 import com.group3.vitamins.file.application.command.RenameFileCommand;
+import com.group3.vitamins.file.application.command.RestoreFileCommand;
 import com.group3.vitamins.file.application.command.TrashFileCommand;
 import com.group3.vitamins.file.application.port.ApprovalLockQueryPort;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
@@ -10,6 +11,7 @@ import com.group3.vitamins.file.application.port.FileQueryPort;
 import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.file.application.result.FilePermanentDeleteResult;
 import com.group3.vitamins.file.application.result.FileRenameResult;
+import com.group3.vitamins.file.application.result.FileRestoreResult;
 import com.group3.vitamins.file.application.result.FileTrashResult;
 import com.group3.vitamins.file.application.usecase.FileCommandUseCase;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
@@ -98,6 +100,34 @@ public class FileCommandService implements FileCommandUseCase {
     }
 
     @Override
+    public FileRestoreResult restore(RestoreFileCommand command) {
+        File file = fileRepository.findById(command.fileId())
+                .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+
+        // ⭐ 블록이 삭제됐어도 복구된다(§6) — 삭제된 블록의 스텝으로도 권한을 판정한다.
+        Long stepId = fileQueryPort.findStepIdByFileIdIncludingDeletedBlock(command.fileId())
+                .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
+        requireEditableOnStep(stepId, command.requesterUserId(), command.role());
+
+        // 휴지통에 있는 문서만 복구 대상이다 (§6 · 400).
+        if (!file.isDeleted()) {
+            throw new ValidationException(FileErrorCode.FILE_NOT_DELETED);
+        }
+
+        file.restoreFromTrash();
+        File saved = fileRepository.save(file);
+
+        // 원래 블록이 살아있으면 그 블록으로, soft delete 됐으면 blockId=null·blockDeleted=true (§6).
+        Long linkedBlockId = fileQueryPort.findBlockIdByFileId(command.fileId()).orElse(null);
+        boolean blockAlive = linkedBlockId != null
+                && blockCatalogPort.resolveAttachableBlockStepId(linkedBlockId).isPresent();
+
+        return new FileRestoreResult(
+                saved.getFileId(), saved.getName(),
+                blockAlive ? linkedBlockId : null, !blockAlive);
+    }
+
+    @Override
     public FilePermanentDeleteResult permanentDelete(PermanentDeleteFileCommand command) {
         File file = fileRepository.findById(command.fileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
@@ -168,6 +198,11 @@ public class FileCommandService implements FileCommandUseCase {
         // 결재 블록에 매달린 파일도 이름수정·휴지통 이동이 되어야 하므로 attachable(FILE|APPROVAL) 로 해석한다.
         Long stepId = blockCatalogPort.resolveAttachableBlockStepId(blockId)
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_BLOCK_NOT_FOUND));
+        requireEditableOnStep(stepId, userId, role);
+    }
+
+    /** 스텝 EDITOR 판정 + 파일 계약 코드 변환. 스텝 ID 를 이미 아는 호출자용(§6 복구는 삭제 블록의 스텝을 넘긴다). */
+    private void requireEditableOnStep(Long stepId, String userId, String role) {
         try {
             stepAccessUseCase.requireEditable(stepId, userId, role);
         } catch (ForbiddenException e) {

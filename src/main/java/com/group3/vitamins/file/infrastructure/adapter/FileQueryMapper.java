@@ -16,6 +16,8 @@ public interface FileQueryMapper {
 
     Long findBlockIdByFileId(@Param("fileId") Long fileId);
 
+    Long findStepIdByFileIdIncludingDeletedBlock(@Param("fileId") Long fileId);
+
     List<FileVersionProjection> findCompletedVersions(@Param("fileId") Long fileId);
 
     int findMaxCompletedVersionNo(@Param("fileId") Long fileId);

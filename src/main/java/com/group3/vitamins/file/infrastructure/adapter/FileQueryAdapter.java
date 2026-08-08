@@ -27,6 +27,11 @@ public class FileQueryAdapter implements FileQueryPort {
     }
 
     @Override
+    public Optional<Long> findStepIdByFileIdIncludingDeletedBlock(Long fileId) {
+        return Optional.ofNullable(fileQueryMapper.findStepIdByFileIdIncludingDeletedBlock(fileId));
+    }
+
+    @Override
     public List<FileVersionProjection> findCompletedVersions(Long fileId) {
         return fileQueryMapper.findCompletedVersions(fileId);
     }
