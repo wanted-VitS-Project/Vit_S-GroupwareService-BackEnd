@@ -8,7 +8,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 // 비타메이트 파일 인덱싱 상태를 file_index 테이블에 저장하는 adapter입니다.
@@ -22,6 +25,18 @@ public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStoreP
     public boolean existsFileVersion(Long fileVersionId) {
         // DB 방언별 boolean 변환 차이를 피하기 위해 count로 존재 여부를 확인합니다.
         return fileIndexJpaRepository.countActiveFileVersion(fileVersionId) > 0;
+    }
+
+    @Override
+    public List<Long> findStalePendingFileVersionIdCandidates(LocalDateTime before, int limit) {
+        return fileIndexJpaRepository.findStalePendingFileVersionIdCandidates(before, PageRequest.of(0, limit));
+    }
+
+    @Override
+    @Transactional
+    public boolean claimStalePending(Long fileVersionId, LocalDateTime before) {
+        int updatedCount = fileIndexJpaRepository.claimStalePending(fileVersionId, before, LocalDateTime.now());
+        return updatedCount == 1;
     }
 
     @Override

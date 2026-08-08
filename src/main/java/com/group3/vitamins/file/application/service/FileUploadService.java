@@ -2,11 +2,7 @@ package com.group3.vitamins.file.application.service;
 
 import com.group3.vitamins.file.application.command.CompleteFileUploadCommand;
 import com.group3.vitamins.file.application.command.StartFileUploadCommand;
-import com.group3.vitamins.file.application.port.BlockCatalogPort;
-import com.group3.vitamins.file.application.port.FileQueryPort;
-import com.group3.vitamins.file.application.port.FileStoragePort;
-import com.group3.vitamins.file.application.port.PdfPageCounterPort;
-import com.group3.vitamins.file.application.port.UploaderLookupPort;
+import com.group3.vitamins.file.application.port.*;
 import com.group3.vitamins.file.application.result.FileUploadStartResult;
 import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.usecase.FileUploadUseCase;
@@ -57,6 +53,7 @@ public class FileUploadService implements FileUploadUseCase {
     private final FileStoragePort fileStoragePort;
     private final PdfPageCounterPort pdfPageCounterPort;
     private final FileVersionFailureRecorder failureRecorder;
+    private final FileIndexTriggerPort fileIndexTriggerPort;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
@@ -149,6 +146,7 @@ public class FileUploadService implements FileUploadUseCase {
 
         version.complete(stored.sizeBytes(), command.checksum(), pageCount, LocalDateTime.now());
         FileVersion saved = fileVersionRepository.save(version);
+        fileIndexTriggerPort.triggerIndexing(saved.getFileVersionId());
 
         File file = fileRepository.findById(saved.getFileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));

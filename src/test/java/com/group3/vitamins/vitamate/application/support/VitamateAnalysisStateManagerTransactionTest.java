@@ -117,7 +117,9 @@ class VitamateAnalysisStateManagerTransactionTest {
                 REQUESTED_BY,
                 idempotencyKey,
                 REQUEST_HASH,
-                "analysis prompt",
+                "reviewType=COST_REPORT; categories=COMMON",
+                "COST_REPORT",
+                "COMMON",
                 REQUESTED_AT
         ));
         return saved.getId();
@@ -195,7 +197,12 @@ class VitamateAnalysisStateManagerTransactionTest {
         }
 
         @Override
-        public void saveAnalysisDocuments(Long analysisId, List<Long> fileVersionIds) {
+        public void saveAnalysisDocuments(Long analysisId, List<NewAnalysisDocument> documents) {
+            throw unused();
+        }
+
+        @Override
+        public void saveAnalysisTemplates(Long analysisId, List<NewAnalysisTemplate> templates) {
             throw unused();
         }
 

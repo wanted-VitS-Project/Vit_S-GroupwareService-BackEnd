@@ -26,6 +26,8 @@ public record VitamateAnalysisHistoryResult(
 
     public record Item(
             Long analysisId,
+            String reviewType,
+            List<String> reviewCategoryCodes,
             String prompt,
             String analysisStatus,
             LocalDateTime createdAt,
@@ -36,6 +38,8 @@ public record VitamateAnalysisHistoryResult(
         private static Item from(VitamateAnalysisReaderPort.VitamateAnalysisHistory history) {
             return new Item(
                     history.analysisId(),
+                    history.reviewType(),
+                    history.reviewCategoryCodes(),
                     history.prompt(),
                     history.analysisStatus(),
                     history.createdAt(),

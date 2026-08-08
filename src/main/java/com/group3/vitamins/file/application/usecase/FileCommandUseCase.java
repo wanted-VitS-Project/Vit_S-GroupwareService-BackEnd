@@ -1,7 +1,9 @@
 package com.group3.vitamins.file.application.usecase;
 
+import com.group3.vitamins.file.application.command.PermanentDeleteFileCommand;
 import com.group3.vitamins.file.application.command.RenameFileCommand;
 import com.group3.vitamins.file.application.command.TrashFileCommand;
+import com.group3.vitamins.file.application.result.FilePermanentDeleteResult;
 import com.group3.vitamins.file.application.result.FileRenameResult;
 import com.group3.vitamins.file.application.result.FileTrashResult;
 
@@ -13,4 +15,7 @@ public interface FileCommandUseCase {
 
     /** 휴지통으로 이동(§5). 진행 중 결재 대상이면 막는다. */
     FileTrashResult moveToTrash(TrashFileCommand command);
+
+    /** 영구 삭제(§7). 휴지통 문서만 대상. 파생데이터 정리 → 전 버전·file 삭제 → 저장소 객체 삭제. */
+    FilePermanentDeleteResult permanentDelete(PermanentDeleteFileCommand command);
 }

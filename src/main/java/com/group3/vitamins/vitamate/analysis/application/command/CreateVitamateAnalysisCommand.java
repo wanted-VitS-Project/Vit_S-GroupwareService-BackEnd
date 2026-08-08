@@ -2,12 +2,15 @@ package com.group3.vitamins.vitamate.analysis.application.command;
 
 import java.util.List;
 
-// 비타메이트 분석 요청 생성 서비스에 전달하는 명령 객체
+// 비교 기준 문서와 검토 대상 문서를 포함한 분석 생성 명령입니다.
 public record CreateVitamateAnalysisCommand(
         Long blockId,
         String requestedBy,
         String idempotencyKey,
-        List<Long> fileVersionIds,
+        List<Long> referenceFileVersionIds,
+        List<Long> targetFileVersionIds,
+        String reviewType,
+        List<String> reviewCategoryCodes,
         String prompt
 ) {
 }

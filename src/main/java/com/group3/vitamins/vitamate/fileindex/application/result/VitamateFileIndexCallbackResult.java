@@ -7,5 +7,5 @@ public record VitamateFileIndexCallbackResult(
         String indexAttemptId,
         String indexStatus,
         String reason
-) {
+)    {
 }

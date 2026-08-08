@@ -1,16 +1,23 @@
 package com.group3.vitamins.file.application;
 
+import com.group3.vitamins.file.application.command.PermanentDeleteFileCommand;
 import com.group3.vitamins.file.application.command.RenameFileCommand;
 import com.group3.vitamins.file.application.command.TrashFileCommand;
 import com.group3.vitamins.file.application.port.ApprovalLockQueryPort;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
+import com.group3.vitamins.file.application.port.FileDerivedDataCleanupPort;
 import com.group3.vitamins.file.application.port.FileQueryPort;
+import com.group3.vitamins.file.application.port.FileStoragePort;
+import com.group3.vitamins.file.application.result.FilePermanentDeleteResult;
 import com.group3.vitamins.file.application.result.FileRenameResult;
 import com.group3.vitamins.file.application.result.FileTrashResult;
 import com.group3.vitamins.file.application.service.FileCommandService;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
 import com.group3.vitamins.file.domain.model.File;
+import com.group3.vitamins.file.domain.model.FileVersion;
+import com.group3.vitamins.file.domain.model.UploadStatus;
 import com.group3.vitamins.file.domain.repository.FileRepository;
+import com.group3.vitamins.file.domain.repository.FileVersionRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.project.domain.model.MemberPermission;
@@ -19,15 +26,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,21 +56,28 @@ class FileCommandServiceTest {
     private static final String ROLE = "MEMBER";
 
     private FileRepository fileRepository;
+    private FileVersionRepository fileVersionRepository;
     private FileQueryPort fileQueryPort;
     private BlockCatalogPort blockCatalogPort;
     private StepAccessUseCase stepAccessUseCase;
     private ApprovalLockQueryPort approvalLockQueryPort;
+    private FileStoragePort fileStoragePort;
+    private FileDerivedDataCleanupPort fileDerivedDataCleanupPort;
     private FileCommandService service;
 
     @BeforeEach
     void setUp() {
         fileRepository = Mockito.mock(FileRepository.class);
+        fileVersionRepository = Mockito.mock(FileVersionRepository.class);
         fileQueryPort = Mockito.mock(FileQueryPort.class);
         blockCatalogPort = Mockito.mock(BlockCatalogPort.class);
         stepAccessUseCase = Mockito.mock(StepAccessUseCase.class);
         approvalLockQueryPort = Mockito.mock(ApprovalLockQueryPort.class);
+        fileStoragePort = Mockito.mock(FileStoragePort.class);
+        fileDerivedDataCleanupPort = Mockito.mock(FileDerivedDataCleanupPort.class);
         service = new FileCommandService(
-                fileRepository, fileQueryPort, blockCatalogPort, stepAccessUseCase, approvalLockQueryPort);
+                fileRepository, fileVersionRepository, fileQueryPort, blockCatalogPort,
+                stepAccessUseCase, approvalLockQueryPort, fileStoragePort, fileDerivedDataCleanupPort);
     }
 
     // ---- 헬퍼 ---------------------------------------------------------------
@@ -68,6 +88,12 @@ class FileCommandServiceTest {
 
     private File trashedFile() {
         return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now());
+    }
+
+    private FileVersion version(long versionId, String storageKey) {
+        return FileVersion.restore(versionId, FILE_ID, 1, UploadStatus.COMPLETED, storageKey,
+                "제안서.pdf", "pdf", "application/pdf", 100L, null, null, null,
+                USER, "김철수", "사업기획팀", "팀장", LocalDateTime.now(), null);
     }
 
     /** 문서 → 블록 → 스텝 편집 권한(EDITOR) 경로 스텁. */
@@ -219,6 +245,110 @@ class FileCommandServiceTest {
 
             assertThatThrownBy(() -> service.moveToTrash(cmd()))
                     .satisfies(hasCode(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED));
+        }
+    }
+
+    @Nested
+    @DisplayName("§7 영구 삭제")
+    class PermanentDelete {
+
+        private PermanentDeleteFileCommand cmd(String confirmText) {
+            return new PermanentDeleteFileCommand(FILE_ID, confirmText, USER, ROLE);
+        }
+
+        private void assertNoDeletion() {
+            verify(fileDerivedDataCleanupPort, never()).cleanupByFileId(anyLong());
+            verify(fileVersionRepository, never()).deleteByFileId(anyLong());
+            verify(fileRepository, never()).deleteById(anyLong());
+            verify(fileStoragePort, never()).deleteObjects(any());
+        }
+
+        @Test
+        @DisplayName("파생데이터 정리 → 전 버전·file 삭제 → 저장소 삭제 순서로 지운다")
+        void permanentlyDeletes() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(trashedFile()));
+            stubEditable();
+            when(approvalLockQueryPort.existsAnyApprovalReference(FILE_ID)).thenReturn(false);
+            when(fileVersionRepository.findByFileId(FILE_ID))
+                    .thenReturn(List.of(version(1L, "key-1"), version(2L, "key-2")));
+            when(fileStoragePort.deleteObjects(any())).thenReturn(2);
+
+            FilePermanentDeleteResult result = service.permanentDelete(cmd("영구 삭제"));
+
+            assertThat(result.fileId()).isEqualTo(FILE_ID);
+            assertThat(result.deletedVersionCount()).isEqualTo(2);
+            assertThat(result.storageDeletedCount()).isEqualTo(2);
+
+            // ⭐ DB 삭제 前 파생데이터 정리 → 버전 → file(그다음 저장소) 순서가 지켜져야 한다(FK 안전).
+            InOrder order = inOrder(
+                    fileDerivedDataCleanupPort, fileVersionRepository, fileRepository, fileStoragePort);
+            order.verify(fileDerivedDataCleanupPort).cleanupByFileId(FILE_ID);
+            order.verify(fileVersionRepository).deleteByFileId(FILE_ID);
+            order.verify(fileRepository).deleteById(FILE_ID);
+            order.verify(fileStoragePort).deleteObjects(any());
+
+            // 저장소 삭제엔 전 버전의 키가 넘어간다.
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Collection<String>> keys = ArgumentCaptor.forClass(Collection.class);
+            verify(fileStoragePort).deleteObjects(keys.capture());
+            assertThat(keys.getValue()).containsExactlyInAnyOrder("key-1", "key-2");
+        }
+
+        @Test
+        @DisplayName("휴지통에 없으면 FILE_NOT_DELETED — 아무것도 지우지 않는다")
+        void notInTrash() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            stubEditable();
+
+            assertThatThrownBy(() -> service.permanentDelete(cmd("영구 삭제")))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_DELETED));
+            assertNoDeletion();
+        }
+
+        @Test
+        @DisplayName("확인 문자가 다르면 FILE_CONFIRM_TEXT_MISMATCH — 아무것도 지우지 않는다")
+        void confirmTextMismatch() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(trashedFile()));
+            stubEditable();
+
+            assertThatThrownBy(() -> service.permanentDelete(cmd("삭제")))
+                    .satisfies(hasCode(FileErrorCode.FILE_CONFIRM_TEXT_MISMATCH));
+            assertNoDeletion();
+        }
+
+        @Test
+        @DisplayName("결재가 버전을 참조하면 FILE_APPROVAL_REFERENCED(409) — 아무것도 지우지 않는다")
+        void approvalReferenced() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(trashedFile()));
+            stubEditable();
+            when(approvalLockQueryPort.existsAnyApprovalReference(FILE_ID)).thenReturn(true);
+
+            assertThatThrownBy(() -> service.permanentDelete(cmd("영구 삭제")))
+                    .satisfies(hasCode(FileErrorCode.FILE_APPROVAL_REFERENCED));
+            assertNoDeletion();
+        }
+
+        @Test
+        @DisplayName("없는 문서면 FILE_NOT_FOUND")
+        void notFound() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.permanentDelete(cmd("영구 삭제")))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("편집 권한이 없으면 FILE_EDIT_PERMISSION_REQUIRED")
+        void notEditable() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(trashedFile()));
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+
+            assertThatThrownBy(() -> service.permanentDelete(cmd("영구 삭제")))
+                    .satisfies(hasCode(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED));
+            assertNoDeletion();
         }
     }
 }

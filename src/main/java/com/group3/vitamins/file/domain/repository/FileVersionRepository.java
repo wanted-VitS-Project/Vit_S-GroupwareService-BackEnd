@@ -2,6 +2,7 @@ package com.group3.vitamins.file.domain.repository;
 
 import com.group3.vitamins.file.domain.model.FileVersion;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,4 +21,10 @@ public interface FileVersionRepository {
 
     /** 새 버전 차수 계산용 — 해당 문서의 현재 최대 versionNo(없으면 0). */
     int findMaxVersionNo(Long fileId);
+
+    /** 문서의 모든 버전(상태 무관) — 영구삭제(§7) 시 저장소 키 수집·개수 산정용. */
+    List<FileVersion> findByFileId(Long fileId);
+
+    /** 문서의 모든 버전 행을 물리 삭제한다(§7). {@code file} 삭제 전에 호출한다(FK 순서). */
+    void deleteByFileId(Long fileId);
 }
