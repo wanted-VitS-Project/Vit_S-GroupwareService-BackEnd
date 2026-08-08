@@ -8,7 +8,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
@@ -38,15 +37,5 @@ public class NotificationRepositoryAdapter implements NotificationRepository {
                 result.getContent().stream().map(NotificationMapper::toDomain).toList(),
                 result.getTotalElements(),
                 result.getTotalPages());
-    }
-
-    @Override
-    public int markAllRead(String userId, LocalDateTime now) {
-        return springDataRepository.markAllRead(userId, now);
-    }
-
-    @Override
-    public int deleteCreatedBefore(LocalDateTime createdBefore, LocalDateTime deletedAt) {
-        return springDataRepository.deleteCreatedBefore(createdBefore, deletedAt);
     }
 }

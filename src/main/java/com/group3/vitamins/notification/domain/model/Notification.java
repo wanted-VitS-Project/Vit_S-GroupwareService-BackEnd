@@ -61,11 +61,21 @@ public class Notification {
         return targetType != null;
     }
 
-    /** ACT-004 — 이미 읽었으면 시각을 덮어쓰지 않는다(최초 읽음 시각 보존). */
+    /**
+     * ACT-004 · ACT-006 — 읽음 처리. 이미 읽었으면 시각을 덮어쓰지 않는다(최초 읽음 시각 보존).
+     *
+     * <p>이동 대상 조회 시 자동 호출되고(ACT-004), 개별 읽음 API 로도 호출된다(ACT-006).
+     * 두 경로가 겹쳐도 최초 시각이 유지되므로 순서에 상관없이 안전하다.
+     */
     public void markRead(LocalDateTime now) {
         if (readAt == null) {
             this.readAt = now;
         }
+    }
+
+    /** ACT-001 — 논리 삭제. 하드 삭제하지 않는다(INV-05). */
+    public void delete(LocalDateTime now) {
+        this.deletedAt = now;
     }
 
     public Long getNotificationId() { return notificationId; }
