@@ -37,7 +37,21 @@ public enum EmployeeErrorCode implements ErrorCode {
 
     // ── 퇴사 (employee.md §5) ──
     EMP_ALREADY_RESIGNED("EMP_ALREADY_RESIGNED",
-            "이미 퇴사 처리된 사원입니다.");
+            "이미 퇴사 처리된 사원입니다."),
+
+    // ── 엑셀 일괄 등록 (employee.md §6~§8) ──
+    // 파일을 열기 전에 알 수 있는 오류만 4xx 다. 파일을 연 뒤의 행별 오류는 200 + data.errors 로 간다.
+    EMP_FILE_REQUIRED("EMP_FILE_REQUIRED",
+            "업로드할 파일이 없습니다."),
+
+    EMP_FILE_TYPE_INVALID("EMP_FILE_TYPE_INVALID",
+            "엑셀 파일(.xlsx · .xls)만 업로드할 수 있습니다."),
+
+    EMP_FILE_SIZE_EXCEEDED("EMP_FILE_SIZE_EXCEEDED",
+            "파일 크기가 5MB를 초과했습니다."),
+
+    EMP_HAS_ERRORS("EMP_HAS_ERRORS",
+            "오류 행이 있어 등록할 수 없습니다. 오류 제외 등록을 사용하세요.");
 
     private final String code;
     private final String message;
