@@ -52,9 +52,6 @@ import java.util.stream.Collectors;
 public class EmployeeBulkService implements EmployeeBulkUseCase {
 
     private static final long MAX_FILE_SIZE = 5L * 1024 * 1024; // 5MB
-    // 행마다 Argon2 해싱·동기 메일이 있어 요청 스레드를 오래 잡지 않도록 파일 단위 행 수 상한을 둔다(방어).
-    // 30명 규모 회사엔 넉넉하다. 초과분은 파일을 나눠 올린다. 장기적으로는 비동기 작업화 검토(백로그).
-    private static final int MAX_ROWS = 1000;
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("xlsx", "xls");
     private static final Set<String> ASSIGNABLE_ROLES = Set.of("MASTER", "MEMBER");
     private static final String ROLE_ADMIN = "ADMIN";
@@ -158,11 +155,6 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     private BulkAnalysis analyze(byte[] content, String filename, long size) {
         validateFileMeta(content, filename, size);
         List<ParsedEmployeeRow> rows = excelParserPort.parse(content);
-
-        // 행 수 상한(방어) — 초과하면 등록 루프(행별 Argon2·메일)에 들어가기 전에 파일 단위로 막는다.
-        if (rows.size() > MAX_ROWS) {
-            throw new ValidationException(EmployeeErrorCode.EMP_ROW_LIMIT_EXCEEDED);
-        }
 
         // 파일 내 사번 등장 수 · 최초 등장 행 (중복 판정용)
         Map<String, Long> userIdCounts = rows.stream()

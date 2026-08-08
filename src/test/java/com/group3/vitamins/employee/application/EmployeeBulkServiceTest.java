@@ -157,16 +157,6 @@ class EmployeeBulkServiceTest {
                     .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED));
         }
 
-        @Test
-        @DisplayName("행 수가 상한(1000)을 초과하면 EMP_ROW_LIMIT_EXCEEDED")
-        void rowLimit() {
-            List<ParsedEmployeeRow> tooMany = new java.util.ArrayList<>();
-            for (int i = 0; i < 1001; i++) {
-                tooMany.add(valid(i + 2, "EMP" + i, null));
-            }
-            assertThatThrownBy(() -> service.validate(validateCmd(tooMany)))
-                    .satisfies(hasCode(EmployeeErrorCode.EMP_ROW_LIMIT_EXCEEDED));
-        }
     }
 
     // ---- 검증 (§7) ----------------------------------------------------------
