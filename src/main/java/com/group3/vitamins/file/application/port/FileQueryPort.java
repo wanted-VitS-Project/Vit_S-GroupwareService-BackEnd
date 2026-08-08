@@ -2,6 +2,7 @@ package com.group3.vitamins.file.application.port;
 
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
+import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 
 import java.util.List;
@@ -48,4 +49,12 @@ public interface FileQueryPort {
      * 정렬은 파일(file_id) 오름차순 · 같은 파일 안에서는 차수(version_no) 내림차순(최신 버전 먼저).
      */
     List<ProjectFileVersionProjection> findProjectFileVersions(Long projectId);
+
+    /**
+     * 프로젝트 전체 파일 모아보기(§12) — 프로젝트에 속한 <b>활성</b> 문서(file.deleted_at IS NULL)를 문서 단위 최신 완료 버전 1행으로.
+     * 완료 버전이 하나도 없는 문서는 제외한다(§3 과 동일). 스텝·블록 위치를 함께 내려주며, 블록이 soft delete 된 고아 파일도 포함한다
+     * — 이 경우 blockId·blockTitle 은 null, blockDeleted=true, stepId·stepName 은 삭제된 블록의 step 으로 해석한다.
+     * 정렬은 스텝(step_id) → 블록(block_id) → 블록 연결일(linked_at) 오름차순.
+     */
+    List<ProjectFileProjection> findProjectFiles(Long projectId);
 }

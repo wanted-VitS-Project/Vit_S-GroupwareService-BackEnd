@@ -139,4 +139,50 @@
          ORDER BY f.file_id ASC, fv.version_no DESC
     </select>
 
+    <!-- 프로젝트 전체 파일 모아보기(§12) — 프로젝트 문서함. 활성 문서(f.deleted_at IS NULL)를 문서 단위 최신 완료 버전 1행으로. -->
+    <!-- 완료 버전 0개 문서는 vc INNER JOIN 으로 제외. 위치(스텝·블록)를 함께 준다(프론트가 스텝→블록 트리로 조합). -->
+    <!-- ⚠️ 고아 파일: 블록이 soft delete 돼도 block_file 행은 남는다 → block 조인은 되지만 b.deleted_at 이 채워져 있다. -->
+    <!--    이때 blockId·blockTitle 은 CASE 로 NULL 을 내리고 blockDeleted=TRUE, 스텝은 삭제된 블록의 step_id 로 해석한다. -->
+    <!-- ⚠️ 파일 1:블록 1(block_file)이라 fanout 없음. 최신버전은 vc(집계)로 좁힌 뒤 lv 로 단행 조인 — file_version 전체 스캔·카티전 곱 방지. -->
+    <select id="findProjectFiles"
+            resultType="com.group3.vitamins.file.application.result.ProjectFileProjection">
+        SELECT b.step_id                                              AS stepId,
+               s.name                                                 AS stepName,
+               CASE WHEN b.deleted_at IS NULL THEN b.block_id END      AS blockId,
+               CASE WHEN b.deleted_at IS NULL THEN b.title END         AS blockTitle,
+               (b.deleted_at IS NOT NULL)                             AS blockDeleted,
+               f.file_id                                              AS fileId,
+               f.name                                                 AS name,
+               lv.file_version_id                                     AS latestVersionId,
+               lv.version_no                                          AS latestVersionNo,
+               vc.cnt                                                 AS versionCount,
+               lv.original_file_name                                  AS originalFileName,
+               lv.extension                                           AS extension,
+               lv.size_bytes                                          AS sizeBytes,
+               lv.uploader_name                                       AS uploaderName,
+               lv.uploader_department                                 AS uploaderDepartment,
+               lv.uploader_position                                   AS uploaderPosition,
+               lv.completed_at                                        AS updatedAt
+          FROM file f
+          JOIN block_file bf ON bf.file_id = f.file_id
+          JOIN block b ON b.block_id = bf.block_id
+          JOIN step s ON s.step_id = b.step_id
+          JOIN (
+                -- 프로젝트 문서로 먼저 좁힌 뒤 집계한다 — file_version 전체를 스캔하지 않도록.
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                  JOIN file fj ON fj.file_id = fv.file_id AND fj.project_id = #{projectId}
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NULL
+         ORDER BY b.step_id ASC, b.block_id ASC, bf.linked_at ASC, f.file_id ASC
+    </select>
+
 </mapper>
