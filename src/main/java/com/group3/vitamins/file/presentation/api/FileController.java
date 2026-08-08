@@ -1,5 +1,6 @@
 package com.group3.vitamins.file.presentation.api;
 
+import com.group3.vitamins.file.application.command.RestoreFileCommand;
 import com.group3.vitamins.file.application.command.TrashFileCommand;
 import com.group3.vitamins.file.application.usecase.FileCommandUseCase;
 import com.group3.vitamins.file.application.usecase.FileQueryUseCase;
@@ -7,6 +8,7 @@ import com.group3.vitamins.file.presentation.api.request.FilePermanentDeleteRequ
 import com.group3.vitamins.file.presentation.api.request.FileRenameRequest;
 import com.group3.vitamins.file.presentation.api.response.FilePermanentDeleteResponse;
 import com.group3.vitamins.file.presentation.api.response.FileRenameResponse;
+import com.group3.vitamins.file.presentation.api.response.FileRestoreResponse;
 import com.group3.vitamins.file.presentation.api.response.FileTrashResponse;
 import com.group3.vitamins.file.presentation.api.response.VersionHistoryResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -99,6 +101,29 @@ public class FileController {
                                 fileId, authentication.getName(), RequesterRole.from(authentication))));
 
         return ApiResponse.success(FileResponseMessage.FILE_TRASHED, data);
+    }
+
+    @Operation(summary = "휴지통에서 복구",
+            description = "휴지통에 있는 문서를 복구한다. 원래 블록으로 돌아가며, 원래 블록이 삭제된 경우에도 복구되고 "
+                    + "이때는 blockId=null·blockDeleted=true 로 프로젝트 문서함에 복구된다. 스텝 EDITOR 권한이 필요하다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "복구 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "FILE_NOT_DELETED — 휴지통에 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "FILE_EDIT_PERMISSION_REQUIRED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "FILE_NOT_FOUND — 문서 없음")
+    })
+    @PostMapping("/{fileId}/restore")
+    public ApiResponse<FileRestoreResponse> restore(
+            @PathVariable Long fileId,
+            Authentication authentication
+    ) {
+        FileRestoreResponse data = FileRestoreResponse.from(
+                fileCommandUseCase.restore(
+                        new RestoreFileCommand(
+                                fileId, authentication.getName(), RequesterRole.from(authentication))));
+
+        return ApiResponse.success(FileResponseMessage.FILE_RESTORED, data);
     }
 
     @Operation(summary = "영구 삭제",

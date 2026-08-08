@@ -4,6 +4,7 @@ import com.group3.vitamins.file.application.result.BlockFileListResult;
 import com.group3.vitamins.file.application.result.DownloadUrlResult;
 import com.group3.vitamins.file.application.result.FilePreviewResult;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
+import com.group3.vitamins.file.application.result.ProjectFileResult;
 import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
 
@@ -35,4 +36,10 @@ public interface FileQueryUseCase {
      * 고아 파일 포함, 휴지통 제외)을 돌려준다. 프로젝트 접근 권한(VIEWER 이상)을 따른다.
      */
     List<ProjectFileVersionResult> getProjectFileVersions(Long projectId, String requesterUserId, String role);
+
+    /**
+     * 프로젝트 전체 파일 모아보기(§12) — 프로젝트 문서함. 활성 문서의 최신 완료 버전을 스텝·블록 위치와 함께 돌려준다
+     * (고아 파일 포함, 휴지통 제외). 프로젝트 접근 권한(VIEWER 이상)을 따른다.
+     */
+    List<ProjectFileResult> getProjectFiles(Long projectId, String requesterUserId, String role);
 }
