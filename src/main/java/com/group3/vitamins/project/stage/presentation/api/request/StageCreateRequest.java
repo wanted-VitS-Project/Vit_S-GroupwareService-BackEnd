@@ -9,7 +9,7 @@ public record StageCreateRequest(
         @Schema(description = "스테이지명 (최대 100자)", example = "제안")
         String name,
 
-        @Schema(description = "정렬 순서. 생략하면 기존 최대값 + 1", example = "null")
+        @Schema(description = "정렬 순서. 생략하면 기존 최대값 + 1", example = "3")
         Integer sortOrder
 ) {
 
