@@ -31,4 +31,9 @@ public class IssueStatLookupAdapter implements IssueStatLookupPort {
     public List<Long> findOpenIssueIds(Long stepId) {
         return issueStatQueryMapper.findOpenIssueIds(stepId);
     }
+
+    @Override
+    public List<Long> findAllIssueIds(Long stepId) {
+        return issueStatQueryMapper.findAllIssueIds(stepId);
+    }
 }

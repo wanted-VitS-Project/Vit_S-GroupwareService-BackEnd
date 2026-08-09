@@ -8,7 +8,9 @@ import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.domain.model.MemberPermission;
 import com.group3.vitamins.project.step.application.command.ReorderStepsCommand;
 import com.group3.vitamins.project.step.application.command.UpdateStepCommand;
+import com.group3.vitamins.project.step.application.port.StagePermissionDefaultLookupPort;
 import com.group3.vitamins.project.step.application.port.StageLookupPort;
+import com.group3.vitamins.project.step.domain.repository.StepPermissionRepository;
 import com.group3.vitamins.project.step.application.result.StepOrderResult;
 import com.group3.vitamins.project.step.application.result.StepUpdateResult;
 import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
@@ -47,6 +49,8 @@ class StepCommandServiceTest {
     @Mock private StepRepository stepRepository;
     @Mock private StageLookupPort stageLookupPort;
     @Mock private EmployeeLookupPort employeeLookupPort;
+    @Mock private StagePermissionDefaultLookupPort stagePermissionDefaultLookupPort;
+    @Mock private StepPermissionRepository stepPermissionRepository;
     @Mock private ProjectAccessUseCase projectAccessUseCase;
     @Mock private StepAccessUseCase stepAccessUseCase;
 

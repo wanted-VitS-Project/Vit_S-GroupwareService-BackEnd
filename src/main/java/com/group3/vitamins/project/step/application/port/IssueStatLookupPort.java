@@ -16,6 +16,9 @@ public interface IssueStatLookupPort {
      */
     List<Long> findOpenIssueIds(Long stepId);
 
+    /** 스텝의 미삭제 이슈 ID 전부(상태 무관). 스텝 삭제가 하위 이슈를 훑을 때 쓴다 (STP-013). */
+    List<Long> findAllIssueIds(Long stepId);
+
     /** 진행 전 이슈 수는 {@code totalCount - doneCount - inProgressCount} 로 FE 가 계산한다. */
     record IssueStatView(int totalCount, int doneCount, int inProgressCount) {
 

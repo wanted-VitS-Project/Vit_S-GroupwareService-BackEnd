@@ -3,8 +3,10 @@ package com.group3.vitamins.project.step.presentation.api;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.presentation.api.ProjectResponseMessage;
+import com.group3.vitamins.project.step.application.command.DeleteStepCommand;
 import com.group3.vitamins.project.step.application.query.StepDetailQuery;
 import com.group3.vitamins.project.step.application.result.StepCompleteResult;
+import com.group3.vitamins.project.step.application.result.StepDeleteResult;
 import com.group3.vitamins.project.step.application.result.StepDetailResult;
 import com.group3.vitamins.project.step.application.result.StepStatusResult;
 import com.group3.vitamins.project.step.application.result.StepUpdateResult;
@@ -14,6 +16,7 @@ import com.group3.vitamins.project.step.presentation.api.request.StepCompleteReq
 import com.group3.vitamins.project.step.presentation.api.request.StepStatusUpdateRequest;
 import com.group3.vitamins.project.step.presentation.api.request.StepUpdateRequest;
 import com.group3.vitamins.project.step.presentation.api.response.StepCompleteResponse;
+import com.group3.vitamins.project.step.presentation.api.response.StepDeleteResponse;
 import com.group3.vitamins.project.step.presentation.api.response.StepDetailResponse;
 import com.group3.vitamins.project.step.presentation.api.response.StepStatusUpdateResponse;
 import com.group3.vitamins.project.step.presentation.api.response.StepUpdateResponse;
@@ -25,13 +28,17 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Tag(name = "Step - 스텝", description = "스텝 생성 / 조회 / 수정 / 삭제 (담당: 동훈)")
 @RestController
@@ -167,5 +174,43 @@ public class StepController {
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         StepCompleteResponse.from(result)));
+    }
+
+    @Operation(summary = "스텝 삭제",
+            description = "스텝을 논리 삭제한다. 하위 블록·이슈가 함께 삭제된다(STP-013). "
+                    + "⛔ 삭제 잠금은 폐기됐다(2026-08-09) — 살리고 싶은 블록은 moveBlockIds 로 골라 "
+                    + "moveToStepId 로 옮긴다. 옮긴 블록의 이슈 연결은 끊긴다(BLK-014). "
+                    + "⛔ 이슈는 선택지가 없다 — 무조건 함께 삭제된다. "
+                    + "⚠️ 재무 연결 해제(BLK-013)는 미구현이라 입금·계산서가 연결된 블록도 그냥 삭제된다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "BLOCK_MOVE_TARGET_REQUIRED / BLOCK_MOVE_TARGET_INVALID"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음 / "
+                            + "STEP_EDIT_DENIED — 이 스텝에 NONE·VIEWER 오버라이드가 걸려 하위 정리가 막힌 경우"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "STEP_NOT_FOUND / BLOCK_NOT_FOUND")
+    })
+    @DeleteMapping("/{stepId}")
+    public ResponseEntity<ApiResponse<StepDeleteResponse>> deleteStep(
+            @Parameter(description = "삭제할 스텝 ID")
+            @PathVariable Long stepId,
+            @Parameter(description = "살려서 옮길 블록 ID 목록. 생략하면 하위 블록을 전부 삭제한다")
+            @RequestParam(required = false) List<Long> moveBlockIds,
+            @Parameter(description = "블록을 옮길 스텝 ID. moveBlockIds 가 있으면 필수")
+            @RequestParam(required = false) Long moveToStepId,
+            Authentication authentication
+    ) {
+        StepDeleteResult result = stepCommandUseCase.deleteStep(new DeleteStepCommand(
+                stepId, moveBlockIds, moveToStepId,
+                authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        StepDeleteResponse.from(result)));
     }
 }

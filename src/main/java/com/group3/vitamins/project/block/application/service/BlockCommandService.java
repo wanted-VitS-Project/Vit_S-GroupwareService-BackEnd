@@ -6,10 +6,13 @@ import com.group3.vitamins.global.domain.common.error.exception.ValidationExcept
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.block.application.command.CreateBlockCommand;
 import com.group3.vitamins.project.block.application.command.DeleteBlockCommand;
+import com.group3.vitamins.project.block.application.command.MoveBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockLayoutCommand;
 import com.group3.vitamins.project.block.application.port.BlockDetailPort;
+import com.group3.vitamins.project.block.application.port.IssueBlockUnlinkPort;
 import com.group3.vitamins.project.block.application.result.BlockLayoutResult;
+import com.group3.vitamins.project.block.application.result.BlockMoveResult;
 import com.group3.vitamins.project.block.application.result.BlockOwner;
 import com.group3.vitamins.project.block.application.result.BlockResult;
 import com.group3.vitamins.project.block.application.result.BlockUpdateResult;
@@ -46,7 +49,7 @@ public class BlockCommandService implements BlockCommandUseCase {
     private final BlockRepository blockRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
-    private final BlockDeleteLockRegistry blockDeleteLockRegistry;
+    private final IssueBlockUnlinkPort issueBlockUnlinkPort;
     private final StepAccessUseCase stepAccessUseCase;
 
     @Override
@@ -177,18 +180,62 @@ public class BlockCommandService implements BlockCommandUseCase {
                 .toList();
     }
 
-    /** 잠금 4종을 확인한 뒤 블록과 상세 행을 같은 트랜잭션에서 논리 삭제한다. 하드 삭제는 없다 (INV-05). */
+    /**
+     * 같은 프로젝트의 다른 스텝으로 옮긴다 (BLK-014).
+     *
+     * <p>⚠️ 권한을 <b>양쪽 다</b> 확인한다. 출발 스텝만 보면 접근 권한이 없는 스텝으로 블록을 밀어넣을 수 있다.
+     * 그 판정 결과에서 두 스텝의 projectId 를 얻어 같은 프로젝트인지도 함께 본다 —
+     * Block 은 projectId 를 갖지 않아 이 경로 말고는 알 방법이 없다.
+     *
+     * <p>issue_block 연결은 끊는다. 블록과 이슈는 같은 스텝이어야 하는데(BLK-009 · INV-06)
+     * 옮기면 그 전제가 깨진다.
+     */
+    @Override
+    public BlockMoveResult moveBlock(MoveBlockCommand command) {
+
+        if (command.stepId() == null) {
+            throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_REQUIRED);
+        }
+
+        Block block = findBlock(command.blockId());
+
+        StepAccessUseCase.StepAccessView from = stepAccessUseCase.requireEditable(
+                block.getStepId(), command.requesterUserId(), command.role());
+        StepAccessUseCase.StepAccessView to = stepAccessUseCase.requireEditable(
+                command.stepId(), command.requesterUserId(), command.role());
+
+        if (from.stepId().equals(to.stepId()) || !from.projectId().equals(to.projectId())) {
+            throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_INVALID);
+        }
+
+        int unlinkedIssueCount = issueBlockUnlinkPort.unlinkByBlockId(block.getBlockId());
+
+        block.moveToStep(to.stepId(), nextRowIndex(to.stepId()), FIRST_INDEX, LocalDateTime.now());
+        blockRepository.save(block);
+
+        return new BlockMoveResult(block.getBlockId(), block.getStepId(), unlinkedIssueCount);
+    }
+
+    /** 도착 스텝의 맨 아래 새 행에 붙인다. 원래 좌표를 들고 가면 기존 블록과 겹쳐 그리드가 깨진다. */
+    private int nextRowIndex(Long stepId) {
+        return blockRepository.findMaxRowIndex(stepId)
+                .map(max -> max + 1)
+                .orElse(FIRST_INDEX);
+    }
+
+    /**
+     * 블록과 상세 행을 같은 트랜잭션에서 논리 삭제한다. 하드 삭제는 없다 (INV-05).
+     *
+     * <p>⛔ 삭제 잠금 4종은 폐기됐다 (2026-08-09 · BLK-008). 막아도 탈출구가 재무팀 호출뿐이라
+     * 사용자가 갇혔다 — 막는 대신 블록을 옮길 수단을 준다 (BLK-014).
+     * 입금·계산서 연결 해제(BLK-013)는 재무 접근 경로와 함께 별도로 붙는다.
+     */
     @Override
     public void deleteBlock(DeleteBlockCommand command) {
 
         Block block = findBlock(command.blockId());
         stepAccessUseCase.requireEditable(
                 block.getStepId(), command.requesterUserId(), command.role());
-
-        if (blockDeleteLockRegistry.isLocked(
-                block.getType(), block.getBlockId(), block.getTypeId())) {
-            throw new ConflictException(BlockErrorCode.BLOCK_DELETE_LOCKED);
-        }
 
         LocalDateTime now = LocalDateTime.now();
 

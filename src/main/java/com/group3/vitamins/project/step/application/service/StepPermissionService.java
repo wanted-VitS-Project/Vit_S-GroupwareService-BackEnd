@@ -107,6 +107,21 @@ public class StepPermissionService implements StepPermissionUseCase {
     }
 
     /**
+     * 스테이지 하위 스텝 전부에 같은 권한을 찍는다 (STG-004).
+     * 스테이지에 스텝이 없으면 0 을 돌려준다 — 그래도 기본값은 저장되므로 앞으로 만들 스텝에는 적용된다.
+     */
+    @Override
+    public int applyToStage(Long stageId, String userId, MemberPermission permission) {
+        List<Step> steps = stepRepository.findAllByStageId(stageId);
+
+        LocalDateTime now = LocalDateTime.now();
+        steps.forEach(step ->
+                stepPermissionRepository.save(step.getStepId(), userId, permission, now));
+
+        return steps.size();
+    }
+
+    /**
      * 스텝을 찾고 요청자가 그 프로젝트 EDITOR 인지 확인한다.
      * 권한 관리는 스텝 오버라이드가 아니라 <b>프로젝트</b> 권한으로 판정한다 —
      * 스텝 오버라이드로 스텝 권한을 바꿀 수 있으면 스스로 권한을 키울 수 있다.

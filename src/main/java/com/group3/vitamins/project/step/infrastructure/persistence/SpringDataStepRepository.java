@@ -26,4 +26,6 @@ public interface SpringDataStepRepository extends JpaRepository<StepJpaEntity, L
     List<StepJpaEntity> findByStepIdInAndProjectIdAndDeletedAtIsNull(
             Collection<Long> stepIds, Long projectId);
 
+    List<StepJpaEntity> findByStageIdAndDeletedAtIsNull(Long stageId);
+
 }

@@ -106,6 +106,16 @@ public class Step {
         return this;
     }
 
+    /**
+     * 논리 삭제한다 (INV-05 · STP-013). 하위 블록·이슈 정리는 서비스가 맡는다 —
+     * 다른 애그리게이트라 도메인 객체가 손댈 수 없다.
+     */
+    public Step delete(LocalDateTime now) {
+        this.deletedAt = now;
+        this.updatedAt = now;
+        return this;
+    }
+
     public Long getStepId() { return stepId; }
     public Long getProjectId() { return projectId; }
     public Long getStageId() { return stageId; }

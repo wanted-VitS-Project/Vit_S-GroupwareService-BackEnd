@@ -5,6 +5,7 @@ import com.group3.vitamins.project.stage.domain.repository.StageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,21 @@ public class StageRepositoryAdapter implements StageRepository {
     public Stage save(Stage stage) {
         return StageMapper.toDomain(
                 springDataRepository.save(StageMapper.toEntity(stage)));
+    }
+
+    @Override
+    public Optional<Stage> findById(Long stageId) {
+        return springDataRepository.findByStageIdAndDeletedAtIsNull(stageId)
+                .map(StageMapper::toDomain);
+    }
+
+    @Override
+    public List<Stage> findAllByIdsInProject(Collection<Long> stageIds, Long projectId) {
+        return springDataRepository
+                .findByStageIdInAndProjectIdAndDeletedAtIsNull(stageIds, projectId)
+                .stream()
+                .map(StageMapper::toDomain)
+                .toList();
     }
 
     @Override

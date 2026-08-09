@@ -4,17 +4,23 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import com.group3.vitamins.project.block.domain.exception.BlockErrorCode;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.stage.domain.exception.StageErrorCode;
 import com.group3.vitamins.project.step.application.command.ChangeStepStatusCommand;
 import com.group3.vitamins.project.step.application.command.CompleteStepCommand;
 import com.group3.vitamins.project.step.application.command.CreateStepCommand;
+import com.group3.vitamins.project.step.application.command.DeleteStepCommand;
 import com.group3.vitamins.project.step.application.command.ReorderStepsCommand;
 import com.group3.vitamins.project.step.application.command.UpdateStepCommand;
 import com.group3.vitamins.project.step.application.port.IssueCloseCommandPort;
+import com.group3.vitamins.project.step.application.port.IssueDeleteCommandPort;
 import com.group3.vitamins.project.step.application.port.IssueStatLookupPort;
+import com.group3.vitamins.project.step.application.port.StepBlockCascadePort;
+import com.group3.vitamins.project.step.application.port.StagePermissionDefaultLookupPort;
 import com.group3.vitamins.project.step.application.port.StageLookupPort;
 import com.group3.vitamins.project.step.application.result.StepCompleteResult;
+import com.group3.vitamins.project.step.application.result.StepDeleteResult;
 import com.group3.vitamins.project.step.application.result.StepOrderResult;
 import com.group3.vitamins.project.step.application.result.StepPerson;
 import com.group3.vitamins.project.step.application.result.StepResult;
@@ -26,6 +32,7 @@ import com.group3.vitamins.project.step.domain.exception.StepErrorCode;
 import com.group3.vitamins.project.step.domain.model.OpenIssueAction;
 import com.group3.vitamins.project.step.domain.model.Step;
 import com.group3.vitamins.project.step.domain.model.StepStatus;
+import com.group3.vitamins.project.step.domain.repository.StepPermissionRepository;
 import com.group3.vitamins.project.step.domain.repository.StepRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -51,6 +58,10 @@ public class StepCommandService implements StepCommandUseCase {
     private final EmployeeLookupPort employeeLookupPort;
     private final IssueStatLookupPort issueStatLookupPort;
     private final IssueCloseCommandPort issueCloseCommandPort;
+    private final IssueDeleteCommandPort issueDeleteCommandPort;
+    private final StepBlockCascadePort stepBlockCascadePort;
+    private final StagePermissionDefaultLookupPort stagePermissionDefaultLookupPort;
+    private final StepPermissionRepository stepPermissionRepository;
     private final ProjectAccessUseCase projectAccessUseCase;
     private final StepAccessUseCase stepAccessUseCase;
 
@@ -71,6 +82,8 @@ public class StepCommandService implements StepCommandUseCase {
                 nextSortOrder(command.projectId()),
                 command.startedOn(), command.endedOn(), ownerUserId,
                 LocalDateTime.now()));
+
+        applyStageDefaults(saved);
 
         return new StepResult(
                 saved.getStepId(), saved.getProjectId(), saved.getStageId(), saved.getName(),
@@ -183,6 +196,74 @@ public class StepCommandService implements StepCommandUseCase {
     }
 
     /**
+     * 스텝을 논리 삭제한다 (STP-013). 하위 블록·이슈가 함께 삭제된다.
+     *
+     * <p>⛔ 삭제 잠금은 없다 (2026-08-09 · STP-009 폐기). 살리고 싶은 블록은
+     * {@code moveBlockIds} 로 골라 다른 스텝으로 옮긴다 — 그게 잠금을 대신하는 탈출구다.
+     * 이슈는 선택지가 없다 (STP-008 폐기).
+     *
+     * <p>⚠️ 권한은 <b>프로젝트</b> EDITOR 인데 하위 블록·이슈 삭제는 <b>스텝</b> EDITOR 를 요구한다.
+     * 요청자가 이 스텝에 NONE·VIEWER 오버라이드를 갖고 있으면 하위 처리에서 403 이 나고
+     * 트랜잭션이 통째로 롤백된다 — 반쪽 삭제는 생기지 않는다.
+     *
+     * <p>⚠️ 재무 연결 해제(BLK-013)는 아직 없다. 입금·계산서가 연결된 블록도 그냥 삭제되며
+     * {@code payment.block_id}·{@code tax_invoice_confirm} 행이 삭제된 블록을 계속 가리킨다.
+     */
+    @Override
+    public StepDeleteResult deleteStep(DeleteStepCommand command) {
+        Step step = stepRepository.findById(command.stepId())
+                .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
+
+        projectAccessUseCase.requireEditable(
+                step.getProjectId(), command.requesterUserId(), command.role());
+
+        List<Long> blockIds = stepBlockCascadePort.findBlockIds(step.getStepId());
+        List<Long> moveBlockIds = resolveMoveBlockIds(command, step, blockIds);
+        List<Long> deleteBlockIds = blockIds.stream()
+                .filter(blockId -> !moveBlockIds.contains(blockId))
+                .toList();
+
+        if (!moveBlockIds.isEmpty()) {
+            stepBlockCascadePort.moveBlocks(moveBlockIds, command.moveToStepId(),
+                    command.requesterUserId(), command.role());
+        }
+        stepBlockCascadePort.deleteBlocks(deleteBlockIds,
+                command.requesterUserId(), command.role());
+
+        List<Long> issueIds = issueStatLookupPort.findAllIssueIds(step.getStepId());
+        issueIds.forEach(issueId -> issueDeleteCommandPort.delete(
+                issueId, command.requesterUserId(), command.role()));
+
+        stepRepository.save(step.delete(LocalDateTime.now()));
+
+        return new StepDeleteResult(step.getStepId(),
+                moveBlockIds.size(), deleteBlockIds.size(), issueIds.size());
+    }
+
+    /**
+     * 살릴 블록 목록을 검증한다. 지정이 없으면 전부 삭제라 빈 목록이다.
+     *
+     * <p>이동 대상은 같은 프로젝트여야 한다 — 다른 프로젝트로 넘기면 입금확인 블록의
+     * 회차 번호가 프로젝트 스코프라 충돌한다.
+     */
+    private List<Long> resolveMoveBlockIds(DeleteStepCommand command, Step step,
+                                           List<Long> blockIds) {
+        if (command.moveBlockIds() == null || command.moveBlockIds().isEmpty()) {
+            return List.of();
+        }
+        if (command.moveToStepId() == null) {
+            throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_REQUIRED);
+        }
+        if (command.moveToStepId().equals(step.getStepId())) {
+            throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_INVALID);
+        }
+        if (!blockIds.containsAll(command.moveBlockIds())) {
+            throw new NotFoundException(BlockErrorCode.BLOCK_NOT_FOUND);
+        }
+        return command.moveBlockIds();
+    }
+
+    /**
      * NOT_STARTED · IN_PROGRESS 만 받는다. DONE 은 오타와 같은 코드로 거부한다.
      *
      * <p>{@code valueOf} 를 쓰지 않는다 — 값이 null 이면 IllegalArgumentException 이 아니라 NPE 가 나서
@@ -277,6 +358,23 @@ public class StepCommandService implements StepCommandUseCase {
      * 공백 문자열을 해제(null)로 맞춘다. 저장 값과 응답을 같은 값으로 만들기 위한 것이다 —
      * 정규화 없이 원본을 저장하면 응답은 책임자 없음인데 DB 에는 공백이 남는다.
      */
+    /**
+     * 소속 스테이지에 걸린 권한 기본값을 이 스텝의 step_permission 행으로 복사한다 (STG-004).
+     *
+     * <p>⚠️ <b>생성 시점에만</b> 읽는다. 이후 기본값을 고쳐도 이 스텝엔 반영되지 않고,
+     * 스텝을 다른 스테이지로 옮겨도 권한이 따라가지 않는다 — 판정은 여전히 step_permission 한 곳이다 (INV-01).
+     * 미소속 스텝(stageId == null)은 기본값이 없어 프로젝트 권한을 상속한다.
+     */
+    private void applyStageDefaults(Step step) {
+        if (step.getStageId() == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        stagePermissionDefaultLookupPort.findDefaults(step.getStageId())
+                .forEach((userId, permission) -> stepPermissionRepository.save(
+                        step.getStepId(), userId, permission, now));
+    }
+
     private String normalizeOwnerUserId(String ownerUserId) {
         return (ownerUserId == null || ownerUserId.isBlank()) ? null : ownerUserId;
     }

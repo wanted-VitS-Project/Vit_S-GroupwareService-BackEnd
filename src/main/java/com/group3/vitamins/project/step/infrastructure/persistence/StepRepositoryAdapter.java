@@ -34,6 +34,13 @@ public class StepRepositoryAdapter implements StepRepository {
     }
 
     @Override
+    public List<Step> findAllByStageId(Long stageId) {
+        return springDataRepository.findByStageIdAndDeletedAtIsNull(stageId).stream()
+                .map(StepMapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Step> search(Long projectId, Long stageId, StepStatus status) {
         List<StepJpaEntity> rows = status == null
                 ? springDataRepository.findByProjectIdAndDeletedAtIsNullOrderBySortOrderAsc(projectId)
