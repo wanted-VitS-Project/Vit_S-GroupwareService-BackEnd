@@ -18,7 +18,8 @@
                p.name                 AS parentDepartmentName,
                jp.name                AS jobPositionName,
                e.hired_at             AS hiredAt,
-               a.last_login_at        AS lastLoginAt
+               a.last_login_at        AS lastLoginAt,
+               e.company_id           AS companyId
           FROM account a
           JOIN employee e     ON e.user_id = a.user_id
           LEFT JOIN department d  ON d.department_id = e.department_id
