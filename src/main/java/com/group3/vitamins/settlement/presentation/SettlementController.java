@@ -67,7 +67,8 @@ public class SettlementController {
     public ResponseEntity<ApiResponse<SettlementRecommendationResponse>> getRecommendation(
             @Parameter(description = "항목을 수정할 정산 블록 ID", example = "1")
             @PathVariable Long settleId,
-            @Parameter(description = "지금 화면에서 선택 중인 타입. 이 타입 기준으로 추천값을 계산한다", example = "INCOME")
+            @Parameter(description = "지금 화면에서 선택 중인 타입. 이 타입 기준으로 추천값을 계산한다", example = "INCOME",
+                    required = true)
             @RequestParam(required = false) String type,
             Authentication authentication
     ) {
@@ -100,7 +101,8 @@ public class SettlementController {
     public ResponseEntity<ApiResponse<SettlementItemResponse>> upsertItem(
             @Parameter(description = "정산 내용을 작성할 정산 블록 ID", example = "1")
             @PathVariable Long settleId,
-            @Parameter(description = "우리 회사 입장에서 입금(INCOME)인지 출금(OUTCOME)인지 여부", example = "INCOME")
+            @Parameter(description = "우리 회사 입장에서 입금(INCOME)인지 출금(OUTCOME)인지 여부", example = "INCOME",
+                    required = true)
             @RequestParam(required = false) String type,
             @RequestBody SettlementItemUpsertRequest request,
             Authentication authentication

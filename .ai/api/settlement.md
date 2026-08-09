@@ -616,3 +616,27 @@
      이 프로젝트는 테스트 0개 기조라(AGENTS.md 알려진 이슈) 이 PR에서만 기준을 올리지 않기로 함. 동작 자체는
      `SettlementController.getRecommendation`에서 `ResponseEntity.ok().cacheControl(CacheControl.noStore())`로
      이미 처리돼 있다.
+  10. **request.http `roundNo: -2` 버그, `type` 파라미터 OpenAPI `required` 미표시, 음수 금액 테스트 시나리오가
+      다른 검증에 걸려 실제로 검증이 안 되던 문제 — 전부 반영.** `roundNo`는 유효값으로, `@Parameter(required = true)`
+      추가(`@RequestParam(required = false)`는 `SETL-005` 처리를 위해 그대로 둠), 음수 금액 테스트는 `roundNo=1`·
+      기존에 확정된 `totalAmount`를 쓰고 `plannedTaxAmount`만 음수로 바꾸는 별도 요청으로 분리.
+  11. **SETL-008 검증의 잠금 순서 문제 — 반영.** `assertModifiable`이 락 걸기 전에 읽은 `before.status`로 판단해서,
+      상태를 PENDING 밖으로 바꾸는 연결 API가 생기면 두 PATCH가 동시에 PENDING을 읽고 그중 하나가 먼저
+      연결돼도 나머지가 SETL-007을 우회할 수 있었다(지금은 그 연결 API가 없어서 도달 불가능한 경로지만
+      선제 방어). `deleted_at IS NULL`과 동일한 패턴으로 UPDATE 문 자체에 `status = 'PENDING'` 조건을 추가
+      (`SpringDataSettlementRepository.updateItemIfActive`). 0건이 됐을 때 원인(삭제 vs 상태 변경)을 구분해서
+      `SETL-002`/`SETL-007`을 각각 던진다(`SettlementRepositoryAdapter`).
+  12. **`application`이 `infrastructure`(MyBatis 매퍼·Row 타입)를 직접 참조 — 반영.** `SettlementCommandService`/
+      `SettlementQueryService`가 `SettlementDetailMapper`의 일부 메서드(`findEstablishedTotalAmount`·
+      `lockSiblingSettlementBlocksForUpdate`·`findRecommendation`)를 직접 호출하던 것을 정리했다.
+      - **매퍼를 목적별로 나눴다** — `SettlementDetailMapper`(공용 블록 상세 조회, `SettlementBlockDetailAdapter`
+        전용, `findBySettleIds`만 남음)와 `SettlementSiblingMapper`(정산 도메인 자기 자신의 비즈니스 로직 전용,
+        신규)로 분리했다. 한 매퍼를 성격이 다른 두 소비자가 나눠 쓰던 것을 정리한 것 — SQL 자체는 안 바뀌었다.
+      - `application/port/SettlementSiblingLookupPort`(신규) + `infrastructure/blockdetail/
+        SettlementSiblingLookupAdapter`(신규, `SettlementSiblingMapper`를 감쌈)로 Command/Query 서비스가
+        더 이상 매퍼·Row 타입을 직접 모른다.
+      - `findActualAmountSum`은 기존에 `findBySettleIds`(배치 조회용 메서드)를 재사용해 필드 하나만 꺼내 쓰던
+        방식을 버리고, `SettlementSiblingMapper`에 전용 쿼리를 새로 만들었다(단일 값만 필요한데 배치 조회
+        메서드를 억지로 갖다 쓰지 않게).
+      - `AccountNumberCipher`는 그대로 직접 참조로 둔다 — 시그니처가 순수 String이라 infra 세부사항이 안
+        새고, 포트로 감싸는 게 실익이 거의 없다고 판단(둘 다 공통으로 쓰는 것 자체는 문제가 아니라는 점도 확인).

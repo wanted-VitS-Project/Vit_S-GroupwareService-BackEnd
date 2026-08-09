@@ -1,8 +1,10 @@
 package com.group3.vitamins.settlement.infrastructure.persistence;
 
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.settlement.domain.exception.SettlementErrorCode;
 import com.group3.vitamins.settlement.domain.model.Settlement;
+import com.group3.vitamins.settlement.domain.model.SettlementStatus;
 import com.group3.vitamins.settlement.domain.model.SettlementType;
 import com.group3.vitamins.settlement.domain.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
@@ -43,12 +45,23 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
                                   Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
                                   String traderName, String bankName, String encryptedAccountNumber,
                                   String accountHolder) {
-        // deleted_at IS NULL 조건을 UPDATE 문 자체에 걸어서 "확인 후 쓰기" 사이의 틈을 없앤다.
+        // deleted_at IS NULL·status = PENDING 조건을 UPDATE 문 자체에 걸어서 "확인 후 쓰기" 사이의 틈을
+        // 없앤다 — 이 메서드를 호출하기 전에 이미 assertModifiable로 PENDING임을 확인했지만, 그건 락 걸기
+        // 전에 읽은 값이라 그 사이 다른 트랜잭션이 연결(WAITING 등)했을 수 있다. 그 경우도 여기서 막는다.
         int updated = springDataSettlementRepository.updateItemIfActive(
                 settleId, type, roundNo,
                 toDecimal(totalAmount), toDecimal(plannedAmount), toDecimal(plannedTaxAmount),
-                plannedDate, traderName, bankName, encryptedAccountNumber, accountHolder);
+                plannedDate, traderName, bankName, encryptedAccountNumber, accountHolder,
+                SettlementStatus.PENDING);
         if (updated == 0) {
+            // 0건이 된 이유가 삭제인지 상태 변경(연결)인지 구분한다 — 존재하고 삭제도 안 됐는데 갱신이
+            // 안 됐다면 그 사이 상태가 PENDING을 벗어난 것이다.
+            boolean stillActive = springDataSettlementRepository.findById(settleId)
+                    .filter(entity -> entity.getDeletedAt() == null)
+                    .isPresent();
+            if (stillActive) {
+                throw new ConflictException(SettlementErrorCode.ALREADY_LINKED);
+            }
             throw new NotFoundException(SettlementErrorCode.BLOCK_NOT_FOUND);
         }
 

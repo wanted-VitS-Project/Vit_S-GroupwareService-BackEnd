@@ -8,6 +8,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ConflictExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.settlement.application.command.UpdateSettlementItemCommand;
 import com.group3.vitamins.settlement.application.policy.SettlementEligibilityPolicy;
+import com.group3.vitamins.settlement.application.port.SettlementSiblingLookupPort;
 import com.group3.vitamins.settlement.application.usecase.SettlementCommandUseCase;
 import com.group3.vitamins.settlement.domain.exception.SettlementErrorCode;
 import com.group3.vitamins.settlement.domain.model.Settlement;
@@ -15,8 +16,6 @@ import com.group3.vitamins.settlement.domain.model.SettlementProgress;
 import com.group3.vitamins.settlement.domain.model.SettlementStatus;
 import com.group3.vitamins.settlement.domain.model.SettlementType;
 import com.group3.vitamins.settlement.domain.repository.SettlementRepository;
-import com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementDetailMapper;
-import com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementDetailRow;
 import com.group3.vitamins.settlement.infrastructure.security.AccountNumberCipher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +40,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
     private final SettlementRepository settlementRepository;
     private final AccountNumberCipher accountNumberCipher;
     private final DomainEventPublisher domainEventPublisher;
-    private final SettlementDetailMapper settlementDetailMapper;
+    private final SettlementSiblingLookupPort settlementSiblingLookupPort;
 
     @Override
     public UpdateSettlementItemView upsertItem(UpdateSettlementItemCommand command) {
@@ -61,7 +60,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
 
         // SETL-008 검증(조회) 전에 같은 프로젝트의 정산 블록 전체를 잠근다 — 두 개의 빈 블록이 동시에
         // PATCH되면서 서로 "기준값 없음"으로 읽고 다른 totalAmount를 저장하는 레이스를 막는다.
-        settlementDetailMapper.lockSiblingSettlementBlocksForUpdate(command.settleId());
+        settlementSiblingLookupPort.lockSiblingSettlementBlocksForUpdate(command.settleId());
         assertTotalAmountConsistent(command.settleId(), type, command.totalAmount());
 
         String encryptedAccountNumber = command.accountNumber() == null
@@ -146,7 +145,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
      * 이번 요청이 그 프로젝트의 첫 기준값이 되므로 통과시킨다.
      */
     private void assertTotalAmountConsistent(Long settleId, SettlementType type, Long totalAmount) {
-        Long establishedTotalAmount = settlementDetailMapper.findEstablishedTotalAmount(settleId, type.name());
+        Long establishedTotalAmount = settlementSiblingLookupPort.findEstablishedTotalAmount(settleId, type);
         if (establishedTotalAmount != null && !establishedTotalAmount.equals(totalAmount)) {
             throw new ConflictException(SettlementErrorCode.TOTAL_AMOUNT_MISMATCH,
                     SettlementErrorCode.TOTAL_AMOUNT_MISMATCH.getMessage()
@@ -185,14 +184,12 @@ public class SettlementCommandService implements SettlementCommandUseCase {
 
     /**
      * paidAmountRatio 는 이 블록 하나의 값이 아니라 같은 프로젝트·같은 타입 정산 블록 전체의 진행률이라
-     * (block → step → project 조인이 필요해) 저장 직후 {@link SettlementDetailMapper} 로 다시 조회해서 계산한다.
-     * 목록 조회({@code SettlementBlockDetailAdapter})와 같은 쿼리·같은 계산식을 그대로 재사용한다.
+     * (block → step → project 조인이 필요해) 저장 직후 {@link SettlementSiblingLookupPort} 로 다시 조회해서
+     * 계산한다. 목록 조회({@code SettlementBlockDetailAdapter})와 같은 계산식(`SettlementProgress.ratio`)을
+     * 그대로 재사용한다.
      */
     private UpdateSettlementItemView toView(Settlement saved, String plainAccountNumber) {
-        SettlementDetailRow row = settlementDetailMapper.findBySettleIds(List.of(saved.getSettleId())).stream()
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "settlement not found after update: " + saved.getSettleId()));
+        Long actualAmountSum = settlementSiblingLookupPort.findActualAmountSum(saved.getSettleId(), saved.getType());
 
         return new UpdateSettlementItemView(
                 saved.getSettleId(),
@@ -208,7 +205,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 saved.getActualAmount(),
                 saved.getActualDate(),
                 saved.getStatus(),
-                SettlementProgress.ratio(row.actualAmountSum(), row.totalAmount()),
+                SettlementProgress.ratio(actualAmountSum, saved.getTotalAmount()),
                 saved.getCreatedAt()
         );
     }

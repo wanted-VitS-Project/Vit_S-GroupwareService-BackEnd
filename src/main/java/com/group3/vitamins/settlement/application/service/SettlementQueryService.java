@@ -5,6 +5,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.settlement.application.policy.SettlementEligibilityPolicy;
 import com.group3.vitamins.settlement.application.port.PagePermissionPort;
+import com.group3.vitamins.settlement.application.port.SettlementSiblingLookupPort;
 import com.group3.vitamins.settlement.application.query.SettlementFilterQuery;
 import com.group3.vitamins.settlement.application.query.SettlementProjectBlockListQuery;
 import com.group3.vitamins.settlement.application.query.SettlementProjectListQuery;
@@ -13,8 +14,6 @@ import com.group3.vitamins.settlement.application.usecase.SettlementQueryUseCase
 import com.group3.vitamins.settlement.domain.exception.SettlementErrorCode;
 import com.group3.vitamins.settlement.domain.model.Settlement;
 import com.group3.vitamins.settlement.domain.model.SettlementType;
-import com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementDetailMapper;
-import com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementRecommendationRow;
 import com.group3.vitamins.settlement.infrastructure.security.AccountNumberCipher;
 import com.group3.vitamins.settlement.infrastructure.status.SettlementProjectBlockRow;
 import com.group3.vitamins.settlement.infrastructure.status.SettlementProjectRow;
@@ -48,7 +47,7 @@ public class SettlementQueryService implements SettlementQueryUseCase {
     private static final String FINANCE_PAGE_CODE = "FINANCE";
 
     private final SettlementEligibilityPolicy eligibilityPolicy;
-    private final SettlementDetailMapper settlementDetailMapper;
+    private final SettlementSiblingLookupPort settlementSiblingLookupPort;
     private final SettlementStatusMapper settlementStatusMapper;
     private final AccountNumberCipher accountNumberCipher;
     private final PagePermissionPort pagePermissionPort;
@@ -71,11 +70,12 @@ public class SettlementQueryService implements SettlementQueryUseCase {
         Integer recommendedRoundNo = null;
         Long recommendedTotalAmount = null;
         if (isEmpty) {
-            SettlementRecommendationRow row =
-                    settlementDetailMapper.findRecommendation(query.settleId(), type.name());
-            long siblingCount = row == null || row.blockCount() == null ? 0 : row.blockCount();
+            SettlementSiblingLookupPort.SiblingRecommendation recommendation =
+                    settlementSiblingLookupPort.findSiblingRecommendation(query.settleId(), type);
+            long siblingCount = recommendation == null || recommendation.blockCount() == null
+                    ? 0 : recommendation.blockCount();
             recommendedRoundNo = (int) siblingCount + 1;
-            recommendedTotalAmount = row == null ? null : row.recommendedTotalAmount();
+            recommendedTotalAmount = recommendation == null ? null : recommendation.recommendedTotalAmount();
         }
 
         // 이 블록에 이미 저장된 타입이 아니라, 지금 사용자가 고른(쿼리파라미터) 타입 기준으로 판단한다 —
