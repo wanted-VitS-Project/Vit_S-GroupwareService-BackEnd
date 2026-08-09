@@ -2,6 +2,7 @@ package com.group3.vitamins.file.application.port;
 
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
+import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 
 import java.util.List;
@@ -23,6 +24,13 @@ public interface FileQueryPort {
     /** 문서가 연결된 블록 ID(권한 판정 경로 fileId→block→step). 파일 1 : 블록 1. 링크 없으면 empty. */
     Optional<Long> findBlockIdByFileId(Long fileId);
 
+    /**
+     * 문서가 매달린 블록의 스텝 ID — <b>블록이 soft delete 됐어도</b> 돌려준다(§6 복구용).
+     * 블록이 삭제돼도 복구는 성공해야 하므로, 삭제된 블록의 스텝으로도 권한을 판정할 수 있어야 한다.
+     * block_file 링크가 없으면 empty.
+     */
+    Optional<Long> findStepIdByFileIdIncludingDeletedBlock(Long fileId);
+
     /** 문서의 완료된 버전 목록(§8 이력) — 차수 내림차순. 실패·미완료 버전은 제외. */
     List<FileVersionProjection> findCompletedVersions(Long fileId);
 
@@ -41,4 +49,12 @@ public interface FileQueryPort {
      * 정렬은 파일(file_id) 오름차순 · 같은 파일 안에서는 차수(version_no) 내림차순(최신 버전 먼저).
      */
     List<ProjectFileVersionProjection> findProjectFileVersions(Long projectId);
+
+    /**
+     * 프로젝트 전체 파일 모아보기(§12) — 프로젝트에 속한 <b>활성</b> 문서(file.deleted_at IS NULL)를 문서 단위 최신 완료 버전 1행으로.
+     * 완료 버전이 하나도 없는 문서는 제외한다(§3 과 동일). 스텝·블록 위치를 함께 내려주며, 블록이 soft delete 된 고아 파일도 포함한다
+     * — 이 경우 blockId·blockTitle 은 null, blockDeleted=true, stepId·stepName 은 삭제된 블록의 step 으로 해석한다.
+     * 정렬은 스텝(step_id) → 블록(block_id) → 블록 연결일(linked_at) 오름차순.
+     */
+    List<ProjectFileProjection> findProjectFiles(Long projectId);
 }

@@ -6,7 +6,7 @@
 <mapper namespace="com.group3.vitamins.project.infrastructure.adapter.EmployeeLookupQueryMapper">
 
     <select id="findNameByUserId" resultType="java.lang.String">
-        SELECT name FROM employee WHERE user_id = #{userId}
+        SELECT name FROM employee WHERE user_id = #{userId} AND deleted_at IS NULL
     </select>
 
     <select id="findNamesByUserIds"

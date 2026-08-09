@@ -18,6 +18,13 @@ public interface ApprovalLockQueryPort {
      */
     Optional<InProgressApproval> findInProgressApproval(Long fileId);
 
+    /**
+     * 문서의 버전 중 하나라도 결재({@code approval_document})의 참조 대상이면 {@code true} (§7 영구삭제).
+     * 진행 중만 보는 {@link #findInProgressApproval} 과 달리 <b>완료 결재까지 포함한 모든</b> 참조를 본다 —
+     * 영구 삭제는 되돌릴 수 없어 결재 이력이 열리지 않게 되는 것을 막아야 하기 때문이다.
+     */
+    boolean existsAnyApprovalReference(Long fileId);
+
     /** 진행 중 결재 스냅샷. 409 응답 메시지에 담을 최소 정보(결재 id·제목). */
     record InProgressApproval(Long approvalId, String title) {
     }

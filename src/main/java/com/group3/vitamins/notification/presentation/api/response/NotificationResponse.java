@@ -11,9 +11,6 @@ public record NotificationResponse(
         @Schema(description = "알림 구분 번호", example = "301")
         Long notificationId,
 
-        @Schema(description = "연결된 블록. null 이면 block 과 무관한 알림", example = "101")
-        Long blockId,
-
         @Schema(description = "알림 유형", example = "APPROVAL_REQUESTED")
         String notificationType,
 
@@ -32,7 +29,7 @@ public record NotificationResponse(
 
     public static NotificationResponse from(NotificationResult result) {
         return new NotificationResponse(
-                result.notificationId(), result.blockId(), result.notificationType(),
+                result.notificationId(), result.notificationType(),
                 result.title(), result.message(), result.readAt(), result.createdAt());
     }
 }

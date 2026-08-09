@@ -7,8 +7,11 @@ import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.stage.domain.exception.StageErrorCode;
 import com.group3.vitamins.project.step.application.command.CreateStepCommand;
+import com.group3.vitamins.project.step.application.command.UpdateStepCommand;
 import com.group3.vitamins.project.step.application.port.StageLookupPort;
 import com.group3.vitamins.project.step.application.result.StepResult;
+import com.group3.vitamins.project.step.application.result.StepUpdateResult;
+import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import com.group3.vitamins.project.step.application.usecase.StepCommandUseCase;
 import com.group3.vitamins.project.step.domain.exception.StepErrorCode;
 import com.group3.vitamins.project.step.domain.model.Step;
@@ -25,17 +28,16 @@ import java.time.LocalDateTime;
 @Transactional
 public class StepCommandService implements StepCommandUseCase {
 
-    private static final int NAME_MAX_LENGTH = 200;
     private static final int FIRST_SORT_ORDER = 1;
 
     private final StepRepository stepRepository;
     private final StageLookupPort stageLookupPort;
     private final EmployeeLookupPort employeeLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final StepAccessUseCase stepAccessUseCase;
 
     @Override
     public StepResult createStep(CreateStepCommand command) {
-        validateName(command.name());
         validateDateRange(command.startedOn(), command.endedOn());
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
@@ -57,17 +59,37 @@ public class StepCommandService implements StepCommandUseCase {
                 saved.getStartedOn(), saved.getEndedOn(), owner, saved.getCreatedAt());
     }
 
-    /** 스텝명을 검증한다. null·공백·200자 초과를 막는다. */
-    private void validateName(String name) {
-        if (name == null || name.isBlank()) {
-            throw new ValidationException(StepErrorCode.STEP_NAME_REQUIRED);
-        }
-        if (name.length() > NAME_MAX_LENGTH) {
-            throw new ValidationException(StepErrorCode.STEP_NAME_TOO_LONG);
-        }
+    /**
+     * 이름·기간·책임자를 덮어쓴다. 소속 스테이지·정렬순서는 건드리지 않는다 —
+     * 위치 변경은 순서 변경 API 로 일원화했다(폼에 박힌 옛 위치로 되돌아가는 사고를 막는다).
+     *
+     * <p>권한은 프로젝트가 아니라 <b>스텝</b> 기준이다 — 오버라이드로 이 스텝만 편집 가능한 사람이 있다.
+     */
+    @Override
+    public StepUpdateResult updateStep(UpdateStepCommand command) {
+        stepAccessUseCase.requireEditable(
+                command.stepId(), command.requesterUserId(), command.role());
+
+        Step step = stepRepository.findById(command.stepId())
+                .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
+
+        validateDateRange(command.startedOn(), command.endedOn());
+        StepResult.Owner owner = resolveOwner(command.ownerUserId());
+
+        Step updated = stepRepository.save(step.update(
+                command.name(), command.startedOn(), command.endedOn(),
+                command.ownerUserId(), LocalDateTime.now()));
+
+        return new StepUpdateResult(updated.getStepId(), updated.getStageId(), updated.getName(),
+                updated.getStartedOn(), updated.getEndedOn(), owner, updated.getUpdatedAt());
     }
 
-    /** 시작일·종료일이 둘 다 있을 때만 순서를 검증한다. 둘 다 선택 입력이다. */
+    /**
+     * 시작일·종료일이 둘 다 있을 때만 순서를 검증한다. 둘 다 선택 입력이다.
+     *
+     * <p>필수·길이 검증은 요청 DTO 의 Bean Validation 이 맡는다 — 여기 남은 건
+     * 두 필드의 <b>관계</b>라 필드 단위 애노테이션으로 표현할 수 없는 규칙뿐이다.
+     */
     private void validateDateRange(LocalDate startedOn, LocalDate endedOn) {
         if (startedOn != null && endedOn != null && startedOn.isAfter(endedOn)) {
             throw new ValidationException(StepErrorCode.STEP_DATE_RANGE_INVALID);
@@ -81,7 +103,7 @@ public class StepCommandService implements StepCommandUseCase {
         }
     }
 
-    /** 책임자 사번을 보냈으면 존재를 확인하고 이름을 함께 돌려준다. 안 보냈으면 null. */
+    /** 책임자 사번을 보냈으면 존재를 확인하고 이름을 함께 돌려준다. 안 보냈으면 null(해제). */
     private StepResult.Owner resolveOwner(String ownerUserId) {
         if (ownerUserId == null || ownerUserId.isBlank()) {
             return null;

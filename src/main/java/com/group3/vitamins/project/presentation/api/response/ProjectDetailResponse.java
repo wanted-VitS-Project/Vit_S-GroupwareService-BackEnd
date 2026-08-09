@@ -49,13 +49,13 @@ public record ProjectDetailResponse(
         @Schema(description = "연결된 사업 카테고리")
         List<BusinessCategorySummaryResponse> businessCategories,
 
-        @Schema(description = "연결된 공고 ID. 공고 없이 생성했으면 null", example = "null")
+        @Schema(description = "연결된 공고 ID. 공고 없이 생성했으면 null", example = "45", nullable = true)
         Long bidNoticeId,
 
-        @Schema(description = "종결 사유 코드. 종결 건만 값이 있다", example = "null")
+        @Schema(description = "종결 사유 코드. 종결 건만 값이 있다", nullable = true)
         String closeReasonCode,
 
-        @Schema(description = "종결 사유 상세", example = "null")
+        @Schema(description = "종결 사유 상세", nullable = true)
         String closeReasonNote,
 
         @Schema(description = "요청자의 프로젝트 권한. FE 편집 버튼 게이팅용", example = "EDITOR")

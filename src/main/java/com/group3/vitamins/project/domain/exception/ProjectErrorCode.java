@@ -14,6 +14,16 @@ public enum ProjectErrorCode implements ErrorCode {
             "과업명은 300자를 넘을 수 없습니다."),
     PROJECT_DATE_RANGE_INVALID("PROJECT_DATE_RANGE_INVALID",
             "시작일은 종료일보다 늦을 수 없습니다."),
+    CONTRACT_AMOUNT_INVALID("CONTRACT_AMOUNT_INVALID",
+            "계약금액은 0보다 작을 수 없습니다."),
+    CLOSE_REASON_REQUIRED("CLOSE_REASON_REQUIRED",
+            "종결 사유를 선택해 주세요."),
+    CLOSE_REASON_INVALID("CLOSE_REASON_INVALID",
+            "허용되지 않은 종결 사유 코드입니다."),
+    CLOSE_REASON_NOTE_TOO_LONG("CLOSE_REASON_NOTE_TOO_LONG",
+            "종결 사유 상세는 500자를 넘을 수 없습니다."),
+    PROJECT_STATUS_INVALID("PROJECT_STATUS_INVALID",
+            "허용되지 않은 프로젝트 상태 값입니다."),
     PROJECT_BID_NOTICE_ALREADY_LINKED("PROJECT_BID_NOTICE_ALREADY_LINKED",
             "이미 다른 프로젝트가 연결된 공고입니다."),
     PROJECT_NOT_FOUND("PROJECT_NOT_FOUND",
@@ -23,7 +33,16 @@ public enum ProjectErrorCode implements ErrorCode {
     PROJECT_EDIT_DENIED("PROJECT_EDIT_DENIED",
             "프로젝트를 편집할 권한이 없습니다."),
     USER_NOT_FOUND("USER_NOT_FOUND",
-            "지정한 사용자를 찾을 수 없습니다.");
+            "지정한 사용자를 찾을 수 없습니다."),
+    MEMBER_PERMISSION_INVALID("MEMBER_PERMISSION_INVALID",
+            "허용되지 않은 권한 등급입니다."),
+    MEMBER_ALREADY_EXISTS("MEMBER_ALREADY_EXISTS",
+            "이미 참여자로 등록된 사용자입니다."),
+    MEMBER_NOT_FOUND("MEMBER_NOT_FOUND",
+            "참여자를 찾을 수 없습니다."),
+    MEMBER_SELF_EDIT_DENIED("MEMBER_SELF_EDIT_DENIED",
+            "자기 자신의 권한 행은 변경할 수 없습니다.");
+
 
     private final String code;
     private final String message;

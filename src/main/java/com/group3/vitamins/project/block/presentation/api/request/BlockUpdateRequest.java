@@ -10,11 +10,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record BlockUpdateRequest(
 
         @Schema(description = "블록 제목 (최대 200자). null 을 보내면 제목을 지운다. 생략하면 안 바뀐다",
-                example = "핵심 요구사항 메모")
+                example = "핵심 요구사항 메모", nullable = true)
         String title,
 
         @Schema(description = "블록 담당자 사번. null 을 보내면 담당자를 해제한다. 생략하면 안 바뀐다",
-                example = "E2024001")
+                example = "E2024001", nullable = true)
         String owner
 ) {
 }

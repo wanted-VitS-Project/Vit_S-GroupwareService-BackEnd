@@ -17,7 +17,7 @@ public record StepDetailResponse(
         @Schema(description = "소속 프로젝트 ID", example = "12")
         Long projectId,
 
-        @Schema(description = "소속 스테이지 ID. 미소속이면 null", example = "7")
+        @Schema(description = "소속 스테이지 ID. 미소속이면 null", example = "7", nullable = true)
         Long stageId,
 
         @Schema(description = "스텝명", example = "제안서 작성")
@@ -52,7 +52,7 @@ public record StepDetailResponse(
         @Schema(description = "완료자. 미완료면 null")
         StepPersonResponse completedBy,
 
-        @Schema(description = "완료 시각. 미완료면 null")
+        @Schema(description = "완료 시각. 미완료면 null", nullable = true)
         LocalDateTime completedAt,
 
         @Schema(description = "요청자의 스텝 권한", example = "EDITOR")

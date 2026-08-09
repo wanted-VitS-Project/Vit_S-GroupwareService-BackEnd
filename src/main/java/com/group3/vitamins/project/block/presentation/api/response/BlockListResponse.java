@@ -29,7 +29,8 @@ public record BlockListResponse(
             @Schema(description = "블록 타입 (10종)", example = "CHECKLIST")
             String type,
 
-            @Schema(description = "블록 제목. 추가 직후에는 null", example = "제안서 작성 체크리스트")
+            @Schema(description = "블록 제목. 추가 직후에는 null", example = "제안서 작성 체크리스트",
+                    nullable = true)
             String title,
 
             @Schema(description = "블록 담당자. 미지정이면 null")

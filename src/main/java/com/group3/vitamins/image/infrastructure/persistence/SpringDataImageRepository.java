@@ -15,7 +15,11 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
             + "WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
     int findMaxOrderIndex(@Param("imgBlockId") Long imgBlockId);
 
-    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
+    // ORDER BY 는 전체 조회 API가 orderIndex 오름차순을 계약으로 내려주기 위해 필요하다(2026-08-07 추가).
+    // 기존 사용처(수정 API의 대조용 Map, zip 다운로드)는 순서에 의존하지 않아 영향 없다 —
+    // 오히려 zip 안 파일 순서가 정렬 순서로 고정되는 부수 효과가 있다.
+    @Query("SELECT i FROM ImageJpaEntity i WHERE i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "ORDER BY i.orderIndex ASC")
     List<ImageJpaEntity> findAllActiveByImgBlockId(@Param("imgBlockId") Long imgBlockId);
 
     // @UpdateTimestamp 는 벌크 JPQL UPDATE 에는 적용되지 않는다(Hibernate 특성 — 엔티티 생명주기를

@@ -32,4 +32,9 @@ public class StepPermissionRepositoryAdapter implements StepPermissionRepository
         return springDataRepository.findByStepIdAndUserId(stepId, userId)
                 .map(StepPermissionJpaEntity::getPermission);
     }
+
+    @Override
+    public void deleteByProjectIdAndUserId(Long projectId, String userId) {
+        springDataRepository.deleteByProjectIdAndUserId(projectId, userId);
+    }
 }

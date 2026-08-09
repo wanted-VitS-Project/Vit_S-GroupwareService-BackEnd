@@ -11,7 +11,7 @@ public record BlockUpdateResponse(
         @Schema(description = "블록 ID", example = "16")
         Long blockId,
 
-        @Schema(description = "반영된 제목. 해제했으면 null", example = "핵심 요구사항 메모")
+        @Schema(description = "반영된 제목. 해제했으면 null", example = "핵심 요구사항 메모", nullable = true)
         String title,
 
         @Schema(description = "반영된 담당자. 해제했거나 미지정이면 null")

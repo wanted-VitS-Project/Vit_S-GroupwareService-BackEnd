@@ -73,6 +73,12 @@ dependencies {
     // 이미지 블록: S3 업로드 전 큰 이미지를 리사이즈한다 (원본 화질 유지하며 용량만 절약).
     implementation 'net.coobird:thumbnailator:0.4.20'
 
+    // --- 엑셀 (사원 일괄 등록: 템플릿 생성 · 업로드 파싱, employee.md §6~§8) ---
+    // Spring Boot BOM 이 관리하지 않아 버전을 명시한다. poi-ooxml 이 poi(.xls)·xmlbeans 를 함께 끌어와
+    // WorkbookFactory 로 .xlsx·.xls 를 모두 읽는다.
+    // ⚠️ 5.3.0 은 CVE-2025-31672(OOXML 중복 ZIP 항목 검증) 영향 범위 → 5.5.1 이상 유지(CodeRabbit 반영).
+    implementation 'org.apache.poi:poi-ooxml:5.5.1'
+
     // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
 

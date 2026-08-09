@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper.VitamateReviewTemplateMapper">
+
+    <select id="findActiveReviewTypes"
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateReviewTemplateGroupRow">
+        SELECT
+            vrt.review_type AS reviewType,
+            vrt.review_type_name AS reviewTypeName,
+            vrt.description AS description
+        FROM vitamate_review_type vrt
+        WHERE vrt.enabled = TRUE
+        ORDER BY vrt.sort_order ASC, vrt.review_type ASC
+    </select>
+
+    <select id="findActiveReviewTemplates"
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateReviewTemplateRow">
+        SELECT
+            vrt.review_type AS reviewType,
+            vrt.category_code AS categoryCode,
+            vrt.category_name AS categoryName,
+            vrt.guide_text AS guideText,
+            vrt.example_text AS exampleText,
+            vrt.prompt_template AS promptTemplate,
+            vrt.template_version AS templateVersion,
+            vrt.sort_order AS sortOrder
+        FROM vitamate_review_template vrt
+        JOIN vitamate_review_type vrty
+          ON vrty.review_type = vrt.review_type
+         AND vrty.enabled = TRUE
+        WHERE vrt.enabled = TRUE
+        ORDER BY vrt.review_type ASC, vrt.sort_order ASC, vrt.category_code ASC
+    </select>
+
+    <select id="findActiveTemplates"
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateReviewTemplateRow">
+        SELECT
+            vrt.review_type AS reviewType,
+            vrt.category_code AS categoryCode,
+            vrt.category_name AS categoryName,
+            vrt.guide_text AS guideText,
+            vrt.example_text AS exampleText,
+            vrt.prompt_template AS promptTemplate,
+            vrt.template_version AS templateVersion,
+            vrt.sort_order AS sortOrder
+        FROM vitamate_review_template vrt
+        JOIN vitamate_review_type vrty
+          ON vrty.review_type = vrt.review_type
+         AND vrty.enabled = TRUE
+        WHERE vrt.enabled = TRUE
+          AND vrt.review_type = #{reviewType}
+          AND vrt.category_code IN
+        <foreach collection="categoryCodes" item="categoryCode" open="(" separator="," close=")">
+            #{categoryCode}
+        </foreach>
+        ORDER BY vrt.sort_order ASC, vrt.category_code ASC
+    </select>
+
+    <select id="findAnalysisTemplateSnapshots"
+            resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateReviewTemplateRow">
+        SELECT
+            vat.review_type AS reviewType,
+            vat.category_code AS categoryCode,
+            vat.category_name AS categoryName,
+            NULL AS guideText,
+            NULL AS exampleText,
+            vat.prompt_template AS promptTemplate,
+            vat.template_version AS templateVersion,
+            vat.sort_order AS sortOrder
+        FROM vitamate_analysis_template vat
+        WHERE vat.vitamate_analysis_id = #{analysisId}
+          AND vat.deleted_at IS NULL
+        ORDER BY vat.sort_order ASC, vat.category_code ASC
+    </select>
+
+</mapper>
