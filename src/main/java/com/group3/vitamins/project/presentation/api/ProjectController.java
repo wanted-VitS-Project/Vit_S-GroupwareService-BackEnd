@@ -28,6 +28,17 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+// ── import 추가
+import com.group3.vitamins.project.application.result.ProjectCloseResult;
+import com.group3.vitamins.project.application.result.ProjectStatusResult;
+import com.group3.vitamins.project.application.result.ProjectUpdateResult;
+import com.group3.vitamins.project.presentation.api.request.ProjectCloseRequest;
+import com.group3.vitamins.project.presentation.api.request.ProjectStatusUpdateRequest;
+import com.group3.vitamins.project.presentation.api.request.ProjectUpdateRequest;
+import com.group3.vitamins.project.presentation.api.response.ProjectCloseResponse;
+import com.group3.vitamins.project.presentation.api.response.ProjectStatusUpdateResponse;
+import com.group3.vitamins.project.presentation.api.response.ProjectUpdateResponse;
+import jakarta.validation.Valid;
 
 @Tag(name = "Project - 프로젝트", description = "프로젝트 생성 / 조회 / 수정 / 삭제 (담당: 동훈)")
 @RestController
@@ -55,7 +66,7 @@ public class ProjectController {
     })
     @PostMapping
     public ResponseEntity<ApiResponse<ProjectCreateResponse>> createProject(
-            @RequestBody ProjectCreateRequest request,
+            @Valid @RequestBody ProjectCreateRequest request,
             Authentication authentication
     ) {
         ProjectResult result = projectCommandUseCase.createProject(
@@ -174,5 +185,104 @@ public class ProjectController {
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         ProjectProgressResponse.from(result)));
+    }
+
+
+    @Operation(summary = "프로젝트 수정",
+            description = "과업명·설명·발주처·기간·계약금액을 수정한다. "
+                    + "수정 화면의 폼 전체를 보내며, 보내지 않은 필드는 비워진다. "
+                    + "상태 변경·종결은 별도 API 다. "
+                    + "계약금액은 project.contract_amount 한 곳에만 저장된다 (INV-08).")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
+                            + "/ CONTRACT_AMOUNT_INVALID / COMMON_INVALID_REQUEST(형식 오류)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨")
+    })
+    @PatchMapping("/{projectId}")
+    public ResponseEntity<ApiResponse<ProjectUpdateResponse>> updateProject(
+            @Parameter(description = "수정할 프로젝트 ID")
+            @PathVariable Long projectId,
+            @Valid @RequestBody ProjectUpdateRequest request,
+            Authentication authentication
+    ) {
+        ProjectUpdateResult result = projectCommandUseCase.updateProject(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        ProjectUpdateResponse.from(result)));
+    }
+
+    @Operation(summary = "프로젝트 상태 변경",
+            description = "NOT_STARTED · IN_PROGRESS · SETTLEMENT · COMPLETED 로 바꾼다. "
+                    + "역방향 전이도 막지 않는다 (PRJ-003). "
+                    + "CLOSED 는 이 API 로 설정할 수 없고 종결 API 를 쓴다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "변경 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "PROJECT_STATUS_INVALID — 허용되지 않은 상태 값 (CLOSED 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨")
+    })
+    @PatchMapping("/{projectId}/status")
+    public ResponseEntity<ApiResponse<ProjectStatusUpdateResponse>> changeStatus(
+            @Parameter(description = "상태를 바꿀 프로젝트 ID")
+            @PathVariable Long projectId,
+            @Valid @RequestBody ProjectStatusUpdateRequest request,
+            Authentication authentication
+    ) {
+        ProjectStatusResult result = projectCommandUseCase.changeStatus(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        ProjectStatusUpdateResponse.from(result)));
+    }
+
+    @Operation(summary = "프로젝트 종결",
+            description = "사유를 붙여 CLOSED 로 만든다. 어느 상태에서든 종결할 수 있다 (PRJ-004). "
+                    + "종결해도 목록·활동기록에서 사라지지 않는다 — 삭제와 다른 동작이다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "종결 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "CLOSE_REASON_REQUIRED / CLOSE_REASON_INVALID "
+                            + "/ CLOSE_REASON_NOTE_TOO_LONG"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨")
+    })
+    @PostMapping("/{projectId}/close")
+    public ResponseEntity<ApiResponse<ProjectCloseResponse>> closeProject(
+            @Parameter(description = "종결할 프로젝트 ID")
+            @PathVariable Long projectId,
+            @Valid @RequestBody ProjectCloseRequest request,
+            Authentication authentication
+    ) {
+        ProjectCloseResult result = projectCommandUseCase.closeProject(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        ProjectCloseResponse.from(result)));
     }
 }

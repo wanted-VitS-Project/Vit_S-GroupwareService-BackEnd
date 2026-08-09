@@ -2,6 +2,7 @@ package com.group3.vitamins.global.presentation.api.common;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
@@ -19,7 +20,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -54,6 +58,19 @@ public class GlobalExceptionHandler {
     private static final String COMMON_INTERNAL_ERROR = "COMMON_INTERNAL_ERROR";
     private static final String COMMON_INTERNAL_ERROR_MESSAGE = "서버 내부 오류가 발생했습니다.";
 
+    /**
+     * Bean Validation 메시지에 {@code "ERROR_CODE|사용자 문구"} 형태를 허용한다.
+     *
+     * <p>기본 동작으로는 {@code @NotBlank}·{@code @Size} 위반이 전부 {@code COMMON_INVALID_REQUEST} 로
+     * 나가 <b>명세가 정한 도메인 에러코드를 내려줄 수 없었다</b>. 그래서 검증을 애노테이션으로 못 쓰고
+     * 서비스에서 손으로 던져 왔다 (`BCT-V1-API.md` §3-5 B2).
+     *
+     * <p>구분자가 없는 기존 메시지("사번을 입력해 주세요.", "must not be blank")는 이 패턴에 걸리지 않아
+     * <b>지금까지와 완전히 동일하게</b> {@code COMMON_INVALID_REQUEST} 로 나간다.
+     */
+    private static final Pattern CODED_MESSAGE = Pattern.compile(
+            "^([A-Z][A-Z0-9_]{2,})\\|(.+)$", Pattern.DOTALL);
+
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiErrorResponse> handleDomainException(
             DomainException e,
@@ -74,6 +91,14 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException e,
             HttpServletRequest request
     ) {
+        Optional<ResponseEntity<ApiErrorResponse>> coded = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> codedBadRequest(error.getDefaultMessage(), request))
+                .flatMap(Optional::stream)
+                .findFirst();
+        if (coded.isPresent()) {
+            return coded.get();
+        }
+
         String message = e.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
@@ -87,6 +112,15 @@ public class GlobalExceptionHandler {
             ConstraintViolationException e,
             HttpServletRequest request
     ) {
+        Optional<ResponseEntity<ApiErrorResponse>> coded = e.getConstraintViolations().stream()
+                .map(ConstraintViolation::getMessage)
+                .map(message -> codedBadRequest(message, request))
+                .flatMap(Optional::stream)
+                .findFirst();
+        if (coded.isPresent()) {
+            return coded.get();
+        }
+
         String message = e.getConstraintViolations().stream()
                 .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
                 .filter(this::hasText)
@@ -189,6 +223,29 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(500).body(ApiErrorResponse.of(
                 500, COMMON_INTERNAL_ERROR, COMMON_INTERNAL_ERROR_MESSAGE));
+    }
+
+    /**
+     * 검증 메시지가 {@code "ERROR_CODE|문구"} 형태면 그 코드로 400 응답을 만든다.
+     * 형태가 아니면 empty 를 돌려주고 호출부가 기존 폴백을 그대로 탄다.
+     */
+    private Optional<ResponseEntity<ApiErrorResponse>> codedBadRequest(
+            String rawMessage, HttpServletRequest request) {
+        if (rawMessage == null) {
+            return Optional.empty();
+        }
+        Matcher matcher = CODED_MESSAGE.matcher(rawMessage);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+
+        String code = matcher.group(1);
+        String message = matcher.group(2);
+        log.warn("[400] {} {} - {} : {}",
+                request.getMethod(), request.getRequestURI(), code, message);
+
+        return Optional.of(ResponseEntity.badRequest()
+                .body(ApiErrorResponse.of(400, code, message)));
     }
 
     private ResponseEntity<ApiErrorResponse> badRequest(String message, HttpServletRequest request) {

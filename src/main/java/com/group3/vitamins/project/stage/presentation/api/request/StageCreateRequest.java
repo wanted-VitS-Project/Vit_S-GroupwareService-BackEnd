@@ -2,10 +2,14 @@ package com.group3.vitamins.project.stage.presentation.api.request;
 
 import com.group3.vitamins.project.stage.application.command.CreateStageCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @Schema(description = "스테이지 생성 요청")
 public record StageCreateRequest(
 
+        @NotBlank(message = "STAGE_NAME_REQUIRED|스테이지명을 입력해 주세요.")
+        @Size(max = 100, message = "STAGE_NAME_TOO_LONG|스테이지명은 100자를 넘을 수 없습니다.")
         @Schema(description = "스테이지명 (최대 100자)", example = "제안")
         String name,
 

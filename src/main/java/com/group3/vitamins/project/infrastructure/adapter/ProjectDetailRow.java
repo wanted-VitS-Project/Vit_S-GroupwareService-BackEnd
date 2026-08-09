@@ -29,5 +29,10 @@ public record ProjectDetailRow(
         Long categoryId,
         String categoryName,
         String categoryCode
+
+
+
+
+
 ) {
 }
