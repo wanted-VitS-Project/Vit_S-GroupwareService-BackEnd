@@ -18,7 +18,12 @@ import com.group3.vitamins.employee.application.service.EmployeeRegistrationWrit
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
+import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -51,6 +56,7 @@ class EmployeeBulkServiceTest {
     private TempPasswordGenerator tempPasswordGenerator;
     private ThrottledPasswordEncoder passwordEncoder;
     private InitialPasswordMailPort mailPort;
+    private CompanyCodeQueryPort companyCodeQueryPort;
     private EmployeeBulkService service;
 
     @BeforeEach
@@ -62,16 +68,31 @@ class EmployeeBulkServiceTest {
         tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
+        companyCodeQueryPort = Mockito.mock(CompanyCodeQueryPort.class);
         service = new EmployeeBulkService(
                 new EmployeeAdminPolicy(), templatePort, parserPort, referencePort,
-                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort);
+                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort, companyCodeQueryPort);
 
-        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 해싱·비번은 고정
+        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 회사코드 vitas, 해싱·비번은 고정
         when(referencePort.resolveDepartmentIdsByName(any())).thenReturn(Map.of("개발팀", 10L));
         when(referencePort.resolveJobPositionIdsByName(any())).thenReturn(Map.of("대리", 5L));
         when(referencePort.findExistingUserIds(any())).thenReturn(Set.of());
+        when(companyCodeQueryPort.findCodeByCompanyId(any())).thenReturn("vitas");
         when(tempPasswordGenerator.generate()).thenReturn("Temp1234!");
         when(passwordEncoder.encode(anyString())).thenReturn("HASHED");
+
+        // analyze 가 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken("admin", null, List.of());
+        auth.setDetails(1L);
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(auth);
+        SecurityContextHolder.setContext(ctx);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     // ---- 헬퍼 ---------------------------------------------------------------
@@ -168,7 +189,8 @@ class EmployeeBulkServiceTest {
         @Test
         @DisplayName("유효 행은 통과하고 각 오류 유형을 정확히 분류한다")
         void classifiesErrors() {
-            when(referencePort.findExistingUserIds(any())).thenReturn(Set.of("EMP_DB"));
+            // DB 는 접두사 형태로 저장하므로 기존 사번 스텁도 접두사 형태로 준다 (row "EMP_DB" → "vitas-EMP_DB").
+            when(referencePort.findExistingUserIds(any())).thenReturn(Set.of("vitas-EMP_DB"));
             List<ParsedEmployeeRow> rows = List.of(
                     valid(2, "EMP100", "a@b.com"),                                   // 유효
                     row(3, null, "김", "개발팀", null, "2026-01-01", null, "MEMBER"),  // 사번 누락
@@ -273,7 +295,7 @@ class EmployeeBulkServiceTest {
             assertThat(r.registeredCount()).isEqualTo(2);
             assertThat(r.failedCount()).isEqualTo(1);          // 오류 1행
             assertThat(r.emailSentCount()).isEqualTo(1);
-            assertThat(r.emailNotRegistered()).extracting("userId").containsExactly("EMP101");
+            assertThat(r.emailNotRegistered()).extracting("userId").containsExactly("vitas-EMP101");
             verify(registrationWriter, times(2)).register(any(), anyString(), anyString());
         }
 

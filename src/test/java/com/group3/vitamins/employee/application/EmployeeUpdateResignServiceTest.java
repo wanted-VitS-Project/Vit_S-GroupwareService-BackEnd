@@ -54,7 +54,8 @@ class EmployeeUpdateResignServiceTest {
                 new EmployeeAdminPolicy(), employeeRepository, referenceQueryPort,
                 Mockito.mock(EmployeeRegistrationWriter.class), Mockito.mock(TempPasswordGenerator.class),
                 Mockito.mock(ThrottledPasswordEncoder.class), Mockito.mock(InitialPasswordMailPort.class),
-                accountDeactivationPort);
+                accountDeactivationPort,
+                Mockito.mock(com.group3.vitamins.employee.application.port.CompanyCodeQueryPort.class));
     }
 
     private Employee active() {

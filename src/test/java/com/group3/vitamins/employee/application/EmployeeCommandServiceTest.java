@@ -5,6 +5,7 @@ import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.employee.application.command.RegisterEmployeeCommand;
 import com.group3.vitamins.employee.application.policy.EmployeeAdminPolicy;
+import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
 import com.group3.vitamins.employee.application.port.EmployeeReferenceQueryPort;
 import com.group3.vitamins.employee.application.port.InitialPasswordMailPort;
 import com.group3.vitamins.employee.application.result.EmployeeRegisterResult;
@@ -15,13 +16,18 @@ import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,6 +50,7 @@ class EmployeeCommandServiceTest {
     private TempPasswordGenerator tempPasswordGenerator;
     private ThrottledPasswordEncoder passwordEncoder;
     private InitialPasswordMailPort mailPort;
+    private CompanyCodeQueryPort companyCodeQueryPort;
     private EmployeeCommandService service;
 
     @BeforeEach
@@ -54,9 +61,25 @@ class EmployeeCommandServiceTest {
         tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
+        companyCodeQueryPort = Mockito.mock(CompanyCodeQueryPort.class);
+        when(companyCodeQueryPort.findCodeByCompanyId(any())).thenReturn("vitas");
         service = new EmployeeCommandService(new EmployeeAdminPolicy(), employeeRepository,
                 referenceQueryPort, registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
-                Mockito.mock(com.group3.vitamins.employee.application.port.AccountDeactivationPort.class));
+                Mockito.mock(com.group3.vitamins.employee.application.port.AccountDeactivationPort.class),
+                companyCodeQueryPort);
+
+        // 등록 스탬핑이 TenantContext(세션의 company_id)를 읽으므로, 회사 1 컨텍스트를 심는다.
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken("admin", null, List.of());
+        auth.setDetails(1L);
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(auth);
+        SecurityContextHolder.setContext(ctx);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     /** email 있는 정상 등록의 스텁 (해피패스 계열이 공유). */
@@ -162,7 +185,7 @@ class EmployeeCommandServiceTest {
     @Test
     @DisplayName("사번 중복은 EMP_USER_ID_DUPLICATED — 저장하지 않는다")
     void rejectsDuplicate() {
-        when(employeeRepository.existsById("EMP021")).thenReturn(true);
+        when(employeeRepository.existsById("vitas-EMP021")).thenReturn(true);
 
         assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "a@b.com")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_USER_ID_DUPLICATED));
@@ -200,7 +223,7 @@ class EmployeeCommandServiceTest {
         // 저장은 트랜잭션 writer 로, 인코딩된 비밀번호와 role 이 넘어간다
         ArgumentCaptor<Employee> employeeCaptor = ArgumentCaptor.forClass(Employee.class);
         verify(registrationWriter).register(employeeCaptor.capture(), eq("MEMBER"), eq("ENC-PW"));
-        assertThat(employeeCaptor.getValue().getUserId()).isEqualTo("EMP021");
+        assertThat(employeeCaptor.getValue().getUserId()).isEqualTo("vitas-EMP021");
         assertThat(employeeCaptor.getValue().isSystem()).isFalse();
         // 원문 비밀번호로 메일 발송
         verify(mailPort).sendInitialPassword("hong@vitamins.com", "홍길동", "RAW-PW");

@@ -5,6 +5,7 @@ import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.employee.application.command.RegisterBulkCommand;
 import com.group3.vitamins.employee.application.command.ValidateBulkCommand;
 import com.group3.vitamins.employee.application.policy.EmployeeAdminPolicy;
+import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
 import com.group3.vitamins.employee.application.port.EmployeeBulkReferenceQueryPort;
 import com.group3.vitamins.employee.application.port.EmployeeExcelParserPort;
 import com.group3.vitamins.employee.application.port.EmployeeExcelTemplatePort;
@@ -22,6 +23,7 @@ import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
+import com.group3.vitamins.global.infrastructure.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -73,6 +75,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     private final TempPasswordGenerator tempPasswordGenerator;
     private final ThrottledPasswordEncoder passwordEncoder;
     private final InitialPasswordMailPort initialPasswordMailPort;
+    private final CompanyCodeQueryPort companyCodeQueryPort;
 
     @Override
     public byte[] getTemplate(String actorRole) {
@@ -172,17 +175,23 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
                 distinct(rows, ParsedEmployeeRow::department));
         Map<String, Long> posIds = bulkReferenceQueryPort.resolveJobPositionIdsByName(
                 distinct(rows, ParsedEmployeeRow::jobPosition));
+        // 이 등록 배치 전체가 같은 회사(로그인 ADMIN) 소속이므로 회사코드는 한 번만 조회한다.
+        // ⚠️ DB 는 이미 접두사 형태(예: "vitas-1234567")로 저장하므로, 기존 사번 존재 검사는 접두사 붙인 값으로 대조한다.
+        String companyCode = resolveCompanyCode();
         Set<String> existingUserIds = bulkReferenceQueryPort.findExistingUserIds(
-                distinct(rows, ParsedEmployeeRow::userId));
+                distinct(rows, ParsedEmployeeRow::userId).stream()
+                        .filter(Objects::nonNull)
+                        .map(base -> prefixUserId(companyCode, base))
+                        .collect(Collectors.toSet()));
 
         List<ResolvedEmployeeRow> validRows = new ArrayList<>();
         List<BulkRowError> errors = new ArrayList<>();
         for (ParsedEmployeeRow row : rows) {
-            BulkRowError error = validateRow(row, userIdCounts, firstRowByUserId, deptIds, existingUserIds);
+            BulkRowError error = validateRow(row, userIdCounts, firstRowByUserId, deptIds, existingUserIds, companyCode);
             if (error != null) {
                 errors.add(error);
             } else {
-                validRows.add(toResolved(row, deptIds, posIds));
+                validRows.add(toResolved(row, deptIds, posIds, companyCode));
             }
         }
 
@@ -193,13 +202,14 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     /** 행 하나를 우선순위대로 검증해 첫 오류를 돌려준다(없으면 null = 유효). */
     private BulkRowError validateRow(ParsedEmployeeRow row, Map<String, Long> counts,
                                      Map<String, Integer> firstRow, Map<String, Long> deptIds,
-                                     Set<String> existingUserIds) {
+                                     Set<String> existingUserIds, String companyCode) {
         // 1) 필수값·길이·형식 (REQUIRED_COLUMN 버킷)
         if (row.userId() == null) {
             return err(row, BulkValidation.REQUIRED_COLUMN, "필수 컬럼 누락: 사번");
         }
-        if (row.userId().length() > MAX_USER_ID) {
-            return err(row, BulkValidation.REQUIRED_COLUMN, "사번이 " + MAX_USER_ID + "자를 초과했습니다");
+        // 접두사(회사코드-)까지 붙인 최종 user_id 가 컬럼 폭을 넘으면 안 된다 — base 사번이 너무 긴 것.
+        if (prefixUserId(companyCode, row.userId()).length() > MAX_USER_ID) {
+            return err(row, BulkValidation.REQUIRED_COLUMN, "사번이 회사코드 포함 " + MAX_USER_ID + "자를 초과했습니다");
         }
         if (row.name() == null) {
             return err(row, BulkValidation.REQUIRED_COLUMN, "필수 컬럼 누락: 이름");
@@ -241,7 +251,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             return err(row, BulkValidation.USER_ID_DUPLICATED,
                     "파일 내 사번 중복 (" + firstRow.get(row.userId()) + "행)");
         }
-        if (existingUserIds.contains(row.userId())) {
+        if (existingUserIds.contains(prefixUserId(companyCode, row.userId()))) {
             return err(row, BulkValidation.USER_ID_DUPLICATED, "이미 등록된 사번입니다");
         }
 
@@ -253,13 +263,29 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
         return null; // 유효
     }
 
-    /** 유효 행 → 등록 가능한 값으로 변환. 직급명은 불일치·미지정이면 null(오류 아님). */
-    private ResolvedEmployeeRow toResolved(ParsedEmployeeRow row, Map<String, Long> deptIds, Map<String, Long> posIds) {
+    /** 유효 행 → 등록 가능한 값으로 변환. 사번은 접두사를 붙인 최종 user_id 로 굳힌다. 직급명은 불일치·미지정이면 null(오류 아님). */
+    private ResolvedEmployeeRow toResolved(ParsedEmployeeRow row, Map<String, Long> deptIds,
+                                           Map<String, Long> posIds, String companyCode) {
         Long jobPositionId = row.jobPosition() == null ? null : posIds.get(row.jobPosition());
         return new ResolvedEmployeeRow(
-                row.rowNumber(), row.userId(), row.name(),
+                row.rowNumber(), prefixUserId(companyCode, row.userId()), row.name(),
                 deptIds.get(row.department()), jobPositionId, parseDate(row.hiredAt()),
                 row.email(), row.phone(), row.role().toUpperCase(Locale.ROOT));
+    }
+
+    /** 현재 로그인 회사의 코드를 조회한다 (접두사 재료). 등록 배치 전체가 같은 회사라 한 번만 부른다. */
+    private String resolveCompanyCode() {
+        Long companyId = TenantContext.currentCompanyId();
+        String companyCode = companyCodeQueryPort.findCodeByCompanyId(companyId);
+        if (companyCode == null) {
+            throw new IllegalStateException("회사 코드를 찾을 수 없습니다 - companyId=" + companyId);
+        }
+        return companyCode;
+    }
+
+    /** base 사번 앞에 회사코드를 붙여 전역 유일 user_id 를 만든다 (예: {@code "vitas-1234567"}). 회사 판별은 company_id 담당. */
+    private String prefixUserId(String companyCode, String baseUserId) {
+        return companyCode + "-" + baseUserId;
     }
 
     private void validateFileMeta(byte[] content, String filename, long size) {
