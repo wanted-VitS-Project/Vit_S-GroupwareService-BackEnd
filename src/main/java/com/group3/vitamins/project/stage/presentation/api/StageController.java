@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -55,7 +56,7 @@ public class StageController {
     public ResponseEntity<ApiResponse<StageCreateResponse>> createStage(
             @Parameter(description = "스테이지를 추가할 프로젝트 ID")
             @PathVariable Long projectId,
-            @RequestBody StageCreateRequest request,
+            @Valid @RequestBody StageCreateRequest request,
             Authentication authentication
     ) {
         StageResult result = stageCommandUseCase.createStage(request.toCommand(

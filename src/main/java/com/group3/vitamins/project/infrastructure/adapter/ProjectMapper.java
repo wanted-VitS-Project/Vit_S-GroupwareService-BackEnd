@@ -1,6 +1,7 @@
-package com.group3.vitamins.project.infrastructure.persistence;
+package com.group3.vitamins.project.infrastructure.adapter;
 
 import com.group3.vitamins.project.domain.model.Project;
+import com.group3.vitamins.project.infrastructure.persistence.ProjectJpaEntity;
 
 public class ProjectMapper {
 
