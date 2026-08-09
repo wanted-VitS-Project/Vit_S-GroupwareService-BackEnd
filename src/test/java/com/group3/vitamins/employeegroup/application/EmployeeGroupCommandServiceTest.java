@@ -19,7 +19,11 @@ import com.group3.vitamins.employeegroup.domain.model.EmployeeGroup;
 import com.group3.vitamins.employeegroup.domain.repository.EmployeeGroupMemberRepository;
 import com.group3.vitamins.employeegroup.domain.repository.EmployeeGroupRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -58,10 +62,23 @@ class EmployeeGroupCommandServiceTest {
         queryPort = Mockito.mock(EmployeeGroupQueryPort.class);
         service = new EmployeeGroupCommandService(
                 groupRepository, memberRepository, queryPort, new EmployeeGroupAdminPolicy());
+
+        // 생성 스탬핑이 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken("admin", null, List.of());
+        auth.setDetails(1L);
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(auth);
+        SecurityContextHolder.setContext(ctx);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     private EmployeeGroup group() {
-        return EmployeeGroup.restore(GROUP_ID, "개발팀", null, "ADMIN001");
+        return EmployeeGroup.restore(GROUP_ID, 1L, "개발팀", null, "ADMIN001");
     }
 
     private Consumer<Throwable> hasCode(Object expected) {

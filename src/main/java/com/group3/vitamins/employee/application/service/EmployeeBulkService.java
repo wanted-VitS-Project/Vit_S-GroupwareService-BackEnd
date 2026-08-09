@@ -100,6 +100,8 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     public BulkRegisterResult register(RegisterBulkCommand command) {
         employeeAdminPolicy.assertAdmin(command.actorRole());
         BulkAnalysis analysis = analyze(command.content(), command.originalFilename(), command.size());
+        // 이 배치 전체가 같은 회사(로그인 ADMIN) 소속이므로 company_id 스탬핑용 회사번호는 한 번만 읽는다.
+        Long companyId = TenantContext.currentCompanyId();
 
         // skipErrors=false 인데 오류가 있으면 등록하지 않는다(전량 거부). true 면 유효 행만 등록(부분 등록).
         if (!command.skipErrors() && analysis.errorCount() > 0) {
@@ -117,7 +119,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             String encodedPassword = passwordEncoder.encode(rawPassword);
 
             Employee employee = Employee.register(row.userId(), row.name(), row.departmentId(),
-                    row.jobPositionId(), row.email(), row.phone(), row.hiredAt());
+                    row.jobPositionId(), row.email(), row.phone(), row.hiredAt(), companyId);
             try {
                 registrationWriter.register(employee, row.role(), encodedPassword); // 행별 독립 트랜잭션
             } catch (DataIntegrityViolationException e) {

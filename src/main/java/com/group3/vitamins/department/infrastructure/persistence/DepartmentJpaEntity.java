@@ -40,6 +40,9 @@ public class DepartmentJpaEntity {
     @Column(name = "department_id")
     private Long departmentId;
 
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     @Column(name = "name", nullable = false, length = 50)
     private String name;
 
@@ -56,8 +59,9 @@ public class DepartmentJpaEntity {
     @Column(name = "parent_key", insertable = false, updatable = false)
     private Long parentKey;
 
-    public DepartmentJpaEntity(Long departmentId, String name, Long parentId) {
+    public DepartmentJpaEntity(Long departmentId, Long companyId, String name, Long parentId) {
         this.departmentId = departmentId;
+        this.companyId = companyId;
         this.name = name;
         this.parentId = parentId;
     }

@@ -9,25 +9,27 @@ package com.group3.vitamins.employeegroup.domain.model;
 public class EmployeeGroup {
 
     private final Long groupId;
+    private final Long companyId;
     private String name;
     private String description;
     private final String createdBy;
 
-    private EmployeeGroup(Long groupId, String name, String description, String createdBy) {
+    private EmployeeGroup(Long groupId, Long companyId, String name, String description, String createdBy) {
         this.groupId = groupId;
+        this.companyId = companyId;
         this.name = name;
         this.description = description;
         this.createdBy = createdBy;
     }
 
     /** 새 그룹을 만든다. 아직 저장 전이라 ID 가 없다. */
-    public static EmployeeGroup create(String name, String description, String createdBy) {
-        return new EmployeeGroup(null, name, description, createdBy);
+    public static EmployeeGroup create(String name, String description, String createdBy, Long companyId) {
+        return new EmployeeGroup(null, companyId, name, description, createdBy);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
-    public static EmployeeGroup restore(Long groupId, String name, String description, String createdBy) {
-        return new EmployeeGroup(groupId, name, description, createdBy);
+    public static EmployeeGroup restore(Long groupId, Long companyId, String name, String description, String createdBy) {
+        return new EmployeeGroup(groupId, companyId, name, description, createdBy);
     }
 
     public void rename(String name) {
@@ -40,6 +42,10 @@ public class EmployeeGroup {
 
     public Long getGroupId() {
         return groupId;
+    }
+
+    public Long getCompanyId() {
+        return companyId;
     }
 
     public String getName() {

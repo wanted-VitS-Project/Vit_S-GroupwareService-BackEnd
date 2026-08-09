@@ -10,23 +10,25 @@ package com.group3.vitamins.department.domain.model;
 public class Department {
 
     private final Long departmentId;
+    private final Long companyId;
     private String name;
     private final Long parentId;
 
-    private Department(Long departmentId, String name, Long parentId) {
+    private Department(Long departmentId, Long companyId, String name, Long parentId) {
         this.departmentId = departmentId;
+        this.companyId = companyId;
         this.name = name;
         this.parentId = parentId;
     }
 
     /** 새 부서를 만든다. 아직 저장되지 않았으므로 ID 가 없다. {@code parentId} 가 {@code null} 이면 최상위. */
-    public static Department create(String name, Long parentId) {
-        return new Department(null, name, parentId);
+    public static Department create(String name, Long parentId, Long companyId) {
+        return new Department(null, companyId, name, parentId);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
-    public static Department restore(Long departmentId, String name, Long parentId) {
-        return new Department(departmentId, name, parentId);
+    public static Department restore(Long departmentId, Long companyId, String name, Long parentId) {
+        return new Department(departmentId, companyId, name, parentId);
     }
 
     /** 부서명 수정 — 상위 부서는 바꾸지 않는다 (부서 이동 기능 없음, `.ai/api/department.md` §3). */
@@ -41,6 +43,10 @@ public class Department {
 
     public Long getDepartmentId() {
         return departmentId;
+    }
+
+    public Long getCompanyId() {
+        return companyId;
     }
 
     public String getName() {

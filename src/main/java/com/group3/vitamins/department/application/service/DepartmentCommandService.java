@@ -13,6 +13,7 @@ import com.group3.vitamins.department.domain.repository.DepartmentRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.global.infrastructure.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -78,7 +79,8 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
         // save 구현이 saveAndFlush 라 위반을 즉시 감지한다.
         Department saved;
         try {
-            saved = departmentRepository.save(Department.create(command.name(), parentId));
+            saved = departmentRepository.save(
+                    Department.create(command.name(), parentId, TenantContext.currentCompanyId()));
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED, e);
         }

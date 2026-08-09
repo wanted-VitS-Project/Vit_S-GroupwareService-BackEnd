@@ -3,6 +3,7 @@ package com.group3.vitamins.jobposition.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.global.infrastructure.security.TenantContext;
 import com.group3.vitamins.jobposition.application.command.CreateJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.DeleteJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.UpdateJobPositionCommand;
@@ -40,7 +41,8 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
                 ? command.sortOrder()
                 : jobPositionRepository.nextSortOrder();
 
-        JobPosition saved = saveHandlingNameConflict(JobPosition.create(command.name(), sortOrder));
+        JobPosition saved = saveHandlingNameConflict(
+                JobPosition.create(command.name(), sortOrder, TenantContext.currentCompanyId()));
 
         // 생성 직후이므로 사용 인원은 항상 0
         return JobPositionResult.of(saved, 0);

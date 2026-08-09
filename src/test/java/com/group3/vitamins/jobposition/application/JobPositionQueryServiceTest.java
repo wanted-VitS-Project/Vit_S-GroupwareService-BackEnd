@@ -50,7 +50,7 @@ class JobPositionQueryServiceTest {
     }
 
     private JobPosition position(Long id, String name, int sortOrder) {
-        return JobPosition.restore(id, name, sortOrder);
+        return JobPosition.restore(id, 1L, name, sortOrder);
     }
 
     @Test
