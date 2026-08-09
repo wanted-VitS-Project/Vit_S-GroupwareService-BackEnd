@@ -162,13 +162,14 @@ public class EmployeeGroupCommandService implements EmployeeGroupCommandUseCase 
     public RemoveMemberResult removeMember(RemoveMemberCommand command) {
         adminPolicy.assertAdmin(command.role());
 
+        // 그룹 없음(GRP_NOT_FOUND)과 구성원 아님(GRP_MEMBER_NOT_FOUND)을 구분해야 하므로 그룹 존재는 먼저 확인한다.
         groupRepository.findById(command.groupId())
                 .orElseThrow(() -> new NotFoundException(EmployeeGroupErrorCode.GRP_NOT_FOUND));
-        if (!memberRepository.existsMember(command.groupId(), command.userId())) {
+
+        // 존재확인+삭제를 원자적 DELETE 로 합친다 — 삭제 0건이면 구성원이 아니었던 것(동시 제거 레이스 안전).
+        if (memberRepository.removeMember(command.groupId(), command.userId()) == 0) {
             throw new NotFoundException(EmployeeGroupErrorCode.GRP_MEMBER_NOT_FOUND);
         }
-
-        memberRepository.removeMember(command.groupId(), command.userId());
         int memberCount = queryPort.countMembers(command.groupId());
         log.info("그룹 구성원 제거 - groupId={} userId={}", command.groupId(), command.userId());
         return new RemoveMemberResult(command.groupId(), memberCount);

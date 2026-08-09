@@ -16,9 +16,7 @@ public interface SpringDataEmployeeGroupMemberRepository
     @Query("select m.userId from EmployeeGroupMemberJpaEntity m where m.groupId = :groupId and m.userId in :userIds")
     List<String> findExistingUserIds(@Param("groupId") Long groupId, @Param("userIds") Collection<String> userIds);
 
-    boolean existsByGroupIdAndUserId(Long groupId, String userId);
-
-    /** 벌크 DELETE — 즉시 DB 에 실행돼 같은 트랜잭션의 후속 MyBatis 집계가 반영값을 본다(select-then-delete 아님). */
+    /** 벌크 DELETE — 삭제 행 수 반환(0이면 구성원 아님). 즉시 DB 실행돼 후속 MyBatis 집계가 반영값을 본다(select-then-delete 아님). */
     @Modifying
     @Query("delete from EmployeeGroupMemberJpaEntity m where m.groupId = :groupId and m.userId = :userId")
     int deleteMember(@Param("groupId") Long groupId, @Param("userId") String userId);

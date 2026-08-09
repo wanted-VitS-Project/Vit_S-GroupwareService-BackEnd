@@ -231,19 +231,19 @@ class EmployeeGroupCommandServiceTest {
     class RemoveMember {
 
         @Test
-        @DisplayName("구성원이 아니면 GRP_MEMBER_NOT_FOUND")
+        @DisplayName("삭제 0건이면(구성원 아님) GRP_MEMBER_NOT_FOUND")
         void notMember() {
             when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
-            when(memberRepository.existsMember(GROUP_ID, "EMP9")).thenReturn(false);
+            when(memberRepository.removeMember(GROUP_ID, "EMP9")).thenReturn(0);
             assertThatThrownBy(() -> service.removeMember(new RemoveMemberCommand(ADMIN, GROUP_ID, "EMP9")))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_MEMBER_NOT_FOUND));
         }
 
         @Test
-        @DisplayName("성공하면 처리 후 구성원 수를 돌려준다")
+        @DisplayName("삭제 1건이면 처리 후 구성원 수를 돌려준다")
         void success() {
             when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
-            when(memberRepository.existsMember(GROUP_ID, "EMP1")).thenReturn(true);
+            when(memberRepository.removeMember(GROUP_ID, "EMP1")).thenReturn(1);
             when(queryPort.countMembers(GROUP_ID)).thenReturn(3);
             RemoveMemberResult r = service.removeMember(new RemoveMemberCommand(ADMIN, GROUP_ID, "EMP1"));
             assertThat(r.memberCount()).isEqualTo(3);

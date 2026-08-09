@@ -21,8 +21,10 @@ public interface EmployeeGroupMemberRepository {
      */
     void addMembers(Long groupId, Collection<String> userIds);
 
-    boolean existsMember(Long groupId, String userId);
-
-    /** 구성원 1명 제거. 벌크 DELETE 라 즉시 DB 에 반영돼(같은 트랜잭션) 뒤따르는 MyBatis 집계가 본다. */
-    void removeMember(Long groupId, String userId);
+    /**
+     * 구성원 1명 제거 — <b>삭제된 행 수</b>를 돌려준다(0이면 구성원이 아니었음). 벌크 DELETE 라 즉시 DB 에 반영돼
+     * 같은 트랜잭션의 MyBatis 집계가 본다. 존재확인+삭제를 원자적 DELETE 한 번으로 합쳐, 동시 제거가 둘 다
+     * 사전확인을 통과한 뒤 한쪽이 0건 삭제하고도 성공으로 응답하는 레이스를 막는다.
+     */
+    int removeMember(Long groupId, String userId);
 }

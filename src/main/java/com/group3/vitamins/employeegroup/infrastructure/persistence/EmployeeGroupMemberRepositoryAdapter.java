@@ -33,12 +33,7 @@ public class EmployeeGroupMemberRepositoryAdapter implements EmployeeGroupMember
     }
 
     @Override
-    public boolean existsMember(Long groupId, String userId) {
-        return springDataRepository.existsByGroupIdAndUserId(groupId, userId);
-    }
-
-    @Override
-    public void removeMember(Long groupId, String userId) {
-        springDataRepository.deleteMember(groupId, userId); // 벌크 DELETE — 즉시 반영
+    public int removeMember(Long groupId, String userId) {
+        return springDataRepository.deleteMember(groupId, userId); // 벌크 DELETE — 삭제 행 수 반환·즉시 반영
     }
 }
