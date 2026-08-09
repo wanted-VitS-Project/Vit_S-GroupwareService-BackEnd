@@ -1,6 +1,7 @@
 # 📂 도메인 문서 인덱스
 
 **최종 업데이트**
+- 2026-08-08 — 삭제 데이터 정리 컨벤션(`CLEANUP.md`) — `global` 하드 딜리트 SPI 등록 + CASCADE 판단 기준 확장
 - 2026-08-05 — 입찰용 블록 폐기 · 블록 카탈로그 9종으로 정리
 - 2026-08-04 — Flyway 마이그레이션 컨벤션 추가
 - 2026-08-03 — 다형성 규약 · 삭제 정책 · 입찰·비타메이트 문서 제거
@@ -23,6 +24,7 @@
 │   ├── PERMISSION.md   권한 체계 (3층 판정 · ADMIN/MASTER/MEMBER 차이)
 │   ├── BLOCK.md        블록 정보 (공통 규칙 · 배치 · 9종 카탈로그)
 │   ├── FLYWAY.md       DB 마이그레이션 컨벤션
+│   ├── CLEANUP.md      삭제 데이터 정리 컨벤션 (하드 딜리트 스케줄러 SPI + CASCADE 판단 기준)
 │   └── USECASE.md      전 과정 흐름 (공고 → 실적)
 └── domain/        도메인별 구현 계약 + 유스케이스
     ├── ERD.md            ⭐ 전 도메인 DDL 정본 (51테이블)     (동훈)
@@ -52,6 +54,7 @@
 | [PAGE.md](global/PAGE.md) | 화면 P-00~P-70 역할 · 백엔드/프론트 담당 | 화면·라우팅 설계 · "이 페이지가 무슨 역할인가" |
 | [BLOCK.md](global/BLOCK.md) | 공통 규칙 · 배치 · 9종 카탈로그 · 삭제 잠금 | 블록이 걸린 **모든** 작업 |
 | [FLYWAY.md](global/FLYWAY.md) | DB 마이그레이션 컨벤션 · RDS 반영 규칙 | 테이블·컬럼·인덱스·FK·seed 변경 전 |
+| [CLEANUP.md](global/CLEANUP.md) | 삭제 데이터 정리 — 스케줄러(`global`에 하나) vs `CASCADE` 판단 기준 | soft delete되는 테이블을 새로 만들 때, 그 종속 데이터를 어떻게 정리할지 정할 때 |
 | [USECASE.md](global/USECASE.md) | 공고 → 실적 전 과정 흐름 | 기능 구현 전 흐름 확인 |
 
 ---
