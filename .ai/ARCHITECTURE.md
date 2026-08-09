@@ -202,6 +202,11 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 `@PreAuthorize`·`@NotBlank`/`@Size` 같은 프레임워크 기본 경로는 쓰지 않는다 (`.ai/API.md` §3-5 참고 — `COMMON_FORBIDDEN`/`COMMON_INVALID_REQUEST` 로 새어나가 명세 에러코드가 안 나간다).
 인가는 `application/policy`, 입력 검증은 `service` 내부 수동 검증으로 처리하고 도메인 전용 `ErrorCode` 를 던진다.
 
+### PATCH 요청 파싱 (2026-08-09)
+
+- **PATCH 요청 파싱은 `XxxRequest` 클래스가 소유한다.** 컨트롤러는 `request.toCommand(...)` 한 줄이다 — 파싱 분기를 컨트롤러에 풀어놓지 않는다.
+- **`JsonNode` 는 명세가 "생략 vs `null` 명시" 를 구분한다고 밝힌 API 에만 쓴다.** 그 구분이 명세에 없으면 일반 record DTO 로 받는다 — `JsonNode` 를 기본값으로 쓰면 계약에 없는 의미가 코드에서 생긴다.
+
 ---
 
 ## 5. 레거시 도메인 이관 완료 (2026-08-05)
@@ -226,4 +231,5 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 |---|---|---|
 | 2026-08-04 | 신설 — `businesscategory` 구현을 기준으로 헥사고날 계층·네이밍 컨벤션 확정, `auth`/`account` 레거시 명시 | 김동현 |
 | 2026-08-04 | §2-1 신설 — 애그리게이트별 서브패키지 규칙(`project` 계층). 애그리게이트 간 참조도 `port`+`adapter`, URL↔패키지 불일치 허용 | 동훈 |
+| 2026-08-09 | §4 권한 처리에 **PATCH 요청 파싱 컨벤션 2건** 추가 — 파싱은 `XxxRequest` 소유(컨트롤러 한 줄), `JsonNode` 는 "생략 vs `null` 명시" 를 명세가 구분한 API 한정 | 동훈 |
 | 2026-08-05 | §2-2 신설 — 쓰기 방향 포트(경계 넘는 쓰기는 한 트랜잭션, 이벤트 아님) · 타입별 확장 SPI(`List<Port>` + `supportedType()`, 공용 파일 동시 편집 금지, `sealed` 금지). 근거: `project/block` 타입 10종을 5명이 나눠 갖는다 | 동훈 |

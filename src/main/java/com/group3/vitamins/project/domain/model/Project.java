@@ -19,12 +19,14 @@ public class Project {
     private final String closeReasonNote;
     private final String createdBy;
     private final LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
 
     private Project(Long projectId, Long bidNoticeId, String name, String description, ProjectStatus status,
                     String clientName, BigDecimal contractAmount, LocalDate startedOn, LocalDate endedOn,
                     CloseReasonCode closeReasonCode, String closeReasonNote,
-                    String createdBy, LocalDateTime createdAt, LocalDateTime deletedAt) {
+                    String createdBy, LocalDateTime createdAt, LocalDateTime updatedAt,
+                    LocalDateTime deletedAt) {
         this.projectId = projectId;
         this.bidNoticeId = bidNoticeId;
         this.name = name;
@@ -38,6 +40,7 @@ public class Project {
         this.closeReasonNote = closeReasonNote;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
         this.deletedAt = deletedAt;
     }
 
@@ -46,7 +49,7 @@ public class Project {
                                  LocalDate startedOn, LocalDate endedOn, BigDecimal contractAmount,
                                  String createdBy, LocalDateTime now) {
         return new Project(null, bidNoticeId, name, description, ProjectStatus.NOT_STARTED,
-                clientName, contractAmount, startedOn, endedOn, null, null, createdBy, now, null);
+                clientName, contractAmount, startedOn, endedOn, null, null, createdBy, now, now, null);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
@@ -54,9 +57,28 @@ public class Project {
                                   ProjectStatus status, String clientName, BigDecimal contractAmount,
                                   LocalDate startedOn, LocalDate endedOn,
                                   CloseReasonCode closeReasonCode, String closeReasonNote,
-                                  String createdBy, LocalDateTime createdAt, LocalDateTime deletedAt) {
+                                  String createdBy, LocalDateTime createdAt, LocalDateTime updatedAt,
+                                  LocalDateTime deletedAt) {
         return new Project(projectId, bidNoticeId, name, description, status, clientName, contractAmount,
-                startedOn, endedOn, closeReasonCode, closeReasonNote, createdBy, createdAt, deletedAt);
+                startedOn, endedOn, closeReasonCode, closeReasonNote, createdBy, createdAt, updatedAt,
+                deletedAt);
+    }
+
+    /**
+     * 수정 가능한 6필드를 갈아끼운다. "생략" 판정은 호출부가 끝내고 최종 값만 넘긴다.
+     * 상태·종결사유·공고연결은 여기서 바꾸지 않는다 — 전용 API 소관이다 (PRJ-006).
+     */
+    public Project update(String name, String description, String clientName,
+                          LocalDate startedOn, LocalDate endedOn, BigDecimal contractAmount,
+                          LocalDateTime now) {
+        this.name = name;
+        this.description = description;
+        this.clientName = clientName;
+        this.startedOn = startedOn;
+        this.endedOn = endedOn;
+        this.contractAmount = contractAmount;
+        this.updatedAt = now;
+        return this;
     }
 
     public Long getProjectId() { return projectId; }
@@ -72,5 +94,6 @@ public class Project {
     public String getCloseReasonNote() { return closeReasonNote; }
     public String getCreatedBy() { return createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
 }

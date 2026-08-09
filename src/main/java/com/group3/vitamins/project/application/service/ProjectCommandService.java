@@ -24,6 +24,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import com.group3.vitamins.project.application.command.UpdateProjectCommand;
+import com.group3.vitamins.project.application.result.ProjectUpdateResult;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +41,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final ProjectBusinessCategoryRepository projectBusinessCategoryRepository;
     private final BusinessCategoryLookupPort businessCategoryLookupPort;
     private final EmployeeLookupPort employeeLookupPort;
+    private final ProjectAccessUseCase projectAccessUseCase;
 
     @Override
     public ProjectResult createProject(CreateProjectCommand command) {
@@ -71,6 +76,36 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 saved.getContractAmount(), categories, saved.getBidNoticeId(),
                 new ProjectResult.CreatedBy(command.requesterUserId(), createdByName),
                 saved.getCreatedAt());
+    }
+
+    /** 수정 화면이 폼 전체를 보내므로 받은 값으로 덮어쓴다. null 은 해당 값을 비운다. */
+    @Override
+    public ProjectUpdateResult updateProject(UpdateProjectCommand command) {
+        projectAccessUseCase.requireEditable(
+                command.projectId(), command.requesterUserId(), command.role());
+
+        Project project = projectRepository.findById(command.projectId())
+                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+
+        validateName(command.name());
+        validateDateRange(command.startedOn(), command.endedOn());
+        validateContractAmount(command.contractAmount());
+
+        Project updated = projectRepository.save(project.update(
+                command.name(), command.description(), command.clientName(),
+                command.startedOn(), command.endedOn(), command.contractAmount(),
+                LocalDateTime.now()));
+
+        return new ProjectUpdateResult(updated.getProjectId(), updated.getName(),
+                updated.getClientName(), updated.getStartedOn(), updated.getEndedOn(),
+                updated.getContractAmount(), updated.getUpdatedAt());
+    }
+
+    /** 계약금액은 음수를 막는다. null 은 미입력·해제라 통과시킨다. */
+    private void validateContractAmount(BigDecimal contractAmount) {
+        if (contractAmount != null && contractAmount.signum() < 0) {
+            throw new ValidationException(ProjectErrorCode.CONTRACT_AMOUNT_INVALID);
+        }
     }
 
     /** 과업명을 검증한다. null·공백·300자 초과를 막는다. */

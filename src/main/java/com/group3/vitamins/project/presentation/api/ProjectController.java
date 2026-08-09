@@ -28,6 +28,16 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+// ── import 추가
+import com.fasterxml.jackson.databind.JsonNode;
+import com.group3.vitamins.project.application.command.UpdateProjectCommand;
+import com.group3.vitamins.project.application.result.ProjectUpdateResult;
+import com.group3.vitamins.project.presentation.api.request.ProjectUpdateRequest;
+import com.group3.vitamins.project.presentation.api.response.ProjectUpdateResponse;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+
+import java.math.BigDecimal;
+import java.time.format.DateTimeParseException;
 
 @Tag(name = "Project - 프로젝트", description = "프로젝트 생성 / 조회 / 수정 / 삭제 (담당: 동훈)")
 @RestController
@@ -175,4 +185,40 @@ public class ProjectController {
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         ProjectProgressResponse.from(result)));
     }
+
+
+    @Operation(summary = "프로젝트 수정",
+            description = "과업명·설명·발주처·기간·계약금액을 수정한다. "
+                    + "수정 화면의 폼 전체를 보내며, 보내지 않은 필드는 비워진다. "
+                    + "상태 변경·종결은 별도 API 다. "
+                    + "계약금액은 project.contract_amount 한 곳에만 저장된다 (INV-08).")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
+                            + "/ CONTRACT_AMOUNT_INVALID / COMMON_INVALID_REQUEST(형식 오류)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨")
+    })
+    @PatchMapping("/{projectId}")
+    public ResponseEntity<ApiResponse<ProjectUpdateResponse>> updateProject(
+            @Parameter(description = "수정할 프로젝트 ID")
+            @PathVariable Long projectId,
+            @RequestBody ProjectUpdateRequest request,
+            Authentication authentication
+    ) {
+        ProjectUpdateResult result = projectCommandUseCase.updateProject(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        ProjectUpdateResponse.from(result)));
+    }
+
 }
