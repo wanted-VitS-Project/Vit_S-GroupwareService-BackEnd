@@ -229,6 +229,33 @@ domainEventPublisher.publish(NotificationRequestedEvent.of(
 
 이 경우 이동 대상 조회는 `type=NONE`을 반환한다(에러 아님). 목록·읽음·삭제는 동일하게 동작한다.
 
+### 3. 여러 명에게 보낼 때 — **사람 수만큼 발행한다**
+
+이벤트 하나에 수신자 목록을 담는 필드는 **없다.** 알림은 수신자 1명당 1행이라(`GEN-004`),
+받는 사람마다 이벤트를 하나씩 발행한다. 각자 따로 읽음·삭제할 수 있어야 하므로 행이 나뉘어야 한다.
+
+```java
+// 프로젝트 참여자 전원에게 초대 알림
+List<String> memberIds = List.of("EMP001", "EMP002", "EMP003");
+
+memberIds.forEach(userId ->
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                userId, "PROJECT_INVITED", "프로젝트 초대",
+                project.getName() + "에 초대되었습니다.",
+                "PROJECT", project.getProjectId(), null)));
+```
+
+**주의**
+
+- **본인은 제외해야 하는 경우가 많다.** 초대한 사람에게 "당신이 초대됐습니다"가 가면 어색하다.
+  ```java
+  memberIds.stream()
+          .filter(userId -> !userId.equals(actorId))   // 행위자 제외
+          .forEach(...);
+  ```
+- 같은 사람에게 **중복 발행하지 않도록** 목록에 중복이 없는지 확인한다(알림 쪽에서 걸러주지 않는다).
+- 수신자가 많아도 반복 발행이면 충분하다 — 리스너가 커밋 후 각각 저장한다.
+
 ### 지켜야 할 규칙
 
 | 규칙 | 안 지키면 |
