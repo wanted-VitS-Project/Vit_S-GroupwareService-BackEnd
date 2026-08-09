@@ -47,8 +47,8 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
      * 부서 생성 (`.ai/api/department.md` §2).
      *
      * <p>{@code parentId} 유무로 최상위/하위가 갈린다. 하위 부서를 상위로 지정하면 계층이 3단이 되므로
-     * {@code DEPT_MAX_DEPTH_EXCEEDED}(409) 로 막는다. 부서명은 <b>같은 상위 부서 안에서만</b> 유니크하다
-     * (2026-08-06). DB 복합 유니크 {@code uk_department_parent_name(parent_key, name)} 이 자식·최상위를
+     * {@code DEPT_MAX_DEPTH_EXCEEDED}(409) 로 막는다. 부서명은 <b>같은 회사·같은 상위 부서 안에서만</b> 유니크하다.
+     * DB 복합 유니크 {@code uk_department_company_parent_name(company_id, parent_key, name)} 이 자식·최상위를
      * 모두 막고(최상위는 {@code parent_key=COALESCE(parent_id,0)=0} 공유), 아래 app 검사는 친절한 선처리다.
      */
     @Override
@@ -75,7 +75,7 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
-        // 검사 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_parent_name(parent_key, name)
+        // 검사 통과 후 저장까지의 틈에 같은 이름이 먼저 커밋될 수 있다. uk_department_company_parent_name(company_id, parent_key, name)
         // 이 최종 방어선이라 그 위반을 500 이 아니라 명세의 409(DEPT_NAME_DUPLICATED)로 돌려준다.
         // parent_key = COALESCE(parent_id, 0) 라 최상위(0 공유)·자식 모두 DB 가 막는다(위 app 검사는 친절한 선처리).
         // 부모 행을 위에서 잠갔으므로 이 시점의 제약 위반은 부서명 유니크뿐이다(FK 위반 불가) → 매핑이 결정적.
@@ -113,7 +113,7 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
         }
 
         department.rename(command.name());
-        // 검사~커밋 틈의 동시 중복(하위 부서)은 uk_department_parent_name 이 잡는다 → 500 대신 409 (saveAndFlush 라 즉시 감지).
+        // 검사~커밋 틈의 동시 중복(하위 부서)은 uk_department_company_parent_name 이 잡는다 → 500 대신 409 (saveAndFlush 라 즉시 감지).
         Department saved;
         try {
             saved = departmentRepository.save(department);

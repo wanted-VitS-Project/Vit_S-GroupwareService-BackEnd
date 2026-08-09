@@ -16,7 +16,7 @@ public interface DepartmentRepository {
 
     /**
      * 부서를 저장한다. 구현은 {@code saveAndFlush} 로 즉시 반영해, 유니크 제약 위반
-     * ({@code uk_department_parent_name(parent_key, name)} = 같은 상위 부서 안 동명)을 커밋까지 미루지
+     * ({@code uk_department_company_parent_name(company_id, parent_key, name)} = 같은 회사·상위 부서 안 동명)을 커밋까지 미루지
      * 않고 이 시점에 드러낸다 — 서비스가 그 위반을 명세의 409({@code DEPT_NAME_DUPLICATED})로 변환할 수
      * 있게 한다. {@code parent_key=COALESCE(parent_id,0)} 라 최상위·자식 동명 모두 이 DB 제약이 잡는다.
      */
