@@ -54,7 +54,8 @@ class VitamateCleanupOutboxPublishServiceTest {
         publishService = new VitamateCleanupOutboxPublishService(
                 outboxStorePort,
                 jobPublisherPort,
-                FIXED_CLOCK
+                FIXED_CLOCK,
+                300
         );
     }
 
@@ -67,7 +68,7 @@ class VitamateCleanupOutboxPublishServiceTest {
                 LOCK_OWNER,
                 10,
                 NOW,
-                NOW.plusSeconds(30)
+                NOW.plusSeconds(300)
         )).thenReturn(List.of(outbox));
 
         int publishedCount =
@@ -98,7 +99,7 @@ class VitamateCleanupOutboxPublishServiceTest {
                 LOCK_OWNER,
                 10,
                 NOW,
-                NOW.plusSeconds(30)
+                NOW.plusSeconds(300)
         )).thenReturn(List.of(outbox));
 
         doThrow(new IllegalStateException("Redis unavailable"))
@@ -133,7 +134,7 @@ class VitamateCleanupOutboxPublishServiceTest {
                 LOCK_OWNER,
                 10,
                 NOW,
-                NOW.plusSeconds(30)
+                NOW.plusSeconds(300)
         )).thenReturn(List.of(failedOutbox, successfulOutbox));
 
         doThrow(new IllegalStateException("Redis unavailable"))
@@ -181,7 +182,7 @@ class VitamateCleanupOutboxPublishServiceTest {
                 LOCK_OWNER,
                 10,
                 NOW,
-                NOW.plusSeconds(30)
+                NOW.plusSeconds(300)
         )).thenReturn(List.of(outbox));
 
         doThrow(new IllegalStateException("Redis unavailable"))

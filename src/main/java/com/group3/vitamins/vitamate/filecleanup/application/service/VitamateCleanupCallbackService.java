@@ -8,7 +8,7 @@ import com.group3.vitamins.vitamate.filecleanup.application.model.VitamateCleanu
 import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateCleanupJobStorePort;
 import com.group3.vitamins.vitamate.filecleanup.application.result.VitamateCleanupCallbackResult;
 import com.group3.vitamins.vitamate.filecleanup.application.usecase.HandleVitamateCleanupCallbackUseCase;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,10 +17,8 @@ import java.time.LocalDateTime;
 
 // Python worker가 전달한 ChromaDB 정리 결과를 현재 시도와 대조해 반영합니다.
 @Service
-@RequiredArgsConstructor
 public class VitamateCleanupCallbackService implements HandleVitamateCleanupCallbackUseCase {
 
-    private static final int MAX_ATTEMPTS = 5;
     private static final int MAX_ATTEMPT_ID_LENGTH = 36;
     private static final int MAX_ERROR_CODE_LENGTH = 100;
     private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
@@ -28,6 +26,20 @@ public class VitamateCleanupCallbackService implements HandleVitamateCleanupCall
 
     private final VitamateCleanupJobStorePort cleanupJobStorePort;
     private final Clock clock;
+    private final int maxAttempts;
+
+    public VitamateCleanupCallbackService(
+            VitamateCleanupJobStorePort cleanupJobStorePort,
+            Clock clock,
+            @Value("${vitamate.cleanup.max-attempts:5}") int maxAttempts
+    ) {
+        if (maxAttempts <= 0) {
+            throw new IllegalArgumentException("cleanup maxAttempts는 1 이상이어야 합니다.");
+        }
+        this.cleanupJobStorePort = cleanupJobStorePort;
+        this.clock = clock;
+        this.maxAttempts = maxAttempts;
+    }
 
     @Override
     @Transactional
@@ -54,13 +66,13 @@ public class VitamateCleanupCallbackService implements HandleVitamateCleanupCall
             int attemptCount,
             LocalDateTime now
     ) {
-        if (Boolean.TRUE.equals(command.retryable()) && attemptCount < MAX_ATTEMPTS) {
+        if (Boolean.TRUE.equals(command.retryable()) && attemptCount < maxAttempts) {
             boolean scheduled = cleanupJobStorePort.scheduleRetry(
                     command.cleanupJobId(),
                     command.attemptId(),
                     command.errorCode(),
                     command.errorMessage(),
-                    MAX_ATTEMPTS,
+                    maxAttempts,
                     now.plusSeconds(retryDelaySeconds(attemptCount)),
                     now
             );
@@ -83,8 +95,11 @@ public class VitamateCleanupCallbackService implements HandleVitamateCleanupCall
 
     // 최초 실행을 포함한 현재 처리 횟수에 맞춰 10초, 30초, 1분, 5분 간격을 적용합니다.
     private long retryDelaySeconds(int attemptCount) {
+        if (attemptCount <= 1) {
+            return 10L;
+        }
+
         return switch (attemptCount) {
-            case 1 -> 10L;
             case 2 -> 30L;
             case 3 -> 60L;
             default -> 300L;

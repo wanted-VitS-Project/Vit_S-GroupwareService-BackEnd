@@ -59,6 +59,20 @@ class VitamateFileDerivedDataCleanupServiceTest {
             inOrder.verify(cleanupPort).cleanupByFileId(FILE_ID);
             assertThat(result).isEqualTo(expected);
         }
+
+        @Test
+        @DisplayName("cleanup job 생성이 실패하면 파생 데이터 삭제를 시작하지 않는다")
+        void stopsCleanupWhenJobCreationFails() {
+            doThrow(new IllegalStateException("cleanup job creation failed"))
+                    .when(cleanupJobStorePort)
+                    .createCleanupJob(FILE_ID);
+
+            assertThatThrownBy(() -> cleanupService.handle(
+                    new CleanupVitamateFileDerivedDataCommand(FILE_ID)
+            )).isInstanceOf(IllegalStateException.class);
+
+            verify(cleanupPort, never()).cleanupByFileId(FILE_ID);
+        }
     }
 
     @Nested

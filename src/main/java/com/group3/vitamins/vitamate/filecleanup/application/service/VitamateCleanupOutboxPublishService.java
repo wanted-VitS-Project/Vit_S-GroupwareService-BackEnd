@@ -3,7 +3,7 @@ package com.group3.vitamins.vitamate.filecleanup.application.service;
 import com.group3.vitamins.vitamate.filecleanup.application.model.ClaimedVitamateCleanupOutbox;
 import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateCleanupJobPublisherPort;
 import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateCleanupOutboxStorePort;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.Clock;
@@ -12,14 +12,27 @@ import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class VitamateCleanupOutboxPublishService {
-
-    private static final int LOCK_SECONDS = 30;
 
     private final VitamateCleanupOutboxStorePort outboxStorePort;
     private final VitamateCleanupJobPublisherPort jobPublisherPort;
     private final Clock clock;
+    private final int lockSeconds;
+
+    public VitamateCleanupOutboxPublishService(
+            VitamateCleanupOutboxStorePort outboxStorePort,
+            VitamateCleanupJobPublisherPort jobPublisherPort,
+            Clock clock,
+            @Value("${vitamate.cleanup.outbox.lock-seconds:300}") int lockSeconds
+    ) {
+        if (lockSeconds <= 0) {
+            throw new IllegalArgumentException("Outbox lockSeconds는 1 이상이어야 합니다.");
+        }
+        this.outboxStorePort = outboxStorePort;
+        this.jobPublisherPort = jobPublisherPort;
+        this.clock = clock;
+        this.lockSeconds = lockSeconds;
+    }
 
     // 발행 가능한 Outbox를 점유한 뒤 Redis Stream에 순서대로 발행합니다.
     public int publishBatch(String lockOwner, int batchSize) {
@@ -32,7 +45,7 @@ public class VitamateCleanupOutboxPublishService {
                         lockOwner,
                         batchSize,
                         claimedAt,
-                        claimedAt.plusSeconds(LOCK_SECONDS)
+                        claimedAt.plusSeconds(lockSeconds)
                 );
 
         int publishedCount = 0;

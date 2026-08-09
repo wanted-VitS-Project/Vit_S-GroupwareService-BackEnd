@@ -23,6 +23,9 @@
 | ✅ 확정 | 문서 청크 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks` | 내부 서버 |
 | ✅ 확정 | 문서 청크 임베딩 결과 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks/embeddings` | 내부 서버 |
 | ✅ 확정 | 파일 인덱싱 상태 콜백 | POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | 내부 서버 |
+| ✅ 확정 | ChromaDB 정리 결과 콜백 | POST | `/internal/v1/vitamate/chroma-cleanup-jobs/{cleanupJobId}/callback` | 내부 서버 |
+| ✅ 확정 | 관리자 ChromaDB 정리 작업 조회 | GET | `/api/v1/admin/vitamate/chroma-cleanup-jobs` | `ADMIN`, `MASTER` |
+| ✅ 확정 | 관리자 ChromaDB 정리 작업 재처리 | POST | `/api/v1/admin/vitamate/chroma-cleanup-jobs/{cleanupJobId}/retry` | `ADMIN`, `MASTER` |
 
 ---
 
@@ -1286,6 +1289,18 @@ local을 제외한 dev/prod에서는 HTTPS와 TLS 인증서 검증을 강제한�
 | `deletedVectorCount` | Integer | N | 삭제된 vector 수. `COMPLETED`일 때 필수이며 0 이상 |
 | `errorCode` | String | N | 정제된 실패 코드. `FAILED`일 때 필수 |
 | `errorMessage` | String | N | 민감정보를 제거한 실패 설명. 최대 500자 |
+
+**상태 전이 및 null 규칙**
+
+| callback `status` | 허용되는 현재 작업 상태 | 저장 결과 | `retryable` | `deletedVectorCount` | `errorCode` / `errorMessage` |
+|------|------|------|------|------|------|
+| `PROCESSING` | `PUBLISHED` | `PROCESSING` | 반드시 `false` | 반드시 `null` | 모두 `null` 또는 빈 값 |
+| `COMPLETED` | `PUBLISHED`, `PROCESSING` | `COMPLETED` | 반드시 `false` | 필수, 0 이상 | 모두 `null` 또는 빈 값 |
+| `FAILED` + 재시도 가능 | `PUBLISHED`, `PROCESSING` | 남은 시도가 있으면 `RETRY_WAIT`, 한도 도달 시 `DEAD_LETTER` | `true` | 반드시 `null` | 모두 필수 |
+| `FAILED` + 재시도 불가 | `PUBLISHED`, `PROCESSING` | `DEAD_LETTER` | `false` | 반드시 `null` | 모두 필수 |
+
+현재 `attemptId`와 다른 callback이나 이미 종료된 작업의 callback은 상태를 변경하지 않고
+`200`, `accepted=false`, `reason=attempt_mismatch_or_already_finished`로 응답한다.
 
 **Request 예시 — 완료**
 

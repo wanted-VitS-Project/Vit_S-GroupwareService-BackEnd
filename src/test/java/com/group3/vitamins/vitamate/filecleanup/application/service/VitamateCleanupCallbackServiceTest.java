@@ -41,7 +41,7 @@ class VitamateCleanupCallbackServiceTest {
 
     @BeforeEach
     void setUp() {
-        callbackService = new VitamateCleanupCallbackService(cleanupJobStorePort, FIXED_CLOCK);
+        callbackService = new VitamateCleanupCallbackService(cleanupJobStorePort, FIXED_CLOCK, 5);
     }
 
     @Test
