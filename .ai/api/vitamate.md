@@ -23,6 +23,9 @@
 | ✅ 확정 | 문서 청크 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks` | 내부 서버 |
 | ✅ 확정 | 문서 청크 임베딩 결과 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks/embeddings` | 내부 서버 |
 | ✅ 확정 | 파일 인덱싱 상태 콜백 | POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | 내부 서버 |
+| ✅ 확정 | ChromaDB 정리 결과 콜백 | POST | `/internal/v1/vitamate/chroma-cleanup-jobs/{cleanupJobId}/callback` | 내부 서버 |
+| ✅ 확정 | 관리자 ChromaDB 정리 작업 조회 | GET | `/api/v1/admin/vitamate/chroma-cleanup-jobs` | `ADMIN`, `MASTER` |
+| ✅ 확정 | 관리자 ChromaDB 정리 작업 재처리 | POST | `/api/v1/admin/vitamate/chroma-cleanup-jobs/{cleanupJobId}/retry` | `ADMIN`, `MASTER` |
 
 ---
 
@@ -1196,3 +1199,234 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
   "reason": null
 }
 ```
+
+---
+
+## 파일 영구삭제 시 ChromaDB 파생 데이터 정리
+
+파일 영구삭제 트랜잭션은 비타메이트 DB 파생 데이터를 제거하고 정리 작업과 outbox 이벤트를 함께 저장한다.
+Redis 발행과 ChromaDB 삭제는 비동기로 처리하며, 파일 삭제 성공 여부가 Python worker 또는 ChromaDB 가용성에 의존하지 않게 한다.
+
+**정리 범위**
+
+| 항목 | 규칙 |
+|------|------|
+| 정리 기준 | 영구삭제 대상 `fileId`에 속했던 모든 `fileVersionId` |
+| DB 정리 | citation, 분석-문서 연결, document chunk, file index를 파일 삭제 트랜잭션에서 정리한다 |
+| ChromaDB 정리 | Python worker가 `fileVersionIds` 메타데이터 기준으로 vector를 삭제한다 |
+| 멱등성 | 이미 삭제된 vector가 없어도 성공으로 처리한다 |
+| 원자성 | cleanup job과 outbox 저장이 실패하면 파일 영구삭제 트랜잭션도 롤백한다 |
+| FK 정책 | 파일은 물리 삭제되므로 cleanup job의 `fileId`에는 FK를 걸지 않는다 |
+| 민감정보 | 파일명, 문서 원문, 프롬프트, storage key, worker token을 job·outbox·Redis payload·로그에 저장하지 않는다 |
+
+**정리 상태**
+
+| 상태 | 의미 |
+|------|------|
+| `WAITING` | cleanup job과 outbox가 생성되어 발행을 기다리는 상태 |
+| `PUBLISHED` | Redis Stream에 작업을 발행한 상태 |
+| `PROCESSING` | Python worker가 현재 시도의 ChromaDB 삭제를 처리 중인 상태 |
+| `RETRY_WAIT` | 재시도 가능한 실패로 다음 발행 시각을 기다리는 상태 |
+| `COMPLETED` | ChromaDB 삭제가 완료된 상태 |
+| `DEAD_LETTER` | 재시도 한도 초과 또는 재시도 불가 실패로 관리자 확인이 필요한 상태 |
+
+**Redis Stream 작업 메시지**
+
+| 항목 | 규칙 |
+|------|------|
+| Stream | `vitamate:chroma-cleanup:jobs` |
+| Consumer Group | `vitamate-chroma-cleanup-workers` |
+| DLQ Stream | `vitamate:chroma-cleanup:dlq` |
+| 전달 보장 | at-least-once. 중복 수신을 허용하고 worker 삭제는 멱등하게 처리한다 |
+
+```json
+{
+  "cleanupJobId": 31,
+  "cleanupKey": "550e8400-e29b-41d4-a716-446655440000",
+  "attemptId": "91f3c9c4-27dd-48e7-af1b-732b69eac214",
+  "fileVersionIds": [101, 102],
+  "retryCount": 0
+}
+```
+
+**재시도 및 보관 정책**
+
+| 항목 | 규칙 |
+|------|------|
+| 최대 처리 횟수 | 최초 처리 포함 5회 |
+| 재시도 간격 | 10초, 30초, 1분, 5분 |
+| 멈춘 작업 | `PUBLISHED` 또는 `PROCESSING` 상태로 5분 이상 응답이 없으면 새 시도로 재발행한다 |
+| 늦은 callback | 현재 `attemptId`와 다르면 `accepted=false`로 응답하고 상태를 변경하지 않는다 |
+| outbox 보관 | 발행 완료 후 7일 |
+| 완료 job 보관 | 완료 후 30일 |
+| DLQ job 보관 | 관리자가 해결하기 전 자동 삭제하지 않는다 |
+
+---
+
+## ChromaDB 정리 결과 callback `POST /internal/v1/vitamate/chroma-cleanup-jobs/{cleanupJobId}/callback`
+
+**상태**: ✅ 확정
+
+Python worker가 ChromaDB vector 삭제의 처리 시작·완료·실패 결과를 Spring Boot에 전달한다.
+프론트에서 호출하지 않는다.
+
+서비스 인증은 다른 `/internal/v1/vitamate/**` API와 동일하게 `X-Vitamate-Worker-Token`을 사용한다.
+local을 제외한 dev/prod에서는 HTTPS와 TLS 인증서 검증을 강제한다.
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `cleanupJobId` | Long | ChromaDB 정리 작업 ID |
+
+**Request**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| `attemptId` | String | Y | 현재 처리 시도 UUID |
+| `status` | String | Y | `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
+| `retryable` | Boolean | Y | 실패 원인이 재시도 가능한지 여부. 실패가 아니면 `false` |
+| `deletedVectorCount` | Integer | N | 삭제된 vector 수. `COMPLETED`일 때 필수이며 0 이상 |
+| `errorCode` | String | N | 정제된 실패 코드. `FAILED`일 때 필수 |
+| `errorMessage` | String | N | 민감정보를 제거한 실패 설명. 최대 500자 |
+
+**상태 전이 및 null 규칙**
+
+| callback `status` | 허용되는 현재 작업 상태 | 저장 결과 | `retryable` | `deletedVectorCount` | `errorCode` / `errorMessage` |
+|------|------|------|------|------|------|
+| `PROCESSING` | `PUBLISHED` | `PROCESSING` | 반드시 `false` | 반드시 `null` | 모두 `null` 또는 빈 값 |
+| `COMPLETED` | `PUBLISHED`, `PROCESSING` | `COMPLETED` | 반드시 `false` | 필수, 0 이상 | 모두 `null` 또는 빈 값 |
+| `FAILED` + 재시도 가능 | `PUBLISHED`, `PROCESSING` | 남은 시도가 있으면 `RETRY_WAIT`, 한도 도달 시 `DEAD_LETTER` | `true` | 반드시 `null` | 모두 필수 |
+| `FAILED` + 재시도 불가 | `PUBLISHED`, `PROCESSING` | `DEAD_LETTER` | `false` | 반드시 `null` | 모두 필수 |
+
+현재 `attemptId`와 다른 callback이나 이미 종료된 작업의 callback은 상태를 변경하지 않고
+`200`, `accepted=false`, `reason=attempt_mismatch_or_already_finished`로 응답한다.
+
+**Request 예시 — 완료**
+
+```json
+{
+  "attemptId": "91f3c9c4-27dd-48e7-af1b-732b69eac214",
+  "status": "COMPLETED",
+  "retryable": false,
+  "deletedVectorCount": 14,
+  "errorCode": null,
+  "errorMessage": null
+}
+```
+
+**Request 예시 — 실패**
+
+```json
+{
+  "attemptId": "91f3c9c4-27dd-48e7-af1b-732b69eac214",
+  "status": "FAILED",
+  "retryable": true,
+  "deletedVectorCount": null,
+  "errorCode": "CHROMA_TEMPORARY_UNAVAILABLE",
+  "errorMessage": "ChromaDB temporary unavailable"
+}
+```
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `accepted` | Boolean | callback 반영 여부 |
+| `cleanupJobId` | Long | 정리 작업 ID |
+| `cleanupStatus` | String | callback 처리 후 저장된 상태 |
+| `reason` | String | 늦은 callback 등으로 반영하지 않았을 때의 사유 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 200 | OK | - | callback 처리 성공. 늦은 callback은 `accepted=false`로 응답 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 상태별 필수값 또는 입력 형식 위반 |
+| 401 | Unauthorized | `VITAMATE_WORKER_UNAUTHORIZED` | worker token 누락 또는 불일치 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | worker 전용 권한 없음 |
+| 404 | Not Found | `VITAMATE_CLEANUP_JOB_NOT_FOUND` | 정리 작업이 존재하지 않음 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 서버 내부 오류 |
+
+---
+
+## 관리자 ChromaDB 정리 작업 조회 `GET /api/v1/admin/vitamate/chroma-cleanup-jobs`
+
+**상태**: ✅ 확정
+
+관리자가 ChromaDB 정리 작업의 처리 상태와 DLQ 항목을 조회한다.
+
+**권한**: `ADMIN`, `MASTER`
+
+**Request Parameter**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| `status` | String | N | 정리 상태 필터. 기본값은 전체 |
+| `page` | Integer | N | 0부터 시작하는 페이지. 기본값 0 |
+| `size` | Integer | N | 페이지 크기. 기본값 20, 최대 100 |
+
+**Response 주요값**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `content[].cleanupJobId` | Long | 정리 작업 ID |
+| `content[].cleanupKey` | String | 정리 작업 UUID |
+| `content[].fileId` | Long | 삭제된 파일 ID 스냅샷 |
+| `content[].cleanupStatus` | String | 현재 정리 상태 |
+| `content[].attemptCount` | Integer | 처리 시도 횟수 |
+| `content[].deletedVectorCount` | Integer | 삭제된 vector 수 |
+| `content[].lastErrorCode` | String | 마지막 실패 코드 |
+| `content[].lastErrorMessage` | String | 민감정보를 제거한 마지막 실패 설명 |
+| `content[].createdAt` | String | 작업 생성 시각 |
+| `content[].completedAt` | String | 완료 시각 |
+| `page` | Integer | 현재 페이지 |
+| `size` | Integer | 페이지 크기 |
+| `totalElements` | Long | 전체 항목 수 |
+| `totalPages` | Integer | 전체 페이지 수 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 200 | OK | - | 조회 성공 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음 또는 만료 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | 관리자 권한 없음 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 서버 내부 오류 |
+
+---
+
+## 관리자 ChromaDB 정리 작업 재처리 `POST /api/v1/admin/vitamate/chroma-cleanup-jobs/{cleanupJobId}/retry`
+
+**상태**: ✅ 확정
+
+관리자가 `DEAD_LETTER` 상태의 정리 작업을 다시 대기 상태로 전환한다.
+기존 job을 유지하고 새 attempt와 새 outbox 이벤트를 생성하며 관리자 활동 로그를 남긴다.
+
+**권한**: `ADMIN`, `MASTER`
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `cleanupJobId` | Long | 재처리할 정리 작업 ID |
+
+**Response — `200`**
+
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| `cleanupJobId` | Long | 정리 작업 ID |
+| `cleanupStatus` | String | 재처리 등록 후 상태. `WAITING` |
+| `attemptCount` | Integer | 기존 처리 시도 횟수 |
+| `requestedAt` | String | 관리자 재처리 요청 시각 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 200 | OK | - | 재처리 등록 성공 |
+| 400 | Bad Request | `VITAMATE_CLEANUP_RETRY_NOT_ALLOWED` | `DEAD_LETTER`가 아닌 작업의 재처리 요청 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음 또는 만료 |
+| 403 | Forbidden | `COMMON_FORBIDDEN` | 관리자 권한 없음 |
+| 404 | Not Found | `VITAMATE_CLEANUP_JOB_NOT_FOUND` | 정리 작업이 존재하지 않음 |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | 서버 내부 오류 |

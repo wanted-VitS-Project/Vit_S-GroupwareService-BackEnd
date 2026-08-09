@@ -1,4 +1,4 @@
-package com.group3.vitamins.vitamate.filecleanup.infrastructure.persistence;
+package com.group3.vitamins.vitamate.filecleanup.infrastructure.persistence.adapter;
 
 import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateFileDerivedDataCleanupPort;
 import com.group3.vitamins.vitamate.filecleanup.application.result.CleanupVitamateFileDerivedDataResult;
