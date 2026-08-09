@@ -195,6 +195,7 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 | `XxxRepositoryAdapter` (구현체) | `XxxRepository` 구현 | `infrastructure/persistence` |
 | `XxxErrorCode` (enum) | `ErrorCode` 구현체 | `domain/exception` |
 | `XxxRequest` / `XxxResponse` (record) | Web DTO | `presentation/api/request`, `presentation/api/response` |
+| `XxxCleanupConfig` (`@Configuration`) | `global`의 하드 딜리트 SPI(`HardDeleteTarget`)에 자기 도메인 몫을 등록하는 팩토리 | `infrastructure/cleanup` — 상세 규칙은 `.ai/docs/global/CLEANUP.md` |
 
 ### 권한 처리
 
@@ -223,6 +224,7 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 | 날짜 | 변경 내용 | 담당 |
 |---|---|---|
+| 2026-08-08 | §4 갱신 — `XxxCleanupConfig` 네이밍 추가. `global`에 하드 딜리트 스케줄러 SPI(`HardDeleteTarget`/`HardDeleteOperation`/`HardDeleteExecutor`/`HardDeleteScheduler`) 신설 — 스케줄러는 `global`에 하나, 도메인은 포트만 구현해 등록. 상세는 `.ai/docs/global/CLEANUP.md` (⚠️ develop 병합 중 한 번 유실돼 재반영, 2026-08-09) | 김동현 |
 | 2026-08-04 | 신설 — `businesscategory` 구현을 기준으로 헥사고날 계층·네이밍 컨벤션 확정, `auth`/`account` 레거시 명시 | 김동현 |
 | 2026-08-04 | §2-1 신설 — 애그리게이트별 서브패키지 규칙(`project` 계층). 애그리게이트 간 참조도 `port`+`adapter`, URL↔패키지 불일치 허용 | 동훈 |
 | 2026-08-05 | §2-2 신설 — 쓰기 방향 포트(경계 넘는 쓰기는 한 트랜잭션, 이벤트 아님) · 타입별 확장 SPI(`List<Port>` + `supportedType()`, 공용 파일 동시 편집 금지, `sealed` 금지). 근거: `project/block` 타입 10종을 5명이 나눠 갖는다 | 동훈 |
