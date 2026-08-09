@@ -186,7 +186,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("존재하지 않는 사번이 있으면 EMP_NOT_FOUND 로 전체 거부")
         void missingUser() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
             // EMP2 는 결과에 없음 → 없는 사번
             when(queryPort.findEmployeeRefs(any())).thenReturn(List.of(new EmployeeRefRow("EMP1", false)));
             assertThatThrownBy(() -> service.addMembers(cmd(List.of("EMP1", "EMP2"))))
@@ -197,7 +197,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("시스템 계정이 섞이면 ACC_SYSTEM_ACCOUNT_NOT_ALLOWED")
         void systemAccount() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
             when(queryPort.findEmployeeRefs(any()))
                     .thenReturn(List.of(new EmployeeRefRow("EMP1", false), new EmployeeRefRow("ADMIN001", true)));
             assertThatThrownBy(() -> service.addMembers(cmd(List.of("EMP1", "ADMIN001"))))
@@ -207,10 +207,10 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("이미 소속은 건너뛰고 신규만 추가한다(멱등·집계)")
         void idempotent() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
             when(queryPort.findEmployeeRefs(any())).thenReturn(List.of(
                     new EmployeeRefRow("EMP1", false), new EmployeeRefRow("EMP2", false)));
-            when(memberRepository.findMemberUserIds(GROUP_ID)).thenReturn(Set.of("EMP1")); // EMP1 이미 소속
+            when(memberRepository.findExistingMemberUserIds(eq(GROUP_ID), any())).thenReturn(Set.of("EMP1")); // EMP1 이미 소속
             when(queryPort.countMembers(GROUP_ID)).thenReturn(2);
 
             AddMembersResult r = service.addMembers(cmd(List.of("EMP1", "EMP2")));

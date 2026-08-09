@@ -6,7 +6,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -15,10 +14,11 @@ public class EmployeeGroupMemberRepositoryAdapter implements EmployeeGroupMember
     private final SpringDataEmployeeGroupMemberRepository springDataRepository;
 
     @Override
-    public Set<String> findMemberUserIds(Long groupId) {
-        return springDataRepository.findByGroupId(groupId).stream()
-                .map(EmployeeGroupMemberJpaEntity::getUserId)
-                .collect(Collectors.toSet());
+    public Set<String> findExistingMemberUserIds(Long groupId, Collection<String> userIds) {
+        if (userIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(springDataRepository.findExistingUserIds(groupId, userIds));
     }
 
     @Override
@@ -26,7 +26,8 @@ public class EmployeeGroupMemberRepositoryAdapter implements EmployeeGroupMember
         if (userIds.isEmpty()) {
             return;
         }
-        springDataRepository.saveAll(userIds.stream()
+        // saveAllAndFlush — 뒤이어 같은 트랜잭션에서 MyBatis 로 구성원 수를 읽으므로 INSERT 를 즉시 반영시킨다.
+        springDataRepository.saveAllAndFlush(userIds.stream()
                 .map(userId -> new EmployeeGroupMemberJpaEntity(groupId, userId))
                 .toList());
     }
@@ -38,6 +39,6 @@ public class EmployeeGroupMemberRepositoryAdapter implements EmployeeGroupMember
 
     @Override
     public void removeMember(Long groupId, String userId) {
-        springDataRepository.deleteByGroupIdAndUserId(groupId, userId);
+        springDataRepository.deleteMember(groupId, userId); // 벌크 DELETE — 즉시 반영
     }
 }

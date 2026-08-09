@@ -30,6 +30,11 @@ public class EmployeeGroupRepositoryAdapter implements EmployeeGroupRepository {
     }
 
     @Override
+    public Optional<EmployeeGroup> findByIdForUpdate(Long groupId) {
+        return springDataRepository.findByIdForUpdate(groupId).map(EmployeeGroupPersistenceMapper::toDomain);
+    }
+
+    @Override
     public boolean existsByName(String name) {
         return springDataRepository.existsByName(name);
     }

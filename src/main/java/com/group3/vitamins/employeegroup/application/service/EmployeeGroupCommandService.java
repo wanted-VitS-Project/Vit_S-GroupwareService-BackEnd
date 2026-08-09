@@ -131,7 +131,9 @@ public class EmployeeGroupCommandService implements EmployeeGroupCommandUseCase 
             throw new ValidationException(EmployeeGroupErrorCode.GRP_INVALID_REQUEST);
         }
 
-        groupRepository.findById(command.groupId())
+        // 그룹 행을 배타 잠금으로 읽는다 — 같은 그룹에 동시 추가가 들어와도 직렬화돼, 두 요청이 같은 사번을
+        // 신규로 판정해 복합 PK 가 충돌하는 레이스를 막는다(멱등 보장). 잠금을 쥔 동안 다른 추가는 대기한다.
+        groupRepository.findByIdForUpdate(command.groupId())
                 .orElseThrow(() -> new NotFoundException(EmployeeGroupErrorCode.GRP_NOT_FOUND));
 
         // 존재·시스템 계정 검증 (배치 1회).
@@ -144,8 +146,8 @@ public class EmployeeGroupCommandService implements EmployeeGroupCommandUseCase 
             throw new ForbiddenException(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED);
         }
 
-        // 이미 소속은 건너뛰고 신규만 추가(멱등).
-        Set<String> existing = memberRepository.findMemberUserIds(command.groupId());
+        // 이미 소속인 사번은 건너뛰고 신규만 추가(멱등). 전체 로드 대신 요청분만 IN 조회한다.
+        Set<String> existing = memberRepository.findExistingMemberUserIds(command.groupId(), requested);
         List<String> toAdd = requested.stream().filter(id -> !existing.contains(id)).toList();
         memberRepository.addMembers(command.groupId(), toAdd);
 

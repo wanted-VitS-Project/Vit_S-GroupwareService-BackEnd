@@ -15,6 +15,13 @@ public interface EmployeeGroupRepository {
 
     Optional<EmployeeGroup> findById(Long groupId);
 
+    /**
+     * <b>비관적 쓰기 잠금</b> 단건 조회 — 구성원 추가(§6) 시 그룹 행을 잠가 동시 요청을 직렬화한다.
+     * 두 요청이 같은 그룹에 같은 사번을 동시에 넣어 복합 PK(group_id, user_id)가 충돌하는 레이스를 원천 차단한다
+     * (department {@code findByIdForUpdate} 선례). 잠금을 쥔 동안 다른 추가 요청은 대기한다.
+     */
+    Optional<EmployeeGroup> findByIdForUpdate(Long groupId);
+
     /** 그룹명 전역 중복 검증 (생성). */
     boolean existsByName(String name);
 
