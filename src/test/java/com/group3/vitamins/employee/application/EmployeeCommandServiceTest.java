@@ -15,19 +15,15 @@ import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.List;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +47,7 @@ class EmployeeCommandServiceTest {
     private ThrottledPasswordEncoder passwordEncoder;
     private InitialPasswordMailPort mailPort;
     private CompanyCodeQueryPort companyCodeQueryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeCommandService service;
 
     @BeforeEach
@@ -63,23 +60,13 @@ class EmployeeCommandServiceTest {
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
         companyCodeQueryPort = Mockito.mock(CompanyCodeQueryPort.class);
         when(companyCodeQueryPort.findCodeByCompanyId(any())).thenReturn("vitas");
+        // 회사 ID는 앱 포트로 주입 — 세션(SecurityContext) 세팅 불필요.
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         service = new EmployeeCommandService(new EmployeeAdminPolicy(), employeeRepository,
                 referenceQueryPort, registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
                 Mockito.mock(com.group3.vitamins.employee.application.port.AccountDeactivationPort.class),
-                companyCodeQueryPort);
-
-        // 등록 스탬핑이 TenantContext(세션의 company_id)를 읽으므로, 회사 1 컨텍스트를 심는다.
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken("admin", null, List.of());
-        auth.setDetails(1L);
-        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-        ctx.setAuthentication(auth);
-        SecurityContextHolder.setContext(ctx);
-    }
-
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
+                companyCodeQueryPort, currentCompanyIdProvider);
     }
 
     /** email 있는 정상 등록의 스텁 (해피패스 계열이 공유). */
@@ -94,6 +81,33 @@ class EmployeeCommandServiceTest {
     private RegisterEmployeeCommand cmd(String role, String hiredAt, String email) {
         return new RegisterEmployeeCommand(
                 "ADMIN", "EMP021", "홍길동", 2L, hiredAt, role, 10L, email, "010-1234-5678");
+    }
+
+    @Test
+    @DisplayName("접두사 포함 20자 경계 — base 사번 14자는 등록되고 vitas- 접두사가 붙는다")
+    void baseUserIdAtLengthBoundaryRegisters() {
+        stubHappyPath();
+        // base 14자 → "vitas-"(6) + 14 = 20 (컬럼 폭 정확히 경계)
+        RegisterEmployeeCommand command = new RegisterEmployeeCommand(
+                "ADMIN", "EMP01234567890", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null);
+
+        service.register(command);
+
+        ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
+        verify(registrationWriter).register(captor.capture(), eq("MEMBER"), anyString());
+        assertThat(captor.getValue().getUserId()).isEqualTo("vitas-EMP01234567890"); // 20자
+    }
+
+    @Test
+    @DisplayName("접두사 포함 20자 초과 — base 사번 15자는 EMP_INVALID_REQUEST (저장 안 함)")
+    void baseUserIdOverLengthBoundaryRejected() {
+        // base 15자 → "vitas-" + 15 = 21 > 20
+        RegisterEmployeeCommand command = new RegisterEmployeeCommand(
+                "ADMIN", "EMP012345678901", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null);
+
+        assertThatThrownBy(() -> service.register(command))
+                .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
+        verify(registrationWriter, never()).register(any(), anyString(), anyString());
     }
 
     @Test

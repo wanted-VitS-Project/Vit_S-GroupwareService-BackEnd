@@ -23,7 +23,7 @@ import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
-import com.group3.vitamins.global.infrastructure.security.TenantContext;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -76,6 +76,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     private final ThrottledPasswordEncoder passwordEncoder;
     private final InitialPasswordMailPort initialPasswordMailPort;
     private final CompanyCodeQueryPort companyCodeQueryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public byte[] getTemplate(String actorRole) {
@@ -101,7 +102,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
         employeeAdminPolicy.assertAdmin(command.actorRole());
         BulkAnalysis analysis = analyze(command.content(), command.originalFilename(), command.size());
         // 이 배치 전체가 같은 회사(로그인 ADMIN) 소속이므로 company_id 스탬핑용 회사번호는 한 번만 읽는다.
-        Long companyId = TenantContext.currentCompanyId();
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
 
         // skipErrors=false 인데 오류가 있으면 등록하지 않는다(전량 거부). true 면 유효 행만 등록(부분 등록).
         if (!command.skipErrors() && analysis.errorCount() > 0) {
@@ -277,7 +278,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
 
     /** 현재 로그인 회사의 코드를 조회한다 (접두사 재료). 등록 배치 전체가 같은 회사라 한 번만 부른다. */
     private String resolveCompanyCode() {
-        Long companyId = TenantContext.currentCompanyId();
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         String companyCode = companyCodeQueryPort.findCodeByCompanyId(companyId);
         if (companyCode == null) {
             throw new IllegalStateException("회사 코드를 찾을 수 없습니다 - companyId=" + companyId);

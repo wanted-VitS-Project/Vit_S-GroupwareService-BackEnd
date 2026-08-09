@@ -22,7 +22,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ForbiddenExcepti
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
-import com.group3.vitamins.global.infrastructure.security.TenantContext;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -73,6 +73,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private final InitialPasswordMailPort initialPasswordMailPort;
     private final AccountDeactivationPort accountDeactivationPort;
     private final CompanyCodeQueryPort companyCodeQueryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public EmployeeRegisterResult register(RegisterEmployeeCommand command) {
@@ -83,7 +84,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         // 아래 catch 에서 사번 중복(409)으로 오인 변환된다 — 값 초과를 EMP_INVALID_REQUEST(400)로 먼저 막는다.
         // 회사코드 접두사를 붙여 전역 유일 user_id 를 만든다 (예: "vitas-1234567"). 이후 중복검사·저장은 이 값 기준.
         // company_id 스탬핑에도 같은 회사를 쓰므로 한 번만 읽는다.
-        Long companyId = TenantContext.currentCompanyId();
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         String userId = prefixWithCompanyCode(required(command.userId()), companyId);
         String name = requiredWithMax(command.name(), MAX_NAME_LENGTH);
         Long departmentId = command.departmentId();

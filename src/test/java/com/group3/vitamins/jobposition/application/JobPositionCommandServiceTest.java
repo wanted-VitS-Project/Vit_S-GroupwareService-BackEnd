@@ -12,16 +12,12 @@ import com.group3.vitamins.jobposition.application.service.JobPositionCommandSer
 import com.group3.vitamins.jobposition.domain.exception.JobPositionErrorCode;
 import com.group3.vitamins.jobposition.domain.model.JobPosition;
 import com.group3.vitamins.jobposition.domain.repository.JobPositionRepository;
-import org.junit.jupiter.api.AfterEach;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-
-import java.util.List;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -43,28 +39,20 @@ class JobPositionCommandServiceTest {
 
     private JobPositionRepository jobPositionRepository;
     private JobPositionEmployeeCountPort employeeCountPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private JobPositionCommandService commandService;
 
     @BeforeEach
     void setUp() {
         jobPositionRepository = Mockito.mock(JobPositionRepository.class);
         employeeCountPort = Mockito.mock(JobPositionEmployeeCountPort.class);
+        // 생성 스탬핑이 읽는 회사 ID는 앱 포트로 주입 — 세션(SecurityContext) 세팅 불필요.
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         // ADMIN 판정은 순수 컴포넌트라 실제 인스턴스를 그대로 쓴다 (mock 불필요).
         commandService = new JobPositionCommandService(
-                jobPositionRepository, employeeCountPort, new JobPositionAdminPolicy());
-
-        // 생성 스탬핑이 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken("admin", null, List.of());
-        auth.setDetails(1L);
-        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-        ctx.setAuthentication(auth);
-        SecurityContextHolder.setContext(ctx);
-    }
-
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
+                jobPositionRepository, employeeCountPort, new JobPositionAdminPolicy(),
+                currentCompanyIdProvider);
     }
 
     /** id 가 설정된 직급 도메인 객체를 만든다 (JPA 가 채우는 jobPositionId 를 흉내낸다). */
@@ -90,7 +78,10 @@ class JobPositionCommandServiceTest {
             assertThat(result.sortOrder()).isEqualTo(2);
             assertThat(result.employeeCount()).isZero();
             verify(jobPositionRepository, never()).nextSortOrder();
-            verify(jobPositionRepository, times(1)).save(any(JobPosition.class));
+            // 저장된 도메인 객체에 현재 회사 ID(1)가 스탬핑되는지 검증
+            ArgumentCaptor<JobPosition> captor = ArgumentCaptor.forClass(JobPosition.class);
+            verify(jobPositionRepository).save(captor.capture());
+            assertThat(captor.getValue().getCompanyId()).isEqualTo(1L);
         }
 
         @Test

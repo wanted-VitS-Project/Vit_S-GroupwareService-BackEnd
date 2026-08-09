@@ -11,19 +11,16 @@ import com.group3.vitamins.department.application.service.DepartmentCommandServi
 import com.group3.vitamins.department.domain.exception.DepartmentErrorCode;
 import com.group3.vitamins.department.domain.model.Department;
 import com.group3.vitamins.department.domain.repository.DepartmentRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.DomainException;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -42,28 +39,20 @@ class DepartmentCommandServiceTest {
 
     private DepartmentRepository departmentRepository;
     private DepartmentEmployeeQueryPort departmentEmployeeQueryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private DepartmentCommandService commandService;
 
     @BeforeEach
     void setUp() {
         departmentRepository = Mockito.mock(DepartmentRepository.class);
         departmentEmployeeQueryPort = Mockito.mock(DepartmentEmployeeQueryPort.class);
+        // 생성 스탬핑이 읽는 회사 ID는 앱 포트로 주입 — 세션(SecurityContext) 세팅 불필요.
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         // ADMIN 판정은 순수 컴포넌트라 실제 인스턴스를 그대로 쓴다 (mock 불필요).
         commandService = new DepartmentCommandService(
-                departmentRepository, departmentEmployeeQueryPort, new DepartmentAdminPolicy());
-
-        // 생성 스탬핑이 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken("admin", null, List.of());
-        auth.setDetails(1L);
-        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-        ctx.setAuthentication(auth);
-        SecurityContextHolder.setContext(ctx);
-    }
-
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
+                departmentRepository, departmentEmployeeQueryPort, new DepartmentAdminPolicy(),
+                currentCompanyIdProvider);
     }
 
     /** id 가 설정된 부서 도메인 객체를 만든다 (JPA 가 채우는 departmentId 를 흉내낸다). */
@@ -89,7 +78,10 @@ class DepartmentCommandServiceTest {
             assertThat(result.parentName()).isNull();
             assertThat(result.directEmployeeCount()).isZero();
             assertThat(result.totalEmployeeCount()).isZero();
-            verify(departmentRepository, times(1)).save(any(Department.class));
+            // 저장된 도메인 객체에 현재 회사 ID(1)가 스탬핑되는지 검증
+            ArgumentCaptor<Department> captor = ArgumentCaptor.forClass(Department.class);
+            verify(departmentRepository).save(captor.capture());
+            assertThat(captor.getValue().getCompanyId()).isEqualTo(1L);
         }
 
         @Test

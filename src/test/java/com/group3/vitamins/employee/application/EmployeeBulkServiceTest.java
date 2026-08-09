@@ -17,13 +17,10 @@ import com.group3.vitamins.employee.application.service.EmployeeBulkService;
 import com.group3.vitamins.employee.application.service.EmployeeRegistrationWriter;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -57,6 +54,7 @@ class EmployeeBulkServiceTest {
     private ThrottledPasswordEncoder passwordEncoder;
     private InitialPasswordMailPort mailPort;
     private CompanyCodeQueryPort companyCodeQueryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeBulkService service;
 
     @BeforeEach
@@ -69,30 +67,20 @@ class EmployeeBulkServiceTest {
         passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
         companyCodeQueryPort = Mockito.mock(CompanyCodeQueryPort.class);
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
         service = new EmployeeBulkService(
                 new EmployeeAdminPolicy(), templatePort, parserPort, referencePort,
-                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort, companyCodeQueryPort);
+                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
+                companyCodeQueryPort, currentCompanyIdProvider);
 
-        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 회사코드 vitas, 해싱·비번은 고정
+        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 회사코드 vitas, 회사ID 1, 해싱·비번은 고정
         when(referencePort.resolveDepartmentIdsByName(any())).thenReturn(Map.of("개발팀", 10L));
         when(referencePort.resolveJobPositionIdsByName(any())).thenReturn(Map.of("대리", 5L));
         when(referencePort.findExistingUserIds(any())).thenReturn(Set.of());
         when(companyCodeQueryPort.findCodeByCompanyId(any())).thenReturn("vitas");
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         when(tempPasswordGenerator.generate()).thenReturn("Temp1234!");
         when(passwordEncoder.encode(anyString())).thenReturn("HASHED");
-
-        // analyze 가 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken("admin", null, List.of());
-        auth.setDetails(1L);
-        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-        ctx.setAuthentication(auth);
-        SecurityContextHolder.setContext(ctx);
-    }
-
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
     }
 
     // ---- 헬퍼 ---------------------------------------------------------------
@@ -208,6 +196,19 @@ class EmployeeBulkServiceTest {
                     BulkValidation.ADMIN_ROLE_NOT_ALLOWED,
                     BulkValidation.DEPARTMENT_NOT_FOUND,
                     BulkValidation.USER_ID_DUPLICATED);
+        }
+
+        @Test
+        @DisplayName("접두사 포함 20자 경계 — base 14자 유효, 15자는 REQUIRED_COLUMN")
+        void userIdPrefixLengthBoundary() {
+            List<ParsedEmployeeRow> rows = List.of(
+                    valid(2, "EMP01234567890", "a@b.com"),   // base 14 → "vitas-"+14=20 유효
+                    valid(3, "EMP012345678901", "b@c.com"));  // base 15 → 21 초과 → 거부
+            BulkValidateResult r = service.validate(validateCmd(rows));
+
+            assertThat(r.validCount()).isEqualTo(1);
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors()).extracting("validation").containsExactly(BulkValidation.REQUIRED_COLUMN);
         }
 
         @Test

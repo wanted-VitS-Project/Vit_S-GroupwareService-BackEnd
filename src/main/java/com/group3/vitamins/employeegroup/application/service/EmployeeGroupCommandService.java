@@ -21,7 +21,7 @@ import com.group3.vitamins.employeegroup.domain.repository.EmployeeGroupReposito
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
-import com.group3.vitamins.global.infrastructure.security.TenantContext;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +51,7 @@ public class EmployeeGroupCommandService implements EmployeeGroupCommandUseCase 
     private final EmployeeGroupMemberRepository memberRepository;
     private final EmployeeGroupQueryPort queryPort;
     private final EmployeeGroupAdminPolicy adminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public GroupCreateResult create(CreateGroupCommand command) {
@@ -65,7 +66,7 @@ public class EmployeeGroupCommandService implements EmployeeGroupCommandUseCase 
         EmployeeGroup saved;
         try {
             saved = groupRepository.save(EmployeeGroup.create(
-                    name, description, command.createdBy(), TenantContext.currentCompanyId()));
+                    name, description, command.createdBy(), currentCompanyIdProvider.currentCompanyId()));
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(EmployeeGroupErrorCode.GRP_NAME_DUPLICATED, e);
         }

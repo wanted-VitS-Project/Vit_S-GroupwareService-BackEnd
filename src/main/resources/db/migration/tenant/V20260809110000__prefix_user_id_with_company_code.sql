@@ -16,7 +16,17 @@
 -- 1) 회사 1 코드 확정 (DEFAULT 폐기)
 UPDATE company SET company_code = 'vitas' WHERE company_id = 1 AND company_code = 'DEFAULT';
 
--- 2) 사번 접두사 일괄 부착 (부모 + 33개 자식 FK 칼럼)
+-- 2) ⚠️ 사전 가드 — 'vitas-'(6자) 접두사를 붙이면 user_id 컬럼 폭(20자)을 넘는 사번이 있으면 여기서 중단한다.
+--    (base 사번 ≤ 14자여야 6+14=20 에 맞는다.) FOREIGN_KEY_CHECKS 를 끄기 전에 검증하므로,
+--    중단돼도 FK 검사는 켜진 상태로 남고 접두사 UPDATE 도 실행되지 않는다(값 절단·부분 리네임 방지).
+--    위반 행이 있으면 THEN 의 스칼라 서브쿼리가 2행을 반환해 오류(1242 Subquery returns more than 1 row)로 실패한다.
+SELECT CASE WHEN COUNT(*) > 0
+            THEN (SELECT n FROM (SELECT 1 AS n UNION ALL SELECT 2) t)
+            ELSE 0 END AS user_id_prefix_length_guard
+FROM employee
+WHERE CHAR_LENGTH(user_id) > 14;
+
+-- 3) 사번 접두사 일괄 부착 (부모 + 33개 자식 FK 칼럼)
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- 부모

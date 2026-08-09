@@ -3,7 +3,7 @@ package com.group3.vitamins.jobposition.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import com.group3.vitamins.global.infrastructure.security.TenantContext;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.jobposition.application.command.CreateJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.DeleteJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.UpdateJobPositionCommand;
@@ -29,6 +29,7 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
     private final JobPositionRepository jobPositionRepository;
     private final JobPositionEmployeeCountPort jobPositionEmployeeCountPort;
     private final JobPositionAdminPolicy jobPositionAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public JobPositionResult createJobPosition(CreateJobPositionCommand command) {
@@ -42,7 +43,7 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
                 : jobPositionRepository.nextSortOrder();
 
         JobPosition saved = saveHandlingNameConflict(
-                JobPosition.create(command.name(), sortOrder, TenantContext.currentCompanyId()));
+                JobPosition.create(command.name(), sortOrder, currentCompanyIdProvider.currentCompanyId()));
 
         // 생성 직후이므로 사용 인원은 항상 0
         return JobPositionResult.of(saved, 0);

@@ -19,11 +19,8 @@ import com.group3.vitamins.employeegroup.domain.model.EmployeeGroup;
 import com.group3.vitamins.employeegroup.domain.repository.EmployeeGroupMemberRepository;
 import com.group3.vitamins.employeegroup.domain.repository.EmployeeGroupRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
-import org.junit.jupiter.api.AfterEach;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -53,6 +50,7 @@ class EmployeeGroupCommandServiceTest {
     private EmployeeGroupRepository groupRepository;
     private EmployeeGroupMemberRepository memberRepository;
     private EmployeeGroupQueryPort queryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeGroupCommandService service;
 
     @BeforeEach
@@ -60,21 +58,12 @@ class EmployeeGroupCommandServiceTest {
         groupRepository = Mockito.mock(EmployeeGroupRepository.class);
         memberRepository = Mockito.mock(EmployeeGroupMemberRepository.class);
         queryPort = Mockito.mock(EmployeeGroupQueryPort.class);
+        // 생성 스탬핑이 읽는 회사 ID는 앱 포트로 주입 — 세션(SecurityContext) 세팅 불필요.
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         service = new EmployeeGroupCommandService(
-                groupRepository, memberRepository, queryPort, new EmployeeGroupAdminPolicy());
-
-        // 생성 스탬핑이 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken("admin", null, List.of());
-        auth.setDetails(1L);
-        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-        ctx.setAuthentication(auth);
-        SecurityContextHolder.setContext(ctx);
-    }
-
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
+                groupRepository, memberRepository, queryPort, new EmployeeGroupAdminPolicy(),
+                currentCompanyIdProvider);
     }
 
     private EmployeeGroup group() {
@@ -120,6 +109,10 @@ class EmployeeGroupCommandServiceTest {
             GroupCreateResult r = service.create(new CreateGroupCommand(ADMIN, "ADMIN001", "개발팀", "설명"));
             assertThat(r.groupId()).isEqualTo(GROUP_ID);
             assertThat(r.memberCount()).isZero();
+            // 저장된 도메인 객체에 현재 회사 ID(1)가 스탬핑되는지 검증
+            ArgumentCaptor<EmployeeGroup> captor = ArgumentCaptor.forClass(EmployeeGroup.class);
+            verify(groupRepository).save(captor.capture());
+            assertThat(captor.getValue().getCompanyId()).isEqualTo(1L);
         }
     }
 
