@@ -63,6 +63,9 @@ public class ProjectJpaEntity {
     @Column(name = "close_reason_note", length = 500)
     private String closeReasonNote;
 
+    @Column(name = "closed_at")
+    private LocalDateTime closedAt;
+
     @Column(name = "created_by", nullable = false, length = 20)
     private String createdBy;
 
