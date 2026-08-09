@@ -237,6 +237,8 @@ class EmployeeGroupCommandServiceTest {
             when(memberRepository.removeMember(GROUP_ID, "EMP9")).thenReturn(0);
             assertThatThrownBy(() -> service.removeMember(new RemoveMemberCommand(ADMIN, GROUP_ID, "EMP9")))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_MEMBER_NOT_FOUND));
+            verify(memberRepository).removeMember(GROUP_ID, "EMP9");    // 원자 삭제를 실제로 호출했고
+            verify(queryPort, never()).countMembers(anyLong());        // 실패 후 집계는 하지 않는다
         }
 
         @Test

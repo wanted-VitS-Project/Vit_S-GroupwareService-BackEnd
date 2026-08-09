@@ -10,21 +10,21 @@ import java.util.Set;
 public interface EmployeeGroupMemberRepository {
 
     /**
-     * 요청 사번 중 <b>이미 구성원인</b> 사번만 (멱등 추가 판정). 전체 구성원을 로드하지 않고 요청분만 {@code IN} 조회한다
+     * 요청 사번 중 <b>이미 구성원인</b> 사번만 (멱등 추가 판정). 전체 구성원을 로드하지 않고 요청분만 조회한다
      * — 그룹이 커져도 추가 비용이 요청 크기에만 비례한다.
      */
     Set<String> findExistingMemberUserIds(Long groupId, Collection<String> userIds);
 
     /**
      * 구성원으로 추가한다(신규만 넘어온다). 빈 컬렉션이면 아무것도 하지 않는다.
-     * ⚠️ 구현은 <b>즉시 flush</b> 한다 — 같은 트랜잭션에서 뒤이어 MyBatis 로 구성원 수를 읽으므로 안 그러면 방금 추가분이 안 보인다.
+     * 추가한 결과는 <b>같은 작업 안의 뒤이은 조회에 즉시 보인다</b>(가시성 보장은 어댑터 책임).
      */
     void addMembers(Long groupId, Collection<String> userIds);
 
     /**
-     * 구성원 1명 제거 — <b>삭제된 행 수</b>를 돌려준다(0이면 구성원이 아니었음). 벌크 DELETE 라 즉시 DB 에 반영돼
-     * 같은 트랜잭션의 MyBatis 집계가 본다. 존재확인+삭제를 원자적 DELETE 한 번으로 합쳐, 동시 제거가 둘 다
-     * 사전확인을 통과한 뒤 한쪽이 0건 삭제하고도 성공으로 응답하는 레이스를 막는다.
+     * 구성원 1명 제거 — <b>제거된 수</b>를 돌려준다(0이면 구성원이 아니었음). 존재확인과 제거를 <b>원자적으로</b> 합쳐,
+     * 동시 제거가 둘 다 사전확인을 통과한 뒤 한쪽이 아무것도 못 지우고도 성공으로 응답하는 레이스를 막는다.
+     * 제거 결과는 뒤이은 조회에 즉시 보인다.
      */
     int removeMember(Long groupId, String userId);
 }
