@@ -203,7 +203,7 @@ class AuthCommandServiceTest {
 
     private UserProfileRow profile(String role, LocalDateTime termsAgreedAt) {
         return new UserProfileRow(USER_ID, "김민준", role, true,
-                termsAgreedAt, null, null, "개발팀", "기술본부", "대리", null, null);
+                termsAgreedAt, null, null, "개발팀", "기술본부", "대리", null, null, 1L);
     }
 
     // ===== 도구 =====
@@ -214,7 +214,7 @@ class AuthCommandServiceTest {
 
     private UserProfileRow profileRow() {
         return new UserProfileRow(USER_ID, "김민준", "MEMBER", true,
-                null, null, null, "개발팀", "기술본부", "대리", null, null);
+                null, null, null, "개발팀", "기술본부", "대리", null, null, 1L);
     }
 
     private Consumer<Throwable> hasCode(AuthErrorCode expected) {
