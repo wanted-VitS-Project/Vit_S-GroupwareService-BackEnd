@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -49,7 +48,7 @@ public class AuthSessionManager {
      *   <li>새 세션에 SecurityContext 저장 — 이때 Spring Session 이 사용자명 인덱스도 함께 기록한다</li>
      * </ol>
      */
-    public void openSession(String userId, String role,
+    public void openSession(String userId, String role, Long companyId,
                             boolean termsAgreementRequired, boolean passwordResetRequired,
                             HttpServletRequest request, HttpServletResponse response) {
         HttpSession existing = request.getSession(false);
@@ -58,8 +57,11 @@ public class AuthSessionManager {
         }
         closeAllSessions(userId);
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 userId, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        // 회사(테넌트) 컨텍스트를 details 에 실어둔다 — TenantContext.currentCompanyId() 가 이걸 읽는다.
+        // principal 은 사번(String) 그대로라 @AuthenticationPrincipal String userId 는 안 바뀐다.
+        authentication.setDetails(companyId);
 
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
