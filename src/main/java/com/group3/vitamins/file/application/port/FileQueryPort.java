@@ -3,6 +3,7 @@ package com.group3.vitamins.file.application.port;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
+import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 
 import java.util.List;
@@ -57,4 +58,11 @@ public interface FileQueryPort {
      * 정렬은 스텝(step_id) → 블록(block_id) → 블록 연결일(linked_at) 오름차순.
      */
     List<ProjectFileProjection> findProjectFiles(Long projectId);
+
+    /**
+     * 프로젝트 휴지통 모아보기(§13) — 프로젝트에 속한 <b>휴지통</b> 문서(file.deleted_at IS NOT NULL)를 문서 단위로.
+     * 문서 표시정보 + 전체 버전 수 + 최신 버전 원본명/확장자/크기 + 위치(스텝·블록) + 휴지통 진입 시각(deletedAt)을 내린다.
+     * 블록도 삭제된 고아 파일 포함(blockId·blockTitle=null, blockDeleted=true). 정렬은 deletedAt 내림차순.
+     */
+    List<ProjectTrashFileProjection> findProjectTrashFiles(Long projectId);
 }

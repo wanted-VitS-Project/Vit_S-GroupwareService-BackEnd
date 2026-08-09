@@ -15,6 +15,7 @@ public final class FileResponseMessage {
     public static final String FILE_PERMANENTLY_DELETED = "문서를 영구 삭제했습니다.";
     public static final String PROJECT_FILE_VERSIONS = "파일 버전 목록 조회 성공";
     public static final String PROJECT_FILES = "프로젝트 파일 목록 조회 성공";
+    public static final String PROJECT_TRASH_FILES = "프로젝트 휴지통 목록 조회 성공";
 
     private FileResponseMessage() {
     }
