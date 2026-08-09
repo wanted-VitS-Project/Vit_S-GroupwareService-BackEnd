@@ -75,10 +75,11 @@ class PageAccessResolverTest {
     }
 
     @Test
-    @DisplayName("grantedByCode 가 null 이어도 NPE 없이 처리한다(빈 맵 취급)")
+    @DisplayName("grantedByCode 가 null 이면 빈 맵과 동일한 결과(NPE 없이)")
     void nullGrantedMap() {
-        List<PageAccessResolver.Entry> entries = PageAccessResolver.resolveMyPages("MEMBER", null);
-        assertThat(entries).isNotEmpty(); // 500 대신 정상 반환
+        List<PageAccessResolver.Entry> withNull = PageAccessResolver.resolveMyPages("MEMBER", null);
+        List<PageAccessResolver.Entry> withEmpty = PageAccessResolver.resolveMyPages("MEMBER", Map.of());
+        assertThat(withNull).isEqualTo(withEmpty); // null 을 빈 맵으로 취급 — 500 아님
     }
 
     @Test

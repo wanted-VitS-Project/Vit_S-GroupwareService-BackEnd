@@ -57,7 +57,8 @@ public class PagePermissionCommandService implements PagePermissionCommandUseCas
         // 사번 중복 금지 — 한 요청에 같은 사번이 두 번 오면 어느 등급이 이기는지 모호하다.
         Set<String> userIds = new LinkedHashSet<>();
         for (GrantPermissionsCommand.Item item : items) {
-            if (item == null || item.userId() == null || !userIds.add(item.userId())) {
+            // null·공백 사번은 여기서 400 으로 막는다 — 안 그러면 직원 조회에서 못 찾아 EMP_NOT_FOUND(404)로 잘못 분류된다.
+            if (item == null || item.userId() == null || item.userId().isBlank() || !userIds.add(item.userId())) {
                 throw new ValidationException(PagePermissionErrorCode.PAGE_INVALID_REQUEST);
             }
             if (!PageAccessLevel.isGrantable(item.permission())) { // VIEWER·EDITOR 만

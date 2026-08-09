@@ -115,6 +115,13 @@ class PagePermissionCommandServiceTest {
     }
 
     @Test
+    @DisplayName("공백 사번이면 PAGE_INVALID_REQUEST — EMP_NOT_FOUND(404)로 새지 않는다")
+    void rejectsBlankUserId() {
+        assertThatThrownBy(() -> service.grant(grant("ADMIN", "BIDDING", item("  ", "EDITOR"))))
+                .satisfies(hasCode(PagePermissionErrorCode.PAGE_INVALID_REQUEST));
+    }
+
+    @Test
     @DisplayName("null 항목이 섞이면 PAGE_INVALID_REQUEST — NPE(500)가 아니다")
     void rejectsNullItem() {
         GrantPermissionsCommand command = new GrantPermissionsCommand("ADMIN", "BIDDING",
