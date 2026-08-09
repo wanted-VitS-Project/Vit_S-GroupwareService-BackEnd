@@ -6,6 +6,7 @@ import com.group3.vitamins.project.step.domain.repository.StepRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +42,15 @@ public class StepRepositoryAdapter implements StepRepository {
 
         return rows.stream()
                 .filter(row -> matchesStage(row.getStageId(), stageId))
+                .map(StepMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Step> findAllByIdsInProject(Collection<Long> stepIds, Long projectId) {
+        return springDataRepository
+                .findByStepIdInAndProjectIdAndDeletedAtIsNull(stepIds, projectId)
+                .stream()
                 .map(StepMapper::toDomain)
                 .toList();
     }

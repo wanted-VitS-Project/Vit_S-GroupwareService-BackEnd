@@ -17,4 +17,6 @@ import java.util.List;
 public interface IssueStatQueryMapper {
 
     List<IssueStatRow> countByStepIds(@Param("stepIds") Collection<Long> stepIds);
+
+    List<Long> findOpenIssueIds(@Param("stepId") Long stepId);
 }

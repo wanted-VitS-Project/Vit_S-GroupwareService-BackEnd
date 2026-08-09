@@ -85,8 +85,18 @@ public class Project {
         return this;
     }
 
-    /** 상태를 바꾼다. 역방향 전이도 허용한다 (PRJ-003) — 되돌릴 일이 실제로 있다. */
+    /**
+     * 상태를 바꾼다. 역방향 전이도 허용한다 (PRJ-003) — 되돌릴 일이 실제로 있다.
+     *
+     * <p>CLOSED 에서 벗어나면 종결 정보도 함께 지운다. 상태만 바꾸고 두면
+     * 진행 중인데 종결 사유와 종결 일시가 남아 조회 화면이 어긋난다.
+     */
     public Project changeStatus(ProjectStatus status, LocalDateTime now) {
+        if (this.status == ProjectStatus.CLOSED && status != ProjectStatus.CLOSED) {
+            this.closeReasonCode = null;
+            this.closeReasonNote = null;
+            this.closedAt = null;
+        }
         this.status = status;
         this.updatedAt = now;
         return this;

@@ -13,9 +13,9 @@ public class Step {
     private LocalDate startedOn;
     private LocalDate endedOn;
     private String ownerUserId;
-    private final StepStatus status;
-    private final LocalDateTime completedAt;
-    private final String completedBy;
+    private StepStatus status;
+    private LocalDateTime completedAt;
+    private String completedBy;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
@@ -72,6 +72,36 @@ public class Step {
         this.startedOn = startedOn;
         this.endedOn = endedOn;
         this.ownerUserId = ownerUserId;
+        this.updatedAt = now;
+        return this;
+    }
+
+    /**
+     * 위치를 옮긴다 (STP-002). stageId 가 null 이면 미소속으로 뺀다.
+     * 선행 스텝 완료 여부는 보지 않는다.
+     */
+    public Step moveTo(Long stageId, int sortOrder, LocalDateTime now) {
+        this.stageId = stageId;
+        this.sortOrder = sortOrder;
+        this.updatedAt = now;
+        return this;
+    }
+
+    /**
+     * 상태를 바꾼다 (STP-004). DONE 은 이 경로로 오지 않는다 —
+     * 완료는 미완료 이슈 처리 선택이 필요해 {@link #complete} 가 전담한다.
+     */
+    public Step changeStatus(StepStatus status, LocalDateTime now) {
+        this.status = status;
+        this.updatedAt = now;
+        return this;
+    }
+
+    /** 완료 처리한다 (STP-005). 완료자·완료시각을 함께 기록한다. */
+    public Step complete(String completedBy, LocalDateTime now) {
+        this.status = StepStatus.DONE;
+        this.completedBy = completedBy;
+        this.completedAt = now;
         this.updatedAt = now;
         return this;
     }

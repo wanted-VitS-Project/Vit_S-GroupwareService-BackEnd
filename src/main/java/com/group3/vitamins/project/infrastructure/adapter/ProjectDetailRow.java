@@ -30,9 +30,5 @@ public record ProjectDetailRow(
         String categoryName,
         String categoryCode
 
-
-
-
-
 ) {
 }
