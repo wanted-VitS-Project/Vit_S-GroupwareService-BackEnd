@@ -5,6 +5,7 @@ import com.group3.vitamins.employee.application.query.EmployeeSearchQuery;
 import com.group3.vitamins.employee.application.result.EmployeeSearchRow;
 import com.group3.vitamins.employee.application.usecase.EmployeeQueryUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.util.List;
 public class EmployeeQueryService implements EmployeeQueryUseCase {
 
     private final EmployeeSearchQueryPort employeeSearchQueryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     @Transactional(readOnly = true)
@@ -31,6 +33,6 @@ public class EmployeeQueryService implements EmployeeQueryUseCase {
         if (query == null || query.name() == null) {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_PARAMETER);
         }
-        return employeeSearchQueryPort.searchByName(query.name());
+        return employeeSearchQueryPort.searchByName(query.name(), currentCompanyIdProvider.currentCompanyId());
     }
 }

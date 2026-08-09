@@ -24,6 +24,7 @@
           LEFT JOIN department d     ON d.department_id = e.department_id
           LEFT JOIN job_position jp  ON jp.job_position_id = e.job_position_id
          WHERE e.is_system = 0
+           AND e.company_id = #{companyId}
            AND e.resigned_at IS NULL
            AND e.deleted_at IS NULL
            AND e.name LIKE CONCAT('%', #{name}, '%')

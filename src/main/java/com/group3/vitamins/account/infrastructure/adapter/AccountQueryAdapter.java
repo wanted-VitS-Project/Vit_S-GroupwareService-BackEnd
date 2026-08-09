@@ -19,12 +19,12 @@ public class AccountQueryAdapter implements AccountQueryPort {
     private final AccountQueryMapper accountQueryMapper;
 
     @Override
-    public Optional<AccountTargetRow> findTarget(String userId) {
-        return accountQueryMapper.findTarget(userId);
+    public Optional<AccountTargetRow> findTarget(String userId, Long companyId) {
+        return accountQueryMapper.findTarget(userId, companyId);
     }
 
     @Override
-    public List<AccountTargetRow> findTargets(Collection<String> userIds) {
-        return accountQueryMapper.findTargets(userIds);
+    public List<AccountTargetRow> findTargets(Collection<String> userIds, Long companyId) {
+        return accountQueryMapper.findTargets(userIds, companyId);
     }
 }

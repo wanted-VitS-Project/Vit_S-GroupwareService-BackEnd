@@ -13,14 +13,14 @@ import java.util.Set;
 public interface EmployeeBulkReferenceQueryPort {
 
     /**
-     * 부서명 → 부서 ID. ⚠️ 부서명은 <b>형제 유니크</b>(전역 유일 아님, #212)라 같은 이름이 여러 부서일 수 있다.
-     * 엑셀에는 부서명만 있어 어느 부서인지 특정할 수 없으므로 <b>전역에서 유일하게 매칭되는 이름만</b> 담는다.
-     * 모호하거나 없는 이름은 맵에 빠지며, 호출자가 {@code DEPARTMENT_NOT_FOUND} 로 처리한다.
+     * 부서명 → 부서 ID. ⚠️ 부서명은 <b>회사·형제 유니크</b>(전역 유일 아님)라 같은 회사 안에서도 같은 이름이 여러 부서일 수 있다.
+     * 엑셀에는 부서명만 있어 어느 부서인지 특정할 수 없으므로 <b>이 회사 안에서 유일하게 매칭되는 이름만</b> 담는다.
+     * 타사 부서·모호하거나 없는 이름은 맵에 빠지며, 호출자가 {@code DEPARTMENT_NOT_FOUND} 로 처리한다.
      */
-    Map<String, Long> resolveDepartmentIdsByName(Collection<String> names);
+    Map<String, Long> resolveDepartmentIdsByName(Collection<String> names, Long companyId);
 
-    /** 직급명 → 직급 ID. 직급명은 전역 유니크라 그대로 매핑한다. 없는 이름은 맵에 빠진다(직급은 선택값 → null 등록). */
-    Map<String, Long> resolveJobPositionIdsByName(Collection<String> names);
+    /** 직급명 → 직급 ID. 직급명은 회사 범위 유니크라 그대로 매핑한다. 없는 이름은 맵에 빠진다(직급은 선택값 → null 등록). */
+    Map<String, Long> resolveJobPositionIdsByName(Collection<String> names, Long companyId);
 
     /**
      * 요청 사번 중 <b>이미 등록된(존재하는)</b> 사번 집합 — DB 기존 사번 판정용. 행마다 existsById 를 호출하면 N+1 이라

@@ -173,11 +173,12 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             }
         }
 
-        // 부서명·직급명·기존 사번 → 배치 해석 (모두 N+1 회피)
+        // 부서명·직급명·기존 사번 → 배치 해석 (모두 N+1 회피). 이름 해석은 현재 회사 범위로만 매칭한다(타사 부서·직급 배정 차단).
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         Map<String, Long> deptIds = bulkReferenceQueryPort.resolveDepartmentIdsByName(
-                distinct(rows, ParsedEmployeeRow::department));
+                distinct(rows, ParsedEmployeeRow::department), companyId);
         Map<String, Long> posIds = bulkReferenceQueryPort.resolveJobPositionIdsByName(
-                distinct(rows, ParsedEmployeeRow::jobPosition));
+                distinct(rows, ParsedEmployeeRow::jobPosition), companyId);
         // 이 등록 배치 전체가 같은 회사(로그인 ADMIN) 소속이므로 회사코드는 한 번만 조회한다.
         // ⚠️ DB 는 이미 접두사 형태(예: "vitas-1234567")로 저장하므로, 기존 사번 존재 검사는 접두사 붙인 값으로 대조한다.
         String companyCode = resolveCompanyCode();
