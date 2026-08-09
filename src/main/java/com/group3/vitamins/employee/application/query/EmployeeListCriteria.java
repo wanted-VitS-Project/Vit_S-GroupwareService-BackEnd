@@ -15,6 +15,7 @@ package com.group3.vitamins.employee.application.query;
  * @param resignedOnly       true 면 퇴사자만, false 면 재직자만
  * @param offset             LIMIT 시작 위치 (page * size)
  * @param limit              페이지 크기
+ * @param companyId          현재 회사 — 이 회사 사원만 조회한다(타사 사원 노출 차단)
  */
 public record EmployeeListCriteria(
         String keyword,
@@ -24,6 +25,7 @@ public record EmployeeListCriteria(
         Boolean mustChangePassword,
         boolean resignedOnly,
         int offset,
-        int limit
+        int limit,
+        Long companyId
 ) {
 }

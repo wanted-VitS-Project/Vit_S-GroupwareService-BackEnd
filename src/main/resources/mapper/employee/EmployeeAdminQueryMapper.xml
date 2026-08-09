@@ -18,6 +18,7 @@
     -->
     <sql id="listFilters">
         WHERE e.is_system = 0
+          AND e.company_id = #{companyId}
           AND e.deleted_at IS NULL
           <choose>
               <when test="resignedOnly">AND e.resigned_at IS NOT NULL</when>
@@ -48,9 +49,9 @@
                e.resigned_at          AS resignedAt
           FROM employee e
           JOIN account a           ON a.user_id = e.user_id
-          LEFT JOIN department d    ON d.department_id = e.department_id
-          LEFT JOIN department p    ON p.department_id = d.parent_id
-          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id
+          LEFT JOIN department d    ON d.department_id = e.department_id AND d.company_id = e.company_id
+          LEFT JOIN department p    ON p.department_id = d.parent_id     AND p.company_id = e.company_id
+          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
         <include refid="listFilters"/>
          ORDER BY e.name ASC, e.user_id ASC
          LIMIT #{limit} OFFSET #{offset}
@@ -88,10 +89,11 @@
                e.is_system            AS isSystem
           FROM employee e
           JOIN account a           ON a.user_id = e.user_id
-          LEFT JOIN department d    ON d.department_id = e.department_id
-          LEFT JOIN department p    ON p.department_id = d.parent_id
-          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id
+          LEFT JOIN department d    ON d.department_id = e.department_id AND d.company_id = e.company_id
+          LEFT JOIN department p    ON p.department_id = d.parent_id     AND p.company_id = e.company_id
+          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
          WHERE e.user_id = #{userId}
+           AND e.company_id = #{companyId}
            AND e.deleted_at IS NULL
     </select>
 

@@ -29,6 +29,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -72,8 +73,8 @@ class EmployeeCommandServiceTest {
     /** email 있는 정상 등록의 스텁 (해피패스 계열이 공유). */
     private void stubHappyPath() {
         when(employeeRepository.existsById(anyString())).thenReturn(false);
-        when(referenceQueryPort.departmentExists(any())).thenReturn(true);
-        when(referenceQueryPort.jobPositionExists(any())).thenReturn(true);
+        when(referenceQueryPort.departmentExists(any(), anyLong())).thenReturn(true);
+        when(referenceQueryPort.jobPositionExists(any(), anyLong())).thenReturn(true);
         when(tempPasswordGenerator.generate()).thenReturn("RAW-PW");
         when(passwordEncoder.encode("RAW-PW")).thenReturn("ENC-PW");
     }
@@ -211,7 +212,7 @@ class EmployeeCommandServiceTest {
     @DisplayName("부서가 없으면 EMP_DEPARTMENT_NOT_FOUND")
     void rejectsMissingDepartment() {
         when(employeeRepository.existsById("EMP021")).thenReturn(false);
-        when(referenceQueryPort.departmentExists(2L)).thenReturn(false);
+        when(referenceQueryPort.departmentExists(2L, 1L)).thenReturn(false);
 
         assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "a@b.com")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_DEPARTMENT_NOT_FOUND));
@@ -221,8 +222,8 @@ class EmployeeCommandServiceTest {
     @DisplayName("직급을 지정했는데 없으면 EMP_JOB_POSITION_NOT_FOUND")
     void rejectsMissingJobPosition() {
         when(employeeRepository.existsById("EMP021")).thenReturn(false);
-        when(referenceQueryPort.departmentExists(2L)).thenReturn(true);
-        when(referenceQueryPort.jobPositionExists(10L)).thenReturn(false);
+        when(referenceQueryPort.departmentExists(2L, 1L)).thenReturn(true);
+        when(referenceQueryPort.jobPositionExists(10L, 1L)).thenReturn(false);
 
         assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "a@b.com")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_JOB_POSITION_NOT_FOUND));

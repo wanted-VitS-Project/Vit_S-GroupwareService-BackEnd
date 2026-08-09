@@ -30,6 +30,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +43,7 @@ class EmployeeUpdateResignServiceTest {
     private EmployeeRepository employeeRepository;
     private EmployeeReferenceQueryPort referenceQueryPort;
     private AccountDeactivationPort accountDeactivationPort;
+    private com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeCommandService service;
 
     @BeforeEach
@@ -49,6 +51,9 @@ class EmployeeUpdateResignServiceTest {
         employeeRepository = Mockito.mock(EmployeeRepository.class);
         referenceQueryPort = Mockito.mock(EmployeeReferenceQueryPort.class);
         accountDeactivationPort = Mockito.mock(AccountDeactivationPort.class);
+        currentCompanyIdProvider =
+                Mockito.mock(com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         // 등록 경로 협력자는 이 테스트에서 안 쓰므로 목만 채운다.
         service = new EmployeeCommandService(
                 new EmployeeAdminPolicy(), employeeRepository, referenceQueryPort,
@@ -56,7 +61,7 @@ class EmployeeUpdateResignServiceTest {
                 Mockito.mock(ThrottledPasswordEncoder.class), Mockito.mock(InitialPasswordMailPort.class),
                 accountDeactivationPort,
                 Mockito.mock(com.group3.vitamins.employee.application.port.CompanyCodeQueryPort.class),
-                Mockito.mock(com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider.class));
+                currentCompanyIdProvider);
     }
 
     private Employee active() {
@@ -101,6 +106,18 @@ class EmployeeUpdateResignServiceTest {
         }
 
         @Test
+        @DisplayName("타사 사원은 없는 것으로 취급 — EMP_NOT_FOUND (사번을 알아도 수정 불가)")
+        void otherCompanyTreatedAsNotFound() {
+            // 현재 회사=1L 인데 대상 사원의 회사=2L → 소유권 가드가 404 로 막는다.
+            when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(
+                    Employee.restore("EMP021", "홍길동", false, 2L, 10L,
+                            "hong@vitamins.com", "010-1111-2222", LocalDate.of(2024, 3, 2), null, 2L)));
+            assertThatThrownBy(() -> service.updateEmployee(onlyName("ADMIN", "새이름")))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_NOT_FOUND));
+            verify(employeeRepository, never()).updateInfo(any());
+        }
+
+        @Test
         @DisplayName("시스템 계정은 ACC_SYSTEM_ACCOUNT_NOT_ALLOWED")
         void systemForbidden() {
             when(employeeRepository.findById("ADMIN001")).thenReturn(Optional.of(
@@ -116,7 +133,7 @@ class EmployeeUpdateResignServiceTest {
         @DisplayName("부서를 지정했는데 없으면 EMP_DEPARTMENT_NOT_FOUND")
         void departmentNotFound() {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
-            when(referenceQueryPort.departmentExists(99L)).thenReturn(false);
+            when(referenceQueryPort.departmentExists(99L, 1L)).thenReturn(false);
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
                     false, null, false, null, false, null, true, 99L, false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
@@ -151,7 +168,7 @@ class EmployeeUpdateResignServiceTest {
             ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
             verify(employeeRepository).updateInfo(captor.capture());
             assertThat(captor.getValue().getJobPositionId()).isNull();
-            verify(referenceQueryPort, never()).jobPositionExists(any());
+            verify(referenceQueryPort, never()).jobPositionExists(any(), anyLong());
         }
 
         @Test
@@ -207,6 +224,20 @@ class EmployeeUpdateResignServiceTest {
             assertThatThrownBy(() -> service.resignEmployee(
                     new ResignEmployeeCommand("ADMIN", "EMP021", "2026-08-31")))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("타사 사원은 없는 것으로 취급 — EMP_NOT_FOUND (퇴사·계정정지 모두 안 함)")
+        void otherCompanyTreatedAsNotFound() {
+            // 현재 회사=1L, 대상 사원의 회사=2L → 소유권 가드가 404 로 막고 어떤 쓰기도 하지 않는다.
+            when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(
+                    Employee.restore("EMP021", "홍길동", false, 2L, 10L, "h@v.com", null,
+                            LocalDate.of(2024, 3, 2), null, 2L)));
+            assertThatThrownBy(() -> service.resignEmployee(
+                    new ResignEmployeeCommand("ADMIN", "EMP021", "2026-08-31")))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_NOT_FOUND));
+            verify(employeeRepository, never()).resign(anyString(), any());
+            verify(accountDeactivationPort, never()).deactivate(anyString());
         }
 
         @Test

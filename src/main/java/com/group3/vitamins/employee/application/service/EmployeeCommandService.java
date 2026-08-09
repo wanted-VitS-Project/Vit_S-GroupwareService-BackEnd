@@ -99,10 +99,10 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         if (employeeRepository.existsById(userId)) {
             throw new ConflictException(EmployeeErrorCode.EMP_USER_ID_DUPLICATED);
         }
-        if (!referenceQueryPort.departmentExists(departmentId)) {
+        if (!referenceQueryPort.departmentExists(departmentId, companyId)) {
             throw new NotFoundException(EmployeeErrorCode.EMP_DEPARTMENT_NOT_FOUND);
         }
-        if (command.jobPositionId() != null && !referenceQueryPort.jobPositionExists(command.jobPositionId())) {
+        if (command.jobPositionId() != null && !referenceQueryPort.jobPositionExists(command.jobPositionId(), companyId)) {
             throw new NotFoundException(EmployeeErrorCode.EMP_JOB_POSITION_NOT_FOUND);
         }
 
@@ -152,8 +152,13 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
         }
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         Employee current = employeeRepository.findById(command.userId())
                 .orElseThrow(() -> new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND));
+        // 타사 사원은 없는 것으로 취급 — 사번(전역 유일)을 알아도 다른 회사 사원을 수정할 수 없다.
+        if (!current.getCompanyId().equals(companyId)) {
+            throw new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND);
+        }
         if (current.isSystem()) {
             throw new ForbiddenException(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED);
         }
@@ -174,7 +179,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         Long departmentId = current.getDepartmentId();
         if (command.departmentIdProvided()) {
             departmentId = command.departmentId();
-            if (departmentId != null && !referenceQueryPort.departmentExists(departmentId)) {
+            if (departmentId != null && !referenceQueryPort.departmentExists(departmentId, companyId)) {
                 throw new NotFoundException(EmployeeErrorCode.EMP_DEPARTMENT_NOT_FOUND);
             }
         }
@@ -182,7 +187,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         Long jobPositionId = current.getJobPositionId();
         if (command.jobPositionIdProvided()) {
             jobPositionId = command.jobPositionId(); // null = 직급 미지정으로 변경
-            if (jobPositionId != null && !referenceQueryPort.jobPositionExists(jobPositionId)) {
+            if (jobPositionId != null && !referenceQueryPort.jobPositionExists(jobPositionId, companyId)) {
                 throw new NotFoundException(EmployeeErrorCode.EMP_JOB_POSITION_NOT_FOUND);
             }
         }
@@ -207,6 +212,10 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
         Employee current = employeeRepository.findById(command.userId())
                 .orElseThrow(() -> new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND));
+        // 타사 사원은 없는 것으로 취급 — 사번(전역 유일)을 알아도 다른 회사 사원을 퇴사시킬 수 없다.
+        if (!current.getCompanyId().equals(currentCompanyIdProvider.currentCompanyId())) {
+            throw new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND);
+        }
         if (current.isSystem()) {
             throw new ForbiddenException(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED);
         }

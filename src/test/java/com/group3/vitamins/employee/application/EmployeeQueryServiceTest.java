@@ -5,6 +5,7 @@ import com.group3.vitamins.employee.application.query.EmployeeSearchQuery;
 import com.group3.vitamins.employee.application.result.EmployeeSearchRow;
 import com.group3.vitamins.employee.application.service.EmployeeQueryService;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,18 +28,21 @@ import static org.mockito.Mockito.when;
 class EmployeeQueryServiceTest {
 
     private EmployeeSearchQueryPort searchPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeQueryService queryService;
 
     @BeforeEach
     void setUp() {
         searchPort = Mockito.mock(EmployeeSearchQueryPort.class);
-        queryService = new EmployeeQueryService(searchPort);
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
+        queryService = new EmployeeQueryService(searchPort, currentCompanyIdProvider);
     }
 
     @Test
     @DisplayName("이름으로 검색하면 후보 목록을 그대로 반환한다")
     void returnsCandidates() {
-        when(searchPort.searchByName("김")).thenReturn(List.of(
+        when(searchPort.searchByName("김", 1L)).thenReturn(List.of(
                 new EmployeeSearchRow("EMP001", "김민준", "개발팀", "대리"),
                 new EmployeeSearchRow("EMP007", "김서연", null, null)
         ));
@@ -51,17 +56,17 @@ class EmployeeQueryServiceTest {
     @Test
     @DisplayName("검색어 앞뒤 공백은 trim 되어 포트에 넘어간다")
     void trimsWhitespace() {
-        when(searchPort.searchByName("김민준")).thenReturn(List.of());
+        when(searchPort.searchByName("김민준", 1L)).thenReturn(List.of());
 
         queryService.searchByName(new EmployeeSearchQuery("  김민준  "));
 
-        verify(searchPort).searchByName("김민준");
+        verify(searchPort).searchByName("김민준", 1L);
     }
 
     @Test
     @DisplayName("결과가 없으면 빈 배열")
     void emptyWhenNoMatch() {
-        when(searchPort.searchByName("없는이름")).thenReturn(List.of());
+        when(searchPort.searchByName("없는이름", 1L)).thenReturn(List.of());
 
         assertThat(queryService.searchByName(new EmployeeSearchQuery("없는이름"))).isEmpty();
     }
@@ -71,7 +76,7 @@ class EmployeeQueryServiceTest {
     void rejectsNullName() {
         assertThatThrownBy(() -> queryService.searchByName(new EmployeeSearchQuery(null)))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
-        verify(searchPort, never()).searchByName(anyString());
+        verify(searchPort, never()).searchByName(any(), anyLong());
     }
 
     @Test
@@ -79,7 +84,7 @@ class EmployeeQueryServiceTest {
     void rejectsBlankName() {
         assertThatThrownBy(() -> queryService.searchByName(new EmployeeSearchQuery("   ")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
-        verify(searchPort, never()).searchByName(anyString());
+        verify(searchPort, never()).searchByName(any(), anyLong());
     }
 
     @Test
@@ -87,7 +92,7 @@ class EmployeeQueryServiceTest {
     void rejectsNullQuery() {
         assertThatThrownBy(() -> queryService.searchByName(null))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
-        verify(searchPort, never()).searchByName(anyString());
+        verify(searchPort, never()).searchByName(any(), anyLong());
     }
 
     private Consumer<Throwable> hasCode(Object expected) {

@@ -14,11 +14,13 @@ import java.util.List;
 @Mapper
 public interface EmployeeBulkReferenceQueryMapper {
 
-    /** 전역에서 유일하게 매칭되는 부서명만 (name, id). 형제 유니크라 이름이 겹치는 부서는 제외한다. */
-    List<NameIdRow> findUniqueDepartmentIdsByName(@Param("names") Collection<String> names);
+    /** 이 회사 안에서 유일하게 매칭되는 부서명만 (name, id). 회사·형제 유니크라 이름이 겹치는 부서는 제외한다. */
+    List<NameIdRow> findUniqueDepartmentIdsByName(
+            @Param("names") Collection<String> names, @Param("companyId") Long companyId);
 
-    /** 직급명(전역 유니크) → (name, id). */
-    List<NameIdRow> findJobPositionIdsByName(@Param("names") Collection<String> names);
+    /** 직급명(회사 범위 유니크) → (name, id). */
+    List<NameIdRow> findJobPositionIdsByName(
+            @Param("names") Collection<String> names, @Param("companyId") Long companyId);
 
     /** 요청 사번 중 실재하는(PK 점유) 사번 — soft delete 무관. */
     List<String> findExistingUserIds(@Param("userIds") Collection<String> userIds);

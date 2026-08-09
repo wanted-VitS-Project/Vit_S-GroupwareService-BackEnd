@@ -23,7 +23,7 @@ public interface EmployeeAdminQueryMapper {
 
     long count(EmployeeListCriteria criteria);
 
-    Optional<EmployeeDetailRow> findDetail(@Param("userId") String userId);
+    Optional<EmployeeDetailRow> findDetail(@Param("userId") String userId, @Param("companyId") Long companyId);
 
     List<EmployeeGroupRow> findGroups(@Param("userId") String userId);
 }
