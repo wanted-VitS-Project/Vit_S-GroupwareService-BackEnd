@@ -73,8 +73,12 @@ public class SettlementController {
                 new SettlementRecommendationQuery(settleId, type, authentication.getName(),
                         RequesterRole.from(authentication)));
 
-        return ResponseEntity.ok(ApiResponse.success("정산 항목 수정 시 조회 성공",
-                SettlementRecommendationResponse.from(view)));
+        // 이미 채워진 OUTCOME 블록이면 마스킹 없는 원본 계좌번호가 실려 나간다 — 브라우저/프록시가
+        // 이 응답을 캐시해 사본을 남기지 않도록 명시적으로 캐시를 막는다.
+        return ResponseEntity.ok()
+                .cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(ApiResponse.success("정산 항목 수정 시 조회 성공",
+                        SettlementRecommendationResponse.from(view)));
     }
 
     @Operation(summary = "정산 항목 작성/수정", description = "정산 블록 내부의 정산 항목을 작성하거나 수정한다.")

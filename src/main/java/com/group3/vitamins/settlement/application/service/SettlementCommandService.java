@@ -58,6 +58,10 @@ public class SettlementCommandService implements SettlementCommandUseCase {
 
         assertModifiable(before);
         eligibilityPolicy.assertNoTypeDowngrade(before.getType(), type);
+
+        // SETL-008 검증(조회) 전에 같은 프로젝트의 정산 블록 전체를 잠근다 — 두 개의 빈 블록이 동시에
+        // PATCH되면서 서로 "기준값 없음"으로 읽고 다른 totalAmount를 저장하는 레이스를 막는다.
+        settlementDetailMapper.lockSiblingSettlementBlocksForUpdate(command.settleId());
         assertTotalAmountConsistent(command.settleId(), type, command.totalAmount());
 
         String encryptedAccountNumber = command.accountNumber() == null
@@ -99,6 +103,8 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         }
     }
 
+    // 금액(totalAmount/plannedAmount/plannedTaxAmount)은 음수를 막지 않는다 — 은행사 CSV/API 수집 양식에
+    // 따라 OUTCOME 거래가 음수로 표기되는 경우가 있어, 여기서 부호를 강제하면 실제 데이터를 못 받는다.
     private void validateRequiredFields(UpdateSettlementItemCommand command) {
         if (command.roundNo() == null
                 || command.totalAmount() == null
@@ -106,6 +112,9 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 || command.plannedTaxAmount() == null
                 || command.plannedDate() == null
                 || isBlank(command.traderName())) {
+            throw new ValidationException(SettlementErrorCode.INVALID_CONTENT);
+        }
+        if (command.roundNo() <= 0) {
             throw new ValidationException(SettlementErrorCode.INVALID_CONTENT);
         }
     }

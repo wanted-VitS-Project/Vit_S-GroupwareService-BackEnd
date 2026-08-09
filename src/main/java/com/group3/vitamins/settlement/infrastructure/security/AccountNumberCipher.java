@@ -30,11 +30,23 @@ public class AccountNumberCipher {
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int IV_LENGTH_BYTES = 12;
     private static final int TAG_LENGTH_BITS = 128;
+    private static final int AES_256_KEY_LENGTH_BYTES = 32;
 
     private final SecretKeySpec secretKey;
 
     public AccountNumberCipher(@Value("${settlement.account-number.encryption-key}") String base64Key) {
-        this.secretKey = new SecretKeySpec(Base64.getDecoder().decode(base64Key), "AES");
+        byte[] decoded;
+        try {
+            decoded = Base64.getDecoder().decode(base64Key);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("SETTLEMENT_ACCOUNT_ENC_KEY 가 올바른 Base64 값이 아닙니다.", e);
+        }
+        if (decoded.length != AES_256_KEY_LENGTH_BYTES) {
+            throw new IllegalStateException(
+                    "SETTLEMENT_ACCOUNT_ENC_KEY 는 Base64 디코드 후 32바이트(AES-256)여야 합니다. 실제 길이: "
+                            + decoded.length + "바이트");
+        }
+        this.secretKey = new SecretKeySpec(decoded, "AES");
     }
 
     public String encrypt(String plainText) {

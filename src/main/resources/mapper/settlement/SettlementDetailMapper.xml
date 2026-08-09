@@ -11,6 +11,11 @@
         (파생 테이블 agg) 원래 행에 조인해서 붙인다 — 요청받은 settle_id 개수와 무관하게 쿼리 1발.
         type 이 NULL(빈 상세 행)이면 agg 와 매칭되지 않아 actualAmountSum 이 NULL로 내려오고,
         어댑터가 이를 0으로 취급한다(진행률 0.0).
+
+        ⚠️ agg는 요청받은 settleIds가 속한 project_id로 먼저 좁힌다(target 서브쿼리) — 안 좁히면
+        settlement_block 테이블 전체를 project_id·type으로 GROUP BY 하게 되어, 관계없는 다른 모든
+        프로젝트까지 매번 집계하게 된다(데이터가 쌓일수록 이 조회가 선형으로 느려짐). 여전히 앱→DB
+        왕복은 이 쿼리 1개뿐이다 — SQL 안에 스캔 범위를 줄이는 서브쿼리를 추가한 것뿐이다.
     -->
     <select id="findBySettleIds"
             resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementDetailRow">
@@ -39,6 +44,14 @@
         JOIN block b2 ON b2.block_id = sb2.block_id
         JOIN step st2 ON st2.step_id = b2.step_id
         WHERE sb2.deleted_at IS NULL
+        AND st2.project_id IN (
+        SELECT DISTINCT st3.project_id
+        FROM settlement_block sb3
+        JOIN block b3 ON b3.block_id = sb3.block_id
+        JOIN step st3 ON st3.step_id = b3.step_id
+        WHERE sb3.settle_id IN
+        <foreach item="id" collection="settleIds" open="(" separator="," close=")">#{id}</foreach>
+        )
         GROUP BY st2.project_id, sb2.type
         ) agg ON agg.project_id = st.project_id AND agg.type = sb.type
         WHERE sb.settle_id IN
@@ -72,6 +85,31 @@
         AND sb2.deleted_at IS NULL
         ORDER BY (sb2.status != 'PENDING') DESC, sb2.settle_id ASC
         LIMIT 1
+    </select>
+
+    <!--
+        SETL-008 검증 직전 호출 — 이 settleId가 속한 프로젝트의 활성 정산 블록 전체를 FOR UPDATE로 잠근다.
+        두 트랜잭션이 같은 프로젝트의 서로 다른 settleId를 동시에 PATCH하면 이 SELECT ... FOR UPDATE에서
+        행 잠금이 겹쳐(둘 다 그 프로젝트의 모든 정산 블록 행을 잠그려 하므로) 하나는 먼저 커밋할 때까지
+        대기한다 — 그래서 findEstablishedTotalAmount가 항상 "먼저 커밋된 최신 상태"를 본다. 이 블록의
+        행 자체는 블록 생성 시점에 이미 만들어져 있어(내용은 비어 있어도 행은 존재) 잠금 대상에서 빠지지
+        않는다 — "아직 아무도 기준값을 안 정한" 최초 회차 케이스도 이 잠금으로 커버된다.
+    -->
+    <select id="lockSiblingSettlementBlocksForUpdate" resultType="java.lang.Long">
+        SELECT sb.settle_id
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE st.project_id = (
+            SELECT st0.project_id
+            FROM settlement_block sb0
+            JOIN block b0 ON b0.block_id = sb0.block_id
+            JOIN step st0 ON st0.step_id = b0.step_id
+            WHERE sb0.settle_id = #{settleId}
+        )
+        AND sb.deleted_at IS NULL
+        ORDER BY sb.settle_id
+        FOR UPDATE
     </select>
 
     <!--

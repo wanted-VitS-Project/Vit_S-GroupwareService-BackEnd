@@ -4,7 +4,7 @@ Content-Type: application/json
 
 {
     "userId": "EMP003",
-    "password": "Test1234!"
+    "password": ""
 }
 
 ### 0-0a. [준비, 최초 로그인 계정만] 약관 동의 — 로그인 응답에 termsAgreementRequired=true 면 먼저 실행. 본문 없음
@@ -120,7 +120,7 @@ Content-Type: application/json
 ### 정산 항목 수정 시 조회 — 0-3b는 이미 OUTCOME으로 내용이 채워진 블록이므로(재수정 케이스),
 ### recommendRoundNo/recommendTotalAmount는 둘 다 null이어야 하고, originalAccountNumber만
 ### 마스킹 없는 원본("100555074444")으로 나와야 한다. URL의 2를 0-3b 블록의 settleId로 교체할 것
-GET localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
+GET localhost:8080/api/v1/blocks/settlements/2/items?type=OUTCOME
 
 ### 정산 항목 수정 시 조회 — 이미 OUTCOME으로 저장된 0-3b 블록을 type=INCOME으로 조회 시도 → 409 SETL-006 확인용
 ### (PATCH의 OUTCOME→INCOME 다운그레이드 금지와 동일 규칙을 GET에도 적용 — 어차피 저장 시점에 막힐 전환을 미리 알려준다)
@@ -259,9 +259,8 @@ GET localhost:8080/api/v1/projects/settlements/filters
 ### ========================================================================
 
 ### 기본 조회 — 파라미터 없이 호출
-### ⚠️ 0-1 프로젝트는 생성 시 endedOn="2026-12-31"을 이미 넣어뒀다. includeCompleted 생략(=false) 상태에서는
-### "종료일이 있는 프로젝트"로 취급돼 이 프로젝트가 목록에서 빠진다 — 안 보이면 버그가 아니라 이 필터 때문이다.
-### 확인하려면 아래 "includeCompleted=true" 요청을 쓸 것.
+### includeCompleted 생략(=false) 상태에서는 project.status가 COMPLETED 또는 CLOSED인 프로젝트가 목록에서
+### 빠진다(0-1 프로젝트는 기본 상태 NOT_STARTED라 이 필터엔 안 걸린다 — endedOn 값 유무와는 무관).
 GET localhost:8080/api/v1/projects/settlements
 
 ### includeCompleted=true — 0-1 프로젝트가 나와야 한다. totalPlannedAmount는 0-3a/0-3c(INCOME)의 totalAmount와

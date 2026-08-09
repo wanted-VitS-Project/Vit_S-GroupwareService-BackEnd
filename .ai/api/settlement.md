@@ -30,7 +30,7 @@
 | ✅ 확정 (구현 완료) | 정산 항목 작성/수정 | PATCH | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
 | ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산현황 필터 옵션 조회 | GET | `/api/v1/projects/settlements/filters` | 접근 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 프로젝트 조회 | GET | `/api/v1/projects/settlements` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 (구현 완료) | 정산 현황 블록 조회 | GET | `/api/v1/projects/{projectId}/settlements` | 프로젝트 접근 권한 보유자 |
+| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 블록 조회 | GET | `/api/v1/projects/{projectId}/settlements` | 접근 권한 보유자(재무 관리 페이지) |
 
 ---
 
@@ -345,6 +345,10 @@
   `OUTCOME`으로 저장된 블록을 `type=INCOME`으로 조회하면 `SETL-006`(409)으로 막는다. 어차피 저장 시점에
   막힐 전환(OUTCOME → INCOME)을 조회 단계에서 미리 알려주는 것. `assertNoTypeDowngrade`를
   `SettlementCommandService`에서 `SettlementEligibilityPolicy`로 옮겨 PATCH·GET 양쪽이 같은 메서드를 쓴다.
+- **`Cache-Control: no-store` 추가 (2026-08-09, CodeRabbit)** — 이 엔드포인트는 이미 채워진 `OUTCOME` 블록을
+  조회하면 마스킹 없는 원본 계좌번호를 응답에 그대로 싣는다. GET 응답이라 브라우저·중간 프록시가 캐시할
+  수 있어서, 편집 권한 검사만으로는 캐시된 사본까지 통제할 수 없다는 지적을 받아 응답에 캐시 차단 헤더를
+  명시적으로 달았다.
 
 ---
 
@@ -504,7 +508,11 @@
      상세 테이블의 `block_id`를 항상 `NOT NULL + UNIQUE`로 요구한다. 작업자 확인 후 `NOT NULL`로 확정.
   3. **`cash_flow.linked_by`/`tax_invoice.linked_by`를 `NULL` 허용으로 변경** — 원 DDL은 `NOT NULL`이었지만, 두 값 모두
      "정산 블록에 연결됐을 때"만 채워지는 값이라(연결 전엔 주인이 없음) `NOT NULL`이면 최초 수집 시점에 INSERT 자체가 불가능하다.
-     기존 `payment.linked_by`/`tax_invoice_confirm.linked_by` 설계와 동일하게 `NULL` 허용으로 맞췄다.
+     기존 `payment.linked_by`/`tax_invoice_confirm.linked_by` 설계와 동일하게 `NULL` 허용으로 맞췄다. ⚠️ **이건 의도된
+     예외다** — `linked_by`/`linked_at`을 제외한 나머지 "(필수)" 표시 컬럼들은 최초 구현 때 실수로 전부 `NULL`로
+     나갔던 버그였고(2026-08-09, CodeRabbit 리뷰로 발견), 원래 설계대로 `NOT NULL`로 되돌렸다. 이 과정에서
+     `uk_cash_flow_dedup UNIQUE(bank_name, traded_at, amount)`도 세 컬럼이 `NOT NULL`이 되면서 MySQL이 NULL을
+     서로 다른 값으로 취급해 중복을 못 막던 문제가 같이 해결됐다.
   4. **`settlement_block.status` 기본값** — 설명에 "기본값 PENDING"이 있어 컬럼을 `NOT NULL DEFAULT 'PENDING'`으로 뒀다
      (원 DDL은 `NULL`로 선언돼 있었음).
 - **기존 실제 테이블과의 충돌** — `payment`/`tax_invoice`/`block_payment_confirm`/`tax_invoice_confirm`은 실제로
@@ -560,3 +568,32 @@
   `traderName`/`bankName`/`accountHolder`는 실제 값으로 비교·기록하고, `accountNumber`만 예외로 **양쪽 다 마스킹된 값으로
   비교·기록한다** (이전 값은 저장된 암호문을 복호화 후 마스킹, 이후 값은 이번 요청 평문을 마스킹) — 활동 로그에
   계좌번호 원문이 절대 남지 않게 하기 위함이다. `resourceName`은 `traderName`을 쓴다.
+- **CodeRabbit 리뷰 반영 (2026-08-09)**:
+  1. **`roundNo <= 0` 검증 추가, 금액은 그대로 둠** — `validateRequiredFields`에 회차 번호 양수 검증을 추가했다.
+     `totalAmount`/`plannedAmount`/`plannedTaxAmount`엔 음수 금지를 안 걸었다 — 은행 CSV/API 수집 양식에 따라
+     `OUTCOME` 거래가 음수로 표기되는 경우가 있어서, 여기서 부호를 강제하면 실제 데이터를 못 받는다(작업자 확인).
+     여전히 **Bean Validation은 안 쓴다** — `@Valid`를 붙이면 실패 시 `code`가 `COMMON_INVALID_REQUEST`로 뭉개져
+     `SETL-003` 계약이 깨진다(2026-08-04 팀 결정과 동일 이유). 서비스 내부 수동 검증으로 처리했다.
+  2. **SETL-008 검증 직전에 같은 프로젝트의 정산 블록 전체를 `FOR UPDATE`로 잠금** —
+     `SettlementDetailMapper.lockSiblingSettlementBlocksForUpdate` 신설. 서로 다른(둘 다 빈) 정산 블록을 동시에
+     PATCH하면 둘 다 `findEstablishedTotalAmount`에서 "기준값 없음"으로 읽고 각자 다른 `totalAmount`를 저장할 수
+     있었던 레이스(체크 후 쓰기 사이의 틈)를 막는다. 이 블록의 행 자체는 블록 생성 시점에 이미 만들어져 있어(내용은
+     비어 있어도 행은 존재) 최초 회차 케이스도 이 잠금으로 커버된다. 스키마 변경(별도 기준값 테이블+유니크 키) 없이
+     기존 행을 잠그는 가벼운 방식으로 처리했다.
+  3. **`AccountNumberCipher` 생성자에서 키 길이 검증** — `SETTLEMENT_ACCOUNT_ENC_KEY`를 Base64 디코드한 값이 정확히
+     32바이트(AES-256)가 아니면 기동 시점에 `IllegalStateException`을 던진다. 이전엔 16/24바이트를 넣어도 조용히
+     AES-128/192로 동작했다.
+  4. **`SettlementDetailMapper.findBySettleIds`의 `agg` 서브쿼리를 요청받은 settleIds의 project_id로 제한** —
+     기존엔 `settlement_block` 테이블 전체를 project_id·type으로 집계했다(관계없는 프로젝트까지 매번 스캔).
+     블록 목록을 불러올 때마다 도는 조회라 데이터가 쌓이면 느려질 수 있었다. 앱→DB 왕복 횟수는 그대로 1번이고,
+     SQL 안에 스캔 범위를 좁히는 서브쿼리만 추가했다.
+  5. `PagePermissionMapperAdapter`가 `MEMBER` 외 role도 권한 행이 있으면 통과시킬 수 있다는 지적은 **반영 안 함** —
+     `ADMIN`/`MASTER`는 이 메서드 맨 앞에서 이미 무조건 `true`를 반환해 `existsGrant` 자체를 안 보고, 이 시스템에서
+     `role` 값은 `ADMIN`/`MASTER`/`MEMBER`/빈 문자열뿐이라(`RequesterRole.from`) 실제로 뚫릴 경로가 없다. `permission`
+     컬럼(`VIEWER`/`EDITOR`)을 지금 안 쓰는 것도 지적됐는데, FINANCE로 막힌 3개 API가 전부 조회(GET)라 구분할 필요가
+     아직 없다 — 재무팀이 "쓰는" 화면이 생기면 그때 설계.
+  6. **마이그레이션이 기존 데이터 보존 없이 DROP한다는 지적** — 이 4테이블은 사용자가 직접 "삭제해달라"고 확정한
+     것이고(위 "기존 실제 테이블과의 충돌" 참고) 프로젝트가 아직 초기 세팅 단계라 지킬 운영 데이터가 없다고 판단해
+     반영 안 함.
+  7. **목록 조회 2개(정산현황 프로젝트/블록 조회)에 페이지네이션 명세가 없다는 지적** — 원 명세 자체에 페이징이 없어서
+     지금 넣으면 프론트 계약을 새로 만드는 일이 된다. 필요해지면 명세부터 정하고 오는 게 맞다고 보고 반영 안 함.
