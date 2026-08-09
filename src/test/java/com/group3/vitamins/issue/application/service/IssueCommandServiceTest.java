@@ -1,9 +1,11 @@
 package com.group3.vitamins.issue.application.service;
 
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.issue.application.command.ChangeIssueStatusCommand;
+import com.group3.vitamins.issue.application.command.CreateIssueCommand;
 import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
 import com.group3.vitamins.issue.application.command.PatchField;
 import com.group3.vitamins.issue.application.command.UpdateIssueCommand;
@@ -18,6 +20,7 @@ import com.group3.vitamins.issue.domain.IssueStatus;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import com.group3.vitamins.issue.domain.model.Issue;
 import com.group3.vitamins.issue.domain.repository.IssueRepository;
+import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -30,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,13 +48,59 @@ class IssueCommandServiceTest {
     private final IssueAssigneePort issueAssigneePort = mock(IssueAssigneePort.class);
     private final IssueBlockPort issueBlockPort = mock(IssueBlockPort.class);
     private final IssueQueryPort issueQueryPort = mock(IssueQueryPort.class);
+    private final DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
     private final IssueCommandService service = new IssueCommandService(
             issueRepository,
             issueStepAccessPort,
             issueAssigneePort,
             issueBlockPort,
-            issueQueryPort
+            issueQueryPort,
+            domainEventPublisher
     );
+
+    @Test
+    @DisplayName("이슈 생성 시 담당자별 ISSUE_ASSIGNED 알림을 발행한다")
+    void createIssue_publishAssignedNotifications() {
+        when(issueStepAccessPort.requireEditable(10L, "EMP002", "MEMBER"))
+                .thenReturn(new IssueStepAccessPort.StepAccessView(10L, 20L));
+        when(issueAssigneePort.validateAssignable(20L, List.of("EMP003", "EMP005")))
+                .thenReturn(List.of(
+                        new IssueAssigneePort.AssigneeView("EMP003", "김용준"),
+                        new IssueAssigneePort.AssigneeView("EMP005", "김동훈")
+                ));
+        when(issueBlockPort.validateLinkable(10L, List.of()))
+                .thenReturn(List.of());
+        when(issueRepository.save(org.mockito.ArgumentMatchers.any(Issue.class)))
+                .thenReturn(issue(101L, IssueStatus.TO_DO, null));
+
+        service.createIssue(new CreateIssueCommand(
+                10L,
+                "경쟁사 제안서 벤치마킹",
+                "신규 이슈",
+                null,
+                "TODO",
+                "HIGH",
+                List.of("EMP003", "EMP005"),
+                List.of(),
+                "EMP002",
+                "MEMBER"
+        ));
+
+        verify(domainEventPublisher).publish(argThat(event ->
+                event instanceof NotificationRequestedEvent notification
+                        && notification.recipientUserId().equals("EMP003")
+                        && notification.notificationType().equals("ISSUE_ASSIGNED")
+                        && notification.targetType().equals("ISSUE")
+                        && notification.targetId().equals(101L)
+                        && notification.targetContext() == null));
+        verify(domainEventPublisher).publish(argThat(event ->
+                event instanceof NotificationRequestedEvent notification
+                        && notification.recipientUserId().equals("EMP005")
+                        && notification.notificationType().equals("ISSUE_ASSIGNED")
+                        && notification.targetType().equals("ISSUE")
+                        && notification.targetId().equals(101L)
+                        && notification.targetContext() == null));
+    }
 
     @Test
     @DisplayName("전달된 일반 필드와 관계 목록만 수정하고 최신 상세를 반환한다")
@@ -91,6 +141,16 @@ class IssueCommandServiceTest {
         verify(issueRepository).deleteBlockLinks(101L);
         verify(issueRepository).saveBlockLinks(101L, List.of(15L));
         verify(issueRepository).save(issue);
+        verify(domainEventPublisher, never()).publish(argThat(event ->
+                event instanceof NotificationRequestedEvent notification
+                        && notification.recipientUserId().equals("EMP003")));
+        verify(domainEventPublisher).publish(argThat(event ->
+                event instanceof NotificationRequestedEvent notification
+                        && notification.recipientUserId().equals("EMP005")
+                        && notification.notificationType().equals("ISSUE_ASSIGNED")
+                        && notification.targetType().equals("ISSUE")
+                        && notification.targetId().equals(101L)
+                        && notification.targetContext() == null));
     }
 
     @Test

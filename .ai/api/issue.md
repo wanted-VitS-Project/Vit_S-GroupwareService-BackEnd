@@ -2,6 +2,7 @@
 
 **상태**: `✅ 확정`
 **최종 업데이트**: 2026-08-07 · **담당**: 김용준
+**최종 업데이트**: 2026-08-09 (담당자 지정 알림 정책 추가 — 신규 추가 담당자에게만 `ISSUE_ASSIGNED` 발행, 신규 에러코드 없음)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -43,6 +44,7 @@
 | 완료 시각 | `completedAt`은 상태에 따라 BE가 관리하며 사용자가 직접 수정하지 않는다 |
 | 삭제 | Issue는 논리 삭제하고 담당자·Block 연결 행은 같은 트랜잭션에서 제거한다 |
 | Activity Log | Issue 생성·수정·상태 변경·삭제는 Activity Log에 기록하지 않는다 |
+| Notification | 이슈 생성·수정으로 신규 담당자가 추가되면 해당 담당자별로 `ISSUE_ASSIGNED` 알림을 발행한다 |
 
 ### 권한 판정
 
@@ -74,6 +76,17 @@
 
 `assigneeIds`는 `GET /api/v1/projects/{projectId}/members` 응답의 `members[].userId`를 사용한다.
 `blockIds`는 `GET /api/v1/steps/{stepId}/blocks/options` 응답의 `blocks[].blockId`를 사용한다.
+
+### 담당자 지정 알림
+
+| 항목 | 정책 |
+|---|---|
+| 발행 시점 | 이슈 생성 시 담당자 전체, 이슈 수정 시 기존에 없던 신규 추가 담당자 |
+| 미발행 | 담당자 유지, 담당자 해제, 이슈 삭제, 상태 변경 |
+| 알림 유형 | `ISSUE_ASSIGNED` |
+| 이동 대상 | `targetType=ISSUE`, `targetId=issueId`, `targetContext=null` |
+| 접근 판정 | 알림 도메인은 이동 대상만 반환하고, 실제 조회 가능 여부는 기존 이슈 상세 API의 Step 접근 권한이 판단 |
+| 에러코드 | 신규 추가 없음. 이슈 삭제는 기존 `ISS_NOT_FOUND`, Step 접근 불가는 기존 `ISS_ACCESS_PERMISSION_REQUIRED` |
 
 ---
 
@@ -271,6 +284,8 @@ Step 존재 및 접근 권한 확인
 
 ⛔ `DONE`으로 생성하면 BE가 `completedAt`에 현재 시각을 기록한다.
 
+⛔ 담당자가 있으면 담당자별로 `ISSUE_ASSIGNED` 알림을 발행한다. 이 알림은 트랜잭션 커밋 후 생성되며, 요청이 실패하거나 롤백되면 생성되지 않는다.
+
 **Response** — 상세 조회와 같은 구조
 
 | 코드 | code | 설명 |
@@ -357,6 +372,8 @@ Step 존재 및 접근 권한 확인
 [IDs]  → 해당 목록으로 동기화
 null   → 400
 ```
+
+⛔ `assigneeIds`가 전달되면 기존 담당자와 최종 담당자 목록을 비교해 새로 추가된 담당자에게만 `ISSUE_ASSIGNED` 알림을 발행한다. 기존 담당자 유지나 담당자 해제만으로는 알림을 만들지 않는다.
 
 **Response** — 상세 조회와 같은 최신 구조
 
