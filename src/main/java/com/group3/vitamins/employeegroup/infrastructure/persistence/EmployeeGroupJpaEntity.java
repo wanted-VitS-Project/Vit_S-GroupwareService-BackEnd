@@ -23,7 +23,8 @@ import org.hibernate.annotations.DynamicUpdate;
 @Entity
 @DynamicUpdate
 @Table(name = "employee_group",
-        uniqueConstraints = @UniqueConstraint(name = "uk_employee_group_name", columnNames = "name"))
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_employee_group_company_name", columnNames = {"company_id", "name"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class EmployeeGroupJpaEntity {
@@ -32,6 +33,9 @@ public class EmployeeGroupJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "group_id")
     private Long groupId;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @Column(name = "name", nullable = false, length = 50)
     private String name;
@@ -42,8 +46,9 @@ public class EmployeeGroupJpaEntity {
     @Column(name = "created_by", nullable = false, length = 20)
     private String createdBy;
 
-    public EmployeeGroupJpaEntity(Long groupId, String name, String description, String createdBy) {
+    public EmployeeGroupJpaEntity(Long groupId, Long companyId, String name, String description, String createdBy) {
         this.groupId = groupId;
+        this.companyId = companyId;
         this.name = name;
         this.description = description;
         this.createdBy = createdBy;

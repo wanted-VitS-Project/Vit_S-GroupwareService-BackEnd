@@ -41,21 +41,23 @@
           JOIN employee ce ON ce.user_id = g.created_by
     </sql>
 
-    <!-- 목록 — 이름 오름차순. keyword 있으면 그룹명 부분검색. -->
+    <!-- 목록 — 회사 범위, 이름 오름차순. keyword 있으면 그룹명 부분검색. -->
     <select id="findGroups" resultMap="groupListRow">
         <include refid="selectGroup"/>
         <where>
+            g.company_id = #{companyId}
             <if test="keyword != null">
-                g.name LIKE CONCAT('%', #{keyword}, '%')
+                AND g.name LIKE CONCAT('%', #{keyword}, '%')
             </if>
         </where>
         ORDER BY g.name ASC
     </select>
 
-    <!-- 단건 — 수정(§3) 응답 재조회. -->
+    <!-- 단건 — 회사 범위, 수정(§3) 응답 재조회. 타사 그룹은 결과 없음 → 서비스가 404. -->
     <select id="findGroup" resultMap="groupListRow">
         <include refid="selectGroup"/>
         WHERE g.group_id = #{groupId}
+          AND g.company_id = #{companyId}
     </select>
 
     <!--
@@ -92,12 +94,16 @@
            AND e.deleted_at IS NULL
     </select>
 
-    <!-- §6 검증 — 요청 사번 중 실재(비삭제) 사원의 (사번·시스템여부). 없는 사번은 결과에 빠져 서비스가 EMP_NOT_FOUND 판정. -->
+    <!--
+      §6 검증 — 요청 사번 중 같은 회사에 실재(비삭제)하는 사원의 (사번·시스템여부).
+      타사 사번은 company_id 조건에서 빠져 서비스가 EMP_NOT_FOUND 로 전체 거부 → 크로스테넌트 구성원 유입 차단.
+    -->
     <select id="findEmployeeRefs" resultType="com.group3.vitamins.employeegroup.application.result.EmployeeRefRow">
         SELECT e.user_id AS userId,
                e.is_system AS isSystem
           FROM employee e
          WHERE e.deleted_at IS NULL
+           AND e.company_id = #{companyId}
            AND e.user_id IN
         <foreach collection="userIds" item="id" open="(" separator="," close=")">
             #{id}

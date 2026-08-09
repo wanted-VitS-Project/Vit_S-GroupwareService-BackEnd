@@ -17,10 +17,10 @@ import java.util.List;
 public interface DepartmentEmployeeQueryMapper {
 
     /**
-     * 전체 부서를 직속 인원 수와 함께 조회한다 (정렬 {@code department_id} 오름차순 = 생성 순).
+     * 회사 범위 전체 부서를 직속 인원 수와 함께 조회한다 (정렬 {@code department_id} 오름차순 = 생성 순).
      * 인원 집계에서 시스템 계정·퇴사자는 제외한다 (`.ai/api/department.md` §1).
      */
-    List<DepartmentEmployeeCountRow> findAllWithDirectEmployeeCount();
+    List<DepartmentEmployeeCountRow> findAllWithDirectEmployeeCount(Long companyId);
 
     /**
      * 부서 1건의 직속 사원 수 — 삭제 차단({@code DEPT_HAS_EMPLOYEES}) 판정용.

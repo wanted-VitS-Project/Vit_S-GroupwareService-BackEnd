@@ -1,5 +1,6 @@
 package com.group3.vitamins.jobposition.application.service;
 
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.jobposition.application.policy.JobPositionAdminPolicy;
 import com.group3.vitamins.jobposition.application.port.JobPositionEmployeeCountPort;
@@ -29,12 +30,14 @@ public class JobPositionQueryService implements JobPositionQueryUseCase {
     private final JobPositionEmployeeCountPort jobPositionEmployeeCountPort;
     private final JobPositionEmployeeQueryPort jobPositionEmployeeQueryPort;
     private final JobPositionAdminPolicy jobPositionAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public List<JobPositionResult> listJobPositions(JobPositionListQuery query) {
         jobPositionAdminPolicy.assertAdmin(query.role());
 
-        List<JobPosition> jobPositions = jobPositionRepository.findAllOrdered();
+        List<JobPosition> jobPositions =
+                jobPositionRepository.findAllOrdered(currentCompanyIdProvider.currentCompanyId());
         if (jobPositions.isEmpty()) {
             return List.of();
         }
@@ -60,7 +63,8 @@ public class JobPositionQueryService implements JobPositionQueryUseCase {
     public JobPositionEmployeesResult getEmployeesByJobPosition(JobPositionEmployeesQuery query) {
         jobPositionAdminPolicy.assertAdmin(query.role());
 
-        JobPosition jobPosition = jobPositionRepository.findById(query.jobPositionId())
+        JobPosition jobPosition = jobPositionRepository.findById(
+                        query.jobPositionId(), currentCompanyIdProvider.currentCompanyId())
                 .orElseThrow(() -> new NotFoundException(JobPositionErrorCode.POS_NOT_FOUND));
 
         List<JobPositionEmployeesResult.Employee> employees =

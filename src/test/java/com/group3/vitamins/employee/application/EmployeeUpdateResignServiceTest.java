@@ -54,12 +54,14 @@ class EmployeeUpdateResignServiceTest {
                 new EmployeeAdminPolicy(), employeeRepository, referenceQueryPort,
                 Mockito.mock(EmployeeRegistrationWriter.class), Mockito.mock(TempPasswordGenerator.class),
                 Mockito.mock(ThrottledPasswordEncoder.class), Mockito.mock(InitialPasswordMailPort.class),
-                accountDeactivationPort);
+                accountDeactivationPort,
+                Mockito.mock(com.group3.vitamins.employee.application.port.CompanyCodeQueryPort.class),
+                Mockito.mock(com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider.class));
     }
 
     private Employee active() {
         return Employee.restore("EMP021", "홍길동", false, 2L, 10L,
-                "hong@vitamins.com", "010-1111-2222", LocalDate.of(2024, 3, 2), null);
+                "hong@vitamins.com", "010-1111-2222", LocalDate.of(2024, 3, 2), null, 1L);
     }
 
     @Nested
@@ -102,7 +104,7 @@ class EmployeeUpdateResignServiceTest {
         @DisplayName("시스템 계정은 ACC_SYSTEM_ACCOUNT_NOT_ALLOWED")
         void systemForbidden() {
             when(employeeRepository.findById("ADMIN001")).thenReturn(Optional.of(
-                    Employee.restore("ADMIN001", "시스템", true, null, null, null, null, null, null)));
+                    Employee.restore("ADMIN001", "시스템", true, null, null, null, null, null, null, 1L)));
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "ADMIN001",
                     true, "x", false, null, false, null, false, null, false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
@@ -212,7 +214,7 @@ class EmployeeUpdateResignServiceTest {
         void alreadyResigned() {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(
                     Employee.restore("EMP021", "홍길동", false, 2L, 10L, "h@v.com", null,
-                            LocalDate.of(2024, 3, 2), LocalDate.of(2026, 1, 1))));
+                            LocalDate.of(2024, 3, 2), LocalDate.of(2026, 1, 1), 1L)));
             assertThatThrownBy(() -> service.resignEmployee(
                     new ResignEmployeeCommand("ADMIN", "EMP021", "2026-08-31")))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_ALREADY_RESIGNED));

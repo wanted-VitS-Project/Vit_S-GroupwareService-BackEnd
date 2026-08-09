@@ -12,10 +12,12 @@ import com.group3.vitamins.jobposition.application.service.JobPositionCommandSer
 import com.group3.vitamins.jobposition.domain.exception.JobPositionErrorCode;
 import com.group3.vitamins.jobposition.domain.model.JobPosition;
 import com.group3.vitamins.jobposition.domain.repository.JobPositionRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -37,20 +39,25 @@ class JobPositionCommandServiceTest {
 
     private JobPositionRepository jobPositionRepository;
     private JobPositionEmployeeCountPort employeeCountPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private JobPositionCommandService commandService;
 
     @BeforeEach
     void setUp() {
         jobPositionRepository = Mockito.mock(JobPositionRepository.class);
         employeeCountPort = Mockito.mock(JobPositionEmployeeCountPort.class);
+        // 생성 스탬핑이 읽는 회사 ID는 앱 포트로 주입 — 세션(SecurityContext) 세팅 불필요.
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         // ADMIN 판정은 순수 컴포넌트라 실제 인스턴스를 그대로 쓴다 (mock 불필요).
         commandService = new JobPositionCommandService(
-                jobPositionRepository, employeeCountPort, new JobPositionAdminPolicy());
+                jobPositionRepository, employeeCountPort, new JobPositionAdminPolicy(),
+                currentCompanyIdProvider);
     }
 
     /** id 가 설정된 직급 도메인 객체를 만든다 (JPA 가 채우는 jobPositionId 를 흉내낸다). */
     private JobPosition position(Long id, String name, int sortOrder) {
-        return JobPosition.restore(id, name, sortOrder);
+        return JobPosition.restore(id, 1L, name, sortOrder);
     }
 
     @Nested
@@ -60,7 +67,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("sortOrder 를 지정하면 그대로 저장되고 사용 인원은 0 이다")
         void createsWithExplicitSortOrder() {
-            when(jobPositionRepository.findByName("대리")).thenReturn(Optional.empty());
+            when(jobPositionRepository.findByName("대리", 1L)).thenReturn(Optional.empty());
             when(jobPositionRepository.save(any())).thenReturn(position(10L, "대리", 2));
 
             JobPositionResult result = commandService.createJobPosition(
@@ -70,22 +77,25 @@ class JobPositionCommandServiceTest {
             assertThat(result.name()).isEqualTo("대리");
             assertThat(result.sortOrder()).isEqualTo(2);
             assertThat(result.employeeCount()).isZero();
-            verify(jobPositionRepository, never()).nextSortOrder();
-            verify(jobPositionRepository, times(1)).save(any(JobPosition.class));
+            verify(jobPositionRepository, never()).nextSortOrder(1L);
+            // 저장된 도메인 객체에 현재 회사 ID(1)가 스탬핑되는지 검증
+            ArgumentCaptor<JobPosition> captor = ArgumentCaptor.forClass(JobPosition.class);
+            verify(jobPositionRepository).save(captor.capture());
+            assertThat(captor.getValue().getCompanyId()).isEqualTo(1L);
         }
 
         @Test
         @DisplayName("sortOrder 를 생략하면 마지막 순서 + 1 을 붙인다")
         void createsWithNextSortOrderWhenOmitted() {
-            when(jobPositionRepository.findByName("사원")).thenReturn(Optional.empty());
-            when(jobPositionRepository.nextSortOrder()).thenReturn(5);
+            when(jobPositionRepository.findByName("사원", 1L)).thenReturn(Optional.empty());
+            when(jobPositionRepository.nextSortOrder(1L)).thenReturn(5);
             when(jobPositionRepository.save(any())).thenReturn(position(11L, "사원", 5));
 
             JobPositionResult result = commandService.createJobPosition(
                     new CreateJobPositionCommand("사원", null, "ADMIN"));
 
             assertThat(result.sortOrder()).isEqualTo(5);
-            verify(jobPositionRepository, times(1)).nextSortOrder();
+            verify(jobPositionRepository, times(1)).nextSortOrder(1L);
         }
 
         @Test
@@ -95,7 +105,7 @@ class JobPositionCommandServiceTest {
                     new CreateJobPositionCommand("대리", 2, "MASTER")))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
             verify(jobPositionRepository, never()).save(any());
-            verify(jobPositionRepository, never()).findByName(anyString());
+            verify(jobPositionRepository, never()).findByName(anyString(), anyLong());
         }
 
         @Test
@@ -119,7 +129,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("이미 존재하는 직급명이면 POS_NAME_DUPLICATED")
         void rejectsDuplicateName() {
-            when(jobPositionRepository.findByName("사원")).thenReturn(Optional.of(position(1L, "사원", 1)));
+            when(jobPositionRepository.findByName("사원", 1L)).thenReturn(Optional.of(position(1L, "사원", 1)));
 
             assertThatThrownBy(() -> commandService.createJobPosition(
                     new CreateJobPositionCommand("사원", null, "ADMIN")))
@@ -130,7 +140,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("선검사 통과 후 저장 시 UNIQUE 위반이 나면 POS_NAME_DUPLICATED 로 변환한다(500 방지)")
         void mapsUniqueViolationToConflict() {
-            when(jobPositionRepository.findByName("대리")).thenReturn(Optional.empty());
+            when(jobPositionRepository.findByName("대리", 1L)).thenReturn(Optional.empty());
             when(jobPositionRepository.save(any()))
                     .thenThrow(new DataIntegrityViolationException("uk_job_position_name"));
 
@@ -147,8 +157,8 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("직급명만 수정하면 이름이 바뀌고 사용 인원이 응답에 담긴다")
         void updatesNameOnly() {
-            when(jobPositionRepository.findById(4L)).thenReturn(Optional.of(position(4L, "대리", 2)));
-            when(jobPositionRepository.findByName("과장")).thenReturn(Optional.empty());
+            when(jobPositionRepository.findById(4L, 1L)).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findByName("과장", 1L)).thenReturn(Optional.empty());
             when(jobPositionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(employeeCountPort.countByJobPositionId(4L)).thenReturn(3L);
 
@@ -163,7 +173,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("정렬 순서만 수정하면 이름은 그대로고 중복 검사는 하지 않는다")
         void updatesSortOrderOnly() {
-            when(jobPositionRepository.findById(4L)).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findById(4L, 1L)).thenReturn(Optional.of(position(4L, "대리", 2)));
             when(jobPositionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(employeeCountPort.countByJobPositionId(4L)).thenReturn(0L);
 
@@ -172,14 +182,14 @@ class JobPositionCommandServiceTest {
 
             assertThat(result.name()).isEqualTo("대리");
             assertThat(result.sortOrder()).isEqualTo(9);
-            verify(jobPositionRepository, never()).findByName(anyString());
+            verify(jobPositionRepository, never()).findByName(anyString(), anyLong());
         }
 
         @Test
         @DisplayName("같은 이름으로 수정(자기 자신)하면 중복이 아니다")
         void allowsRenameToSameName() {
-            when(jobPositionRepository.findById(4L)).thenReturn(Optional.of(position(4L, "대리", 2)));
-            when(jobPositionRepository.findByName("대리")).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findById(4L, 1L)).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findByName("대리", 1L)).thenReturn(Optional.of(position(4L, "대리", 2)));
             when(jobPositionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(employeeCountPort.countByJobPositionId(4L)).thenReturn(0L);
 
@@ -195,13 +205,13 @@ class JobPositionCommandServiceTest {
             assertThatThrownBy(() -> commandService.updateJobPosition(
                     new UpdateJobPositionCommand(4L, false, null, false, null, "ADMIN")))
                     .satisfies(hasCode(JobPositionErrorCode.POS_INVALID_REQUEST));
-            verify(jobPositionRepository, never()).findById(anyLong());
+            verify(jobPositionRepository, never()).findById(anyLong(), anyLong());
         }
 
         @Test
         @DisplayName("직급이 없으면 POS_NOT_FOUND")
         void rejectsMissing() {
-            when(jobPositionRepository.findById(99L)).thenReturn(Optional.empty());
+            when(jobPositionRepository.findById(99L, 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> commandService.updateJobPosition(
                     new UpdateJobPositionCommand(99L, true, "부장", false, null, "ADMIN")))
@@ -211,8 +221,8 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("다른 직급과 이름이 겹치면 POS_NAME_DUPLICATED")
         void rejectsDuplicateName() {
-            when(jobPositionRepository.findById(4L)).thenReturn(Optional.of(position(4L, "대리", 2)));
-            when(jobPositionRepository.findByName("과장")).thenReturn(Optional.of(position(7L, "과장", 3)));
+            when(jobPositionRepository.findById(4L, 1L)).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findByName("과장", 1L)).thenReturn(Optional.of(position(7L, "과장", 3)));
 
             assertThatThrownBy(() -> commandService.updateJobPosition(
                     new UpdateJobPositionCommand(4L, true, "과장", false, null, "ADMIN")))
@@ -223,8 +233,8 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("수정 저장 시 UNIQUE 위반이 나면 POS_NAME_DUPLICATED 로 변환한다(500 방지)")
         void mapsUniqueViolationToConflict() {
-            when(jobPositionRepository.findById(4L)).thenReturn(Optional.of(position(4L, "대리", 2)));
-            when(jobPositionRepository.findByName("과장")).thenReturn(Optional.empty());
+            when(jobPositionRepository.findById(4L, 1L)).thenReturn(Optional.of(position(4L, "대리", 2)));
+            when(jobPositionRepository.findByName("과장", 1L)).thenReturn(Optional.empty());
             when(jobPositionRepository.save(any()))
                     .thenThrow(new DataIntegrityViolationException("uk_job_position_name"));
 
@@ -239,7 +249,7 @@ class JobPositionCommandServiceTest {
             assertThatThrownBy(() -> commandService.updateJobPosition(
                     new UpdateJobPositionCommand(4L, true, "과장", false, null, "MEMBER")))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-            verify(jobPositionRepository, never()).findById(anyLong());
+            verify(jobPositionRepository, never()).findById(anyLong(), anyLong());
         }
     }
 
@@ -251,7 +261,7 @@ class JobPositionCommandServiceTest {
         @DisplayName("참조하는 사원이 없으면 삭제된다")
         void deletesWhenUnused() {
             JobPosition target = position(5L, "인턴", 6);
-            when(jobPositionRepository.findById(5L)).thenReturn(Optional.of(target));
+            when(jobPositionRepository.findById(5L, 1L)).thenReturn(Optional.of(target));
             when(employeeCountPort.countAllReferencing(5L)).thenReturn(0L);
 
             commandService.deleteJobPosition(new DeleteJobPositionCommand(5L, "ADMIN"));
@@ -262,7 +272,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("퇴사자·삭제 사원만 참조해도(표시 인원 0) 전체 참조 수로 삭제를 막는다 — FK 위반 방지")
         void blocksByAllReferencesNotDisplayCount() {
-            when(jobPositionRepository.findById(5L)).thenReturn(Optional.of(position(5L, "인턴", 6)));
+            when(jobPositionRepository.findById(5L, 1L)).thenReturn(Optional.of(position(5L, "인턴", 6)));
             // 표시용 countByJobPositionId 가 아니라 전체 참조 수(countAllReferencing)로 판정해야 한다.
             when(employeeCountPort.countAllReferencing(5L)).thenReturn(2L);
 
@@ -277,7 +287,7 @@ class JobPositionCommandServiceTest {
         @DisplayName("게이트 통과 후 삭제 중 FK 위반(경합)이 나면 POS_IN_USE 로 변환한다(500 방지)")
         void mapsForeignKeyViolationToConflict() {
             JobPosition target = position(5L, "인턴", 6);
-            when(jobPositionRepository.findById(5L)).thenReturn(Optional.of(target));
+            when(jobPositionRepository.findById(5L, 1L)).thenReturn(Optional.of(target));
             when(employeeCountPort.countAllReferencing(5L)).thenReturn(0L);
             Mockito.doThrow(new DataIntegrityViolationException("fk_employee_job_position"))
                     .when(jobPositionRepository).delete(target);
@@ -289,7 +299,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("직급이 없으면 POS_NOT_FOUND")
         void rejectsMissing() {
-            when(jobPositionRepository.findById(99L)).thenReturn(Optional.empty());
+            when(jobPositionRepository.findById(99L, 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> commandService.deleteJobPosition(
                     new DeleteJobPositionCommand(99L, "ADMIN")))
@@ -299,7 +309,7 @@ class JobPositionCommandServiceTest {
         @Test
         @DisplayName("사용 인원이 있으면 POS_IN_USE — 메시지에 인원 수를 담는다")
         void rejectsWhenInUse() {
-            when(jobPositionRepository.findById(1L)).thenReturn(Optional.of(position(1L, "사원", 1)));
+            when(jobPositionRepository.findById(1L, 1L)).thenReturn(Optional.of(position(1L, "사원", 1)));
             when(employeeCountPort.countAllReferencing(1L)).thenReturn(14L);
 
             assertThatThrownBy(() -> commandService.deleteJobPosition(
@@ -315,7 +325,7 @@ class JobPositionCommandServiceTest {
             assertThatThrownBy(() -> commandService.deleteJobPosition(
                     new DeleteJobPositionCommand(5L, "MASTER")))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-            verify(jobPositionRepository, never()).findById(anyLong());
+            verify(jobPositionRepository, never()).findById(anyLong(), anyLong());
         }
     }
 

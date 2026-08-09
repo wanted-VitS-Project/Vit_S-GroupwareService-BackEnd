@@ -43,7 +43,7 @@ class EmployeeRepositoryAdapterTest {
 
     private Employee sample(String userId) {
         return Employee.register(userId, "홍길동", 2L, 10L, "hong@vitamins.com", "010-1111-2222",
-                LocalDate.of(2026, 8, 5));
+                LocalDate.of(2026, 8, 5), 1L);
     }
 
     @Test
@@ -98,7 +98,7 @@ class EmployeeRepositoryAdapterTest {
 
         // 퇴사 이전 스냅샷(resignedAt=null)으로 정보 수정 — 동시 수정 시나리오. resigned_at 을 되돌리면 안 된다.
         Employee stale = Employee.restore("EMP021", "홍길동", false, 2L, 10L,
-                "hong@vitamins.com", "010-1111-2222", LocalDate.of(2024, 3, 2), null);
+                "hong@vitamins.com", "010-1111-2222", LocalDate.of(2024, 3, 2), null, 1L);
         adapter.updateInfo(stale.withInfo("김철수", "010-9999-8888", "hong@vitamins.com", 2L, 10L,
                 LocalDate.of(2024, 3, 2)));
 
