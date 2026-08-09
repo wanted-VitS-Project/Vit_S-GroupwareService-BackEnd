@@ -15,7 +15,7 @@ public record StepCreateResponse(
         @Schema(description = "소속 프로젝트 ID", example = "12")
         Long projectId,
 
-        @Schema(description = "소속 스테이지 ID. 미소속이면 null", example = "7")
+        @Schema(description = "소속 스테이지 ID. 미소속이면 null", example = "7", nullable = true)
         Long stageId,
 
         @Schema(description = "스텝명", example = "제안서 작성")

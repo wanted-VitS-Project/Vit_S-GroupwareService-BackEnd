@@ -35,7 +35,7 @@ public record ProjectCreateResponse(
         @Schema(description = "연결된 사업 카테고리")
         List<BusinessCategorySummaryResponse> businessCategories,
 
-        @Schema(description = "연결된 공고 ID. 공고 없이 생성했으면 null", example = "null")
+        @Schema(description = "연결된 공고 ID. 공고 없이 생성했으면 null", example = "45", nullable = true)
         Long bidNoticeId,
 
         @Schema(description = "생성자")

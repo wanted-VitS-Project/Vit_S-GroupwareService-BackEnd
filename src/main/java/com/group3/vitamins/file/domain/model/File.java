@@ -47,6 +47,11 @@ public class File {
         this.deletedAt = now;
     }
 
+    /** 휴지통에서 복구(§6). 삭제 시각을 지운다. 휴지통 여부 판정은 서비스가 한다. */
+    public void restoreFromTrash() {
+        this.deletedAt = null;
+    }
+
     public boolean isDeleted() {
         return deletedAt != null;
     }

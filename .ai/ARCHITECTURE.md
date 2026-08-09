@@ -1,9 +1,8 @@
 # 🏗️ 아키텍처 컨벤션
 
+**최종 업데이트**: 2026-08-09 (§4 **검증 책임 분리 신설** — 형식은 Request 애노테이션 · 관계/불변식은 서비스. `GlobalExceptionHandler` 가 `"CODE|문구"` 를 응답 `code` 로 승격하도록 고쳐 **애노테이션 금지 규칙을 폐기**했다)
+**최종 업데이트**: 2026-08-09 (§4 PATCH 요청 파싱 2건 — 파싱은 `XxxRequest` 소유, `JsonNode` 는 명세가 "생략 vs null" 을 구분한 API 한정)
 **최종 업데이트**: 2026-08-05 (§2-3 신설 — 이벤트 기반 **N:1 cross-cutting 도메인** 규칙. 공용 이벤트 계약 + `presentation/event` 진입점, 근거: `activitylog`)
-**최종 업데이트**: 2026-08-05 (§5 갱신 — `department`·`account`·`auth` 레거시 3도메인 헥사고날 이관 완료 반영)
-**최종 업데이트**: 2026-08-05 (§2-2 신설 — **쓰기 방향 포트**와 **타입별 확장(SPI)** 규칙. §2-1 은 조회만 다뤘다)
-**최종 업데이트**: 2026-08-04 (§2-1 신설 — 애그리게이트가 여러 개인 도메인의 서브패키지 규칙, `project` 계층 38개 엔드포인트 대응)
 **담당**: 김동현 (DevOps)
 **근거**: `businesscategory` 도메인 구현 (#96~#99) — 4계층 + `command/query/result/usecase/service/policy/port` 전체를 갖춘 첫 완성 사례
 
@@ -196,6 +195,7 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 | `XxxRepositoryAdapter` (구현체) | `XxxRepository` 구현 | `infrastructure/persistence` |
 | `XxxErrorCode` (enum) | `ErrorCode` 구현체 | `domain/exception` |
 | `XxxRequest` / `XxxResponse` (record) | Web DTO | `presentation/api/request`, `presentation/api/response` |
+| `XxxCleanupConfig` (`@Configuration`) | `global`의 하드 딜리트 SPI(`HardDeleteTarget`)에 자기 도메인 몫을 등록하는 팩토리 | `infrastructure/cleanup` — 상세 규칙은 `.ai/docs/global/CLEANUP.md` |
 
 ### 권한 처리
 
@@ -224,6 +224,7 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 | 날짜 | 변경 내용 | 담당 |
 |---|---|---|
+| 2026-08-08 | §4 갱신 — `XxxCleanupConfig` 네이밍 추가. `global`에 하드 딜리트 스케줄러 SPI(`HardDeleteTarget`/`HardDeleteOperation`/`HardDeleteExecutor`/`HardDeleteScheduler`) 신설 — 스케줄러는 `global`에 하나, 도메인은 포트만 구현해 등록. 상세는 `.ai/docs/global/CLEANUP.md` (⚠️ develop 병합 중 한 번 유실돼 재반영, 2026-08-09) | 김동현 |
 | 2026-08-04 | 신설 — `businesscategory` 구현을 기준으로 헥사고날 계층·네이밍 컨벤션 확정, `auth`/`account` 레거시 명시 | 김동현 |
 | 2026-08-04 | §2-1 신설 — 애그리게이트별 서브패키지 규칙(`project` 계층). 애그리게이트 간 참조도 `port`+`adapter`, URL↔패키지 불일치 허용 | 동훈 |
 | 2026-08-05 | §2-2 신설 — 쓰기 방향 포트(경계 넘는 쓰기는 한 트랜잭션, 이벤트 아님) · 타입별 확장 SPI(`List<Port>` + `supportedType()`, 공용 파일 동시 편집 금지, `sealed` 금지). 근거: `project/block` 타입 10종을 5명이 나눠 갖는다 | 동훈 |

@@ -24,4 +24,15 @@ public class ProjectMemberRepositoryAdapter implements ProjectMemberRepository {
         return springDataRepository.findByProjectIdAndUserId(projectId, userId)
                 .map(ProjectMemberJpaEntity::getPermission);
     }
+
+    @Override
+    public Optional<ProjectMember> findById(Long projectMemberId) {
+        return springDataRepository.findById(projectMemberId)
+                .map(ProjectMemberMapper::toDomain);
+    }
+
+    @Override
+    public void deleteById(Long projectMemberId) {
+        springDataRepository.deleteById(projectMemberId);
+    }
 }

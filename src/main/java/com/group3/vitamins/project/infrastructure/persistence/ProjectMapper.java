@@ -21,8 +21,10 @@ public class ProjectMapper {
                 entity.getEndedOn(),
                 entity.getCloseReasonCode(),
                 entity.getCloseReasonNote(),
+                entity.getClosedAt(),
                 entity.getCreatedBy(),
                 entity.getCreatedAt(),
+                entity.getUpdatedAt(),
                 entity.getDeletedAt()
         );
     }
@@ -41,8 +43,10 @@ public class ProjectMapper {
                 domain.getEndedOn(),
                 domain.getCloseReasonCode(),
                 domain.getCloseReasonNote(),
+                domain.getClosedAt(),
                 domain.getCreatedBy(),
                 domain.getCreatedAt(),
+                domain.getUpdatedAt(),
                 domain.getDeletedAt()
         );
     }

@@ -2,6 +2,7 @@ package com.group3.vitamins.file.application;
 
 import com.group3.vitamins.file.application.command.PermanentDeleteFileCommand;
 import com.group3.vitamins.file.application.command.RenameFileCommand;
+import com.group3.vitamins.file.application.command.RestoreFileCommand;
 import com.group3.vitamins.file.application.command.TrashFileCommand;
 import com.group3.vitamins.file.application.port.ApprovalLockQueryPort;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
@@ -10,6 +11,7 @@ import com.group3.vitamins.file.application.port.FileQueryPort;
 import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.file.application.result.FilePermanentDeleteResult;
 import com.group3.vitamins.file.application.result.FileRenameResult;
+import com.group3.vitamins.file.application.result.FileRestoreResult;
 import com.group3.vitamins.file.application.result.FileTrashResult;
 import com.group3.vitamins.file.application.service.FileCommandService;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
@@ -349,6 +351,100 @@ class FileCommandServiceTest {
             assertThatThrownBy(() -> service.permanentDelete(cmd("영구 삭제")))
                     .satisfies(hasCode(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED));
             assertNoDeletion();
+        }
+    }
+
+    @Nested
+    @DisplayName("§6 휴지통 복구")
+    class Restore {
+
+        private RestoreFileCommand cmd() {
+            return new RestoreFileCommand(FILE_ID, USER, ROLE);
+        }
+
+        /** 삭제 무시 스텝 조회 + EDITOR 권한 스텁(복구 경로 전용). */
+        private void stubRestorable() {
+            when(fileQueryPort.findStepIdByFileIdIncludingDeletedBlock(FILE_ID)).thenReturn(Optional.of(STEP_ID));
+            when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
+                    .thenReturn(new StepAccessUseCase.StepAccessView(STEP_ID, PROJECT_ID, MemberPermission.EDITOR));
+        }
+
+        @Test
+        @DisplayName("살아있는 블록으로 복구 — blockId 채우고 blockDeleted=false")
+        void restoresToLiveBlock() {
+            File file = trashedFile();
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
+            stubRestorable();
+            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+
+            FileRestoreResult result = service.restore(cmd());
+
+            assertThat(file.isDeleted()).isFalse();
+            assertThat(result.blockId()).isEqualTo(BLOCK_ID);
+            assertThat(result.blockDeleted()).isFalse();
+        }
+
+        @Test
+        @DisplayName("블록이 삭제됐어도 복구 — blockId=null·blockDeleted=true")
+        void restoresWhenBlockDeleted() {
+            File file = trashedFile();
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
+            stubRestorable();
+            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
+            // 원래 블록이 soft delete 돼 attachable 해석은 비어있다.
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.empty());
+
+            FileRestoreResult result = service.restore(cmd());
+
+            assertThat(file.isDeleted()).isFalse();
+            assertThat(result.blockId()).isNull();
+            assertThat(result.blockDeleted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("휴지통에 없으면 FILE_NOT_DELETED — 저장하지 않는다")
+        void notInTrash() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            stubRestorable();
+
+            assertThatThrownBy(() -> service.restore(cmd()))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_DELETED));
+            verify(fileRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("없는 문서면 FILE_NOT_FOUND")
+        void notFound() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.restore(cmd()))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("편집 권한이 없으면 FILE_EDIT_PERMISSION_REQUIRED — 저장하지 않는다")
+        void notEditable() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(trashedFile()));
+            when(fileQueryPort.findStepIdByFileIdIncludingDeletedBlock(FILE_ID)).thenReturn(Optional.of(STEP_ID));
+            when(stepAccessUseCase.requireEditable(STEP_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+
+            assertThatThrownBy(() -> service.restore(cmd()))
+                    .satisfies(hasCode(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED));
+            verify(fileRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("블록 링크가 아예 없으면 FILE_BLOCK_NOT_FOUND")
+        void blockLinkMissing() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(trashedFile()));
+            when(fileQueryPort.findStepIdByFileIdIncludingDeletedBlock(FILE_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.restore(cmd()))
+                    .satisfies(hasCode(FileErrorCode.FILE_BLOCK_NOT_FOUND));
         }
     }
 }

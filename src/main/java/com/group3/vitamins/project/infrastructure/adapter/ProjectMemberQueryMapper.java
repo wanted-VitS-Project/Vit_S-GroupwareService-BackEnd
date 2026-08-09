@@ -6,9 +6,9 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 /**
- * 참여자 목록 조회 — {@code project_member} 에 {@code employee}·{@code department} 를 조인한다.
+ * 참여자를 사원·부서와 함께 조회한다.
  *
- * <p>⛔ SQL 은 애노테이션이 아니라 XML 에 둔다 (팀 MyBatis 컨벤션) —
+ * <p>⛔ SQL 은 애노테이션이 아니라 XML 에 둔다 —
  * {@code src/main/resources/mapper/project/ProjectMemberQueryMapper.xml}.
  */
 @Mapper
