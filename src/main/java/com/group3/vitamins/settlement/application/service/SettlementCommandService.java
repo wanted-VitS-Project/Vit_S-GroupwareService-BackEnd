@@ -115,7 +115,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
             throw new ValidationException(SettlementErrorCode.INVALID_CONTENT);
         }
         if (command.roundNo() <= 0) {
-            throw new ValidationException(SettlementErrorCode.INVALID_CONTENT);
+            throw new ValidationException(SettlementErrorCode.ROUND_NO_INVALID);
         }
     }
 

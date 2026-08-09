@@ -59,7 +59,9 @@ public class SettlementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "정산 블록의 타입 지정은 필수입니다. (SETL-005)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "편집 권한이 없습니다. (SETL-001)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (SETL-002)")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (SETL-002)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다. (SETL-006)")
     })
     @GetMapping("/api/v1/blocks/settlements/{settleId}/items")
     public ResponseEntity<ApiResponse<SettlementRecommendationResponse>> getRecommendation(
@@ -86,7 +88,7 @@ public class SettlementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "정산 항목 작성/수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "정산 블록의 타입 지정은 필수입니다. (SETL-005) / 내용을 입력해 주세요. (SETL-003) "
-                            + "/ 출금 타입은 계좌정보가 필수입니다. (SETL-004)"),
+                            + "/ 출금 타입은 계좌정보가 필수입니다. (SETL-004) / 회차 번호는 1 이상이어야 합니다. (SETL-011)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "편집 권한이 없습니다. (SETL-001)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (SETL-002)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",

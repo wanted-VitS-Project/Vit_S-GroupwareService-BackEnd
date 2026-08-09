@@ -66,6 +66,13 @@
         (ORDER BY ... DESC로 연결된 행을 앞으로 보낸다) — 아직 PENDING인 다른 회차가 우연히 다른 값을
         갖고 있어도(연결 전이라 아직 안 걸러진 상태) 그건 후순위로 밀린다. 연결된 행이 하나도 없으면
         PENDING 중 아무 값이나(먼저 만들어진 순) 기준으로 쓴다.
+
+        ⚠️ FOR UPDATE 필수 (2026-08-09, CodeRabbit) — MySQL InnoDB REPEATABLE READ에서 일반 SELECT는
+        "이 트랜잭션의 첫 읽기 시점 스냅샷"을 계속 쓴다. lockSiblingSettlementBlocksForUpdate가 FOR UPDATE로
+        기다렸다가 상대 트랜잭션의 커밋을 기다려도, 이 쿼리가 평범한 SELECT면 그 커밋 이후 값이 아니라
+        스냅샷(옛 값)을 볼 수 있다 — 두 트랜잭션이 여전히 서로 다른 값을 "기준값 없음"으로 오판할 수 있다.
+        FOR UPDATE로 "현재 읽기"를 강제해야 lockSiblingSettlementBlocksForUpdate로 확보한 순서가 실제로
+        최신 커밋값을 보장한다.
     -->
     <select id="findEstablishedTotalAmount" resultType="java.lang.Long">
         SELECT sb2.total_amount
@@ -85,6 +92,7 @@
         AND sb2.deleted_at IS NULL
         ORDER BY (sb2.status != 'PENDING') DESC, sb2.settle_id ASC
         LIMIT 1
+        FOR UPDATE
     </select>
 
     <!--

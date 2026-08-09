@@ -139,6 +139,21 @@ Content-Type: application/json
     "traderName": "(주)대한항공"
 }
 
+### 정산 항목 작성/수정 — roundNo가 0 이하 → 400 SETL-011("회차 번호는 1 이상이어야 합니다.") 확인용
+### (SETL-003과 구분: 필드 자체는 채웠으므로 "내용을 입력해 주세요"가 아니라 이 코드가 나와야 한다)
+### 금액은 음수여도 통과해야 한다 — totalAmount를 음수로 바꿔서 별도로 호출해보고 200이 나오는지도 확인할 것
+PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
+Content-Type: application/json
+
+{
+    "roundNo": 0,
+    "totalAmount": 4500000,
+    "plannedAmount": 1500000,
+    "plannedTaxAmount": 200000,
+    "plannedDate": "2026-09-01",
+    "traderName": "(주)대한항공"
+}
+
 ### 정산 항목 작성/수정 — 존재하지 않는 settleId → 404 SETL-002 확인용
 PATCH localhost:8080/api/v1/blocks/settlements/999999/items?type=INCOME
 Content-Type: application/json
@@ -186,7 +201,7 @@ PATCH localhost:8080/api/v1/blocks/settlements/3/items?type=INCOME
 Content-Type: application/json
 
 {
-    "roundNo": 2,
+    "roundNo": -2,
     "totalAmount": 5000000,
     "plannedAmount": 3500000,
     "plannedTaxAmount": 350000,

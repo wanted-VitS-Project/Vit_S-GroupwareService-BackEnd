@@ -490,6 +490,7 @@
 | 400 | Bad Request | `SETL-005` | "정산 블록의 타입 지정은 필수입니다." (`type` 쿼리파라미터 누락/오값) |
 | 400 | Bad Request | `SETL-003` | "내용을 입력해 주세요." (공통 필수 필드 누락) |
 | 400 | Bad Request | `SETL-004` | "출금 타입은 계좌정보가 필수입니다." (`OUTCOME`인데 계좌정보 누락) |
+| 400 | Bad Request | `SETL-011` | "회차 번호는 1 이상이어야 합니다." (`roundNo <= 0`) |
 | 403 | Forbidden | `SETL-001` | "편집 권한이 없습니다." |
 | 404 | Not Found | `SETL-002` | "존재하지 않는 블록입니다." |
 | 409 | Conflict | `SETL-006` | "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다." (OUTCOME → INCOME 다운그레이드 시도) |
@@ -573,13 +574,23 @@
      `totalAmount`/`plannedAmount`/`plannedTaxAmount`엔 음수 금지를 안 걸었다 — 은행 CSV/API 수집 양식에 따라
      `OUTCOME` 거래가 음수로 표기되는 경우가 있어서, 여기서 부호를 강제하면 실제 데이터를 못 받는다(작업자 확인).
      여전히 **Bean Validation은 안 쓴다** — `@Valid`를 붙이면 실패 시 `code`가 `COMMON_INVALID_REQUEST`로 뭉개져
-     `SETL-003` 계약이 깨진다(2026-08-04 팀 결정과 동일 이유). 서비스 내부 수동 검증으로 처리했다.
+     계약이 깨진다(2026-08-04 팀 결정과 동일 이유). 서비스 내부 수동 검증으로 처리했다.
+     ⚠️ **처음엔 `SETL-003`("내용을 입력해 주세요")을 재사용했으나 신규 코드 `SETL-011`("회차 번호는 1 이상이어야
+     합니다.")로 분리했다** — 값을 아예 안 넣은 것(필드 누락)과 값은 넣었는데 범위가 틀린 것은 사용자에게 다른
+     메시지로 보여야 한다. `SETL-003`을 그대로 쓰면 "분명히 입력했는데 왜 내용을 입력하라는 거냐"는 오해를 준다
+     (사용자 피드백으로 발견). 이 도메인은 시나리오마다 코드를 따로 두는 기존 패턴(`SETL-004`/`SETL-005`)과도
+     맞다.
   2. **SETL-008 검증 직전에 같은 프로젝트의 정산 블록 전체를 `FOR UPDATE`로 잠금** —
      `SettlementDetailMapper.lockSiblingSettlementBlocksForUpdate` 신설. 서로 다른(둘 다 빈) 정산 블록을 동시에
      PATCH하면 둘 다 `findEstablishedTotalAmount`에서 "기준값 없음"으로 읽고 각자 다른 `totalAmount`를 저장할 수
      있었던 레이스(체크 후 쓰기 사이의 틈)를 막는다. 이 블록의 행 자체는 블록 생성 시점에 이미 만들어져 있어(내용은
      비어 있어도 행은 존재) 최초 회차 케이스도 이 잠금으로 커버된다. 스키마 변경(별도 기준값 테이블+유니크 키) 없이
      기존 행을 잠그는 가벼운 방식으로 처리했다.
+     ⚠️ **1차 반영이 불완전했다 (2026-08-09, 같은 날 CodeRabbit 2차 리뷰로 발견) — `findEstablishedTotalAmount`에도
+     `FOR UPDATE`를 추가로 걸었다.** MySQL InnoDB REPEATABLE READ에서는 일반 SELECT가 "이 트랜잭션의 첫 읽기
+     시점 스냅샷"을 계속 쓴다. `lockSiblingSettlementBlocksForUpdate`가 잠그고 상대 트랜잭션의 커밋을 기다려도,
+     그 뒤에 실행되는 `findEstablishedTotalAmount`가 평범한 SELECT면 그 커밋 이후 값이 아니라 스냅샷(옛 값)을 볼
+     수 있어 레이스가 그대로 남아 있었다. 두 쿼리 다 `FOR UPDATE`(현재 읽기)여야 최신 커밋값을 보장한다.
   3. **`AccountNumberCipher` 생성자에서 키 길이 검증** — `SETTLEMENT_ACCOUNT_ENC_KEY`를 Base64 디코드한 값이 정확히
      32바이트(AES-256)가 아니면 기동 시점에 `IllegalStateException`을 던진다. 이전엔 16/24바이트를 넣어도 조용히
      AES-128/192로 동작했다.
@@ -597,3 +608,11 @@
      반영 안 함.
   7. **목록 조회 2개(정산현황 프로젝트/블록 조회)에 페이지네이션 명세가 없다는 지적** — 원 명세 자체에 페이징이 없어서
      지금 넣으면 프론트 계약을 새로 만드는 일이 된다. 필요해지면 명세부터 정하고 오는 게 맞다고 보고 반영 안 함.
+  8. **`request.http`가 응답으로 받은 ID 대신 `1`/`2`/`3` 등을 그대로 써서 실제 auto-increment 값과 다르면 다른
+     프로젝트/블록을 건드릴 수 있다는 지적 — 반영 안 함.** 로컬 테스트용 시나리오 파일이고 각 요청 위에 "URL의 N을
+     실제 응답 ID로 교체할 것"이라는 주석이 이미 있어 수동 테스트 시 그렇게 쓰는 걸 전제로 한다. HTTP 클라이언트
+     변수로 자동화하는 건 이 파일의 성격(사람이 순서대로 실행하며 읽는 시나리오 로그)과 안 맞다고 판단.
+  9. **`Cache-Control: no-store` 통합 테스트, `getRecommendation` 캐시 헤더 검증 테스트 추가 제안 — 반영 안 함.**
+     이 프로젝트는 테스트 0개 기조라(AGENTS.md 알려진 이슈) 이 PR에서만 기준을 올리지 않기로 함. 동작 자체는
+     `SettlementController.getRecommendation`에서 `ResponseEntity.ok().cacheControl(CacheControl.noStore())`로
+     이미 처리돼 있다.
