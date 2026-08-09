@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  엑셀 일괄 등록의 부서명·직급명 → ID 해석 (employee.md §7·§8).
+  namespace = Mapper 인터페이스 FQN · id = 메서드명 (팀 MyBatis 컨벤션).
+  ⚠️ 어댑터가 빈 컬렉션이면 이 쿼리를 호출하지 않는다 — IN () 은 문법 오류다.
+-->
+<mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.EmployeeBulkReferenceQueryMapper">
+
+    <!-- 부서명은 형제 유니크(전역 유일 아님, #212) → 이름이 정확히 1개 부서에만 매칭될 때만 돌려준다. -->
+    <!-- COUNT(*)=1 인 이름만 통과하므로 MIN(department_id) 는 그 유일한 행의 ID 다. 모호한 이름은 제외돼 호출자가 NOT_FOUND 처리. -->
+    <select id="findUniqueDepartmentIdsByName"
+            resultType="com.group3.vitamins.employee.application.result.NameIdRow">
+        SELECT name AS name, MIN(department_id) AS id
+          FROM department
+         WHERE name IN
+        <foreach collection="names" item="n" open="(" separator="," close=")">
+            #{n}
+        </foreach>
+         GROUP BY name
+        HAVING COUNT(*) = 1
+    </select>
+
+    <!-- 직급명은 전역 유니크라 그대로 조회한다. -->
+    <select id="findJobPositionIdsByName"
+            resultType="com.group3.vitamins.employee.application.result.NameIdRow">
+        SELECT name AS name, job_position_id AS id
+          FROM job_position
+         WHERE name IN
+        <foreach collection="names" item="n" open="(" separator="," close=")">
+            #{n}
+        </foreach>
+    </select>
+
+    <!-- 요청 사번 중 이미 존재하는 사번(DB 기존 판정). PK 조회라 soft delete 무관(deleted_at 안 봄 = existsById 와 동일). -->
+    <select id="findExistingUserIds" resultType="string">
+        SELECT user_id
+          FROM employee
+         WHERE user_id IN
+        <foreach collection="userIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>
