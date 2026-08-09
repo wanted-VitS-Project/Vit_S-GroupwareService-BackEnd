@@ -159,3 +159,9 @@ account:
 vitamate:
   worker:
     token: ${VITAMATE_WORKER_TOKEN:}
+
+  cleanup:
+    outbox:
+      batch-size: ${VITAMATE_CLEANUP_OUTBOX_BATCH_SIZE:50}
+      initial-delay-ms: ${VITAMATE_CLEANUP_OUTBOX_INITIAL_DELAY_MS:5000}
+      fixed-delay-ms: ${VITAMATE_CLEANUP_OUTBOX_FIXED_DELAY_MS:1000}
