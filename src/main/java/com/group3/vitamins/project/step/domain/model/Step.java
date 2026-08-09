@@ -90,8 +90,15 @@ public class Step {
     /**
      * 상태를 바꾼다 (STP-004). DONE 은 이 경로로 오지 않는다 —
      * 완료는 미완료 이슈 처리 선택이 필요해 {@link #complete} 가 전담한다.
+     *
+     * <p>DONE 에서 벗어나면 완료 정보도 함께 지운다. 상태만 바꾸고 두면
+     * 진행 중인데 완료자와 완료 시각이 남아 조회 화면이 어긋난다.
      */
     public Step changeStatus(StepStatus status, LocalDateTime now) {
+        if (this.status == StepStatus.DONE && status != StepStatus.DONE) {
+            this.completedBy = null;
+            this.completedAt = null;
+        }
         this.status = status;
         this.updatedAt = now;
         return this;

@@ -190,6 +190,20 @@ class StepCommandServiceTest {
     }
 
     @Test
+    @DisplayName("요청에 없는 기존 스텝과 순서가 겹치면 400 이다 — 부분 전송을 막는다")
+    void 순서_기존행_충돌() {
+        given(stepRepository.findAllByIdsInProject(anyCollection(), eq(PROJECT_ID)))
+                .willReturn(List.of(stepAt(11L, 7L, 1)));
+        given(stepRepository.search(PROJECT_ID, null, null))
+                .willReturn(List.of(stepAt(11L, 7L, 1), stepAt(10L, 7L, 2)));
+
+        assertThatThrownBy(() -> stepCommandService.reorderSteps(reorder(item(11L, 7L, 2))))
+                .isInstanceOf(ValidationException.class);
+
+        Mockito.verify(stepRepository, Mockito.never()).save(any(Step.class));
+    }
+
+    @Test
     @DisplayName("순서 값이 중복되면 400 이다")
     void 순서_중복() {
         assertThatThrownBy(() -> stepCommandService.reorderSteps(reorder(

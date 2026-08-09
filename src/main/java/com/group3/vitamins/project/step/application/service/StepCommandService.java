@@ -44,6 +44,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -130,6 +131,7 @@ public class StepCommandService implements StepCommandUseCase {
 
         validateNoDuplicates(command.items());
         Map<Long, Step> steps = loadSteps(command.projectId(), command.items());
+        validateNoConflictWithUnlisted(command.projectId(), command.items());
         checkStagesInProject(command.projectId(), command.items());
 
         LocalDateTime now = LocalDateTime.now();
@@ -202,12 +204,15 @@ public class StepCommandService implements StepCommandUseCase {
      * {@code moveBlockIds} 로 골라 다른 스텝으로 옮긴다 — 그게 잠금을 대신하는 탈출구다.
      * 이슈는 선택지가 없다 (STP-008 폐기).
      *
-     * <p>⚠️ 권한은 <b>프로젝트</b> EDITOR 인데 하위 블록·이슈 삭제는 <b>스텝</b> EDITOR 를 요구한다.
-     * 요청자가 이 스텝에 NONE·VIEWER 오버라이드를 갖고 있으면 하위 처리에서 403 이 나고
-     * 트랜잭션이 통째로 롤백된다 — 반쪽 삭제는 생기지 않는다.
+     * <p>권한은 <b>프로젝트</b> EDITOR 다 (명세 STP-013). 하위 블록·이슈 정리는 권한을 다시 묻지 않는
+     * cascade 경로로 부른다 — 스텝 EDITOR 를 재요구하면 이 스텝에 NONE·VIEWER 오버라이드를 가진
+     * 프로젝트 EDITOR 가 명세상 허용된 삭제를 403 으로 거부당한다.
      *
-     * <p>⚠️ 재무 연결 해제(BLK-013)는 아직 없다. 입금·계산서가 연결된 블록도 그냥 삭제되며
-     * {@code payment.block_id}·{@code tax_invoice_confirm} 행이 삭제된 블록을 계속 가리킨다.
+     * <p>⚠️ 재무 연결 해제(BLK-013)는 아직 없다. 입출금·계산서가 연결된 정산 블록도 그냥 삭제되며
+     * {@code cash_flow.settle_block_id}·{@code tax_invoice.settle_block_id} 가 삭제된 블록을 계속 가리킨다.
+     * 옛 {@code payment}·{@code tax_invoice_confirm} 은 정산 재설계에서 테이블째 사라졌다
+     * ({@code V20260809130000}). 두 컬럼은 {@code settlement_block} 을 <b>실제 FK 로</b> 참조하므로
+     * 보존기간 만료 하드 삭제가 붙으면 연결을 끊기 전까지 정리 자체가 FK 위반으로 실패한다.
      */
     @Override
     public StepDeleteResult deleteStep(DeleteStepCommand command) {
@@ -224,15 +229,12 @@ public class StepCommandService implements StepCommandUseCase {
                 .toList();
 
         if (!moveBlockIds.isEmpty()) {
-            stepBlockCascadePort.moveBlocks(moveBlockIds, command.moveToStepId(),
-                    command.requesterUserId(), command.role());
+            stepBlockCascadePort.moveBlocks(moveBlockIds, command.moveToStepId());
         }
-        stepBlockCascadePort.deleteBlocks(deleteBlockIds,
-                command.requesterUserId(), command.role());
+        stepBlockCascadePort.deleteBlocks(deleteBlockIds, command.requesterUserId());
 
         List<Long> issueIds = issueStatLookupPort.findAllIssueIds(step.getStepId());
-        issueIds.forEach(issueId -> issueDeleteCommandPort.delete(
-                issueId, command.requesterUserId(), command.role()));
+        issueDeleteCommandPort.delete(issueIds);
 
         stepRepository.save(step.delete(LocalDateTime.now()));
 
@@ -254,7 +256,12 @@ public class StepCommandService implements StepCommandUseCase {
         if (command.moveToStepId() == null) {
             throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_REQUIRED);
         }
-        if (command.moveToStepId().equals(step.getStepId())) {
+        // ⚠️ 같은 프로젝트인지 여기서 봐야 한다. cascade 이동은 권한 판정을 건너뛰므로
+        // 예전처럼 stepAccessUseCase 가 두 스텝의 projectId 를 대신 비교해 주지 않는다.
+        if (command.moveToStepId().equals(step.getStepId())
+                || stepRepository.findById(command.moveToStepId())
+                        .filter(target -> target.getProjectId().equals(step.getProjectId()))
+                        .isEmpty()) {
             throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_INVALID);
         }
         if (!blockIds.containsAll(command.moveBlockIds())) {
@@ -309,6 +316,28 @@ public class StepCommandService implements StepCommandUseCase {
                 .map(ReorderStepsCommand.Item::sortOrder).distinct().count();
 
         if (distinctSteps != items.size() || distinctOrders != items.size()) {
+            throw new ValidationException(StepErrorCode.STEP_ORDER_INVALID);
+        }
+    }
+
+    /**
+     * 요청에 없는 기존 스텝과 순서 값이 겹치면 거부한다.
+     *
+     * <p>⚠️ 요청 안의 중복만 보면 부분 전송을 막지 못한다. sort_order 는 스테이지별이 아니라
+     * <b>프로젝트 전체</b> 기준이라, 목록 밖 스텝과 겹치면 보드 순서가 비결정적으로 뒤집힌다.
+     */
+    private void validateNoConflictWithUnlisted(Long projectId,
+                                                List<ReorderStepsCommand.Item> items) {
+        Set<Long> requestedIds = items.stream()
+                .map(ReorderStepsCommand.Item::stepId).collect(Collectors.toSet());
+        Set<Integer> requestedOrders = items.stream()
+                .map(ReorderStepsCommand.Item::sortOrder).collect(Collectors.toSet());
+
+        boolean conflict = stepRepository.search(projectId, null, null).stream()
+                .filter(step -> !requestedIds.contains(step.getStepId()))
+                .anyMatch(step -> requestedOrders.contains(step.getSortOrder()));
+
+        if (conflict) {
             throw new ValidationException(StepErrorCode.STEP_ORDER_INVALID);
         }
     }

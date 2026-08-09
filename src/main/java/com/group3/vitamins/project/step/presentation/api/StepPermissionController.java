@@ -102,14 +102,16 @@ public class StepPermissionController {
 
     @Operation(summary = "스텝 권한 회수",
             description = "오버라이드 행을 지워 프로젝트 권한 상속으로 되돌린다(STP-011). 차단이 아니다. "
-                    + "응답의 permission 은 회수 후 상속된 등급이다.")
+                    + "응답의 permission 은 회수 후 상속된 등급이다. "
+                    + "자기 자신의 행은 회수할 수 없다 (INV-10).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "권한 회수 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+                    description = "MEMBER_SELF_EDIT_DENIED — 자기 자신의 권한은 회수할 수 없음 "
+                            + "/ PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "STEP_NOT_FOUND / STEP_PERMISSION_NOT_FOUND")
     })

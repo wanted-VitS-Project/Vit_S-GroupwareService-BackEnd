@@ -62,6 +62,11 @@ class BlockMoveServiceTest {
 
         assertThat(result.stepId()).isEqualTo(TO_STEP);
         assertThat(result.unlinkedIssueCount()).isEqualTo(2);
+
+        // 좌표를 그대로 들고 가면 도착 스텝의 기존 블록과 겹쳐 그리드가 깨진다.
+        Block saved = captureSaved();
+        assertThat(saved.getRowIndex()).isEqualTo(5);
+        assertThat(saved.getSortOrder()).isZero();
     }
 
     @Test

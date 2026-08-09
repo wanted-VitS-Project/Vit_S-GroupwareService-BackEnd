@@ -1,6 +1,8 @@
 package com.group3.vitamins.project.stage.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.stage.application.command.DeleteStageCommand;
@@ -101,6 +103,44 @@ class StageCommandServiceTest {
                 .isInstanceOf(ValidationException.class);
 
         Mockito.verifyNoInteractions(stageRepository);
+    }
+
+    @Test
+    @DisplayName("요청에 없는 기존 스테이지와 순서가 겹치면 400 이다 — 부분 전송을 막는다")
+    void 순서_기존행_충돌() {
+        given(stageRepository.findAllByIdsInProject(anyCollection(), eq(PROJECT_ID)))
+                .willReturn(List.of(stage(7L, 1)));
+        given(stageRepository.findAllByProjectId(PROJECT_ID))
+                .willReturn(List.of(stage(7L, 1), stage(8L, 2)));
+
+        assertThatThrownBy(() -> stageCommandService.reorderStages(
+                reorder(new ReorderStagesCommand.Item(7L, 2))))
+                .isInstanceOf(ValidationException.class);
+
+        Mockito.verify(stageRepository, Mockito.never()).save(any(Stage.class));
+    }
+
+    @Test
+    @DisplayName("편집 권한이 없으면 수정·순서·삭제 모두 저장까지 가지 않는다")
+    void 권한_거부() {
+        given(stageRepository.findById(STAGE_ID)).willReturn(Optional.of(stage(STAGE_ID, 1)));
+        Mockito.doThrow(new ForbiddenException(ProjectErrorCode.PROJECT_EDIT_DENIED))
+                .when(projectAccessUseCase).requireEditable(PROJECT_ID, REQUESTER, "USER");
+
+        assertThatThrownBy(() -> stageCommandService.updateStage(
+                new UpdateStageCommand(STAGE_ID, "제안·계약", REQUESTER, "USER")))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThatThrownBy(() -> stageCommandService.reorderStages(
+                reorder(new ReorderStagesCommand.Item(7L, 1))))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThatThrownBy(() -> stageCommandService.deleteStage(
+                new DeleteStageCommand(STAGE_ID, 8L, REQUESTER, "USER")))
+                .isInstanceOf(ForbiddenException.class);
+
+        Mockito.verify(stageRepository, Mockito.never()).save(any(Stage.class));
+        Mockito.verifyNoInteractions(stepRelocationPort, stagePermissionDefaultRepository);
     }
 
     @Test

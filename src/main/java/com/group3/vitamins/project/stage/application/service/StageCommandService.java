@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -77,6 +78,7 @@ public class StageCommandService implements StageCommandUseCase {
 
         validateNoDuplicates(command.items());
         Map<Long, Stage> stages = loadStages(command.projectId(), command.items());
+        validateNoConflictWithUnlisted(command.projectId(), command.items());
 
         return command.items().stream()
                 .map(item -> stageRepository.save(
@@ -142,6 +144,29 @@ public class StageCommandService implements StageCommandUseCase {
                 .map(ReorderStagesCommand.Item::sortOrder).distinct().count();
 
         if (distinctStages != items.size() || distinctOrders != items.size()) {
+            throw new ValidationException(StageErrorCode.STAGE_ORDER_INVALID);
+        }
+    }
+
+    /**
+     * 요청에 없는 기존 스테이지와 순서 값이 겹치면 거부한다.
+     *
+     * <p>⚠️ 요청 안의 중복만 보면 부분 전송을 막지 못한다. {@code A=1, B=2} 인 상태에서 {@code A=2} 만
+     * 보내면 요청 안에는 중복이 없지만 저장 후 A·B 가 모두 2 가 된다. sort_order 에 UNIQUE 제약이
+     * 없어 그대로 저장되고, 조회는 순서만 정렬하므로 화면 순서가 매번 달라진다.
+     */
+    private void validateNoConflictWithUnlisted(Long projectId,
+                                                List<ReorderStagesCommand.Item> items) {
+        Set<Long> requestedIds = items.stream()
+                .map(ReorderStagesCommand.Item::stageId).collect(Collectors.toSet());
+        Set<Integer> requestedOrders = items.stream()
+                .map(ReorderStagesCommand.Item::sortOrder).collect(Collectors.toSet());
+
+        boolean conflict = stageRepository.findAllByProjectId(projectId).stream()
+                .filter(stage -> !requestedIds.contains(stage.getStageId()))
+                .anyMatch(stage -> requestedOrders.contains(stage.getSortOrder()));
+
+        if (conflict) {
             throw new ValidationException(StageErrorCode.STAGE_ORDER_INVALID);
         }
     }

@@ -86,11 +86,18 @@ public class StepPermissionService implements StepPermissionUseCase {
                 step.getStepId(), command.userId(), permission.name(), true);
     }
 
-    /** 오버라이드 행을 지운다. 지우고 나면 프로젝트 권한을 상속하므로 그 등급을 응답에 담는다 (STP-011). */
+    /**
+     * 오버라이드 행을 지운다. 지우고 나면 프로젝트 권한을 상속하므로 그 등급을 응답에 담는다 (STP-011).
+     *
+     * <p>자기 행은 회수도 막는다 (INV-10). 설정만 막으면 자기 NONE 오버라이드를 스스로 지워
+     * 프로젝트 등급으로 되돌아가는 우회로가 남는다 — 결과가 같으니 같은 코드로 거부한다.
+     */
     @Override
     public StepPermissionResult revokePermission(RevokeStepPermissionCommand command) {
         Step step = requireEditableStep(
                 command.stepId(), command.requesterUserId(), command.role());
+
+        checkNotSelf(command.userId(), command.requesterUserId());
 
         if (!stepPermissionRepository.deleteByStepIdAndUserId(step.getStepId(), command.userId())) {
             throw new NotFoundException(StepErrorCode.STEP_PERMISSION_NOT_FOUND);

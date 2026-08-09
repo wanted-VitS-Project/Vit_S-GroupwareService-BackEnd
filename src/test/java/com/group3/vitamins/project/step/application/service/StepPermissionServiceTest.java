@@ -137,6 +137,19 @@ class StepPermissionServiceTest {
     }
 
     @Test
+    @DisplayName("자기 행은 회수도 못 한다 — 자기 NONE 을 지워 등급을 되찾는 우회로를 막는다 (INV-10)")
+    void 회수_자기자신() {
+        givenStep();
+
+        assertThatThrownBy(() -> stepPermissionService.revokePermission(
+                new RevokeStepPermissionCommand(STEP_ID, REQUESTER, REQUESTER, "USER")))
+                .isInstanceOf(ForbiddenException.class);
+
+        Mockito.verify(stepPermissionRepository, Mockito.never())
+                .deleteByStepIdAndUserId(any(), anyString());
+    }
+
+    @Test
     @DisplayName("지울 오버라이드 행이 없으면 404 다")
     void 회수_행_없음() {
         givenStep();

@@ -18,6 +18,7 @@ import com.group3.vitamins.project.step.domain.repository.StepRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -73,6 +74,29 @@ class StepStatusCommandServiceTest {
                 .isInstanceOf(ValidationException.class);
 
         Mockito.verify(stepRepository, Mockito.never()).save(any(Step.class));
+    }
+
+    @Test
+    @DisplayName("DONE 에서 되돌리면 완료자·완료시각도 지워진다 — 진행 중인데 완료 기록이 남으면 안 된다")
+    void 완료_해제() {
+        LocalDateTime completedAt = LocalDateTime.of(2026, 8, 1, 10, 0);
+        given(stepAccessUseCase.requireEditable(STEP_ID, REQUESTER, "USER"))
+                .willReturn(new StepAccessUseCase.StepAccessView(
+                        STEP_ID, 3L, MemberPermission.EDITOR));
+        given(stepRepository.findById(STEP_ID)).willReturn(Optional.of(
+                step(StepStatus.DONE, completedAt, "E2024099")));
+        given(stepRepository.save(any(Step.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        stepCommandService.changeStatus(
+                new ChangeStepStatusCommand(STEP_ID, "IN_PROGRESS", REQUESTER, "USER"));
+
+        ArgumentCaptor<Step> captor = ArgumentCaptor.forClass(Step.class);
+        Mockito.verify(stepRepository).save(captor.capture());
+        Step saved = captor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(StepStatus.IN_PROGRESS);
+        assertThat(saved.getCompletedBy()).isNull();
+        assertThat(saved.getCompletedAt()).isNull();
     }
 
     @Test

@@ -74,13 +74,14 @@ class StepDeleteServiceTest {
         assertThat(result.deletedIssueCount()).isEqualTo(2);
         assertThat(captureSaved().getDeletedAt()).isNotNull();
         Mockito.verify(stepBlockCascadePort, Mockito.never())
-                .moveBlocks(anyCollection(), any(), anyString(), anyString());
+                .moveBlocks(anyCollection(), any());
     }
 
     @Test
     @DisplayName("고른 블록만 옮기고 나머지는 삭제한다")
     void 선별_이전() {
         givenStep();
+        givenMoveTarget(11L, PROJECT_ID);
         given(stepBlockCascadePort.findBlockIds(STEP_ID)).willReturn(List.of(5L, 7L, 9L));
         given(issueStatLookupPort.findAllIssueIds(STEP_ID)).willReturn(List.of());
 
@@ -89,8 +90,8 @@ class StepDeleteServiceTest {
 
         assertThat(result.movedBlockCount()).isEqualTo(2);
         assertThat(result.deletedBlockCount()).isEqualTo(1);
-        Mockito.verify(stepBlockCascadePort).moveBlocks(List.of(5L, 7L), 11L, REQUESTER, "USER");
-        Mockito.verify(stepBlockCascadePort).deleteBlocks(List.of(9L), REQUESTER, "USER");
+        Mockito.verify(stepBlockCascadePort).moveBlocks(List.of(5L, 7L), 11L);
+        Mockito.verify(stepBlockCascadePort).deleteBlocks(List.of(9L), REQUESTER);
     }
 
     @Test
@@ -102,9 +103,7 @@ class StepDeleteServiceTest {
 
         stepCommandService.deleteStep(command(null, null));
 
-        Mockito.verify(issueDeleteCommandPort).delete(1L, REQUESTER, "USER");
-        Mockito.verify(issueDeleteCommandPort).delete(2L, REQUESTER, "USER");
-        Mockito.verify(issueDeleteCommandPort).delete(3L, REQUESTER, "USER");
+        Mockito.verify(issueDeleteCommandPort).delete(List.of(1L, 2L, 3L));
         Mockito.verifyNoInteractions(issueCloseCommandPort);
     }
 
@@ -131,9 +130,23 @@ class StepDeleteServiceTest {
     }
 
     @Test
+    @DisplayName("다른 프로젝트 스텝으로는 못 옮긴다 — 400")
+    void 이전_대상_남의_프로젝트() {
+        givenStep();
+        givenMoveTarget(11L, 99L);
+        given(stepBlockCascadePort.findBlockIds(STEP_ID)).willReturn(List.of(5L));
+
+        assertThatThrownBy(() -> stepCommandService.deleteStep(command(List.of(5L), 11L)))
+                .isInstanceOf(ValidationException.class);
+
+        Mockito.verify(stepBlockCascadePort, Mockito.never()).moveBlocks(anyCollection(), any());
+    }
+
+    @Test
     @DisplayName("이 스텝 소속이 아닌 블록을 고르면 404 다")
     void 남의_블록() {
         givenStep();
+        givenMoveTarget(11L, PROJECT_ID);
         given(stepBlockCascadePort.findBlockIds(STEP_ID)).willReturn(List.of(5L));
 
         assertThatThrownBy(() -> stepCommandService.deleteStep(command(List.of(5L, 99L), 11L)))
@@ -162,6 +175,14 @@ class StepDeleteServiceTest {
                         StepStatus.IN_PROGRESS, null, null, createdAt, createdAt, null)));
         Mockito.lenient().when(stepRepository.save(any(Step.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    /** 블록 이전 대상 스텝. cascade 이동은 권한 판정을 건너뛰므로 서비스가 직접 프로젝트를 확인한다. */
+    private void givenMoveTarget(Long stepId, Long projectId) {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
+        given(stepRepository.findById(stepId)).willReturn(Optional.of(
+                Step.restore(stepId, projectId, 7L, "옮길 곳", 2, null, null, null,
+                        StepStatus.NOT_STARTED, null, null, createdAt, createdAt, null)));
     }
 
     private Step captureSaved() {

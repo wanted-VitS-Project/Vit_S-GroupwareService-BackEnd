@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.util.List;
 
@@ -18,7 +19,7 @@ public record StageOrderRequest(
         @Valid
         @NotEmpty(message = "STAGE_ORDER_INVALID|순서를 변경할 스테이지가 없습니다.")
         @Schema(description = "재정렬 대상 목록")
-        List<Item> orders
+        List<@NotNull(message = "STAGE_ORDER_INVALID|순서 항목이 비어 있습니다.") Item> orders
 ) {
 
     @Schema(description = "스테이지 하나의 새 순서")
@@ -29,6 +30,7 @@ public record StageOrderRequest(
             Long stageId,
 
             @NotNull(message = "STAGE_ORDER_INVALID|정렬 순서가 없습니다.")
+            @Positive(message = "STAGE_ORDER_INVALID|정렬 순서는 1 이상이어야 합니다.")
             @Schema(description = "새 정렬 순서", example = "1")
             Integer sortOrder
     ) {
