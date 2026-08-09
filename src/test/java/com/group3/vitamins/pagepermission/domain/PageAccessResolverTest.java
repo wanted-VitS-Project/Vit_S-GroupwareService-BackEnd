@@ -75,6 +75,13 @@ class PageAccessResolverTest {
     }
 
     @Test
+    @DisplayName("grantedByCode 가 null 이어도 NPE 없이 처리한다(빈 맵 취급)")
+    void nullGrantedMap() {
+        List<PageAccessResolver.Entry> entries = PageAccessResolver.resolveMyPages("MEMBER", null);
+        assertThat(entries).isNotEmpty(); // 500 대신 정상 반환
+    }
+
+    @Test
     @DisplayName("카탈로그 순서(상단바·사이드바)로 반환한다")
     void keepsCatalogOrder() {
         List<PageAccessResolver.Entry> entries = PageAccessResolver.resolveMyPages("MEMBER", Map.of());

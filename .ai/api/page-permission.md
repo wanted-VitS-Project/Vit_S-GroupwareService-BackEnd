@@ -78,7 +78,7 @@
 |---|---|---|
 | `GRANTED` | ADMIN 이 명시적으로 부여 (`MEMBER` 한정) | 가능 |
 | `GLOBAL_ROLE` | **`ADMIN` 또는 `MASTER` 라서** 열람됨. 부여 기록이 없다 (`PAGE-004`) | **불가** |
-| `ADMIN_ONLY` | `ADMIN` 전용 페이지 — `TEMPLATE` (`PAGE-003`) | **불가** |
+| `ADMIN_ONLY` | `ADMIN` 전용 페이지 — `TEMPLATE`·`ADMIN_CONSOLE` (`PAGE-003`) | **불가** |
 | `DEFAULT` | 기본 노출 — `PROJECT_CREATE` · `MY_PROJECT` · `SETTINGS`, 그리고 **미부여 상태의** `BIDDING`·`FINANCE` | **불가** |
 
 ⭐ **`permission` 은 3값이다** — `NONE` · `VIEWER` · `EDITOR` (2026-08-03 `NONE` 추가).

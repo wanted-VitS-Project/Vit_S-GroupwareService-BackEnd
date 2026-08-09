@@ -115,6 +115,15 @@ class PagePermissionCommandServiceTest {
     }
 
     @Test
+    @DisplayName("null 항목이 섞이면 PAGE_INVALID_REQUEST — NPE(500)가 아니다")
+    void rejectsNullItem() {
+        GrantPermissionsCommand command = new GrantPermissionsCommand("ADMIN", "BIDDING",
+                java.util.Arrays.asList(item("EMP1", "EDITOR"), null));
+        assertThatThrownBy(() -> service.grant(command))
+                .satisfies(hasCode(PagePermissionErrorCode.PAGE_INVALID_REQUEST));
+    }
+
+    @Test
     @DisplayName("시스템 계정이 섞이면 ACC_SYSTEM_ACCOUNT_NOT_ALLOWED")
     void rejectsSystemAccount() {
         when(queryPort.findEmployeeRoles(anyCollection(), eq(1L)))

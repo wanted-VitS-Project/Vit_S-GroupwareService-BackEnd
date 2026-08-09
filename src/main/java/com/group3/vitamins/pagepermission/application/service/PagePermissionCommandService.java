@@ -57,7 +57,7 @@ public class PagePermissionCommandService implements PagePermissionCommandUseCas
         // 사번 중복 금지 — 한 요청에 같은 사번이 두 번 오면 어느 등급이 이기는지 모호하다.
         Set<String> userIds = new LinkedHashSet<>();
         for (GrantPermissionsCommand.Item item : items) {
-            if (item.userId() == null || !userIds.add(item.userId())) {
+            if (item == null || item.userId() == null || !userIds.add(item.userId())) {
                 throw new ValidationException(PagePermissionErrorCode.PAGE_INVALID_REQUEST);
             }
             if (!PageAccessLevel.isGrantable(item.permission())) { // VIEWER·EDITOR 만
@@ -108,6 +108,7 @@ public class PagePermissionCommandService implements PagePermissionCommandUseCas
         Long companyId = currentCompanyIdProvider.currentCompanyId();
 
         // 대상이 현재 회사 사원인지 확인(타사 사번 회수 차단) + 회수 후 판정을 위한 role 확보.
+        // 시스템 계정 검사는 두지 않는다 — 부여(grant)가 시스템 계정을 거부하므로 회수 대상 행 자체가 존재할 수 없다.
         List<EmployeeRoleRow> refs = pagePermissionQueryPort.findEmployeeRoles(List.of(command.userId()), companyId);
         if (refs.isEmpty()) {
             throw new NotFoundException(PagePermissionErrorCode.PAGE_PERMISSION_NOT_FOUND);
@@ -122,7 +123,8 @@ public class PagePermissionCommandService implements PagePermissionCommandUseCas
         String role = refs.get(0).role();
         boolean stillAccessible = PageAccessResolver.ADMIN.equals(role) || PageAccessResolver.MASTER.equals(role);
         String accessSource = stillAccessible ? PageAccessSource.GLOBAL_ROLE.name() : null;
-        log.info("페이지 권한 회수 - page={} userId={} stillAccessible={}", page.name(), command.userId(), stillAccessible);
+        // 사번(userId)은 개인식별자라 로그에 남기지 않는다 — 결과 플래그만 기록(부여 로그와 동일 기준).
+        log.info("페이지 권한 회수 - page={} stillAccessible={}", page.name(), stillAccessible);
         return new RevokeResult(page.name(), command.userId(), stillAccessible, accessSource);
     }
 }

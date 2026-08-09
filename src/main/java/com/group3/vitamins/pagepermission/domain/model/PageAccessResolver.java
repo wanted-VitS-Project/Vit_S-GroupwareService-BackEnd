@@ -30,6 +30,7 @@ public final class PageAccessResolver {
      * @param grantedByCode 부여 대상 코드 → 부여 등급(VIEWER/EDITOR). MEMBER 만 의미 있고, 없으면 빈 맵.
      */
     public static List<Entry> resolveMyPages(String role, Map<PageCode, PageAccessLevel> grantedByCode) {
+        Map<PageCode, PageAccessLevel> granted = grantedByCode == null ? Map.of() : grantedByCode;
         boolean isAdmin = ADMIN.equals(role);
         boolean isMaster = MASTER.equals(role);
 
@@ -42,7 +43,7 @@ public final class PageAccessResolver {
                         ? new Entry(page, PageAccessLevel.EDITOR, PageAccessSource.GLOBAL_ROLE) : null;
                 case ADMIN_ONLY -> isAdmin
                         ? new Entry(page, PageAccessLevel.EDITOR, PageAccessSource.ADMIN_ONLY) : null;
-                case GRANTABLE -> resolveGrantable(page, isAdmin, isMaster, grantedByCode.get(page));
+                case GRANTABLE -> resolveGrantable(page, isAdmin, isMaster, granted.get(page));
             };
             if (entry != null) {
                 entries.add(entry);
