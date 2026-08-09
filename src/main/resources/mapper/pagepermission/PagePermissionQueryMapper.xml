@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  페이지 권한 화면 조회 (page-permission.md §2·§3·§4·§5). page_permission ⋈ employee ⋈ account.
+  ⚠️ 모든 조회는 회사 범위(e.company_id = #{companyId})로 격리 — 타사 사원이 명단·집계·검증에 섞이지 않는다.
+  부서·직급 조인에도 company_id 일치 조건을 붙여(employee 격리 선례) 잘못 연결된 FK 로 타사 이름이 새는 것을 막는다.
+  namespace = Mapper 인터페이스 FQN · id = 메서드명 (팀 MyBatis 컨벤션).
+-->
+<mapper namespace="com.group3.vitamins.pagepermission.infrastructure.adapter.PagePermissionQueryMapper">
+
+    <!-- 명단 공통 컬럼. 부서·상위부서·직급은 미배정 가능이라 LEFT JOIN. permission 은 호출부에서 선택. -->
+    <sql id="memberColumns">
+        e.user_id AS userId,
+        e.name    AS name,
+        d.name    AS departmentName,
+        p.name    AS parentDepartmentName,
+        jp.name   AS jobPositionName,
+        a.role    AS role
+    </sql>
+
+    <sql id="memberJoins">
+        JOIN account a           ON a.user_id = e.user_id
+        LEFT JOIN department d    ON d.department_id = e.department_id AND d.company_id = e.company_id
+        LEFT JOIN department p    ON p.department_id = d.parent_id     AND p.company_id = e.company_id
+        LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
+    </sql>
+
+    <!--
+      §3 명시 부여 명단 — MEMBER 만(MASTER 부여 행은 무의미해 전역권한 명단에서 다뤄 중복 방지). GRANTED·회수 가능.
+    -->
+    <select id="findGrantedMembers"
+            resultType="com.group3.vitamins.pagepermission.application.result.PageAccessMemberRow">
+        SELECT <include refid="memberColumns"/>,
+               pp.permission AS permission
+          FROM page_permission pp
+          JOIN employee e ON e.user_id = pp.user_id
+           AND e.company_id = #{companyId}
+           AND e.is_system = 0
+           AND e.deleted_at IS NULL
+        <include refid="memberJoins"/>
+         WHERE pp.page_code = #{pageCode}
+           AND a.role = 'MEMBER'
+         ORDER BY e.name ASC, e.user_id ASC
+    </select>
+
+    <!--
+      §3 전역 권한 명단 = MASTER 사원(비시스템·회사). permission 은 null(→ 서비스가 EDITOR), GLOBAL_ROLE·회수 불가.
+      ADMIN 은 시스템 계정이라 사람 목록에서 제외(EMP-003).
+    -->
+    <select id="findMasterMembers"
+            resultType="com.group3.vitamins.pagepermission.application.result.PageAccessMemberRow">
+        SELECT <include refid="memberColumns"/>,
+               NULL AS permission
+          FROM employee e
+        <include refid="memberJoins"/>
+         WHERE e.company_id = #{companyId}
+           AND e.is_system = 0
+           AND e.deleted_at IS NULL
+           AND a.role = 'MASTER'
+         ORDER BY e.name ASC, e.user_id ASC
+    </select>
+
+    <!-- §2 부여 인원 수 — 회사 MEMBER 기준(§3 명단과 동일 모집단). -->
+    <select id="countGrants" resultType="long">
+        SELECT COUNT(*)
+          FROM page_permission pp
+          JOIN employee e ON e.user_id = pp.user_id
+           AND e.company_id = #{companyId}
+           AND e.is_system = 0
+           AND e.deleted_at IS NULL
+          JOIN account a ON a.user_id = e.user_id AND a.role = 'MEMBER'
+         WHERE pp.page_code = #{pageCode}
+    </select>
+
+    <!-- §2·§3 전역 권한 인원 = MASTER 사원 수(비시스템·회사). -->
+    <select id="countMasters" resultType="long">
+        SELECT COUNT(*)
+          FROM employee e
+          JOIN account a ON a.user_id = e.user_id AND a.role = 'MASTER'
+         WHERE e.company_id = #{companyId}
+           AND e.is_system = 0
+           AND e.deleted_at IS NULL
+    </select>
+
+    <!-- §2 마지막 부여 수정일(yyyy-MM-dd). 회사 사원 기준. 부여 기록 없으면 null. -->
+    <select id="findLastGrantedDate" resultType="java.time.LocalDate">
+        SELECT DATE(MAX(pp.updated_at))
+          FROM page_permission pp
+          JOIN employee e ON e.user_id = pp.user_id AND e.company_id = #{companyId}
+         WHERE pp.page_code = #{pageCode}
+    </select>
+
+    <!--
+      §4 부여 검증·§5 회수 후 판정 — 요청 사번의 (사번·role·isSystem). 회사 범위라 타사 사번은 결과에서 빠져
+      호출부가 EMP_NOT_FOUND(부여)·PAGE_PERMISSION_NOT_FOUND(회수)로 처리한다. is_system 은 시스템 계정 거부용.
+    -->
+    <select id="findEmployeeRoles"
+            resultType="com.group3.vitamins.pagepermission.application.result.EmployeeRoleRow">
+        SELECT e.user_id   AS userId,
+               a.role      AS role,
+               e.is_system AS isSystem
+          FROM employee e
+          JOIN account a ON a.user_id = e.user_id
+         WHERE e.company_id = #{companyId}
+           AND e.deleted_at IS NULL
+           AND e.user_id IN
+        <foreach collection="userIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>
