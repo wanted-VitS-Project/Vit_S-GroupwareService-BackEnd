@@ -1,0 +1,562 @@
+# 정산 블록 API 명세
+
+**최종 동기화**: 2026-08-09 (정산 현황 블록 조회 추가 + `includeCompleted` 판정 기준 정정)
+**최종 동기화**: 2026-08-09 (정산 현황 프로젝트 조회 추가)
+**최종 동기화**: 2026-08-09 (정산 항목 작성/수정 최초 작성)
+**도메인 담당**: (미기재 — 작업자 본인 이름으로 채워주세요)
+
+> 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
+
+---
+
+## 🔴 2026-08-09 도메인 재설계
+
+기존 `payment` · `block_payment_confirm`(입금확인 블록 상세) · `tax_invoice` · `tax_invoice_confirm`(세금계산서 조회 블록 상세)
+4개 테이블을 폐기하고, `settlement_block`(정산 블록 상세) · `cash_flow`(입출금 내역) · `tax_invoice`(세금계산서, 신규 스키마)
+3개로 교체했다 (`db/migration/settlement/V20260809130000__*.sql`).
+
+- **블록 생성·삭제**: `SettlementBlockDetailAdapter`(`BlockDetailPort` 구현)가 붙었다 — Block 도메인이 블록 생성/삭제
+  트랜잭션 중 이 포트를 호출하면 `SettlementHandlerService.create/delete`가 실제 처리한다(text/checklist와 동일 패턴).
+- **`block.type` enum에 `SETTLEMENT` 추가 완료 (2026-08-09)** — `BlockType.java` + `V20260809132000__add_settlement_block_type.sql`
+  (BID_NOTICE 선례와 동일하게 담당자 본인 브랜치에서 추가). `PAYMENT_CONFIRM`/`TAX_INVOICE_VIEW` 값은 이 작업 범위 밖이라
+  그대로 뒀다 — 상세 테이블이 없는 채 남아있다(Block 도메인 담당자 정리 필요).
+- **블록 목록 조회 연동 완료** — `SettlementBlockDetailAdapter.loadDetails()`가 `settlement_block`을 MyBatis로 배치 조회해
+  `SettlementDetail`(이 API 응답과 동일한 필드)을 채운다. 계좌번호는 항상 마스킹된 값만 담긴다(원문 복호화 결과를
+  그대로 내보내지 않는다).
+
+| 상태 | 기능 | METHOD | URL | 권한 |
+|------|------|--------|-----|------|
+| ✅ 확정 (구현 완료) | 정산 항목 수정 시 조회 | GET | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
+| ✅ 확정 (구현 완료) | 정산 항목 작성/수정 | PATCH | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
+| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산현황 필터 옵션 조회 | GET | `/api/v1/projects/settlements/filters` | 접근 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 프로젝트 조회 | GET | `/api/v1/projects/settlements` | 접근 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 (구현 완료) | 정산 현황 블록 조회 | GET | `/api/v1/projects/{projectId}/settlements` | 프로젝트 접근 권한 보유자 |
+
+---
+
+### 정산현황 필터 옵션 조회 `GET /api/v1/projects/settlements/filters`
+
+**상태**: ✅ 확정 (권한 판정은 임시 어댑터 — 아래 참고)
+**인증 필요 여부**: Y
+
+재무팀 정산현황 화면의 발주처 필터 드롭다운을 채운다. 위 두 엔드포인트(블록 단위)와 URL·데이터가 전혀
+겹치지 않지만, 사용자 지시에 따라 별도 컨트롤러를 만들지 않고 같은 `SettlementController`에 메서드로만
+추가했다(이 프로젝트는 `@RequestMapping` 클래스 레벨 지정을 쓰지 않고 메서드마다 전체 경로를 적는 컨벤션이라
+한 컨트롤러에 여러 URL 패턴이 섞여도 문제없다).
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.clients` | List\<String\> | 정산 현황에 등장하는(활성 정산 블록이 하나 이상 있는 프로젝트의) 발주처 목록. 오름차순 정렬, 중복 없음 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "정산현황 필터 옵션 조회 성공",
+  "data": {
+    "clients": ["국토교통부", "부산항만공사", "서울시도로관리과", "환경부"]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "정산현황 필터 옵션 조회 성공" |
+| 403 | Forbidden | `SETL-009` | "접근 권한이 없습니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **403 code — 원 명세에 값이 비어 있었다.** 정산 도메인 자체 코드 `SETL-009`를 새로 부여했다.
+- **⚠️ 권한 판정은 임시 어댑터다 (2026-08-09).** "접근 권한 보유자"를 `.ai/api/page-permission.md`의
+  `FINANCE` 페이지 권한으로 판정하기로 했는데, 그 도메인(담당 **김동현** — 사원/부서/직급 쪽, 동훈님 아님)에
+  아직 Java 코드가 하나도 없다(`page_permission` 테이블 자체는 `V202608031500` 마이그레이션에 이미 존재).
+  그래서 이미지 도메인의 선례(`ImageEligibilityPolicy.assertEditPermissionEvenIfBlockDeleted`)와 동일한
+  방식으로, **`settlement` 도메인이 소비자로서 임시 어댑터를 직접 만들었다**:
+  - `settlement/application/port/PagePermissionPort` — 포트(소비자 소유)
+  - `settlement/infrastructure/adapter/PagePermissionMapperAdapter` + `PagePermissionMapper`(MyBatis) —
+    `page_permission` 테이블을 직접 조회하는 **임시 구현**. 판정 규칙은 문서 그대로: `ADMIN`·`MASTER`는
+    부여 기록 없이 항상 접근 가능(GLOBAL_ROLE), `MEMBER`는 `page_code='FINANCE'` 행이 있어야 한다
+  - 김동현님 쪽에 정식 `PagePermission` 유스케이스가 생기면 `PagePermissionMapperAdapter` 내부 구현만
+    그 포트 호출로 교체하면 된다(`PagePermissionPort` 인터페이스·호출부는 안 바뀐다)
+  - 이미지 도메인 선례와 동일하게 **먼저 나서서 김동현님께 요청하지 않는다** — 사용자가 필요하다고
+    판단하면 그때 전달
+- **"정산현황에 등장하는" 발주처 범위** — 활성 정산 블록이 하나 이상 있는 프로젝트만 대상으로 했다
+  (`SettlementStatusMapper.findDistinctClientNames`, `project → step → block → settlement_block` 조인).
+  정산 블록이 아예 없는 프로젝트의 발주처는 필터에 담기지 않는다 — 정산현황 화면 자체에 나올 일이 없는
+  발주처이기 때문. **(2026-08-09 확인 완료)** 아래 "정산 현황 프로젝트 조회"는 대상 범위가 다르다 — 그
+  API는 재무팀이 "전체 프로젝트"를 봐야 해서 활성 정산 블록 유무와 무관하게 전 프로젝트를 대상으로
+  한다(정산 블록이 없으면 관련 필드가 0/null로 나올 뿐 목록에서 빠지지 않는다). 의도된 차이다.
+
+### 정산 현황 프로젝트 조회 `GET /api/v1/projects/settlements`
+
+**상태**: ✅ 확정 (권한 판정은 임시 어댑터 — 필터 옵션 조회와 동일, 아래 참고)
+**인증 필요 여부**: Y
+
+재무팀 정산현황 화면에서 보여줄 **전체 프로젝트**를 프로젝트 단위로 집계해 조회한다(활성 정산 블록이 없는
+프로젝트도 나온다 — 필터 옵션 조회의 "정산현황에 등장하는 발주처"와는 대상 범위가 다르다). 권한 판정은
+필터 옵션 조회와 동일하게 `PagePermissionPort`(`FINANCE` 페이지)를 재사용한다.
+
+**Request Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `startDate` | LocalDate | N | 조회 시작일 — **다음 정산 예정일(`nextPlannedDate`) 기준** |
+| `endDate` | LocalDate | N | 조회 종료일 — 〃 |
+| `client` | String | N | 발주처 (정확히 일치) |
+| `includeCompleted` | Boolean | N | 종결(완료) 프로젝트 포함 여부. **생략하면 `false`(제외)** |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `data.projects[].projectId` | Long | 프로젝트 ID |
+| `data.projects[].projectName` | String | 과업명 |
+| `data.projects[].clientName` | String | 발주처 (nullable) |
+| `data.projects[].projectManager` | String | 담당자(프로젝트 제작자) |
+| `data.projects[].totalPlannedAmount` | Long | 총 계약금액. INCOME 정산 블록이 하나도 없으면 null |
+| `data.projects[].totalOutcome` | Long | 총 비용(OUTCOME 실입금 합계). 없으면 0 |
+| `data.projects[].totalIncome` | Long | 총 수입(INCOME 실입금 합계). 없으면 0 |
+| `data.projects[].totalAmount` | Long | 총 합계 (`totalIncome - totalOutcome`) |
+| `data.projects[].completedRoundCount` | Int | 완료된 회차 수 (INCOME+OUTCOME 합산) |
+| `data.projects[].totalRoundCount` | Int | 전체 회차 수 (INCOME+OUTCOME 합산) |
+| `data.projects[].nextPlannedDate` | LocalDate | 다음 정산 예정일. 미완료 회차가 없으면 null |
+| `data.projects[].settlementStatusSummary` | String | 대표 상태 문구 — 지금은 `"정산완료"` 또는 `"미연결 N건"` 둘 중 하나 |
+| `data.projects[].projectStatus` | String | 프로젝트 상태 (`project.status`) |
+| `data.projects[].endedOn` | LocalDate | 프로젝트 종료일. 종료되지 않았으면 null |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "정산 현황 조회 성공" |
+| 403 | Forbidden | `SETL-009` | "접근 권한이 없습니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **403 코드** — 원 명세엔 `IMG-007`(이미지 도메인 코드)이 적혀 있었다. 필터 옵션 조회와 동일한 사유(다른
+  도메인 명세 복붙 잔재)로 판단해 필터 옵션 조회에서 이미 쓰는 `SETL-009`를 재사용했다(같은 `FINANCE`
+  페이지 권한 판정이라 프론트가 이미 처리 중인 분기를 그대로 쓸 수 있다).
+- **`totalPlannedAmount` 계산 기준 (2026-08-09 확정)** — `project.contract_amount`가 아니라 **그 프로젝트
+  INCOME 타입 정산 블록들의 `total_amount`**를 쓴다(SETL-008이 같은 프로젝트·같은 타입 내에서 회차 간
+  항상 같은 값으로 강제하므로 `MAX` 하나만 뽑아도 안전). INCOME 정산 블록이 아직 하나도 없으면 null.
+- **`completedRoundCount`/`totalRoundCount` 집계 기준 (2026-08-09 확정)** — 타입(INCOME/OUTCOME) 구분 없이
+  그 프로젝트의 활성 정산 블록 전체를 합산해서 센다. `completedRoundCount`는 `status = 'COMPLETED'`인 것.
+  `SettlementStatusMapper.findProjectSettlements`(마이바티스, 파생 테이블 1개로 프로젝트당 한 번에 집계)로
+  계산한다.
+- **`settlementStatusSummary` 규칙 (2026-08-09 확정, 의도적으로 단순화)** — 회차별 예정일까지 따지는
+  세분화(계산서 미발행·"입금 대기 N일" 등)는 아직 규칙이 없어 보류했다. 지금은 **딱 두 가지만** 구분한다:
+  전체 회차가 다 `COMPLETED`면 `"정산완료"`, 아니면 미연결(`PENDING`) 회차 개수를 `"미연결 N건"`으로
+  보여준다(회차가 하나도 없는 프로젝트도 `"미연결 0건"`으로 떨어진다). ⚠️ **이 문구 규칙은 나중에 늘어날
+  수 있다** — 담당자가 세분화 규칙을 확정하면 `SettlementQueryService.settlementStatusSummary`를 손보면 된다.
+- **`startDate`/`endDate` 필터 기준 (2026-08-09 확정)** — 정산 회차 하나하나의 `plannedDate`가 아니라,
+  프로젝트 단위로 계산한 **`nextPlannedDate`**로 거른다. `nextPlannedDate` 자체는 "미완료(`status != COMPLETED`)
+  회차 중 회차 번호(`round_no`)가 가장 낮은 것의 `planned_date`"다 — 1차가 미완료면 1차 예정일, 1차가
+  완료되고 2차가 미완료면 2차 예정일이 뜨는 방식. 같은 회차 번호가 INCOME/OUTCOME 양쪽에 걸쳐 있으면
+  그중 더 빠른 예정일을 쓴다.
+- **`includeCompleted` 판정 기준 (2026-08-09 확정 → 같은 날 정정)** — 처음엔 `project.ended_on`(종료일) 유무로
+  판정했으나, `ended_on`은 **생성 시점에 입력하는 예정 종료일**이라 진행 중인 프로젝트도 이미 값이 차 있을 수
+  있어(예: 생성 요청에 `endedOn`을 같이 넣는 케이스) "종결(완료)" 판정 기준으로 틀렸다는 게 확인돼 정정했다.
+  올바른 기준은 **`project.status`가 `COMPLETED` 또는 `CLOSED`인지**다(정상 완료·비정상 종결 둘 다 "종결"로
+  묶어서 제외). **생략하면 `false`로 취급**해 두 상태를 제외한다.
+- **대상 범위 — 필터 옵션 조회와 다르다** — 필터 옵션 조회(`/filters`)는 "활성 정산 블록이 하나라도 있는
+  프로젝트"만 대상이지만, 이 API는 **전체 프로젝트**를 대상으로 한다(정산 블록이 아직 없는 프로젝트도
+  0/null 값으로 나온다). "재무팀 쪽에서 보일 전체 프로젝트"라는 요구사항 그대로 반영.
+- **정렬 순서** — 명세에 없어 `projectId` 오름차순으로 뒀다. 다른 기준(예: `nextPlannedDate` 오름차순)이
+  필요하면 알려달라.
+- **`client` 필터는 정확히 일치** — 필터 옵션 조회가 내려주는 드롭다운 값을 그대로 선택하는 구조라 부분
+  검색이 아니라 완전 일치로 구현했다.
+
+### 정산 현황 블록 조회 `GET /api/v1/projects/{projectId}/settlements`
+
+**상태**: ✅ 확정 (권한 판정은 임시 어댑터 — 위 두 개와 동일, 아래 참고)
+**인증 필요 여부**: Y
+
+정산 현황 프로젝트 조회(목록)에서 프로젝트 하나를 드릴다운했을 때 그 프로젝트에 속한 정산 블록을 회차별로
+보여준다. **권한은 위 두 개(필터 옵션·프로젝트 목록)와 동일하게 FINANCE 페이지 권한이다** — 정산현황
+페이지의 화면이라 프로젝트 참여자가 아니어도 재무팀이면 봐야 한다(2026-08-09, 최초엔 프로젝트 접근
+권한으로 잘못 판단했다가 정정). 존재 확인은 프로젝트 멤버 여부와 무관하게 단순히 프로젝트가 살아있는지만
+본다(`SettlementStatusMapper.existsActiveProject`) — 프로젝트 도메인의 `ProjectAccessUseCase`는 멤버십까지
+같이 판정해서 이 용도에 안 맞는다.
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `projectId` | Long | Y | 정산 블록 정보를 조회할 프로젝트 ID |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `data.blocks[].settleId` | Long | 정산 블록 아이디 |
+| `data.blocks[].roundNo` | Int | 회차 번호 (nullable — 아직 작성 전인 빈 블록) |
+| `data.blocks[].roundName` | String | 회차명(정산 블록명, `block.title`) |
+| `data.blocks[].plannedDate` | LocalDate | 예정일 |
+| `data.blocks[].plannedAmount` | Long | 예정금액 |
+| `data.blocks[].plannedTaxAmount` | Long | 예정 세금 금액 |
+| `data.blocks[].taxInvoiceDate` | LocalDate | 세금계산서 발행일. 연결된 세금계산서 없으면 null |
+| `data.blocks[].taxInvoiceAmount` | Long | 세금계산서 금액 — **이 정산 블록의 `plannedTaxAmount`와 같은 값** (아래 메모 참고) |
+| `data.blocks[].paidType` | String | 입출금 구분(`INCOME`\|`OUTCOME`) |
+| `data.blocks[].bankName` | String | 은행명(`OUTCOME`만, 아니면 null) |
+| `data.blocks[].accountNumber` | String | 계좌번호(마스킹, `OUTCOME`만, 아니면 null) |
+| `data.blocks[].accountHolder` | String | 예금주(`OUTCOME`만, 아니면 null) |
+| `data.blocks[].paidDate` | LocalDate | 실제 입출금일 |
+| `data.blocks[].paidAmount` | Long | 실제 입출금액 |
+| `data.blocks[].status` | String | 정산 블록 회차 상태 |
+| `data.blocks[].taxLinkedBy` | String | **세금계산서** 매칭 처리자 사번. 없으면 null |
+| `data.blocks[].taxLinkedByName` | String | 〃 이름 |
+| `data.blocks[].taxLinkedAt` | LocalDateTime | 〃 매칭 처리일시 |
+| `data.blocks[].cashFlowLinkedBy` | String | **입출금 내역** 매칭 처리자 사번. 없으면 null |
+| `data.blocks[].cashFlowLinkedByName` | String | 〃 이름 |
+| `data.blocks[].cashFlowLinkedAt` | LocalDateTime | 〃 매칭 처리일시 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "정산 현황 조회 성공" |
+| 403 | Forbidden | `SETL-009` | "접근 권한이 없습니다." |
+| 404 | Not Found | `SETL-010` | "존재하지 않는 프로젝트입니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **권한 판정을 프로젝트 접근 권한으로 잘못 짰다가 정정 (2026-08-09, 같은 날)** — 처음엔 path에
+  `projectId`가 있고 명세의 권한 컬럼이 "접근 권한 보유자"로만 적혀 있어(재무 관리 페이지라는 수식이 없어서)
+  프로젝트 멤버 권한(`ProjectAccessUseCase.requireAccess`)으로 구현했었다. 담당자가 "정산 현황 페이지라
+  재무팀만 봐야 한다"고 정정해서, 위 두 엔드포인트와 동일하게 **`PagePermissionPort`(`FINANCE` 페이지)**로
+  바꿨다. 404 코드도 그에 맞춰 `project` 도메인 코드(`PROJECT_NOT_FOUND`) 대신 정산 도메인 자체 코드
+  (`SETL-010`, 신규)로 바꿨다 — 존재 확인 자체는 `SettlementStatusMapper.existsActiveProject`로 직접
+  하고(멤버십 무관, 단순 `deleted_at IS NULL` 확인), 403은 필터 옵션·프로젝트 목록과 동일한 `SETL-009`를
+  재사용한다.
+- **`linkedBy`/`linkedByName`/`linkedAt`을 `taxLinkedBy*`/`cashFlowLinkedBy*` 둘로 나눴다 (요청사항)** —
+  원 명세는 단일 `linkedBy`/`linkedByName`/`linkedAt`였다. 하지만 `settlement_block` 자체엔 이 컬럼이
+  없고, `cash_flow`·`tax_invoice` 두 원장 테이블이 **각자** `linked_by`/`linked_at`을 갖고 있어서 한 정산
+  블록에 세금계산서와 입출금 내역이 **둘 다** 연결될 수 있다. 하나로 합치면 "누가 세금계산서를 맞췄는지"와
+  "누가 입출금을 맞췄는지"가 뭉개지므로, 담당자 지시대로 `tax`/`cashFlow` 접두어로 나눠 응답한다. 각각
+  그 블록에 연결된 것 중 가장 최근(`linked_at` 내림차순) 한 건만 노출한다(한 블록에 여러 건이 연결될
+  수 있는 스키마라 배열이 아니라 단일 값을 위해 최신 것 하나로 확정).
+- **`taxInvoiceAmount`는 `tax_invoice` 테이블이 아니라 이 정산 블록의 `planned_tax_amount`다 (요청사항)** —
+  원 명세는 `tax_invoice` 테이블에서 가져오는 것처럼 보였으나(응답명이 "세금계산서 금액"), 담당자가
+  **정산 블록 테이블의 세금 금액**(`plannedTaxAmount`와 같은 컬럼)을 쓰라고 확정해서 그대로 반영했다.
+  결과적으로 이 응답에서 `taxInvoiceAmount`와 `plannedTaxAmount`는 항상 같은 값이 나간다 — 의도된
+  중복이다(프론트가 두 이름으로 각각 참조할 걸 대비한 것으로 보임). `taxInvoiceDate`는 그대로
+  `tax_invoice.issued_no`에서 가져온다(세금계산서 자체가 없으면 null이 되는 유일한 필드).
+- **403 코드** — 원 명세엔 `IMG-007`(이미지 도메인 코드, 다른 명세 복붙 잔재로 판단)이 있었다. 필터
+  옵션·프로젝트 목록과 동일한 `SETL-009`로 구현했다(위 정정 메모 참고).
+- **정렬 순서** — 명세에 없어 `roundNo` 오름차순(null은 뒤로)으로 뒀다. 같은 회차 번호가 없다는 전제(같은
+  프로젝트 내 회차 번호는 타입별로만 겹칠 수 있음)에서 `settleId` 오름차순으로 2차 정렬한다.
+- **한 블록에 세금계산서/입출금이 여러 건 연결되는 경우** — 지금은 최신 것 하나만 보여준다(위 참고).
+  프론트가 전체 연결 이력을 봐야 하면 별도 API가 필요할 수 있다 — 필요해지면 알려달라.
+
+### 정산 항목 수정 시 조회 `GET /api/v1/blocks/settlements/{settleId}/items?type={INCOME|OUTCOME}`
+
+**상태**: ✅ 확정 (2026-08-09 — `type` 필수 쿼리파라미터 추가)
+**인증 필요 여부**: Y
+
+정산 항목 수정 화면의 **타입 변경 탭 클릭 시** 호출한다(수정 버튼 클릭 시가 아니다 — 2026-08-09 트리거 지점
+확정). 그 타입(INCOME/OUTCOME) 기준으로 추천 회차 번호·추천 총 금액을 조회하고, `OUTCOME`인 경우 마스킹
+없는 원본 계좌번호를 조회한다. 실제 저장은 별도로 "저장하기" 클릭 시 PATCH가 호출된다. 조회인데 **편집
+권한**을 요구하는 이유는 "수정을 위한 조회"이기 때문이다(image 도메인의 항목 전체 조회 API와 동일한 판단
+— `.ai/api/image.md` 참고).
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `settleId` | Long | Y | 항목을 수정할 정산 블록 ID |
+
+**Request Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `type` | String | Y | 지금 화면에서 선택 중인 타입. 이 타입 기준으로 추천값을 계산한다 |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.settleId` | Long | 수정할 정산 블록 ID |
+| `data.recommendRoundNo` | Int | 같은 프로젝트·같은 타입 정산 블록 개수(이 블록 제외) + 1. **이 블록에 이미 내용이 있으면(재수정) null** |
+| `data.recommendTotalAmount` | Long | 같은 프로젝트·같은 타입의 다른 정산 블록 중 이미 값이 채워진 총 예정 금액. **이 블록에 이미 내용이 있으면(재수정) null** |
+| `data.originalAccountNumber` | String | 마스킹 없는 원본 계좌번호. 이 블록에 **이미 내용이 있고** 요청한 `type`이 `OUTCOME`인 경우에만 값이 있다(그 외 null) |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "정산 항목 수정 시 조회 성공",
+  "data": {
+    "settleId": 1,
+    "recommendRoundNo": 2,
+    "recommendTotalAmount": 4500000,
+    "originalAccountNumber": "100555574444"
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "정산 항목 수정 시 조회 성공" |
+| 400 | Bad Request | `SETL-005` | "정산 블록의 타입 지정은 필수입니다." (`type` 쿼리파라미터 누락/오값) |
+| 403 | Forbidden | `SETL-001` | "편집 권한이 없습니다." |
+| 404 | Not Found | `SETL-002` | "존재하지 않는 블록입니다." |
+| 409 | Conflict | `SETL-006` | "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다." (이미 `OUTCOME`으로 저장된 블록을 `type=INCOME`으로 조회 시도) |
+
+> 401(`AUTH_UNAUTHENTICATED`)·500(`COMMON_INTERNAL_ERROR`)은 전 엔드포인트 공통이라 이 문서·Swagger에는
+> 표시하지 않는다 (2026-08-09부터 이 도메인 컨벤션 — 아래 PATCH 엔드포인트도 동일).
+
+**원 명세와 다르게 처리한 것**:
+- **403/404 코드** — 원 명세엔 `IMG-007`/`IMG-003`(이미지 도메인 코드)가 적혀 있었다. 다른 도메인 명세에서
+  복붙되며 남은 것으로 보여 정산 도메인 자체 코드 `SETL-001`/`SETL-002`로 구현했다(PATCH 엔드포인트와 동일해
+  프론트가 이미 처리 중인 분기를 재사용할 수 있다).
+- **`recommendRoundNo` 철자 수정 완료 (2026-08-09)** — 원래 `recommendAroundNo`로 구현했었으나 오타로 확인돼
+  `recommendRoundNo`로 정정했다(노션 명세도 사용자가 직접 정정함).
+- **`type` 쿼리파라미터 추가 (2026-08-09, 최초 구현 이후 변경)** — 처음엔 이 API가 블록 생성 직후(타입 미정)
+  호출된다고 보고 타입 파라미터 없이 프로젝트 전체 기준으로 추천했다. 그런데 그러면 한 프로젝트에 INCOME/
+  OUTCOME 총 금액이 실제로 다르게 운영될 때 추천값이 반대 타입 금액을 잘못 추천할 수 있다는 문제가 있었고,
+  사용자가 "이왕 추천할 거면 확실하게"라며 **트리거 지점을 수정 버튼이 아니라 타입 변경 탭으로 바꾸고
+  `type`을 필수 파라미터로 받기로 결정**했다. 이제 `recommendRoundNo`·`recommendTotalAmount`·
+  `originalAccountNumber` 셋 다 이 `type` 기준으로 정확하게 계산된다. `type` 검증 실패는 PATCH와 동일하게
+  `SETL-005`를 재사용한다.
+- **회차 번호 추천 계산** — "같은 프로젝트·같은 타입 정산 블록 개수(이 블록 제외) + 1".
+- **총 금액 추천 계산** — `SETL-008` 검증에 쓰는 것과 같은 우선순위 규칙을 그대로 쓴다: 같은 프로젝트·같은
+  타입의 다른 정산 블록 중 이미 연결된(status != PENDING) 블록의 값을 최우선으로, 없으면 아무 값이나(먼저
+  만들어진 순) 추천한다.
+- **원본 계좌번호는 저장된 값이 아니라 요청한 `type` 기준으로 노출 여부를 판단한다** — "타입 변경 탭"에서
+  호출되므로 화면에 표시 중인 타입이 이 블록에 이미 저장된 타입과 다를 수 있다(예: 저장은 INCOME으로 돼
+  있는데 사용자가 지금 OUTCOME 탭을 보는 중). `AccountNumberCipher.decrypt`를 이 엔드포인트에서만 예외적으로
+  그대로 노출한다(다른 모든 응답은 마스킹만 내려준다).
+- **빈 블록일 때만 추천값을 준다 (2026-08-09 추가)** — 처음엔 이미 내용이 채워진 블록을 조회해도 추천값이
+  나가는 버그가 있었다(사용자가 직접 테스트로 발견 — "이미 값 채워져 있으면 추천이 왜 나오나"). `roundNo`가
+  `null`인지로 "빈 블록(최초 작성 전)"을 판정한다 — `roundNo`는 항목 작성/수정 API의 공통 필수 필드(`SETL-003`)
+  라 다른 필드들과 항상 세트로 채워지므로, 이 필드 하나만 봐도 충분하다. **이미 채워진 블록**이면
+  `recommendRoundNo`/`recommendTotalAmount`는 `null`(추천이 무의미), `originalAccountNumber`만 조건에 따라
+  값이 나간다 — 두 그룹의 필드가 서로 배타적으로 채워진다.
+- **저장된 타입과 다른 타입으로 조회하면 PATCH와 같은 규칙으로 막는다 (2026-08-09 추가)** — 이미
+  `OUTCOME`으로 저장된 블록을 `type=INCOME`으로 조회하면 `SETL-006`(409)으로 막는다. 어차피 저장 시점에
+  막힐 전환(OUTCOME → INCOME)을 조회 단계에서 미리 알려주는 것. `assertNoTypeDowngrade`를
+  `SettlementCommandService`에서 `SettlementEligibilityPolicy`로 옮겨 PATCH·GET 양쪽이 같은 메서드를 쓴다.
+
+---
+
+### 정산 항목 작성/수정 `PATCH /api/v1/blocks/settlements/{settleId}/items?type={INCOME|OUTCOME}`
+
+**상태**: ✅ 확정 (Block 도메인 enum 연동 대기)
+**인증 필요 여부**: Y
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `settleId` | Long | Y | 정산 내용을 작성할 정산 블록의 ID |
+
+**Request Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `type` | String | Y | 우리 회사 입장에서 입금(INCOME)인지 출금(OUTCOME)인지 여부 |
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `roundNo` | Int | Y | 정산 회차 |
+| `totalAmount` | Long | Y | 프로젝트 정산 예정 총 금액 |
+| `plannedAmount` | Long | Y | 회차별 정산 예정 금액 |
+| `plannedTaxAmount` | Long | Y | 회차별 정산 예정 세금 금액 |
+| `plannedDate` | LocalDate | Y | 회차별 정산 예정일 |
+| `traderName` | String | Y | 거래처명(입금자명) |
+| `bankName` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 은행명 |
+| `accountNumber` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 계좌번호(하이픈·띄어쓰기 없이) |
+| `accountHolder` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 예금주 |
+
+**Request Example**
+
+```json
+{
+  "roundNo": 1,
+  "totalAmount": 4500000,
+  "plannedAmount": 1500000,
+  "plannedTaxAmount": 200000,
+  "plannedDate": "2026-09-01",
+  "traderName": "(주)대한항공"
+}
+```
+
+```json
+{
+  "roundNo": 1,
+  "totalAmount": 4500000,
+  "plannedAmount": 1500000,
+  "plannedTaxAmount": 200000,
+  "plannedDate": "2026-09-01",
+  "traderName": "(주)대한항공",
+  "bankName": "신한은행",
+  "accountNumber": "100555074444",
+  "accountHolder": "홍길동"
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.settleId` | Long | 정산 블록 ID |
+| `data.roundNo` | Int | 정산 회차 |
+| `data.totalAmount` | Long | 프로젝트 정산 예정 총 금액 |
+| `data.plannedAmount` | Long | 회차별 정산 예정 금액 |
+| `data.plannedTaxAmount` | Long | 회차별 정산 예정 세금 금액 |
+| `data.plannedDate` | LocalDate | 회차별 정산 예정일 |
+| `data.traderName` | String | 거래처명(입금자명) |
+| `data.bankName` | String | `OUTCOME` 타입인 경우만 값 있음. 외주 업체 은행명 (nullable) |
+| `data.accountNumber` | String | `OUTCOME` 타입인 경우만 값 있음. 앞·뒤 3자리만 남기고 마스킹 (nullable) |
+| `data.accountHolder` | String | `OUTCOME` 타입인 경우만 값 있음. 외주 업체 예금주 (nullable) |
+| `data.actualAmount` | Long | 재무팀에서 입력할 실제 입출금 금액 (초기 null) |
+| `data.actualDate` | LocalDateTime | 재무팀에서 입력할 실제 입출금 시간 (초기 null) |
+| `data.status` | String | 정산 상태: `PENDING`(미연결) \| `WAITING`(정산 대기) \| `PARTIAL`(부분 정산) \| `COMPLETED`(정산 완료) |
+| `data.paidAmountRatio` | Double | 금액 기준 진행률 — 이 블록 하나가 아니라 **같은 프로젝트·같은 타입**(INCOME/OUTCOME) 정산 블록 전체의 실제 금액 합계를 이 타입의 프로젝트 총 예정 금액(`totalAmount`)으로 나눈 값. INCOME 블록은 입금 진행률, OUTCOME 블록은 외주 출금 진행률을 뜻한다 |
+| `data.createdAt` | LocalDateTime | 정산 블록에 내용이 생성된 일시 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "정산 항목 작성/수정 성공",
+  "data": {
+    "settleId": 1,
+    "roundNo": 1,
+    "totalAmount": 4500000,
+    "plannedAmount": 1500000,
+    "plannedTaxAmount": 200000,
+    "plannedDate": "2026-09-01",
+    "traderName": "(주)대한항공",
+    "bankName": null,
+    "accountNumber": null,
+    "accountHolder": null,
+    "actualAmount": null,
+    "actualDate": null,
+    "status": "PENDING",
+    "paidAmountRatio": 0.0,
+    "createdAt": "2026-08-07T17:00:00"
+  }
+}
+```
+
+```json
+{
+  "httpStatus": 200,
+  "message": "정산 항목 작성/수정 성공",
+  "data": {
+    "settleId": 1,
+    "roundNo": 1,
+    "totalAmount": 4500000,
+    "plannedAmount": 1500000,
+    "plannedTaxAmount": 200000,
+    "plannedDate": "2026-09-01",
+    "traderName": "(주)대한항공",
+    "bankName": "신한은행",
+    "accountNumber": "100******444",
+    "accountHolder": "홍길동",
+    "actualAmount": null,
+    "actualDate": null,
+    "status": "PENDING",
+    "paidAmountRatio": 0.0,
+    "createdAt": "2026-08-07T17:00:00"
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "정산 항목 작성/수정 성공" |
+| 400 | Bad Request | `SETL-005` | "정산 블록의 타입 지정은 필수입니다." (`type` 쿼리파라미터 누락/오값) |
+| 400 | Bad Request | `SETL-003` | "내용을 입력해 주세요." (공통 필수 필드 누락) |
+| 400 | Bad Request | `SETL-004` | "출금 타입은 계좌정보가 필수입니다." (`OUTCOME`인데 계좌정보 누락) |
+| 403 | Forbidden | `SETL-001` | "편집 권한이 없습니다." |
+| 404 | Not Found | `SETL-002` | "존재하지 않는 블록입니다." |
+| 409 | Conflict | `SETL-006` | "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다." (OUTCOME → INCOME 다운그레이드 시도) |
+| 409 | Conflict | `SETL-007` | "세금계산서 또는 입출금 내역이 연결되어 있어 수정할 수 없습니다." (`status != PENDING`) |
+| 409 | Conflict | `SETL-008` | "같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (기존 등록된 금액: N원)" (같은 프로젝트·같은 타입의 다른 회차가 이미 정해둔 `totalAmount`와 다름) |
+
+---
+
+## 구현 메모 (사람이 확인할 것)
+
+- **원 명세와 다르게 처리한 것 — 반드시 확인**:
+  1. **HTTP 상태 코드 200 vs 201 불일치** — 사용자가 준 Status Code 표는 `201 Created`였지만, 같이 준 Success Example
+     JSON은 둘 다 `"httpStatus": 200`이었다. PATCH 의미상, 그리고 JSON 예시 쪽을 신뢰해 **200으로 구현**했다.
+     201이 맞다면 `SettlementController`의 `ResponseEntity.status(...)`와 `ApiResponse.success→created` 한 줄만 바꾸면 된다.
+  2. **`settlement_block.block_id`를 `NOT NULL`로 강제** — 원 DDL은 `NULL`이었지만, 팀 컨벤션(`BLOCK.md` 다형성 규약 3)이
+     상세 테이블의 `block_id`를 항상 `NOT NULL + UNIQUE`로 요구한다. 작업자 확인 후 `NOT NULL`로 확정.
+  3. **`cash_flow.linked_by`/`tax_invoice.linked_by`를 `NULL` 허용으로 변경** — 원 DDL은 `NOT NULL`이었지만, 두 값 모두
+     "정산 블록에 연결됐을 때"만 채워지는 값이라(연결 전엔 주인이 없음) `NOT NULL`이면 최초 수집 시점에 INSERT 자체가 불가능하다.
+     기존 `payment.linked_by`/`tax_invoice_confirm.linked_by` 설계와 동일하게 `NULL` 허용으로 맞췄다.
+  4. **`settlement_block.status` 기본값** — 설명에 "기본값 PENDING"이 있어 컬럼을 `NOT NULL DEFAULT 'PENDING'`으로 뒀다
+     (원 DDL은 `NULL`로 선언돼 있었음).
+- **기존 실제 테이블과의 충돌** — `payment`/`tax_invoice`/`block_payment_confirm`/`tax_invoice_confirm`은 실제로
+  `init` 마이그레이션(`V202608031739`)에 이미 존재했다(사용자가 "삭제해달라"고 한 4개와 정확히 일치). `tax_invoice_confirm`이
+  `tax_invoice.tax_invoice_id`를 FK로 참조하고 있어서 새 마이그레이션에서 **자식(tax_invoice_confirm) → 부모(tax_invoice)**
+  순서로 DROP했다. 새 `tax_invoice` 테이블은 **이름은 같지만 스키마가 완전히 다르다** (구 스키마는 `project_id`/`matched_by`
+  FK가 있었고, 신규 스키마는 `settle_block_id`만 있다).
+- **계좌번호 암호화** — `settlement/infrastructure/security/AccountNumberCipher`(AES/GCM)로 저장 전 암호화한다.
+  키는 `SETTLEMENT_ACCOUNT_ENC_KEY` 환경변수(Base64 인코딩된 32바이트 AES-256 키)로 주입한다 — **로컬에서 이 값을
+  설정하지 않으면 앱이 기동하지 않는다.** 응답의 마스킹(`100******444`)은 이 요청에서 받은 평문 값을 그대로 마스킹한
+  것이지, 저장된 값을 복호화해서 만든 게 아니다(이 API가 쓰기 전용이라 복호화 로직 자체가 없다).
+- **편집 권한(403) 검사** — `SettlementEligibilityPolicy.assertEditPermission`이 `BlockCatalogPort.hasEditPermission
+  ("SETTLEMENT", settleId, userId, role)`을 호출한다(text/checklist와 동일한 공유 포트 재사용). `BlockType.SETTLEMENT`가
+  2026-08-09에 추가돼 이제 정상 동작한다.
+- **응답 필드 null 표기** — `INCOME` 타입 응답에도 `bankName`/`accountNumber`/`accountHolder` 키 자체는 내려간다
+  (값이 `null`). 팀 공통 `ApiResponse` 관례(다른 도메인도 미사용 필드를 `null`로 명시)를 따랐다.
+- **`paidAmountRatio` 계산 규칙 (2026-08-09 재설계)** — 처음엔 "이 블록의 `actualAmount / plannedAmount`"로 잘못 구현했었다.
+  실제로는 **프로젝트 단위** 지표다: `block_id → block.step_id → step.project_id`를 타고 가서, **같은 프로젝트·같은
+  타입**(INCOME/OUTCOME)의 활성 정산 블록 전체에 걸친 `actual_amount` 합계를 그 타입의 `total_amount`(프로젝트 총
+  예정 금액)로 나눈다. INCOME 블록은 입금 진행률, OUTCOME 블록은 외주 출금 진행률을 보여준다 — 두 방향의 돈을 섞지 않는다.
+  이 합계는 `SettlementDetailMapper.findBySettleIds`(마이바티스, JOIN+GROUP BY 파생 테이블로 쿼리 1발) 하나로 계산하고,
+  블록 목록 조회(`SettlementBlockDetailAdapter`)와 이 PATCH 응답(`SettlementCommandService`) 둘 다 **같은 쿼리·같은
+  계산식**(`SettlementProgress.ratio`)을 재사용한다 — 두 곳에 다른 로직이 생기지 않게.
+- **수정 제약 2건 (2026-08-09 추가)**:
+  1. **타입 다운그레이드 금지(`SETL-006`)** — `OUTCOME → INCOME`은 막는다. OUTCOME 전용 필드(계좌정보)를 버려야 하는
+     손실성 변경이기 때문. 반대로 `INCOME → OUTCOME`(계좌정보를 새로 받기만 하면 됨)과 최초 작성은 허용한다.
+  2. **연결되면 수정 불가(`SETL-007`)** — `settlement_block.status`가 `PENDING`이 아니면(세금계산서·입출금 내역이 연결되면)
+     PATCH 자체를 막는다. 지금은 상태를 `PENDING` 밖으로 바꾸는 연결 API가 아직 없어서 이 코드가 실제로 나갈 일은 없다 —
+     연결 API가 붙을 때를 대비한 선제 방어다.
+  3. **프로젝트 내 총 예정 금액 일관성(`SETL-008`, 2026-08-09 추가, 같은 날 우선순위 고도화)** — `totalAmount`는
+     타입(INCOME/OUTCOME)별로 한 프로젝트 안의 모든 회차가 같은 값이어야 한다(그래야 `paidAmountRatio` 계산이
+     성립한다 — "회차마다 총 금액이 같다"는 전제로 프로젝트+타입 단위 합산을 나누고 있음). 같은 프로젝트·같은 타입의
+     **다른** 회차가 이미 값을 정해뒀는데 이번 요청이 다른 값을 보내면 막는다. **비교 기준값이 여럿이면 이미
+     연결된(`status != PENDING`) 회차를 최우선으로 쓴다** — 연결된 회차는 더 이상 안 바뀌는 진짜 확정값이고,
+     아직 `PENDING`인 다른 회차는 이 검증이 생기기 전에 잘못 들어간 값일 수 있어 후순위다. 연결된 회차가 하나도
+     없으면 `PENDING` 중 아무 값이나(먼저 만들어진 순) 기준으로 쓴다. 아직 아무 회차도 값을 안 정했으면(전부 null)
+     이번 요청이 그 프로젝트의 첫 기준값이 되므로 통과한다. `SettlementDetailMapper.findEstablishedTotalAmount`
+     (마이바티스, `ORDER BY (status != 'PENDING') DESC` 로 우선순위, 쿼리 1발)로 확인한다. 메시지에 기존 등록된
+     금액을 담아 사용자가 바로 어떤 값으로 맞춰야 하는지 알 수 있게 했다.
+     ⚠️ 나중에 "회차·총 금액 추천" API(프로젝트의 기존 정산 블록을 조회해 다음 회차 번호·총 금액을 미리 채워주는 기능)가
+     붙으면 이 검증과 값 출처가 같아진다 — 별도 설계 시 이 메서드를 재사용할 수 있는지 검토할 것.
+- **블록 껍데기 생성/삭제/조회 (2026-08-09 추가)** — text 도메인을 그대로 참고해 구현했다.
+  - 생성: `SettlementBlockDetailAdapter.createDetail` → `SettlementHandlerService.create` → `SettlementRepository.create`
+    (JPA `save()`로 `settlement_block` 빈 행 INSERT, `status=PENDING`).
+  - 삭제: `SettlementBlockDetailAdapter.deleteDetail` → `SettlementHandlerService.delete` — 조건부 UPDATE로
+    멱등 처리(이미 삭제된 행이면 무시), `deletedAt` null 방어 포함. 블록 자체의 생성/삭제 활동 로그는 text·checklist와
+    동일한 이유로 여기서 발행하지 않는다(Block 도메인 책임).
+  - 조회: `SettlementDetailMapper`(MyBatis, `resources/mapper/settlement/SettlementDetailMapper.xml`)로
+    `settle_id IN (...)` 배치 조회 → `SettlementDetail`로 매핑. `accountNumber`는 `AccountNumberCipher.decryptAndMask`로
+    복호화 직후 바로 마스킹해서 담는다(복호화 원문이 어댑터 밖으로 나가지 않는다).
+- **활동 로그(수정) — 2026-08-09 추가** — `SettlementCommandService.upsertItem`이 text와 동일하게 "실제로 바뀐 필드가
+  있을 때만" `MODIFY` 이벤트를 발행한다. `roundNo`/`type`/`totalAmount`/`plannedAmount`/`plannedTaxAmount`/`plannedDate`/
+  `traderName`/`bankName`/`accountHolder`는 실제 값으로 비교·기록하고, `accountNumber`만 예외로 **양쪽 다 마스킹된 값으로
+  비교·기록한다** (이전 값은 저장된 암호문을 복호화 후 마스킹, 이후 값은 이번 요청 평문을 마스킹) — 활동 로그에
+  계좌번호 원문이 절대 남지 않게 하기 위함이다. `resourceName`은 `traderName`을 쓴다.

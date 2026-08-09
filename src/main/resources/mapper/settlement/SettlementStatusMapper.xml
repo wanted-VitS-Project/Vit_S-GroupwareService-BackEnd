@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.settlement.infrastructure.status.SettlementStatusMapper">
+
+    <!--
+        "정산현황에 등장하는" = 활성 정산 블록이 하나 이상 있는 프로젝트만 대상으로 한다.
+        정산 블록이 하나도 없는 프로젝트의 발주처는 정산현황 화면에 나올 일이 없으므로 필터에도 안 담는다.
+    -->
+    <select id="findDistinctClientNames" resultType="java.lang.String">
+        SELECT DISTINCT p.client_name
+        FROM project p
+        WHERE p.deleted_at IS NULL
+        AND p.client_name IS NOT NULL
+        AND EXISTS (
+        SELECT 1
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE st.project_id = p.project_id
+        AND sb.deleted_at IS NULL
+        )
+        ORDER BY p.client_name ASC
+    </select>
+
+    <!--
+        정산 현황 프로젝트 조회 — 전체 프로젝트(활성 정산 블록 유무와 무관) 대상, 프로젝트당 한 행.
+
+        agg: 이 프로젝트의 활성 정산 블록 전체를 한 번에 집계한다.
+             - totalPlannedAmount: INCOME 타입의 total_amount (SETL-008로 같은 프로젝트·같은 타입 내에서
+               회차 간 항상 동일하도록 강제되므로 MAX 하나만 뽑아도 안전하다). INCOME 블록이 없으면 NULL.
+             - totalOutcome/totalIncome: 각 타입의 actual_amount(실입금) 합계.
+             - completedRoundCount/pendingRoundCount/totalRoundCount: 회차 카운트 — 타입 구분 없이 합산.
+        nxt: "다음 정산 예정일" — 미완료(status != COMPLETED) 회차 중 round_no 가 가장 낮은 것을 고르고,
+             같은 round_no 가 여러 타입에 걸쳐 있으면(예: INCOME·OUTCOME 모두 1회차 미완료) 그중 가장
+             빠른 planned_date로 묶는다(mr로 최소 round_no를 먼저 구한 뒤 nb와 다시 매칭, 프로젝트당 1행
+             으로 GROUP BY 해서 LEFT JOIN 시 행이 늘어나지 않게 한다).
+    -->
+    <select id="findProjectSettlements"
+            resultType="com.group3.vitamins.settlement.infrastructure.status.SettlementProjectRow">
+        SELECT
+        p.project_id AS projectId,
+        p.name AS projectName,
+        p.client_name AS clientName,
+        e.name AS projectManager,
+        agg.total_planned_amount AS totalPlannedAmount,
+        COALESCE(agg.total_outcome, 0) AS totalOutcome,
+        COALESCE(agg.total_income, 0) AS totalIncome,
+        COALESCE(agg.completed_round_count, 0) AS completedRoundCount,
+        COALESCE(agg.total_round_count, 0) AS totalRoundCount,
+        COALESCE(agg.pending_round_count, 0) AS pendingRoundCount,
+        nxt.planned_date AS nextPlannedDate,
+        p.status AS projectStatus,
+        p.ended_on AS endedOn
+        FROM project p
+        JOIN employee e ON e.user_id = p.created_by
+        LEFT JOIN (
+        SELECT st.project_id AS project_id,
+        MAX(CASE WHEN sb.type = 'INCOME' THEN sb.total_amount END) AS total_planned_amount,
+        SUM(CASE WHEN sb.type = 'OUTCOME' THEN sb.actual_amount ELSE 0 END) AS total_outcome,
+        SUM(CASE WHEN sb.type = 'INCOME' THEN sb.actual_amount ELSE 0 END) AS total_income,
+        SUM(CASE WHEN sb.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_round_count,
+        SUM(CASE WHEN sb.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_round_count,
+        COUNT(*) AS total_round_count
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE sb.deleted_at IS NULL
+        GROUP BY st.project_id
+        ) agg ON agg.project_id = p.project_id
+        LEFT JOIN (
+        SELECT nb.project_id AS project_id, MIN(nb.planned_date) AS planned_date
+        FROM (
+        SELECT st.project_id AS project_id, sb.round_no AS round_no, sb.planned_date AS planned_date
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE sb.deleted_at IS NULL AND sb.status != 'COMPLETED'
+        ) nb
+        JOIN (
+        SELECT st2.project_id AS project_id, MIN(sb2.round_no) AS min_round_no
+        FROM settlement_block sb2
+        JOIN block b2 ON b2.block_id = sb2.block_id
+        JOIN step st2 ON st2.step_id = b2.step_id
+        WHERE sb2.deleted_at IS NULL AND sb2.status != 'COMPLETED'
+        GROUP BY st2.project_id
+        ) mr ON mr.project_id = nb.project_id AND mr.min_round_no = nb.round_no
+        GROUP BY nb.project_id
+        ) nxt ON nxt.project_id = p.project_id
+        WHERE p.deleted_at IS NULL
+        <if test="client != null">AND p.client_name = #{client}</if>
+        <!-- endedOn은 생성 시 입력하는 예정 종료일이라 진행 중 프로젝트도 값이 있을 수 있다 — "종결(완료)"
+             판정은 project.status(COMPLETED · CLOSED)로 한다 (2026-08-09 정정, ended_on 기준에서 변경). -->
+        <if test="includeCompleted == null or includeCompleted == false">AND p.status NOT IN ('COMPLETED', 'CLOSED')</if>
+        <if test="startDate != null">AND nxt.planned_date &gt;= #{startDate}</if>
+        <if test="endDate != null">AND nxt.planned_date &lt;= #{endDate}</if>
+        ORDER BY p.project_id ASC
+    </select>
+
+    <!-- 정산 현황 블록 조회의 404 판정용 — project_member 여부와 무관한 단순 존재 확인(FINANCE 페이지 권한이라 프로젝트 참여자가 아니어도 조회할 수 있어야 한다). -->
+    <select id="existsActiveProject" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM project WHERE project_id = #{projectId} AND deleted_at IS NULL
+        )
+    </select>
+
+    <!--
+        정산 현황 블록 조회 — 하나의 프로젝트에 속한 정산 블록 회차별 내역.
+
+        ti/cf: 이 정산 블록(settle_id)에 연결된 tax_invoice/cash_flow 중 가장 최근에 연결(linked_at)된
+        행 하나를 상관 서브쿼리로 골라 조인한다(같은 블록에 여러 건이 연결될 수 있어 LIMIT 1로 확정 —
+        동시각 연결 시 PK 내림차순으로 결정적 tie-break). 두 원장 테이블은 각자 linked_by/linked_at을
+        따로 가지므로(정산 블록 자체엔 이 컬럼이 없다) 응답도 taxLinkedBy* / cashFlowLinkedBy* 로 나눠
+        낸다 — 한쪽으로 합치면 "누가 세금계산서를 맞췄는지"와 "누가 입출금을 맞췄는지"가 뭉개진다.
+        taxInvoiceAmount는 tax_invoice 테이블이 아니라 이 정산 블록의 planned_tax_amount다(요청사항).
+    -->
+    <select id="findProjectSettlementBlocks"
+            resultType="com.group3.vitamins.settlement.infrastructure.status.SettlementProjectBlockRow">
+        SELECT
+        sb.settle_id AS settleId,
+        sb.round_no AS roundNo,
+        b.title AS roundName,
+        sb.planned_date AS plannedDate,
+        sb.planned_amount AS plannedAmount,
+        sb.planned_tax_amount AS plannedTaxAmount,
+        ti.issued_no AS taxInvoiceDate,
+        sb.planned_tax_amount AS taxInvoiceAmount,
+        sb.type AS paidType,
+        sb.bank_name AS bankName,
+        sb.account_number AS accountNumber,
+        sb.account_holder AS accountHolder,
+        DATE(sb.actual_date) AS paidDate,
+        sb.actual_amount AS paidAmount,
+        sb.status AS status,
+        ti.linked_by AS taxLinkedBy,
+        tie.name AS taxLinkedByName,
+        ti.linked_at AS taxLinkedAt,
+        cf.linked_by AS cashFlowLinkedBy,
+        cfe.name AS cashFlowLinkedByName,
+        cf.linked_at AS cashFlowLinkedAt
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        LEFT JOIN tax_invoice ti ON ti.tax_id = (
+        SELECT ti2.tax_id FROM tax_invoice ti2
+        WHERE ti2.settle_block_id = sb.settle_id AND ti2.deleted_at IS NULL
+        ORDER BY ti2.linked_at DESC, ti2.tax_id DESC
+        LIMIT 1
+        )
+        LEFT JOIN employee tie ON tie.user_id = ti.linked_by
+        LEFT JOIN cash_flow cf ON cf.cash_flow_id = (
+        SELECT cf2.cash_flow_id FROM cash_flow cf2
+        WHERE cf2.settle_block_id = sb.settle_id AND cf2.deleted_at IS NULL
+        ORDER BY cf2.linked_at DESC, cf2.cash_flow_id DESC
+        LIMIT 1
+        )
+        LEFT JOIN employee cfe ON cfe.user_id = cf.linked_by
+        WHERE st.project_id = #{projectId}
+        AND sb.deleted_at IS NULL
+        AND b.deleted_at IS NULL
+        ORDER BY (sb.round_no IS NULL) ASC, sb.round_no ASC, sb.settle_id ASC
+    </select>
+
+</mapper>

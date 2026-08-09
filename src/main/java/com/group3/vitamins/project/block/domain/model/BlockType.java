@@ -10,7 +10,8 @@ public enum BlockType {
     TAX_INVOICE_VIEW,
     APPROVAL,
     AI,
-    BID_NOTICE;
+    BID_NOTICE,
+    SETTLEMENT;
 
     /** 사용자가 직접 만들 수 있는 타입인지. BID_NOTICE 는 공고→프로젝트 전환 API 만 생성한다. */
     public boolean userCreatable() {
