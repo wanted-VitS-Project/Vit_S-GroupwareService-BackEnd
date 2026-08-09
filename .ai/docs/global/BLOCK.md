@@ -1,6 +1,7 @@
-# 🧩 블록 정보 — 10종 카탈로그
+# 🧩 블록 정보 — 카탈로그 (**enum 10값 / 실사용 8종**)
 
 **최종 업데이트**
+- 2026-08-10 — ⭐ **정산 재설계 반영 + 등록표 전수 재확인.** `SETTLEMENT` 등재(`settlement_block`) · `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **상세 테이블 DROP** 으로 빈 껍데기가 됐다(정리는 Block 도메인 소관) · §2-8 표의 `IMAGE`·`APPROVAL` **미등록 표기 오류 정정**(둘 다 실재) · `APPROVAL.deleteDetail` 의 409 잔재 명시 · **블록에 복구·휴지통이 없다는 경계**를 [`../domain/프로젝트/PRJ-V1.md`](../domain/프로젝트/PRJ-V1.md) §3-1 에 신설
 - 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · §4 번호 당김(4-8~4-10 → 4-7~4-9) · DB 는 `V20260805170000` 로 ALTER
 - 2026-08-05 — 🩹 **`BID_NOTICE` 이중 정의 해소** — 상세 테이블 없는 구 §4-9 를 제거하고 `bid_notice_block` 모델 하나로 통일(§5 요약표 기준), **§4-10 번호 중복 정리**(AI → 4-9), AI 설명문 오배치 복구, 깨진 링크(`입찰관리/BID-V1.md`) 제거 · 엔드포인트 경로는 `api/bid.md` 단일 기준으로 위임 · `bid_notice_block` 테이블 부재 명시
 - 2026-08-05 — `AI` 블록 상세 어댑터 등록 완료 (`vitamate/infrastructure/blockdetail/`) · `detail` shape = `VitamateDetail(vitamateBlockId, welcomeMessage)`
@@ -215,14 +216,19 @@ public Long create(Long blockId) {
 
 | 타입 | 어댑터 | `type_id` | 비고 |
 |------|:-----:|:---------:|------|
+> 🔄 **2026-08-10 전수 재확인** — 아래는 실제 파일 존재를 대조한 결과다 (이전 판은 `IMAGE`·`APPROVAL` 을 미등록으로 적고 있었으나 **둘 다 실재한다**).
+
+| 타입 | 어댑터 | `type_id` | 비고 |
+|------|:-----:|:---------:|------|
 | `TEXT` | ✅ `text/infrastructure/blockdetail/` | 값 | 참조 구현 (1:1) |
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
 | `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail` 조회 |
-| `IMAGE` · `APPROVAL` | ❌ 미등록 | **NULL** | 어댑터 추가하면 살아난다 |
-| `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환 |
-| `PERFORMANCE_VIEW` | ❌ | **NULL** | 상세 테이블 없음 |
-| `TAX_INVOICE_VIEW` | ❌ | **NULL** | 행 존재 자체가 "연결됨" 신호 (TXL-008) — 빈 행을 만들면 안 된다 |
-| `BID_NOTICE` | — | — | 사용자 생성 금지 (`POST` 에서 400) |
+| `IMAGE` | ✅ `image/infrastructure/blockdetail/` | 값 | 1:N (`image_block` → `image`) |
+| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | `deleteDetail` 이 문서(하드)·결재선·회차·결재를 **상태 불문 연쇄 삭제**한다. ✅ 2026-08-10 `IN_PROGRESS` 차단 제거(BLK-008) — 결재는 블록 종속이라 블록이 사라지면 함께 사라진다 |
+| ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block` |
+| `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환. 🚨 **조회 `detail` 도 안 채워진다** (명세는 `{fileCount}`) |
+| ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | ❌ | **NULL** | ⛔ **상세 테이블이 DROP 됐다** (`V20260809130000`) — `SETTLEMENT` 로 통합. enum 값만 남은 빈 껍데기이며 **정리는 Block 도메인 소관** |
+| `BID_NOTICE` | — | — | 사용자 생성 금지 (`POST` 에서 400). `bid_notice_block` 테이블 아직 없음 |
 
 > 어댑터가 없어도 **`POST` 는 정상 동작한다** — `type_id` 가 NULL 로 남고 조회에서 `detail: null` 이 된다.
 > 500 이 아니다. 담당자가 어댑터만 추가하면 Block 도메인 코드는 **한 줄도 안 바뀐다.**

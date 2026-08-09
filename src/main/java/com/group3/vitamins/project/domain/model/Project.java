@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 public class Project {
 
     private final Long projectId;
-    private final Long bidNoticeId;
+    private Long bidNoticeId;
     private String name;
     private String description;
     private ProjectStatus status;
@@ -111,6 +111,21 @@ public class Project {
         this.closeReasonCode = closeReasonCode;
         this.closeReasonNote = closeReasonNote;
         this.closedAt = now;
+        this.updatedAt = now;
+        return this;
+    }
+
+    /**
+     * 논리 삭제한다 (PRJ-014 · INV-05). 진행 전 + 스텝 0개 판정은 서비스가 끝낸 뒤 부른다.
+     *
+     * <p>⚠️ 연결된 공고를 <b>함께 비운다.</b> {@code uk_project_bid_notice} 는 UNIQUE 라
+     * 논리 삭제만 하면 그 공고가 영구히 점유돼 <b>같은 공고로 프로젝트를 다시 못 만든다</b>(1062).
+     * MySQL UNIQUE 는 NULL 을 중복으로 보지 않으므로 비우는 것으로 풀린다 —
+     * 삭제된 프로젝트라 출처 기록의 손실은 감수한다.
+     */
+    public Project delete(LocalDateTime now) {
+        this.bidNoticeId = null;
+        this.deletedAt = now;
         this.updatedAt = now;
         return this;
     }
