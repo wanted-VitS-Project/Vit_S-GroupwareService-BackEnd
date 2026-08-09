@@ -29,4 +29,24 @@
          LIMIT 1
     </select>
 
+    <!--
+      문서의 버전을 참조하는 결재가 하나라도 있으면 true (§7 영구삭제).
+      findInProgressApproval 과 같은 조인이되 status 필터가 없다 — 완료 결재까지 포함해 참조를 막는다.
+    -->
+    <select id="existsAnyApprovalReference" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1
+              FROM file_version fv
+              JOIN approval_document ad
+                ON ad.file_version_id = fv.file_version_id
+               AND ad.deleted_at IS NULL
+              JOIN approval_revision ar
+                ON ar.approval_revision_id = ad.approval_revision_id
+              JOIN approval a
+                ON a.approval_id = ar.approval_id
+               AND a.deleted_at IS NULL
+             WHERE fv.file_id = #{fileId}
+        )
+    </select>
+
 </mapper>

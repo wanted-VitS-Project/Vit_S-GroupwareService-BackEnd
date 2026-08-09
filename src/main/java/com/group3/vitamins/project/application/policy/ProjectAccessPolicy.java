@@ -50,4 +50,9 @@ public class ProjectAccessPolicy {
         }
         return memberPermission == null ? MemberPermission.NONE : memberPermission;
     }
+
+    /** 전역 관리자 여부. 목록 조회는 거부가 아니라 조회 범위를 넓히는 판정이라 별도로 노출한다. */
+    public boolean isGlobalAdmin(String role) {
+        return GLOBAL_ADMIN_ROLES.contains(role);
+    }
 }

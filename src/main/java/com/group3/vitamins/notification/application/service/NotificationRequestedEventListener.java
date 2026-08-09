@@ -29,6 +29,8 @@ public class NotificationRequestedEventListener {
     public void handle(NotificationRequestedEvent event) {
         notificationRepository.save(Notification.create(
                 event.recipientUserId(), event.notificationType(),
-                event.title(), event.message(), event.blockId(), LocalDateTime.now()));
+                event.title(), event.message(),
+                event.targetType(), event.targetId(), event.targetContext(),
+                LocalDateTime.now()));
     }
 }

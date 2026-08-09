@@ -10,6 +10,8 @@ import com.group3.vitamins.file.application.result.DownloadUrlResult;
 import com.group3.vitamins.file.application.result.FilePreviewResult;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
+import com.group3.vitamins.file.application.result.ProjectFileProjection;
+import com.group3.vitamins.file.application.result.ProjectFileResult;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
@@ -175,6 +177,19 @@ public class FileQueryService implements FileQueryUseCase {
                         p.versionNo() == maxVersionNoByFile.get(p.fileId()),
                         p.originalFileName(), p.extension(), p.sizeBytes(), p.pageCount(),
                         isPreviewable(p.extension()), p.completedAt(), p.indexStatus()))
+                .toList();
+    }
+
+    @Override
+    public List<ProjectFileResult> getProjectFiles(Long projectId, String requesterUserId, String role) {
+        requireProjectAccess(projectId, requesterUserId, role);
+
+        return fileQueryPort.findProjectFiles(projectId).stream()
+                .map(p -> new ProjectFileResult(
+                        p.stepId(), p.stepName(), p.blockId(), p.blockTitle(), p.blockDeleted(),
+                        p.fileId(), p.name(), p.latestVersionId(), p.latestVersionNo(), p.versionCount(),
+                        p.originalFileName(), p.extension(), p.sizeBytes(), isPreviewable(p.extension()),
+                        p.uploaderName(), p.uploaderDepartment(), p.uploaderPosition(), p.updatedAt()))
                 .toList();
     }
 

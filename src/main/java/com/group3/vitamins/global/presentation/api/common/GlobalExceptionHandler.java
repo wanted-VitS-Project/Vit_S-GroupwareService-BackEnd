@@ -2,12 +2,15 @@ package com.group3.vitamins.global.presentation.api.common;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -17,6 +20,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -38,7 +45,7 @@ public class GlobalExceptionHandler {
     private static final String AUTH_UNAUTHENTICATED = "AUTH_UNAUTHENTICATED";
     private static final String AUTH_UNAUTHENTICATED_MESSAGE = "로그인이 필요합니다.";
 
-    // 아래 4개는 명세에 대응 코드가 없는 프레임워크 레벨 오류의 폴백이다.
+    // 아래 5개는 명세에 대응 코드가 없는 프레임워크 레벨 오류의 폴백이다.
     // 도메인 에러는 반드시 명세의 코드(ACC_NOT_FOUND · EMP_INVALID_REQUEST …)를 쓴다.
     private static final String COMMON_FORBIDDEN = "COMMON_FORBIDDEN";
     private static final String COMMON_FORBIDDEN_MESSAGE = "접근 권한이 없습니다.";
@@ -46,8 +53,23 @@ public class GlobalExceptionHandler {
     private static final String COMMON_INVALID_REQUEST_MESSAGE = "잘못된 요청입니다.";
     private static final String COMMON_NOT_FOUND = "COMMON_NOT_FOUND";
     private static final String COMMON_NOT_FOUND_MESSAGE = "요청한 경로를 찾을 수 없습니다.";
+    private static final String COMMON_METHOD_NOT_ALLOWED = "COMMON_METHOD_NOT_ALLOWED";
+    private static final String COMMON_METHOD_NOT_ALLOWED_MESSAGE = "지원하지 않는 요청 방식입니다.";
     private static final String COMMON_INTERNAL_ERROR = "COMMON_INTERNAL_ERROR";
     private static final String COMMON_INTERNAL_ERROR_MESSAGE = "서버 내부 오류가 발생했습니다.";
+
+    /**
+     * Bean Validation 메시지에 {@code "ERROR_CODE|사용자 문구"} 형태를 허용한다.
+     *
+     * <p>기본 동작으로는 {@code @NotBlank}·{@code @Size} 위반이 전부 {@code COMMON_INVALID_REQUEST} 로
+     * 나가 <b>명세가 정한 도메인 에러코드를 내려줄 수 없었다</b>. 그래서 검증을 애노테이션으로 못 쓰고
+     * 서비스에서 손으로 던져 왔다 (`BCT-V1-API.md` §3-5 B2).
+     *
+     * <p>구분자가 없는 기존 메시지("사번을 입력해 주세요.", "must not be blank")는 이 패턴에 걸리지 않아
+     * <b>지금까지와 완전히 동일하게</b> {@code COMMON_INVALID_REQUEST} 로 나간다.
+     */
+    private static final Pattern CODED_MESSAGE = Pattern.compile(
+            "^([A-Z][A-Z0-9_]{2,})\\|(.+)$", Pattern.DOTALL);
 
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiErrorResponse> handleDomainException(
@@ -69,6 +91,14 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException e,
             HttpServletRequest request
     ) {
+        Optional<ResponseEntity<ApiErrorResponse>> coded = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> codedBadRequest(error.getDefaultMessage(), request))
+                .flatMap(Optional::stream)
+                .findFirst();
+        if (coded.isPresent()) {
+            return coded.get();
+        }
+
         String message = e.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
@@ -82,6 +112,15 @@ public class GlobalExceptionHandler {
             ConstraintViolationException e,
             HttpServletRequest request
     ) {
+        Optional<ResponseEntity<ApiErrorResponse>> coded = e.getConstraintViolations().stream()
+                .map(ConstraintViolation::getMessage)
+                .map(message -> codedBadRequest(message, request))
+                .flatMap(Optional::stream)
+                .findFirst();
+        if (coded.isPresent()) {
+            return coded.get();
+        }
+
         String message = e.getConstraintViolations().stream()
                 .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
                 .filter(this::hasText)
@@ -147,6 +186,34 @@ public class GlobalExceptionHandler {
                 404, COMMON_NOT_FOUND, COMMON_NOT_FOUND_MESSAGE));
     }
 
+    /**
+     * 경로는 맞지만 HTTP 메서드가 없는 경우 — {@code 405}.
+     *
+     * <p>🚨 <b>{@link NoResourceFoundException} 과 같은 이유로 필요하다.</b> 이 핸들러가 없으면 아래
+     * {@code Exception} 폴백이 삼켜 <b>500 이 나가고</b>, 프론트가 "메서드를 잘못 썼다"(프론트 버그)와
+     * "서버가 터졌다"(장애)를 구분하지 못한다. 실제로 {@code PATCH /api/v1/notifications} 처럼
+     * GET 만 있는 경로에 다른 메서드를 쓰면 500 이 나가고 있었다 (2026-08-07 발견).
+     *
+     * <p>{@code Allow} 헤더에 지원 메서드를 담아 준다 — RFC 9110 이 405 응답에 요구하는 헤더다.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException e,
+            HttpServletRequest request
+    ) {
+        log.warn("[405] {} {} - 지원 메서드: {}",
+                request.getMethod(), request.getRequestURI(), e.getSupportedHttpMethods());
+
+        // RFC 9110 §15.5.6 — 405 응답은 Allow 헤더를 반드시 포함해야 한다.
+        // 지원 메서드를 모르는 경우(예외가 목록 없이 만들어진 경우)에도 빈 Allow 를 내보낸다 —
+        // 없는 메서드를 지어내지 않으면서 "모든 405 에 Allow 가 있다"는 계약은 지킨다.
+        Set<HttpMethod> supported = e.getSupportedHttpMethods();
+        return ResponseEntity.status(405)
+                .allow(supported == null ? new HttpMethod[0] : supported.toArray(new HttpMethod[0]))
+                .body(ApiErrorResponse.of(
+                        405, COMMON_METHOD_NOT_ALLOWED, COMMON_METHOD_NOT_ALLOWED_MESSAGE));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleException(
             Exception e,
@@ -156,6 +223,29 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(500).body(ApiErrorResponse.of(
                 500, COMMON_INTERNAL_ERROR, COMMON_INTERNAL_ERROR_MESSAGE));
+    }
+
+    /**
+     * 검증 메시지가 {@code "ERROR_CODE|문구"} 형태면 그 코드로 400 응답을 만든다.
+     * 형태가 아니면 empty 를 돌려주고 호출부가 기존 폴백을 그대로 탄다.
+     */
+    private Optional<ResponseEntity<ApiErrorResponse>> codedBadRequest(
+            String rawMessage, HttpServletRequest request) {
+        if (rawMessage == null) {
+            return Optional.empty();
+        }
+        Matcher matcher = CODED_MESSAGE.matcher(rawMessage);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+
+        String code = matcher.group(1);
+        String message = matcher.group(2);
+        log.warn("[400] {} {} - {} : {}",
+                request.getMethod(), request.getRequestURI(), code, message);
+
+        return Optional.of(ResponseEntity.badRequest()
+                .body(ApiErrorResponse.of(400, code, message)));
     }
 
     private ResponseEntity<ApiErrorResponse> badRequest(String message, HttpServletRequest request) {

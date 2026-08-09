@@ -14,10 +14,10 @@ public record BusinessCategoryDetailResponse(
         @Schema(description = "카테고리 이름", example = "상하수도")
         String name,
 
-        @Schema(description = "업무코드. 미입력이면 null", example = "WATER")
+        @Schema(description = "업무코드. 미입력이면 null", example = "WATER", nullable = true)
         String code,
 
-        @Schema(description = "설명. 미입력이면 null", example = "상수도·하수도 설계 및 관리")
+        @Schema(description = "설명. 미입력이면 null", example = "상수도·하수도 설계 및 관리", nullable = true)
         String description,
 
         @Schema(description = "삭제 가능 여부. 생성 직후이므로 항상 true", example = "true")

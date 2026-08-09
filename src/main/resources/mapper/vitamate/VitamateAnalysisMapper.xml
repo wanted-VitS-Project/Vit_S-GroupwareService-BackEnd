@@ -22,30 +22,20 @@
           AND b.type = 'AI'
           AND b.deleted_at IS NULL
           AND vb.deleted_at IS NULL
-          AND (
-            EXISTS (
-                SELECT 1
-                FROM step_permission sp
-                WHERE sp.step_id = b.step_id
-                  AND sp.user_id = #{userId}
-                  AND sp.permission != 'NONE'
-            )
-                OR (
-                NOT EXISTS (
-                    SELECT 1
-                    FROM step_permission sp
-                    WHERE sp.step_id = b.step_id
-                      AND sp.user_id = #{userId}
-                )
-                    AND EXISTS (
-                    SELECT 1
-                    FROM project_member pm
-                    WHERE pm.project_id = s.project_id
-                      AND pm.user_id = #{userId}
-                      AND pm.permission != 'NONE'
-                )
-                )
-            )
+          AND EXISTS (
+            SELECT 1
+            FROM project_member pm
+            WHERE pm.project_id = s.project_id
+              AND pm.user_id = #{userId}
+              AND pm.permission != 'NONE'
+        )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM step_permission sp
+            WHERE sp.step_id = b.step_id
+              AND sp.user_id = #{userId}
+              AND sp.permission = 'NONE'
+        )
     </select>
 
     <select id="countCompletedFileVersionsInProject" resultType="int">
@@ -68,6 +58,8 @@
         SELECT
             va.vitamate_analysis_id AS analysisId,
             b.block_id AS blockId,
+            va.review_type AS reviewType,
+            va.review_category_codes AS reviewCategoryCodes,
             va.prompt AS prompt,
             va.analysis_status AS analysisStatus,
             va.result AS result,
@@ -88,37 +80,28 @@
           AND va.deleted_at IS NULL
           AND vb.deleted_at IS NULL
           AND b.deleted_at IS NULL
-          AND (
-            EXISTS (
-                SELECT 1
-                FROM step_permission sp
-                WHERE sp.step_id = b.step_id
-                  AND sp.user_id = #{userId}
-                  AND sp.permission != 'NONE'
-            )
-                OR (
-                NOT EXISTS (
-                    SELECT 1
-                    FROM step_permission sp
-                    WHERE sp.step_id = b.step_id
-                      AND sp.user_id = #{userId}
-                )
-                    AND EXISTS (
-                    SELECT 1
-                    FROM project_member pm
-                    WHERE pm.project_id = s.project_id
-                      AND pm.user_id = #{userId}
-                      AND pm.permission != 'NONE'
-                )
-                )
-            )
+          AND EXISTS (
+            SELECT 1
+            FROM project_member pm
+            WHERE pm.project_id = s.project_id
+              AND pm.user_id = #{userId}
+              AND pm.permission != 'NONE'
+        )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM step_permission sp
+            WHERE sp.step_id = b.step_id
+              AND sp.user_id = #{userId}
+              AND sp.permission = 'NONE'
+        )
     </select>
 
     <select id="findAnalysisDocuments"
             resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisDocumentRow">
         SELECT
             vad.file_version_id AS fileVersionId,
-            f.name AS fileName
+            f.name AS fileName,
+            vad.document_role AS documentRole
         FROM vitamate_analysis_document vad
                  JOIN file_version fv
                       ON fv.file_version_id = vad.file_version_id
@@ -156,6 +139,8 @@
         SELECT
             va.vitamate_analysis_id AS analysisId,
             va.processing_attempt_id AS attemptId,
+            va.review_type AS reviewType,
+            va.review_category_codes AS reviewCategoryCodes,
             va.prompt AS prompt,
             s.project_id AS projectId,
             b.block_id AS blockId
@@ -181,7 +166,8 @@
             resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisJobDocumentRow">
         SELECT
             vad.file_version_id AS fileVersionId,
-            f.name AS fileName
+            f.name AS fileName,
+            vad.document_role AS documentRole
         FROM vitamate_analysis_document vad
                  JOIN file_version fv
                       ON fv.file_version_id = vad.file_version_id
@@ -212,13 +198,15 @@
           AND fv.deleted_at IS NULL
           AND dc.deleted_at IS NULL
           AND dc.embedding_status = 'COMPLETED'
-        ORDER BY vad.created_at ASC, vad.vitamate_analysis_document_id ASC, dc.chunk_index ASC
+        ORDER BY vad.document_role ASC, vad.created_at ASC, vad.vitamate_analysis_document_id ASC, dc.chunk_index ASC
     </select>
 
     <select id="findBlockAnalysisHistories"
             resultType="com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateAnalysisHistoryRow">
         SELECT
             va.vitamate_analysis_id AS analysisId,
+            va.review_type AS reviewType,
+            va.review_category_codes AS reviewCategoryCodes,
             va.prompt AS prompt,
             va.analysis_status AS analysisStatus,
             va.created_at AS createdAt,

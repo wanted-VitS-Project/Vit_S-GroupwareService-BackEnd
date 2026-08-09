@@ -39,6 +39,9 @@ public class VitamateAnalysisDocumentEntity {
     @Column(name = "file_version_id", nullable = false)
     private Long fileVersionId;
 
+    @Column(name = "document_role", nullable = false, length = 20)
+    private String documentRole;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -46,10 +49,11 @@ public class VitamateAnalysisDocumentEntity {
     private LocalDateTime deletedAt;
 
     // 분석 요청 ID와 파일 버전 ID로 분석 대상 문서 엔티티를 만든다.
-    public static VitamateAnalysisDocumentEntity of(Long analysisId, Long fileVersionId) {
+    public static VitamateAnalysisDocumentEntity of(Long analysisId, Long fileVersionId, String documentRole) {
         VitamateAnalysisDocumentEntity entity = new VitamateAnalysisDocumentEntity();
         entity.analysisId = analysisId;
         entity.fileVersionId = fileVersionId;
+        entity.documentRole = documentRole;
         entity.createdAt = LocalDateTime.now();
         return entity;
     }

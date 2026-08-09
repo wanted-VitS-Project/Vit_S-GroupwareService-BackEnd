@@ -3,16 +3,14 @@ package com.group3.vitamins.notification.infrastructure.persistence;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface SpringDataNotificationRepository extends JpaRepository<NotificationJpaEntity, Long> {
 
-    /** 삭제되지 않은 알림만 ID 로 찾는다 (삭제·이동대상조회의 404 판정용). */
+    /** 삭제되지 않은 알림만 ID 로 찾는다 (삭제·읽음·이동대상조회의 404 판정용). */
     Optional<NotificationJpaEntity> findByNotificationIdAndDeletedAtIsNull(Long notificationId);
 
     /**
@@ -33,26 +31,4 @@ public interface SpringDataNotificationRepository extends JpaRepository<Notifica
                                        @Param("category") String category,
                                        @Param("isRead") Boolean isRead,
                                        Pageable pageable);
-
-    /** ACT-005 — 본인의 안 읽은 알림 전체를 일괄 읽음 처리. 처리 건수를 반환한다. */
-    @Modifying
-    @Query("""
-            UPDATE NotificationJpaEntity n
-            SET n.readAt = :now
-            WHERE n.userId = :userId
-              AND n.readAt IS NULL
-              AND n.deletedAt IS NULL
-            """)
-    int markAllRead(@Param("userId") String userId, @Param("now") LocalDateTime now);
-
-    /** RET-001 — 보존 기간이 지난 알림을 전 사용자 대상으로 일괄 논리 삭제한다. */
-    @Modifying
-    @Query("""
-            UPDATE NotificationJpaEntity n
-            SET n.deletedAt = :deletedAt
-            WHERE n.createdAt < :createdBefore
-              AND n.deletedAt IS NULL
-            """)
-    int deleteCreatedBefore(@Param("createdBefore") LocalDateTime createdBefore,
-                            @Param("deletedAt") LocalDateTime deletedAt);
 }

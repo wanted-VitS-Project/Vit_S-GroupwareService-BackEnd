@@ -31,7 +31,7 @@ public record MemberListResponse(
             @Schema(description = "이름", example = "김용준")
             String name,
 
-            @Schema(description = "부서명. 부서 미배정이면 null", example = "사업1팀")
+            @Schema(description = "부서명. 부서 미배정이면 null", example = "사업1팀", nullable = true)
             String department,
 
             @Schema(description = "프로젝트 권한", example = "EDITOR",

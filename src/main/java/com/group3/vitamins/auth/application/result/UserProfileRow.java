@@ -24,7 +24,9 @@ public record UserProfileRow(
         String parentDepartmentName,
         String jobPositionName,
         LocalDate hiredAt,
-        LocalDateTime lastLoginAt
+        LocalDateTime lastLoginAt,
+        /** 소속 회사(테넌트) 번호 — 로그인 시 세션(TenantContext)에 실린다. 화면에 노출하지 않는다 */
+        Long companyId
 ) {
 
     /** 명세의 {@code departmentPath} — {@code "기술본부 / 개발팀"}. 최상위면 부서명 하나만 */

@@ -65,6 +65,12 @@ GET localhost:8080/api/v1/steps/15/blocks
 ### direction=prev일 때 첫 이미지에서 호출하면 마지막 이미지로 순환하는지 확인할 것.
 GET localhost:8080/api/v1/blocks/images/3/items/1?direction=next
 
+### 이미지 항목 전체 조회 — URL의 3을 imgBlockId로 교체할 것. 수정 화면이 목록을 통째로 받는 용도.
+### orderIndex 오름차순으로 전부 나오는지 + totalCount가 배열 길이와 같은지 확인할 것 (삭제된 건 안 보여야 함).
+### ⚠️ 이 조회만 편집 권한이다 — VIEWER 계정으로 호출하면 403 IMG-002 확인할 것 (순차 조회는 VIEWER도 200).
+### 이미지가 0장인 블록이면 404가 아니라 200 + { totalCount: 0, images: [] } 인지, 없는 imgBlockId면 404 IMG-003 확인
+GET localhost:8080/api/v1/blocks/images/4/items
+
 ### 이미지 다운로드 (단건) — URL의 1을 imgBlockId로, imgId 쿼리파라미터를 실제 이미지 ID로 교체할 것.
 ### ⚠️ filename=은 항상 "download.jpg" ASCII 폴백이다 — 실제 원본 파일명은 filename*=UTF-8''...에 인코딩되어 있다.
 ### 그 값을 디코딩해서 원본 파일명과 일치하는지 확인할 것 (filename=만 보면 항상 download.jpg로 보임, 정상 동작).
@@ -82,18 +88,17 @@ GET localhost:8080/api/v1/blocks/images/4/download
 
 ### 이미지 항목 수정 (순서·캡션) — images 배열에 없는 이미지는 삭제 처리됨 (부분집합 OK). URL의 1을 imgBlockId로 교체할 것
 ### imgId는 Swagger 생성 응답 또는 0-4 재조회로 확인
-PATCH localhost:8080/api/v1/blocks/images/items/1
+PATCH localhost:8080/api/v1/blocks/images/items/4
 Content-Type: application/json
 
 {
     "images": [
-        { "imgId": 2, "caption": "모듈6 ERD.V2" },
-        { "imgId": 1, "caption": "모듈6 ERD.v1" }
+        { "imgId": 12, "caption": "모자 쓴 병아리" }
     ]
 }
 
 ### 이미지 항목 삭제 (단건) — imgId를 실제 삭제할 이미지 ID로 교체할 것
-DELETE localhost:8080/api/v1/blocks/images/items/6
+DELETE localhost:8080/api/v1/blocks/images/items/11
 
 ### 블록 삭제 (동훈님 담당, 공용 API) — URL의 1을 0-3 응답의 blockId로 교체할 것.
 ### ⚠️ imgBlockId(0-4에서 확인한 값)가 아니라 공용 block 테이블 PK다. 성공하면
@@ -119,7 +124,7 @@ PATCH localhost:8080/api/v1/blocks/images/items/restore
 Content-Type: application/json
 
 {
-    "imgIds": [7]
+    "imgIds": []
 }
 
 ### 이미지 완전 삭제(하드 삭제) — imgIds를 휴지통 조회에서 확인한 삭제된 imgId들로 교체할 것.
@@ -133,5 +138,5 @@ DELETE localhost:8080/api/v1/blocks/images/items/hard
 Content-Type: application/json
 
 {
-    "imgIds": [8]
+    "imgIds": [11, 10, 9, 8, 5]
 }

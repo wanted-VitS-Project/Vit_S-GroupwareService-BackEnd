@@ -2,12 +2,16 @@ package com.group3.vitamins.project.step.presentation.api.request;
 
 import com.group3.vitamins.project.step.application.command.CreateStepCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
 @Schema(description = "스텝 생성 요청")
 public record StepCreateRequest(
 
+        @NotBlank(message = "STEP_NAME_REQUIRED|스텝명을 입력해 주세요.")
+        @Size(max = 200, message = "STEP_NAME_TOO_LONG|스텝명은 200자를 넘을 수 없습니다.")
         @Schema(description = "스텝명 (최대 200자)", example = "제안서 작성")
         String name,
 
