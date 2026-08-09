@@ -55,6 +55,7 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
     public DepartmentResult create(CreateDepartmentCommand command) {
         departmentAdminPolicy.assertAdmin(command.role());
         validateName(command.name());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
 
         String parentName = null;
         Long parentId = command.parentId();
@@ -62,14 +63,15 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
             // 부모 행을 배타 잠금으로 읽는다 — 삭제(findByIdForUpdate)와 잠금 순서를 맞춰,
             // "부모가 동시에 삭제돼 저장 시 FK 위반(→ 이름중복으로 오분류)" 레이스를 원천 차단한다.
             // 잠금을 쥐고 있는 동안 부모는 삭제되지 못하므로, 커밋 시점까지 parentId 참조가 유효하다.
-            Department parent = departmentRepository.findByIdForUpdate(parentId)
+            // 회사 범위 조회라 타사 부서를 부모로 지정하면 DEPT_PARENT_NOT_FOUND 로 귀결된다.
+            Department parent = departmentRepository.findByIdForUpdate(parentId, companyId)
                     .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_PARENT_NOT_FOUND));
             if (!parent.isRoot()) {
                 throw new ConflictException(DepartmentErrorCode.DEPT_MAX_DEPTH_EXCEEDED);
             }
             parentName = parent.getName();
         }
-        if (departmentRepository.existsSiblingName(command.name(), parentId)) {
+        if (departmentRepository.existsSiblingName(command.name(), parentId, companyId)) {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
@@ -81,7 +83,7 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
         Department saved;
         try {
             saved = departmentRepository.save(
-                    Department.create(command.name(), parentId, currentCompanyIdProvider.currentCompanyId()));
+                    Department.create(command.name(), parentId, companyId));
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED, e);
         }
@@ -100,12 +102,13 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
     public DepartmentResult rename(RenameDepartmentCommand command) {
         departmentAdminPolicy.assertAdmin(command.role());
         validateName(command.name());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
 
-        Department department = departmentRepository.findById(command.departmentId())
+        Department department = departmentRepository.findById(command.departmentId(), companyId)
                 .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_NOT_FOUND));
         // 상위는 바뀌지 않으므로 그 부서의 현재 parentId 기준 형제끼리, 자기 자신은 제외하고 비교한다.
         if (departmentRepository.existsSiblingNameExcludingSelf(
-                command.name(), department.getParentId(), command.departmentId())) {
+                command.name(), department.getParentId(), command.departmentId(), companyId)) {
             throw new ConflictException(DepartmentErrorCode.DEPT_NAME_DUPLICATED);
         }
 
@@ -120,7 +123,7 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
         log.info("부서명 수정 — departmentId={} name={}", saved.getDepartmentId(), saved.getName());
         return new DepartmentResult(
                 saved.getDepartmentId(), saved.getName(),
-                saved.getParentId(), resolveParentName(saved.getParentId()), 0, 0);
+                saved.getParentId(), resolveParentName(saved.getParentId(), companyId), 0, 0);
     }
 
     /**
@@ -133,10 +136,12 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
     @Override
     public void delete(DeleteDepartmentCommand command) {
         departmentAdminPolicy.assertAdmin(command.role());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
 
         // 부서 행을 배타 잠금으로 읽는다 — 아래 차단 검사와 삭제 사이에 다른 트랜잭션이 이 부서로
         // 사원 배정·하위 부서 생성을 끼워 넣어 FK 위반(500)이 나는 레이스를 막는다.
-        Department department = departmentRepository.findByIdForUpdate(command.departmentId())
+        // 회사 범위 조회라 타사 부서 삭제 시도는 DEPT_NOT_FOUND 로 귀결된다.
+        Department department = departmentRepository.findByIdForUpdate(command.departmentId(), companyId)
                 .orElseThrow(() -> new NotFoundException(DepartmentErrorCode.DEPT_NOT_FOUND));
 
         long directEmployees = departmentEmployeeQueryPort.countDirectEmployees(command.departmentId());
@@ -144,7 +149,7 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
             throw new ConflictException(DepartmentErrorCode.DEPT_HAS_EMPLOYEES,
                     "소속 사원 " + directEmployees + "명이 있어 삭제할 수 없습니다.");
         }
-        long children = departmentRepository.countByParentId(command.departmentId());
+        long children = departmentRepository.countByParentId(command.departmentId(), companyId);
         if (children > 0) {
             throw new ConflictException(DepartmentErrorCode.DEPT_HAS_CHILDREN,
                     "하위 부서 " + children + "개가 있어 삭제할 수 없습니다.");
@@ -163,12 +168,12 @@ public class DepartmentCommandService implements DepartmentCommandUseCase {
         }
     }
 
-    /** 상위 부서명을 조회한다. 최상위 부서면 {@code null}. FK 로 부모 존재가 보장되지만 방어적으로 둔다. */
-    private String resolveParentName(Long parentId) {
+    /** 상위 부서명을 조회한다(회사 범위). 최상위 부서면 {@code null}. FK 로 부모 존재가 보장되지만 방어적으로 둔다. */
+    private String resolveParentName(Long parentId, Long companyId) {
         if (parentId == null) {
             return null;
         }
-        return departmentRepository.findById(parentId)
+        return departmentRepository.findById(parentId, companyId)
                 .map(Department::getName)
                 .orElse(null);
     }

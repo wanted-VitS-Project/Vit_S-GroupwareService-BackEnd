@@ -11,6 +11,7 @@ import com.group3.vitamins.jobposition.application.result.JobPositionEmployeeRow
 import com.group3.vitamins.jobposition.application.result.JobPositionEmployeesResult;
 import com.group3.vitamins.jobposition.application.result.JobPositionResult;
 import com.group3.vitamins.jobposition.application.service.JobPositionQueryService;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.jobposition.domain.exception.JobPositionErrorCode;
 import com.group3.vitamins.jobposition.domain.model.JobPosition;
 import com.group3.vitamins.jobposition.domain.repository.JobPositionRepository;
@@ -38,6 +39,7 @@ class JobPositionQueryServiceTest {
     private JobPositionRepository jobPositionRepository;
     private JobPositionEmployeeCountPort employeeCountPort;
     private JobPositionEmployeeQueryPort employeeQueryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private JobPositionQueryService queryService;
 
     @BeforeEach
@@ -45,8 +47,11 @@ class JobPositionQueryServiceTest {
         jobPositionRepository = Mockito.mock(JobPositionRepository.class);
         employeeCountPort = Mockito.mock(JobPositionEmployeeCountPort.class);
         employeeQueryPort = Mockito.mock(JobPositionEmployeeQueryPort.class);
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         queryService = new JobPositionQueryService(
-                jobPositionRepository, employeeCountPort, employeeQueryPort, new JobPositionAdminPolicy());
+                jobPositionRepository, employeeCountPort, employeeQueryPort,
+                new JobPositionAdminPolicy(), currentCompanyIdProvider);
     }
 
     private JobPosition position(Long id, String name, int sortOrder) {
@@ -56,7 +61,7 @@ class JobPositionQueryServiceTest {
     @Test
     @DisplayName("각 직급에 사용 인원을 붙여 반환하고, 집계에 없는 직급은 0 으로 채운다")
     void mapsEmployeeCountAndDefaultsZero() {
-        when(jobPositionRepository.findAllOrdered()).thenReturn(List.of(
+        when(jobPositionRepository.findAllOrdered(1L)).thenReturn(List.of(
                 position(1L, "사원", 1),
                 position(2L, "대리", 2),
                 position(3L, "과장", 3)   // 집계 맵에 없음 → 0
@@ -74,7 +79,7 @@ class JobPositionQueryServiceTest {
     @Test
     @DisplayName("직급이 하나도 없으면 빈 배열이고 집계는 조회하지 않는다")
     void emptyWhenNoPositions() {
-        when(jobPositionRepository.findAllOrdered()).thenReturn(List.of());
+        when(jobPositionRepository.findAllOrdered(1L)).thenReturn(List.of());
 
         assertThat(queryService.listJobPositions(new JobPositionListQuery("ADMIN"))).isEmpty();
         verify(employeeCountPort, never()).countByJobPosition();
@@ -85,7 +90,7 @@ class JobPositionQueryServiceTest {
     void rejectsNonAdmin() {
         assertThatThrownBy(() -> queryService.listJobPositions(new JobPositionListQuery("MASTER")))
                 .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-        verify(jobPositionRepository, never()).findAllOrdered();
+        verify(jobPositionRepository, never()).findAllOrdered(1L);
     }
 
     // ===== §5 직급별 사원 목록 =====
@@ -93,7 +98,7 @@ class JobPositionQueryServiceTest {
     @Test
     @DisplayName("직급에 속한 사원을 반환하고 departmentPath 를 상위/부서로 조립한다")
     void listsEmployeesWithDepartmentPath() {
-        when(jobPositionRepository.findById(1L)).thenReturn(Optional.of(position(1L, "사원", 1)));
+        when(jobPositionRepository.findById(1L, 1L)).thenReturn(Optional.of(position(1L, "사원", 1)));
         when(employeeQueryPort.findEmployeesByJobPosition(1L)).thenReturn(List.of(
                 new JobPositionEmployeeRow("EMP001", "김철수", "개발팀", "본사"),   // 하위 부서 → "본사 / 개발팀"
                 new JobPositionEmployeeRow("EMP002", "박영수", "본사", null),      // 최상위 부서 → "본사"
@@ -114,7 +119,7 @@ class JobPositionQueryServiceTest {
     @Test
     @DisplayName("존재하는 직급이지만 인원이 0명이면 빈 배열")
     void emptyWhenNoEmployees() {
-        when(jobPositionRepository.findById(2L)).thenReturn(Optional.of(position(2L, "대리", 2)));
+        when(jobPositionRepository.findById(2L, 1L)).thenReturn(Optional.of(position(2L, "대리", 2)));
         when(employeeQueryPort.findEmployeesByJobPosition(2L)).thenReturn(List.of());
 
         JobPositionEmployeesResult result =
@@ -127,7 +132,7 @@ class JobPositionQueryServiceTest {
     @Test
     @DisplayName("직급이 없으면 POS_NOT_FOUND — 사원 조회 이전에 막는다")
     void rejectsMissingPosition() {
-        when(jobPositionRepository.findById(99L)).thenReturn(Optional.empty());
+        when(jobPositionRepository.findById(99L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> queryService.getEmployeesByJobPosition(new JobPositionEmployeesQuery(99L, "ADMIN")))
                 .satisfies(hasCode(JobPositionErrorCode.POS_NOT_FOUND));
@@ -139,7 +144,7 @@ class JobPositionQueryServiceTest {
     void employeesRejectsNonAdmin() {
         assertThatThrownBy(() -> queryService.getEmployeesByJobPosition(new JobPositionEmployeesQuery(1L, "MASTER")))
                 .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-        verify(jobPositionRepository, never()).findById(anyLong());
+        verify(jobPositionRepository, never()).findById(anyLong(), anyLong());
     }
 
     private Consumer<Throwable> hasCode(Object expected) {

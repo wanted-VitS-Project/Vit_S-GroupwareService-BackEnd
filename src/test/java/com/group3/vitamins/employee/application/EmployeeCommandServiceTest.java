@@ -96,6 +96,7 @@ class EmployeeCommandServiceTest {
         ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
         verify(registrationWriter).register(captor.capture(), eq("MEMBER"), anyString());
         assertThat(captor.getValue().getUserId()).isEqualTo("vitas-EMP01234567890"); // 20자
+        assertThat(captor.getValue().getCompanyId()).isEqualTo(1L);                  // 회사 식별자 스탬핑
     }
 
     @Test

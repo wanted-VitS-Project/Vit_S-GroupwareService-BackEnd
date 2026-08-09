@@ -34,6 +34,7 @@
            AND e.is_system = 0
            AND e.resigned_at IS NULL
            AND e.deleted_at IS NULL
+         WHERE d.company_id = #{companyId}
          GROUP BY d.department_id, d.name, d.parent_id
          ORDER BY d.department_id
     </select>

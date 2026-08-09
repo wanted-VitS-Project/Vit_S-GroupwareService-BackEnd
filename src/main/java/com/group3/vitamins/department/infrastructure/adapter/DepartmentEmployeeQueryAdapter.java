@@ -18,8 +18,8 @@ public class DepartmentEmployeeQueryAdapter implements DepartmentEmployeeQueryPo
     private final DepartmentEmployeeQueryMapper departmentEmployeeQueryMapper;
 
     @Override
-    public List<DepartmentEmployeeCountRow> findAllWithDirectEmployeeCount() {
-        return departmentEmployeeQueryMapper.findAllWithDirectEmployeeCount();
+    public List<DepartmentEmployeeCountRow> findAllWithDirectEmployeeCount(Long companyId) {
+        return departmentEmployeeQueryMapper.findAllWithDirectEmployeeCount(companyId);
     }
 
     @Override

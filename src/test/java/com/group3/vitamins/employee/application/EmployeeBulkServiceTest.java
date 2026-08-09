@@ -16,6 +16,7 @@ import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
 import com.group3.vitamins.employee.application.service.EmployeeBulkService;
 import com.group3.vitamins.employee.application.service.EmployeeRegistrationWriter;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -297,7 +299,10 @@ class EmployeeBulkServiceTest {
             assertThat(r.failedCount()).isEqualTo(1);          // 오류 1행
             assertThat(r.emailSentCount()).isEqualTo(1);
             assertThat(r.emailNotRegistered()).extracting("userId").containsExactly("vitas-EMP101");
-            verify(registrationWriter, times(2)).register(any(), anyString(), anyString());
+
+            ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
+            verify(registrationWriter, times(2)).register(captor.capture(), anyString(), anyString());
+            assertThat(captor.getAllValues()).extracting(Employee::getCompanyId).containsOnly(1L); // 등록된 전원 회사 스탬핑
         }
 
         @Test

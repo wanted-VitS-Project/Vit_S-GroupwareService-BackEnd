@@ -6,6 +6,7 @@ import com.group3.vitamins.employeegroup.application.result.GroupMembersResult;
 import com.group3.vitamins.employeegroup.application.result.MemberRow;
 import com.group3.vitamins.employeegroup.application.usecase.EmployeeGroupQueryUseCase;
 import com.group3.vitamins.employeegroup.domain.exception.EmployeeGroupErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,23 +24,24 @@ import java.util.List;
 public class EmployeeGroupQueryService implements EmployeeGroupQueryUseCase {
 
     private final EmployeeGroupQueryPort queryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public List<GroupListRow> listGroups(String keyword) {
         String normalized = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
-        return queryPort.findGroups(normalized);
+        return queryPort.findGroups(normalized, currentCompanyIdProvider.currentCompanyId());
     }
 
     @Override
     public GroupListRow getGroup(Long groupId) {
-        return queryPort.findGroup(groupId)
+        return queryPort.findGroup(groupId, currentCompanyIdProvider.currentCompanyId())
                 .orElseThrow(() -> new NotFoundException(EmployeeGroupErrorCode.GRP_NOT_FOUND));
     }
 
     @Override
     public GroupMembersResult getMembers(Long groupId) {
-        // 그룹 존재 확인 + 그룹명 확보(응답에 name 필요).
-        GroupListRow group = queryPort.findGroup(groupId)
+        // 그룹 존재 확인 + 그룹명 확보(응답에 name 필요). 회사 범위 조회라 타사 그룹은 404.
+        GroupListRow group = queryPort.findGroup(groupId, currentCompanyIdProvider.currentCompanyId())
                 .orElseThrow(() -> new NotFoundException(EmployeeGroupErrorCode.GRP_NOT_FOUND));
 
         List<GroupMembersResult.Member> members = queryPort.findMembers(groupId).stream()

@@ -96,7 +96,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("중복 그룹명이면 GRP_NAME_DUPLICATED")
         void duplicate() {
-            when(groupRepository.existsByName("개발팀")).thenReturn(true);
+            when(groupRepository.existsByName("개발팀", 1L)).thenReturn(true);
             assertThatThrownBy(() -> service.create(new CreateGroupCommand(ADMIN, "u", "개발팀", null)))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_NAME_DUPLICATED));
         }
@@ -104,7 +104,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("성공하면 memberCount 0 으로 돌려준다")
         void success() {
-            when(groupRepository.existsByName("개발팀")).thenReturn(false);
+            when(groupRepository.existsByName("개발팀", 1L)).thenReturn(false);
             when(groupRepository.save(any())).thenReturn(group());
             GroupCreateResult r = service.create(new CreateGroupCommand(ADMIN, "ADMIN001", "개발팀", "설명"));
             assertThat(r.groupId()).isEqualTo(GROUP_ID);
@@ -131,7 +131,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("그룹이 없으면 GRP_NOT_FOUND")
         void notFound() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.empty());
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.empty());
             assertThatThrownBy(() -> service.update(
                     new UpdateGroupCommand(ADMIN, GROUP_ID, true, "새이름", false, null)))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_NOT_FOUND));
@@ -140,8 +140,8 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("이름 중복이면 GRP_NAME_DUPLICATED")
         void nameDup() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
-            when(groupRepository.existsByNameExcludingSelf("중복", GROUP_ID)).thenReturn(true);
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.existsByNameExcludingSelf("중복", GROUP_ID, 1L)).thenReturn(true);
             assertThatThrownBy(() -> service.update(
                     new UpdateGroupCommand(ADMIN, GROUP_ID, true, "중복", false, null)))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_NAME_DUPLICATED));
@@ -150,10 +150,10 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("설명만 수정하면 이름 중복검사를 하지 않는다")
         void descOnly() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
             when(groupRepository.save(any())).thenReturn(group());
             service.update(new UpdateGroupCommand(ADMIN, GROUP_ID, false, null, true, "새 설명"));
-            verify(groupRepository, never()).existsByNameExcludingSelf(anyString(), anyLong());
+            verify(groupRepository, never()).existsByNameExcludingSelf(anyString(), anyLong(), anyLong());
         }
     }
 
@@ -164,7 +164,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("그룹이 없으면 GRP_NOT_FOUND")
         void notFound() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.empty());
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.empty());
             assertThatThrownBy(() -> service.delete(new DeleteGroupCommand(ADMIN, GROUP_ID)))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_NOT_FOUND));
         }
@@ -172,7 +172,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("성공하면 delete 를 호출한다(구성원은 CASCADE)")
         void success() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
             service.delete(new DeleteGroupCommand(ADMIN, GROUP_ID));
             verify(groupRepository).delete(any());
         }
@@ -196,9 +196,9 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("존재하지 않는 사번이 있으면 EMP_NOT_FOUND 로 전체 거부")
         void missingUser() {
-            when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findByIdForUpdate(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
             // EMP2 는 결과에 없음 → 없는 사번
-            when(queryPort.findEmployeeRefs(any())).thenReturn(List.of(new EmployeeRefRow("EMP1", false)));
+            when(queryPort.findEmployeeRefs(any(), anyLong())).thenReturn(List.of(new EmployeeRefRow("EMP1", false)));
             assertThatThrownBy(() -> service.addMembers(cmd(List.of("EMP1", "EMP2"))))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_NOT_FOUND));
             verify(memberRepository, never()).addMembers(anyLong(), any());
@@ -207,8 +207,8 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("시스템 계정이 섞이면 ACC_SYSTEM_ACCOUNT_NOT_ALLOWED")
         void systemAccount() {
-            when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
-            when(queryPort.findEmployeeRefs(any()))
+            when(groupRepository.findByIdForUpdate(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
+            when(queryPort.findEmployeeRefs(any(), anyLong()))
                     .thenReturn(List.of(new EmployeeRefRow("EMP1", false), new EmployeeRefRow("ADMIN001", true)));
             assertThatThrownBy(() -> service.addMembers(cmd(List.of("EMP1", "ADMIN001"))))
                     .satisfies(hasCode(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED));
@@ -217,8 +217,8 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("이미 소속은 건너뛰고 신규만 추가한다(멱등·집계)")
         void idempotent() {
-            when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
-            when(queryPort.findEmployeeRefs(any())).thenReturn(List.of(
+            when(groupRepository.findByIdForUpdate(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
+            when(queryPort.findEmployeeRefs(any(), anyLong())).thenReturn(List.of(
                     new EmployeeRefRow("EMP1", false), new EmployeeRefRow("EMP2", false)));
             when(memberRepository.findExistingMemberUserIds(eq(GROUP_ID), any())).thenReturn(Set.of("EMP1")); // EMP1 이미 소속
             when(queryPort.countMembers(GROUP_ID)).thenReturn(2);
@@ -243,7 +243,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("삭제 0건이면(구성원 아님) GRP_MEMBER_NOT_FOUND")
         void notMember() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
             when(memberRepository.removeMember(GROUP_ID, "EMP9")).thenReturn(0);
             assertThatThrownBy(() -> service.removeMember(new RemoveMemberCommand(ADMIN, GROUP_ID, "EMP9")))
                     .satisfies(hasCode(EmployeeGroupErrorCode.GRP_MEMBER_NOT_FOUND));
@@ -254,7 +254,7 @@ class EmployeeGroupCommandServiceTest {
         @Test
         @DisplayName("삭제 1건이면 처리 후 구성원 수를 돌려준다")
         void success() {
-            when(groupRepository.findById(GROUP_ID)).thenReturn(java.util.Optional.of(group()));
+            when(groupRepository.findById(GROUP_ID, 1L)).thenReturn(java.util.Optional.of(group()));
             when(memberRepository.removeMember(GROUP_ID, "EMP1")).thenReturn(1);
             when(queryPort.countMembers(GROUP_ID)).thenReturn(3);
             RemoveMemberResult r = service.removeMember(new RemoveMemberCommand(ADMIN, GROUP_ID, "EMP1"));

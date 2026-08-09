@@ -67,7 +67,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("최상위 부서를 생성하면 parentName·인원 수가 없고(0) 저장된다")
         void createsRootDepartment() {
-            when(departmentRepository.existsSiblingName("신규본부", null)).thenReturn(false);
+            when(departmentRepository.existsSiblingName("신규본부", null, 1L)).thenReturn(false);
             when(departmentRepository.save(any())).thenReturn(department(10L, "신규본부", null));
 
             DepartmentResult result = commandService.create(new CreateDepartmentCommand("ADMIN", "신규본부", null));
@@ -87,8 +87,8 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("하위 부서를 생성하면 상위 부서명(parentName)이 응답에 담긴다")
         void createsChildDepartment() {
-            when(departmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
-            when(departmentRepository.existsSiblingName("인사팀", 1L)).thenReturn(false);
+            when(departmentRepository.findByIdForUpdate(1L, 1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
+            when(departmentRepository.existsSiblingName("인사팀", 1L, 1L)).thenReturn(false);
             when(departmentRepository.save(any())).thenReturn(department(11L, "인사팀", 1L));
 
             DepartmentResult result = commandService.create(new CreateDepartmentCommand("ADMIN", "인사팀", 1L));
@@ -101,7 +101,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("검사 통과 후 저장 시 유니크 위반이 나면 DEPT_NAME_DUPLICATED 로 변환한다(500 방지)")
         void mapsUniqueViolationToConflict() {
-            when(departmentRepository.existsSiblingName("인사팀", null)).thenReturn(false);
+            when(departmentRepository.existsSiblingName("인사팀", null, 1L)).thenReturn(false);
             when(departmentRepository.save(any()))
                     .thenThrow(new DataIntegrityViolationException("uk_department_parent_name"));
 
@@ -115,7 +115,7 @@ class DepartmentCommandServiceTest {
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("MASTER", "인사팀", null)))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
             verify(departmentRepository, never()).save(any());
-            verify(departmentRepository, never()).existsSiblingName(anyString(), any());
+            verify(departmentRepository, never()).existsSiblingName(anyString(), any(), anyLong());
         }
 
         @Test
@@ -136,7 +136,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("상위 부서가 없으면 DEPT_PARENT_NOT_FOUND")
         void rejectsMissingParent() {
-            when(departmentRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
+            when(departmentRepository.findByIdForUpdate(99L, 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("ADMIN", "인사팀", 99L)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_PARENT_NOT_FOUND));
@@ -146,7 +146,7 @@ class DepartmentCommandServiceTest {
         @DisplayName("하위 부서를 상위로 지정하면 계층 2단 초과 — DEPT_MAX_DEPTH_EXCEEDED")
         void rejectsThirdLevel() {
             // 인사팀(parentId=1)은 이미 하위 부서다. 이걸 상위로 지정하면 3단이 된다.
-            when(departmentRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
+            when(departmentRepository.findByIdForUpdate(4L, 1L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
 
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("ADMIN", "인사1파트", 4L)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_MAX_DEPTH_EXCEEDED));
@@ -156,7 +156,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("이미 존재하는 부서명이면 DEPT_NAME_DUPLICATED")
         void rejectsDuplicateName() {
-            when(departmentRepository.existsSiblingName("인사팀", null)).thenReturn(true);
+            when(departmentRepository.existsSiblingName("인사팀", null, 1L)).thenReturn(true);
 
             assertThatThrownBy(() -> commandService.create(new CreateDepartmentCommand("ADMIN", "인사팀", null)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NAME_DUPLICATED));
@@ -171,9 +171,9 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("부서명을 수정하면 이름이 바뀌고 상위 정보가 그대로 담긴다")
         void renamesDepartment() {
-            when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
-            when(departmentRepository.findById(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
-            when(departmentRepository.existsSiblingNameExcludingSelf("인사기획팀", 1L, 4L)).thenReturn(false);
+            when(departmentRepository.findById(4L, 1L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
+            when(departmentRepository.findById(1L, 1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
+            when(departmentRepository.existsSiblingNameExcludingSelf("인사기획팀", 1L, 4L, 1L)).thenReturn(false);
             when(departmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
             DepartmentResult result = commandService.rename(new RenameDepartmentCommand("ADMIN", 4L, "인사기획팀"));
@@ -187,8 +187,8 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("수정 저장 시 유니크 위반이 나면 DEPT_NAME_DUPLICATED 로 변환한다(500 방지)")
         void mapsUniqueViolationToConflict() {
-            when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
-            when(departmentRepository.existsSiblingNameExcludingSelf("회계팀", 1L, 4L)).thenReturn(false);
+            when(departmentRepository.findById(4L, 1L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
+            when(departmentRepository.existsSiblingNameExcludingSelf("회계팀", 1L, 4L, 1L)).thenReturn(false);
             when(departmentRepository.save(any()))
                     .thenThrow(new DataIntegrityViolationException("uk_department_parent_name"));
 
@@ -199,7 +199,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("부서가 없으면 DEPT_NOT_FOUND")
         void rejectsMissingDepartment() {
-            when(departmentRepository.findById(99L)).thenReturn(Optional.empty());
+            when(departmentRepository.findById(99L, 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> commandService.rename(new RenameDepartmentCommand("ADMIN", 99L, "새이름")))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NOT_FOUND));
@@ -208,8 +208,8 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("다른 부서와 이름이 겹치면 DEPT_NAME_DUPLICATED")
         void rejectsDuplicateName() {
-            when(departmentRepository.findById(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
-            when(departmentRepository.existsSiblingNameExcludingSelf("회계팀", 1L, 4L)).thenReturn(true);
+            when(departmentRepository.findById(4L, 1L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
+            when(departmentRepository.existsSiblingNameExcludingSelf("회계팀", 1L, 4L, 1L)).thenReturn(true);
 
             assertThatThrownBy(() -> commandService.rename(new RenameDepartmentCommand("ADMIN", 4L, "회계팀")))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NAME_DUPLICATED));
@@ -220,7 +220,7 @@ class DepartmentCommandServiceTest {
         void rejectsNonAdmin() {
             assertThatThrownBy(() -> commandService.rename(new RenameDepartmentCommand("MEMBER", 4L, "새이름")))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-            verify(departmentRepository, never()).findById(anyLong());
+            verify(departmentRepository, never()).findById(anyLong(), anyLong());
         }
     }
 
@@ -232,9 +232,9 @@ class DepartmentCommandServiceTest {
         @DisplayName("직속 사원·하위 부서가 없으면 삭제된다")
         void deletesDepartment() {
             Department target = department(5L, "회계팀", 1L);
-            when(departmentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(target));
+            when(departmentRepository.findByIdForUpdate(5L, 1L)).thenReturn(Optional.of(target));
             when(departmentEmployeeQueryPort.countDirectEmployees(5L)).thenReturn(0L);
-            when(departmentRepository.countByParentId(5L)).thenReturn(0L);
+            when(departmentRepository.countByParentId(5L, 1L)).thenReturn(0L);
 
             commandService.delete(new DeleteDepartmentCommand("ADMIN", 5L));
 
@@ -244,7 +244,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("부서가 없으면 DEPT_NOT_FOUND")
         void rejectsMissingDepartment() {
-            when(departmentRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
+            when(departmentRepository.findByIdForUpdate(99L, 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> commandService.delete(new DeleteDepartmentCommand("ADMIN", 99L)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_NOT_FOUND));
@@ -253,7 +253,7 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("직속 사원이 있으면 DEPT_HAS_EMPLOYEES — 메시지에 인원 수를 담는다")
         void rejectsWhenHasEmployees() {
-            when(departmentRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
+            when(departmentRepository.findByIdForUpdate(4L, 1L)).thenReturn(Optional.of(department(4L, "인사팀", 1L)));
             when(departmentEmployeeQueryPort.countDirectEmployees(4L)).thenReturn(3L);
 
             assertThatThrownBy(() -> commandService.delete(new DeleteDepartmentCommand("ADMIN", 4L)))
@@ -265,9 +265,9 @@ class DepartmentCommandServiceTest {
         @Test
         @DisplayName("하위 부서가 있으면 DEPT_HAS_CHILDREN — 메시지에 하위 부서 수를 담는다")
         void rejectsWhenHasChildren() {
-            when(departmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
+            when(departmentRepository.findByIdForUpdate(1L, 1L)).thenReturn(Optional.of(department(1L, "경영지원본부", null)));
             when(departmentEmployeeQueryPort.countDirectEmployees(1L)).thenReturn(0L);
-            when(departmentRepository.countByParentId(1L)).thenReturn(2L);
+            when(departmentRepository.countByParentId(1L, 1L)).thenReturn(2L);
 
             assertThatThrownBy(() -> commandService.delete(new DeleteDepartmentCommand("ADMIN", 1L)))
                     .satisfies(hasCode(DepartmentErrorCode.DEPT_HAS_CHILDREN))
@@ -280,7 +280,7 @@ class DepartmentCommandServiceTest {
         void rejectsNonAdmin() {
             assertThatThrownBy(() -> commandService.delete(new DeleteDepartmentCommand("MASTER", 5L)))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-            verify(departmentRepository, never()).findByIdForUpdate(anyLong());
+            verify(departmentRepository, never()).findByIdForUpdate(anyLong(), anyLong());
         }
     }
 
