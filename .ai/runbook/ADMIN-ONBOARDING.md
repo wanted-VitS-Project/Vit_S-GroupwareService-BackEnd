@@ -14,12 +14,13 @@
 
 | 항목 | 결정 주체 | 규칙 |
 |---|---|---|
-| **회사 코드**(`company_code`) | 고객사 요청 | URL-safe 소문자, **≤ 30자**, 전역 유일(`uk_company_code`). 사번 접두사로 쓰인다 (`{code}-{사번}`) |
+| **회사 코드**(`company_code`) | 고객사 요청 | URL-safe 소문자, 전역 유일(`uk_company_code`). 사번 접두사로 쓰인다 (`{code}-{사번}`). ⚠️ **길이 제약**: `len(company_code) + 1 + len(base사번) ≤ 20` (`user_id` 컬럼 폭). 즉 `company_code` 가 19자 이상이면 base 사번을 넣을 자리가 없다 |
 | **회사명**(`name`) | 고객사 | 표시용 |
 | **ADMIN 초기 비밀번호** | DevOps 생성 | 평문 보관 금지. Argon2id 해시만 DB 에 넣는다(아래 2단계) |
 
-> 사번 접두사 길이 예산: `user_id` 컬럼은 **20자**. `{code}-` 를 뺀 나머지가 base 사번 최대 길이다.
-> (예: 코드 `vitas`(5) → `vitas-`(6) → base ≤ 14자)
+> 사번 접두사 길이 예산: `user_id` 컬럼은 **20자** = `len(company_code) + 1('-') + len(base사번)`.
+> base 최대 길이 = `20 - len(company_code) - 1`. (예: 코드 `vitas`(5) → `vitas-`(6) → base ≤ 14자)
+> ⚠️ 이 계산은 문서뿐 아니라 **회사 생성·사원 등록 애플리케이션 검증에도 동일하게** 적용한다.
 
 ---
 
@@ -39,22 +40,27 @@ SELECT company_id FROM company WHERE company_code = '{{company_code}}';  -- 이�
 
 ## 3. ADMIN 사원(employee) INSERT
 
+> ⚠️ **3·4단계는 하나의 트랜잭션이다.** employee 만 커밋되고 account 가 실패하면 **계정 없는 ADMIN 사원**이 남는다.
+> 아래처럼 `START TRANSACTION` … `COMMIT` 으로 묶고, 어느 INSERT 라도 실패하면 `ROLLBACK` 한다.
+
 ```sql
+START TRANSACTION;
+
+-- 3. ADMIN 사원(employee)
 -- user_id = {{company_code}}-{{base사번}}  (전역 유일). ADMIN 은 실제 인사담당자라 is_system=0.
 -- department_id·job_position_id 는 아직 부서/직급이 없으면 NULL 로 둔다(나중에 배정).
 INSERT INTO employee (user_id, company_id, name, is_system, department_id, job_position_id,
                       email, phone, hired_at)
 VALUES ('{{company_code}}-{{base}}', {{COMPANY_ID}}, '{{ADMIN이름}}', 0, NULL, NULL,
         '{{ADMIN이메일}}', NULL, CURDATE());
-```
 
-## 4. ADMIN 계정(account) INSERT
-
-```sql
+-- 4. ADMIN 계정(account)
 -- role=ADMIN 은 이 절차(직접 발급)로만 부여된다 — API 로는 부여 불가(ACC-023).
 -- must_change_password=1 → 최초 로그인 시 비번 변경 강제.
 INSERT INTO account (user_id, password, role, status, must_change_password, login_fail_count)
 VALUES ('{{company_code}}-{{base}}', '{{PW_HASH}}', 'ADMIN', 'ACTIVE', 1, 0);
+
+COMMIT;  -- 어느 INSERT 라도 실패하면 ROLLBACK;
 ```
 
 ## 5. 검증
@@ -75,6 +81,6 @@ VALUES ('{{company_code}}-{{base}}', '{{PW_HASH}}', 'ADMIN', 'ACTIVE', 1, 0);
 
 ## 주의
 
-- **모든 직접 INSERT 에 `company_id` 명시** — DEFAULT 없음.
+- **`company_id` 컬럼이 있는 테이블(예: `employee`)에 직접 INSERT 할 땐 반드시 명시** — DEFAULT 없음. `account` 에는 `company_id` 컬럼이 없다 — 계정의 회사 범위는 `account.user_id → employee.user_id` 로 이어져 **`employee.company_id` 를 통해 파생**된다(조회도 employee 조인으로 회사를 판정).
 - `company_code` 오타 주의 — 사번 접두사로 굳으므로 사후 변경 비용이 크다.
 - 시스템/공용 ADMIN(배치용)이 필요하면 `is_system=1` 로 별도 발급하되, 인사관리 대상에서 제외된다.

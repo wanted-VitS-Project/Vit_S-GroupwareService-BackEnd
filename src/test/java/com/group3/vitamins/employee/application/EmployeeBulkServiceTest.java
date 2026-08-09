@@ -38,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -77,10 +78,10 @@ class EmployeeBulkServiceTest {
                 companyCodeQueryPort, currentCompanyIdProvider);
 
         // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 회사코드 vitas, 회사ID 1, 해싱·비번은 고정
-        when(referencePort.resolveDepartmentIdsByName(any(), anyLong())).thenReturn(Map.of("개발팀", 10L));
-        when(referencePort.resolveJobPositionIdsByName(any(), anyLong())).thenReturn(Map.of("대리", 5L));
+        when(referencePort.resolveDepartmentIdsByName(any(), eq(1L))).thenReturn(Map.of("개발팀", 10L));
+        when(referencePort.resolveJobPositionIdsByName(any(), eq(1L))).thenReturn(Map.of("대리", 5L));
         when(referencePort.findExistingUserIds(any())).thenReturn(Set.of());
-        when(companyCodeQueryPort.findCodeByCompanyId(any())).thenReturn("vitas");
+        when(companyCodeQueryPort.findCodeByCompanyId(eq(1L))).thenReturn("vitas");
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         when(tempPasswordGenerator.generate()).thenReturn("Temp1234!");
         when(passwordEncoder.encode(anyString())).thenReturn("HASHED");

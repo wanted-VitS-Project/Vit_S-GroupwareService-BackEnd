@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -75,7 +76,7 @@ class AccountPasswordResetServiceTest {
     void rejectsNonAdmin() {
         assertThatThrownBy(() -> service.resetPasswords(command("MASTER", List.of("EMP001"))))
                 .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-        verify(accountQueryPort, never()).findTargets(any(), anyLong());
+        verify(accountQueryPort, never()).findTargets(any(), eq(1L));
     }
 
     @Test
@@ -95,7 +96,7 @@ class AccountPasswordResetServiceTest {
     @Test
     @DisplayName("존재하지 않는 사번이 섞이면 전체 거부 — ACC_NOT_FOUND")
     void rejectsWhenAnyMissing() {
-        when(accountQueryPort.findTargets(any(), anyLong()))
+        when(accountQueryPort.findTargets(any(), eq(1L)))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER")));   // 2개 요청, 1개만 존재
 
         assertThatThrownBy(() -> service.resetPasswords(command("ADMIN", List.of("EMP001", "EMP999"))))
@@ -106,7 +107,7 @@ class AccountPasswordResetServiceTest {
     @Test
     @DisplayName("대상에 ADMIN 계정이 있으면 ACC_ADMIN_ACCOUNT_NOT_ALLOWED")
     void rejectsWhenAdminIncluded() {
-        when(accountQueryPort.findTargets(any(), anyLong()))
+        when(accountQueryPort.findTargets(any(), eq(1L)))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER"), row("ADMIN01", null, "ADMIN")));
 
         assertThatThrownBy(() -> service.resetPasswords(command("ADMIN", List.of("EMP001", "ADMIN01"))))
@@ -118,7 +119,7 @@ class AccountPasswordResetServiceTest {
     @SuppressWarnings("unchecked")   // ArgumentCaptor.forClass(Map.class) 는 제네릭을 못 잡는다 (Mockito 한계)
     @DisplayName("이메일 없는 대상은 비밀번호를 바꾸지 않는다 — EMAIL_NOT_REGISTERED(passwordChanged=false)")
     void skipsPasswordChangeWhenEmailMissing() {
-        when(accountQueryPort.findTargets(any(), anyLong()))
+        when(accountQueryPort.findTargets(any(), eq(1L)))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER"), row("EMP002", null, "MEMBER")));
 
         PasswordResetResult result = service.resetPasswords(command("ADMIN", List.of("EMP001", "EMP002")));
@@ -133,6 +134,9 @@ class AccountPasswordResetServiceTest {
         });
 
         // 이메일 있는 대상만 해싱·저장한다
+        // 대상 조회가 현재 회사(1L) 범위로 이뤄졌는지 — 회사 격리 계약 검증
+        verify(accountQueryPort).findTargets(any(), eq(1L));
+
         ArgumentCaptor<Map<String, String>> captor = ArgumentCaptor.forClass(Map.class);
         verify(accountPasswordUpdater, times(1)).applyResets(captor.capture());
         assertThat(captor.getValue()).containsOnlyKeys("EMP001");
@@ -142,7 +146,7 @@ class AccountPasswordResetServiceTest {
     @Test
     @DisplayName("메일 발송이 실패하면 MAIL_SEND_FAILED(passwordChanged=true) — 비번은 이미 바뀌었다")
     void reportsMailFailureAsPasswordChanged() {
-        when(accountQueryPort.findTargets(any(), anyLong()))
+        when(accountQueryPort.findTargets(any(), eq(1L)))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER")));
         doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
                 .when(mailSender).sendTempPassword(anyString(), anyString(), anyString());

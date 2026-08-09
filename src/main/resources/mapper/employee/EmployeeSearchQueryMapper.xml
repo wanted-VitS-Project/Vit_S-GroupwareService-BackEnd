@@ -21,8 +21,8 @@
                d.name    AS department,
                jp.name   AS position
           FROM employee e
-          LEFT JOIN department d     ON d.department_id = e.department_id
-          LEFT JOIN job_position jp  ON jp.job_position_id = e.job_position_id
+          LEFT JOIN department d     ON d.department_id = e.department_id AND d.company_id = e.company_id
+          LEFT JOIN job_position jp  ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
          WHERE e.is_system = 0
            AND e.company_id = #{companyId}
            AND e.resigned_at IS NULL

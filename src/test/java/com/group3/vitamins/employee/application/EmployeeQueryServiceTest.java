@@ -76,7 +76,7 @@ class EmployeeQueryServiceTest {
     void rejectsNullName() {
         assertThatThrownBy(() -> queryService.searchByName(new EmployeeSearchQuery(null)))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
-        verify(searchPort, never()).searchByName(anyString(), anyLong());
+        verify(searchPort, never()).searchByName(any(), anyLong());
     }
 
     @Test
@@ -84,7 +84,7 @@ class EmployeeQueryServiceTest {
     void rejectsBlankName() {
         assertThatThrownBy(() -> queryService.searchByName(new EmployeeSearchQuery("   ")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
-        verify(searchPort, never()).searchByName(anyString(), anyLong());
+        verify(searchPort, never()).searchByName(any(), anyLong());
     }
 
     @Test
@@ -92,7 +92,7 @@ class EmployeeQueryServiceTest {
     void rejectsNullQuery() {
         assertThatThrownBy(() -> queryService.searchByName(null))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_PARAMETER));
-        verify(searchPort, never()).searchByName(anyString(), anyLong());
+        verify(searchPort, never()).searchByName(any(), anyLong());
     }
 
     private Consumer<Throwable> hasCode(Object expected) {

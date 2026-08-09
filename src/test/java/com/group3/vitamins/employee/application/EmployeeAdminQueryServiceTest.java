@@ -107,6 +107,7 @@ class EmployeeAdminQueryServiceTest {
             assertThat(c.offset()).isEqualTo(30); // 2 * 15
             assertThat(c.limit()).isEqualTo(15);
             assertThat(c.resignedOnly()).isFalse(); // resigned 미지정 → 재직자만
+            assertThat(c.companyId()).isEqualTo(1L); // 현재 회사 범위로 조회 — 회사 격리 계약
         }
 
         @Test

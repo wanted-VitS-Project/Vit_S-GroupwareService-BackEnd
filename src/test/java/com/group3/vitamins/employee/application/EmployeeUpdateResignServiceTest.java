@@ -227,6 +227,20 @@ class EmployeeUpdateResignServiceTest {
         }
 
         @Test
+        @DisplayName("타사 사원은 없는 것으로 취급 — EMP_NOT_FOUND (퇴사·계정정지 모두 안 함)")
+        void otherCompanyTreatedAsNotFound() {
+            // 현재 회사=1L, 대상 사원의 회사=2L → 소유권 가드가 404 로 막고 어떤 쓰기도 하지 않는다.
+            when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(
+                    Employee.restore("EMP021", "홍길동", false, 2L, 10L, "h@v.com", null,
+                            LocalDate.of(2024, 3, 2), null, 2L)));
+            assertThatThrownBy(() -> service.resignEmployee(
+                    new ResignEmployeeCommand("ADMIN", "EMP021", "2026-08-31")))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_NOT_FOUND));
+            verify(employeeRepository, never()).resign(anyString(), any());
+            verify(accountDeactivationPort, never()).deactivate(anyString());
+        }
+
+        @Test
         @DisplayName("이미 퇴사한 사원은 EMP_ALREADY_RESIGNED")
         void alreadyResigned() {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(
