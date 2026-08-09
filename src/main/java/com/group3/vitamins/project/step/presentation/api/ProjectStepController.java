@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -58,7 +59,7 @@ public class ProjectStepController {
     public ResponseEntity<ApiResponse<StepCreateResponse>> createStep(
             @Parameter(description = "스텝을 추가할 프로젝트 ID")
             @PathVariable Long projectId,
-            @RequestBody StepCreateRequest request,
+            @Valid @RequestBody StepCreateRequest request,
             Authentication authentication
     ) {
         StepResult result = stepCommandUseCase.createStep(request.toCommand(

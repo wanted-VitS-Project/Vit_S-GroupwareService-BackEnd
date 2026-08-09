@@ -61,6 +61,21 @@ public class Step {
                 ownerUserId, status, completedAt, completedBy, createdAt, updatedAt, deletedAt);
     }
 
+
+    /**
+     * 이름·기간·책임자를 갈아끼운다 (STP-001·003).
+     * 위치(소속 스테이지·정렬순서)는 여기서 안 바꾼다 — 순서 변경 API 가 전담한다.
+     */
+    public Step update(String name, LocalDate startedOn, LocalDate endedOn,
+                       String ownerUserId, LocalDateTime now) {
+        this.name = name;
+        this.startedOn = startedOn;
+        this.endedOn = endedOn;
+        this.ownerUserId = ownerUserId;
+        this.updatedAt = now;
+        return this;
+    }
+
     public Long getStepId() { return stepId; }
     public Long getProjectId() { return projectId; }
     public Long getStageId() { return stageId; }

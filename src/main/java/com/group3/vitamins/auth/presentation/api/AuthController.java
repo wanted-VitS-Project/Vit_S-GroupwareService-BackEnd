@@ -72,7 +72,7 @@ public class AuthController {
 
         UserProfileRow profile = authCommandUseCase.login(request.toCommand());
         authSessionManager.openSession(
-                profile.userId(), profile.role(),
+                profile.userId(), profile.role(), profile.companyId(),
                 profile.termsAgreementRequired(), profile.mustChangePassword(),
                 httpRequest, httpResponse);
 

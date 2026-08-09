@@ -2,6 +2,9 @@ package com.group3.vitamins.project.presentation.api.request;
 
 import com.group3.vitamins.project.application.command.CreateProjectCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,6 +16,8 @@ public record ProjectCreateRequest(
         @Schema(description = "연결할 공고 ID. 생략하면 공고 없이 생성", example = "45")
         Long bidNoticeId,
 
+        @NotBlank(message = "PROJECT_NAME_REQUIRED|과업명을 입력해 주세요.")
+        @Size(max = 300, message = "PROJECT_NAME_TOO_LONG|과업명은 300자를 넘을 수 없습니다.")
         @Schema(description = "과업명 (최대 300자)", example = "OO시 상수도 관리 용역")
         String name,
 
@@ -28,6 +33,7 @@ public record ProjectCreateRequest(
         @Schema(description = "종료일", example = "2026-12-31")
         LocalDate endedOn,
 
+        @PositiveOrZero(message = "CONTRACT_AMOUNT_INVALID|계약금액은 0보다 작을 수 없습니다.")
         @Schema(description = "계약금액", example = "120000000")
         BigDecimal contractAmount,
 
