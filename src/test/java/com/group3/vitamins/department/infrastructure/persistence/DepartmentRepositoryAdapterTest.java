@@ -49,12 +49,12 @@ class DepartmentRepositoryAdapterTest {
     @Test
     @DisplayName("수정(rename)으로 같은 부모 아래 다른 자식과 이름이 겹치면 저장(saveAndFlush) 시점에 즉시 터진다")
     void duplicateSiblingNameOnRenameThrowsSynchronously() {
-        Department parent = adapter.save(Department.create("본부", null));
-        adapter.save(Department.create("개발팀", parent.getDepartmentId()));
-        Department other = adapter.save(Department.create("영업팀", parent.getDepartmentId()));
+        Department parent = adapter.save(Department.create("본부", null, 1L));
+        adapter.save(Department.create("개발팀", parent.getDepartmentId(), 1L));
+        Department other = adapter.save(Department.create("영업팀", parent.getDepartmentId(), 1L));
 
         // 같은 부모 아래 "개발팀" 으로 rename → merge→UPDATE. saveAndFlush 라 커밋이 아니라 지금 터져야 한다.
-        Department renamed = Department.restore(other.getDepartmentId(), "개발팀", parent.getDepartmentId());
+        Department renamed = Department.restore(other.getDepartmentId(), 1L, "개발팀", parent.getDepartmentId());
 
         assertThatThrownBy(() -> adapter.save(renamed))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -63,29 +63,29 @@ class DepartmentRepositoryAdapterTest {
     @Test
     @DisplayName("생성(create)으로 같은 부모 아래 이름이 중복되면 저장(saveAndFlush) 시점에 즉시 터진다")
     void duplicateSiblingNameOnCreateThrowsSynchronously() {
-        Department parent = adapter.save(Department.create("본부", null));
-        adapter.save(Department.create("개발팀", parent.getDepartmentId()));
+        Department parent = adapter.save(Department.create("본부", null, 1L));
+        adapter.save(Department.create("개발팀", parent.getDepartmentId(), 1L));
 
-        assertThatThrownBy(() -> adapter.save(Department.create("개발팀", parent.getDepartmentId())))
+        assertThatThrownBy(() -> adapter.save(Department.create("개발팀", parent.getDepartmentId(), 1L)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     @DisplayName("최상위(부모 없음)끼리 이름이 겹치면 저장(saveAndFlush) 시점에 즉시 터진다 — parent_key=0 공유")
     void duplicateRootNameOnCreateThrowsSynchronously() {
-        adapter.save(Department.create("본부", null));
+        adapter.save(Department.create("본부", null, 1L));
 
-        assertThatThrownBy(() -> adapter.save(Department.create("본부", null)))
+        assertThatThrownBy(() -> adapter.save(Department.create("본부", null, 1L)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     @DisplayName("수정(rename)으로 최상위 다른 부서와 이름이 겹치면 저장(saveAndFlush) 시점에 즉시 터진다")
     void duplicateRootNameOnRenameThrowsSynchronously() {
-        adapter.save(Department.create("경영지원본부", null));
-        Department other = adapter.save(Department.create("기술본부", null));
+        adapter.save(Department.create("경영지원본부", null, 1L));
+        Department other = adapter.save(Department.create("기술본부", null, 1L));
 
-        Department renamed = Department.restore(other.getDepartmentId(), "경영지원본부", null);
+        Department renamed = Department.restore(other.getDepartmentId(), 1L, "경영지원본부", null);
 
         assertThatThrownBy(() -> adapter.save(renamed))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -94,12 +94,12 @@ class DepartmentRepositoryAdapterTest {
     @Test
     @DisplayName("상위 부서가 다르면 같은 이름을 허용한다 — 기술본부>개발팀 · SI본부>개발팀")
     void sameNameUnderDifferentParentsIsAllowed() {
-        Department tech = adapter.save(Department.create("기술본부", null));
-        Department si = adapter.save(Department.create("SI본부", null));
+        Department tech = adapter.save(Department.create("기술본부", null, 1L));
+        Department si = adapter.save(Department.create("SI본부", null, 1L));
 
-        adapter.save(Department.create("개발팀", tech.getDepartmentId()));
+        adapter.save(Department.create("개발팀", tech.getDepartmentId(), 1L));
 
-        assertThatCode(() -> adapter.save(Department.create("개발팀", si.getDepartmentId())))
+        assertThatCode(() -> adapter.save(Department.create("개발팀", si.getDepartmentId(), 1L)))
                 .doesNotThrowAnyException();
     }
 }

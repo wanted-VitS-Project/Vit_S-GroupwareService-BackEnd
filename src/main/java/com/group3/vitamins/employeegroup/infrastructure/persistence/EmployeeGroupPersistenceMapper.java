@@ -10,11 +10,13 @@ public final class EmployeeGroupPersistenceMapper {
 
     public static EmployeeGroup toDomain(EmployeeGroupJpaEntity entity) {
         return EmployeeGroup.restore(
-                entity.getGroupId(), entity.getName(), entity.getDescription(), entity.getCreatedBy());
+                entity.getGroupId(), entity.getCompanyId(), entity.getName(),
+                entity.getDescription(), entity.getCreatedBy());
     }
 
     public static EmployeeGroupJpaEntity toEntity(EmployeeGroup domain) {
         return new EmployeeGroupJpaEntity(
-                domain.getGroupId(), domain.getName(), domain.getDescription(), domain.getCreatedBy());
+                domain.getGroupId(), domain.getCompanyId(), domain.getName(),
+                domain.getDescription(), domain.getCreatedBy());
     }
 }

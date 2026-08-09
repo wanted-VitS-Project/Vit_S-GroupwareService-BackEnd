@@ -12,13 +12,18 @@ import com.group3.vitamins.department.domain.exception.DepartmentErrorCode;
 import com.group3.vitamins.department.domain.model.Department;
 import com.group3.vitamins.department.domain.repository.DepartmentRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -46,11 +51,24 @@ class DepartmentCommandServiceTest {
         // ADMIN 판정은 순수 컴포넌트라 실제 인스턴스를 그대로 쓴다 (mock 불필요).
         commandService = new DepartmentCommandService(
                 departmentRepository, departmentEmployeeQueryPort, new DepartmentAdminPolicy());
+
+        // 생성 스탬핑이 TenantContext(세션 company_id)를 읽으므로 회사 1 컨텍스트를 심는다.
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken("admin", null, List.of());
+        auth.setDetails(1L);
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(auth);
+        SecurityContextHolder.setContext(ctx);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     /** id 가 설정된 부서 도메인 객체를 만든다 (JPA 가 채우는 departmentId 를 흉내낸다). */
     private Department department(Long id, String name, Long parentId) {
-        return Department.restore(id, name, parentId);
+        return Department.restore(id, 1L, name, parentId);
     }
 
     @Nested

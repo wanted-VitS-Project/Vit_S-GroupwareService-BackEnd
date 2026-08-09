@@ -22,7 +22,8 @@ public final class EmployeePersistenceMapper {
                 entity.getEmail(),
                 entity.getPhone(),
                 entity.getHiredAt(),
-                entity.getResignedAt());
+                entity.getResignedAt(),
+                entity.getCompanyId());
     }
 
     /** 도메인 객체를 JPA 엔티티로 옮긴다. */
@@ -36,6 +37,7 @@ public final class EmployeePersistenceMapper {
                 domain.getEmail(),
                 domain.getPhone(),
                 domain.getHiredAt(),
-                domain.getResignedAt());
+                domain.getResignedAt(),
+                domain.getCompanyId());
     }
 }

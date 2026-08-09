@@ -82,7 +82,9 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         // 길이 상한은 DB 컬럼 폭과 같다. 여기서 막지 않으면 INSERT 가 데이터 절단으로 터지고, 그 예외가
         // 아래 catch 에서 사번 중복(409)으로 오인 변환된다 — 값 초과를 EMP_INVALID_REQUEST(400)로 먼저 막는다.
         // 회사코드 접두사를 붙여 전역 유일 user_id 를 만든다 (예: "vitas-1234567"). 이후 중복검사·저장은 이 값 기준.
-        String userId = prefixWithCompanyCode(required(command.userId()));
+        // company_id 스탬핑에도 같은 회사를 쓰므로 한 번만 읽는다.
+        Long companyId = TenantContext.currentCompanyId();
+        String userId = prefixWithCompanyCode(required(command.userId()), companyId);
         String name = requiredWithMax(command.name(), MAX_NAME_LENGTH);
         Long departmentId = command.departmentId();
         if (departmentId == null) {
@@ -110,7 +112,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
         // ── 3 DB 반영 (한 트랜잭션) ──
         Employee employee = Employee.register(
-                userId, name, departmentId, command.jobPositionId(), email, phone, hiredAt);
+                userId, name, departmentId, command.jobPositionId(), email, phone, hiredAt, companyId);
         try {
             registrationWriter.register(employee, role, encodedPassword);
         } catch (DataIntegrityViolationException e) {
@@ -236,8 +238,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
      * 회사 판별은 접두사가 아니라 {@code company_id} 가 담당하므로, 접두사는 회사간 사번 중복을 피하는 PK 충돌 회피 전용이다.
      * 최종 값이 컬럼 폭({@value #MAX_USER_ID_LENGTH})을 넘으면 base 사번이 너무 긴 것 → {@code EMP_INVALID_REQUEST}(400).
      */
-    private String prefixWithCompanyCode(String baseUserId) {
-        Long companyId = TenantContext.currentCompanyId();
+    private String prefixWithCompanyCode(String baseUserId, Long companyId) {
         String companyCode = companyCodeQueryPort.findCodeByCompanyId(companyId);
         if (companyCode == null) {
             throw new IllegalStateException("회사 코드를 찾을 수 없습니다 - companyId=" + companyId);
