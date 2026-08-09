@@ -534,9 +534,11 @@
   실제로는 **프로젝트 단위** 지표다: `block_id → block.step_id → step.project_id`를 타고 가서, **같은 프로젝트·같은
   타입**(INCOME/OUTCOME)의 활성 정산 블록 전체에 걸친 `actual_amount` 합계를 그 타입의 `total_amount`(프로젝트 총
   예정 금액)로 나눈다. INCOME 블록은 입금 진행률, OUTCOME 블록은 외주 출금 진행률을 보여준다 — 두 방향의 돈을 섞지 않는다.
-  이 합계는 `SettlementDetailMapper.findBySettleIds`(마이바티스, JOIN+GROUP BY 파생 테이블로 쿼리 1발) 하나로 계산하고,
-  블록 목록 조회(`SettlementBlockDetailAdapter`)와 이 PATCH 응답(`SettlementCommandService`) 둘 다 **같은 쿼리·같은
-  계산식**(`SettlementProgress.ratio`)을 재사용한다 — 두 곳에 다른 로직이 생기지 않게.
+  이 합계는 소비자별로 별도 쿼리로 계산한다(2026-08-09 매퍼 분리 이후) — 블록 목록 조회
+  (`SettlementBlockDetailAdapter`)는 `SettlementDetailMapper.findBySettleIds`(배치, JOIN+GROUP BY 파생
+  테이블)를, 이 PATCH 응답(`SettlementCommandService`)은 `SettlementSiblingLookupPort.findActualAmountSum`
+  (`SettlementSiblingMapper`, 단건 전용 쿼리)을 쓴다. 쿼리는 다르지만 **같은 계산식**(`SettlementProgress.ratio`)을
+  재사용한다 — 계산 공식이 두 곳에서 갈리지 않게.
 - **수정 제약 2건 (2026-08-09 추가)**:
   1. **타입 다운그레이드 금지(`SETL-006`)** — `OUTCOME → INCOME`은 막는다. OUTCOME 전용 필드(계좌정보)를 버려야 하는
      손실성 변경이기 때문. 반대로 `INCOME → OUTCOME`(계좌정보를 새로 받기만 하면 됨)과 최초 작성은 허용한다.
@@ -550,9 +552,10 @@
      연결된(`status != PENDING`) 회차를 최우선으로 쓴다** — 연결된 회차는 더 이상 안 바뀌는 진짜 확정값이고,
      아직 `PENDING`인 다른 회차는 이 검증이 생기기 전에 잘못 들어간 값일 수 있어 후순위다. 연결된 회차가 하나도
      없으면 `PENDING` 중 아무 값이나(먼저 만들어진 순) 기준으로 쓴다. 아직 아무 회차도 값을 안 정했으면(전부 null)
-     이번 요청이 그 프로젝트의 첫 기준값이 되므로 통과한다. `SettlementDetailMapper.findEstablishedTotalAmount`
-     (마이바티스, `ORDER BY (status != 'PENDING') DESC` 로 우선순위, 쿼리 1발)로 확인한다. 메시지에 기존 등록된
-     금액을 담아 사용자가 바로 어떤 값으로 맞춰야 하는지 알 수 있게 했다.
+     이번 요청이 그 프로젝트의 첫 기준값이 되므로 통과한다. `SettlementSiblingLookupPort.findEstablishedTotalAmount`
+     (`SettlementSiblingMapper`, `ORDER BY (status != 'PENDING') DESC` 로 우선순위, 쿼리 1발, 2026-08-09 매퍼
+     분리 이후 이 경로)로 확인한다. 메시지에 기존 등록된 금액을 담아 사용자가 바로 어떤 값으로 맞춰야 하는지
+     알 수 있게 했다.
      ⚠️ 나중에 "회차·총 금액 추천" API(프로젝트의 기존 정산 블록을 조회해 다음 회차 번호·총 금액을 미리 채워주는 기능)가
      붙으면 이 검증과 값 출처가 같아진다 — 별도 설계 시 이 메서드를 재사용할 수 있는지 검토할 것.
 - **블록 껍데기 생성/삭제/조회 (2026-08-09 추가)** — text 도메인을 그대로 참고해 구현했다.

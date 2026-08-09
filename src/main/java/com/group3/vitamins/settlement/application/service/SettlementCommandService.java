@@ -165,11 +165,18 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         addIfChanged(changes, "bankName", before.getBankName(), saved.getBankName());
         addIfChanged(changes, "accountHolder", before.getAccountHolder(), saved.getAccountHolder());
 
-        // 계좌번호는 마스킹된 값으로만 비교·기록한다 — before는 저장된 암호문을 복호화 후 마스킹,
-        // after는 이번 요청 평문을 마스킹한다. 원문은 어느 쪽도 changes에 담기지 않는다.
-        String maskedBeforeAccountNumber = accountNumberCipher.decryptAndMask(before.getAccountNumber());
-        String maskedAfterAccountNumber = accountNumberCipher.mask(plainAccountNumber);
-        addIfChanged(changes, "accountNumber", maskedBeforeAccountNumber, maskedAfterAccountNumber);
+        // 변경 여부는 원문으로 판단한다 — 마스킹은 앞·뒤 3자리만 남겨서, 서로 다른 계좌번호가 같은
+        // 마스킹값이 될 수 있다(예: "100111111444"/"100999999444" 둘 다 "100******444"). 마스킹값으로
+        // 비교하면 그런 변경이 조용히 로그에서 빠진다. 로그에 기록하는 값은 여전히 마스킹된 값만이다 —
+        // 비교에만 원문을 쓰고, changes에는 원문을 절대 담지 않는다.
+        String beforePlainAccountNumber = before.getAccountNumber() == null
+                ? null
+                : accountNumberCipher.decrypt(before.getAccountNumber());
+        if (!Objects.equals(beforePlainAccountNumber, plainAccountNumber)) {
+            changes.add(new ActivityFieldChange("accountNumber",
+                    accountNumberCipher.decryptAndMask(before.getAccountNumber()),
+                    accountNumberCipher.mask(plainAccountNumber)));
+        }
 
         return changes;
     }
