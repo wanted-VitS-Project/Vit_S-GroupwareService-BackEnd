@@ -14,11 +14,11 @@ import java.util.Optional;
  */
 public interface EmployeeGroupQueryPort {
 
-    /** 그룹 목록 — 이름 오름차순. {@code keyword} 가 있으면 그룹명 부분검색. */
-    List<GroupListRow> findGroups(String keyword);
+    /** 회사 범위 그룹 목록 — 이름 오름차순. {@code keyword} 가 있으면 그룹명 부분검색. */
+    List<GroupListRow> findGroups(String keyword, Long companyId);
 
-    /** 단건 — 수정(§3) 응답이 목록과 같은 구조라 재조회에 쓴다. 없으면 empty. */
-    Optional<GroupListRow> findGroup(Long groupId);
+    /** 회사 범위 단건 — 수정(§3) 응답이 목록과 같은 구조라 재조회에 쓴다. 타사 그룹은 empty → 404. */
+    Optional<GroupListRow> findGroup(Long groupId, Long companyId);
 
     /** 구성원 목록(§5) — 이름 오름차순. 시스템 계정·퇴사자 제외. */
     List<MemberRow> findMembers(Long groupId);
@@ -26,6 +26,9 @@ public interface EmployeeGroupQueryPort {
     /** 처리 후 구성원 수(§6·§7 응답) — 시스템 계정·퇴사자 제외(목록과 같은 기준). */
     int countMembers(Long groupId);
 
-    /** §6 검증용 — 요청 사번 중 실재하는 사원의 (사번·시스템여부). 없는 사번은 결과에 빠진다. */
-    List<EmployeeRefRow> findEmployeeRefs(Collection<String> userIds);
+    /**
+     * §6 검증용 — 요청 사번 중 <b>같은 회사</b>에 실재하는 사원의 (사번·시스템여부). 없는 사번·타사 사번은 결과에 빠진다
+     * (서비스가 EMP_NOT_FOUND 로 전체 거부 → 크로스테넌트 구성원 유입 차단).
+     */
+    List<EmployeeRefRow> findEmployeeRefs(Collection<String> userIds, Long companyId);
 }

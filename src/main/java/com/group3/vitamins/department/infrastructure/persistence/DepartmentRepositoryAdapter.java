@@ -27,36 +27,38 @@ public class DepartmentRepositoryAdapter implements DepartmentRepository {
     }
 
     @Override
-    public Optional<Department> findById(Long departmentId) {
-        return springDataRepository.findById(departmentId)
+    public Optional<Department> findById(Long departmentId, Long companyId) {
+        return springDataRepository.findByDepartmentIdAndCompanyId(departmentId, companyId)
                 .map(DepartmentPersistenceMapper::toDomain);
     }
 
     @Override
-    public Optional<Department> findByIdForUpdate(Long departmentId) {
-        return springDataRepository.findByIdForUpdate(departmentId)
+    public Optional<Department> findByIdForUpdate(Long departmentId, Long companyId) {
+        return springDataRepository.findByIdForUpdate(departmentId, companyId)
                 .map(DepartmentPersistenceMapper::toDomain);
     }
 
     @Override
-    public boolean existsSiblingName(String name, Long parentId) {
+    public boolean existsSiblingName(String name, Long parentId, Long companyId) {
         // MySQL/H2 는 parent_id 가 NULL 인 행끼리 UNIQUE 로 안 막으므로, 최상위(부모 없음)는
         // IS NULL 파생 쿼리로 따로 센다. (파생 쿼리에 null 을 그대로 넘기면 `= null` 이 되어 항상 false)
         return parentId == null
-                ? springDataRepository.existsByNameAndParentIdIsNull(name)
-                : springDataRepository.existsByNameAndParentId(name, parentId);
+                ? springDataRepository.existsByNameAndParentIdIsNullAndCompanyId(name, companyId)
+                : springDataRepository.existsByNameAndParentIdAndCompanyId(name, parentId, companyId);
     }
 
     @Override
-    public boolean existsSiblingNameExcludingSelf(String name, Long parentId, Long departmentId) {
+    public boolean existsSiblingNameExcludingSelf(String name, Long parentId, Long departmentId, Long companyId) {
         return parentId == null
-                ? springDataRepository.existsByNameAndParentIdIsNullAndDepartmentIdNot(name, departmentId)
-                : springDataRepository.existsByNameAndParentIdAndDepartmentIdNot(name, parentId, departmentId);
+                ? springDataRepository.existsByNameAndParentIdIsNullAndDepartmentIdNotAndCompanyId(
+                        name, departmentId, companyId)
+                : springDataRepository.existsByNameAndParentIdAndDepartmentIdNotAndCompanyId(
+                        name, parentId, departmentId, companyId);
     }
 
     @Override
-    public long countByParentId(Long parentId) {
-        return springDataRepository.countByParentId(parentId);
+    public long countByParentId(Long parentId, Long companyId) {
+        return springDataRepository.countByParentIdAndCompanyId(parentId, companyId);
     }
 
     @Override

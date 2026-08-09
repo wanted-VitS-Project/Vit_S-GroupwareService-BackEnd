@@ -4,6 +4,7 @@ import com.group3.vitamins.department.application.port.DepartmentEmployeeQueryPo
 import com.group3.vitamins.department.application.result.DepartmentEmployeeCountRow;
 import com.group3.vitamins.department.application.result.DepartmentTreeResult;
 import com.group3.vitamins.department.application.service.DepartmentQueryService;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,19 +19,22 @@ import static org.mockito.Mockito.when;
 class DepartmentQueryServiceTest {
 
     private DepartmentEmployeeQueryPort departmentEmployeeQueryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private DepartmentQueryService queryService;
 
     @BeforeEach
     void setUp() {
         departmentEmployeeQueryPort = Mockito.mock(DepartmentEmployeeQueryPort.class);
-        queryService = new DepartmentQueryService(departmentEmployeeQueryPort);
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
+        queryService = new DepartmentQueryService(departmentEmployeeQueryPort, currentCompanyIdProvider);
     }
 
     @Test
     @DisplayName("최상위-하위 2단으로 조립하고 상위 인원은 자식 직속 합으로 롤업한다")
     void assemblesTwoLevelTreeAndRollsUpTotal() {
         // 경영지원본부(직속0) > 인사팀(2)·회계팀(2) / 기술본부(직속1) > 개발팀(5)
-        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount()).thenReturn(List.of(
+        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount(1L)).thenReturn(List.of(
                 new DepartmentEmployeeCountRow(1L, "경영지원본부", null, 0),
                 new DepartmentEmployeeCountRow(2L, "기술본부", null, 1),
                 new DepartmentEmployeeCountRow(4L, "인사팀", 1L, 2),
@@ -57,7 +61,7 @@ class DepartmentQueryServiceTest {
     @Test
     @DisplayName("하위 부서의 total 은 자기 직속과 같고 children 은 빈 배열이다")
     void leafTotalEqualsDirectAndChildrenEmpty() {
-        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount()).thenReturn(List.of(
+        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount(1L)).thenReturn(List.of(
                 new DepartmentEmployeeCountRow(1L, "경영지원본부", null, 0),
                 new DepartmentEmployeeCountRow(4L, "인사팀", 1L, 3)
         ));
@@ -72,7 +76,7 @@ class DepartmentQueryServiceTest {
     @Test
     @DisplayName("하위 부서가 없는 최상위는 children 이 빈 배열이고 total = 직속이다")
     void rootWithoutChildren() {
-        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount()).thenReturn(List.of(
+        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount(1L)).thenReturn(List.of(
                 new DepartmentEmployeeCountRow(3L, "감사실", null, 2)
         ));
 
@@ -85,7 +89,7 @@ class DepartmentQueryServiceTest {
     @Test
     @DisplayName("부서가 하나도 없으면 빈 배열이다")
     void emptyWhenNoDepartments() {
-        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount()).thenReturn(List.of());
+        when(departmentEmployeeQueryPort.findAllWithDirectEmployeeCount(1L)).thenReturn(List.of());
 
         assertThat(queryService.getDepartmentTree()).isEmpty();
     }

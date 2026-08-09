@@ -16,13 +16,14 @@ import java.util.List;
 @Mapper
 public interface EmployeeGroupQueryMapper {
 
-    List<GroupListRow> findGroups(@Param("keyword") String keyword);
+    List<GroupListRow> findGroups(@Param("keyword") String keyword, @Param("companyId") Long companyId);
 
-    GroupListRow findGroup(@Param("groupId") Long groupId);
+    GroupListRow findGroup(@Param("groupId") Long groupId, @Param("companyId") Long companyId);
 
     List<MemberRow> findMembers(@Param("groupId") Long groupId);
 
     int countMembers(@Param("groupId") Long groupId);
 
-    List<EmployeeRefRow> findEmployeeRefs(@Param("userIds") Collection<String> userIds);
+    List<EmployeeRefRow> findEmployeeRefs(
+            @Param("userIds") Collection<String> userIds, @Param("companyId") Long companyId);
 }

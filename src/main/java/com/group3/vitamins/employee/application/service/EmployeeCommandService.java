@@ -8,6 +8,7 @@ import com.group3.vitamins.employee.application.command.ResignEmployeeCommand;
 import com.group3.vitamins.employee.application.command.UpdateEmployeeCommand;
 import com.group3.vitamins.employee.application.policy.EmployeeAdminPolicy;
 import com.group3.vitamins.employee.application.port.AccountDeactivationPort;
+import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
 import com.group3.vitamins.employee.application.port.EmployeeReferenceQueryPort;
 import com.group3.vitamins.employee.application.port.InitialPasswordMailPort;
 import com.group3.vitamins.employee.application.result.EmployeeRegisterResult;
@@ -21,6 +22,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ForbiddenExcepti
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -70,6 +72,8 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private final ThrottledPasswordEncoder passwordEncoder;
     private final InitialPasswordMailPort initialPasswordMailPort;
     private final AccountDeactivationPort accountDeactivationPort;
+    private final CompanyCodeQueryPort companyCodeQueryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public EmployeeRegisterResult register(RegisterEmployeeCommand command) {
@@ -78,7 +82,10 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         // ── 1 검증 ──
         // 길이 상한은 DB 컬럼 폭과 같다. 여기서 막지 않으면 INSERT 가 데이터 절단으로 터지고, 그 예외가
         // 아래 catch 에서 사번 중복(409)으로 오인 변환된다 — 값 초과를 EMP_INVALID_REQUEST(400)로 먼저 막는다.
-        String userId = requiredWithMax(command.userId(), MAX_USER_ID_LENGTH);
+        // 회사코드 접두사를 붙여 전역 유일 user_id 를 만든다 (예: "vitas-1234567"). 이후 중복검사·저장은 이 값 기준.
+        // company_id 스탬핑에도 같은 회사를 쓰므로 한 번만 읽는다.
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        String userId = prefixWithCompanyCode(required(command.userId()), companyId);
         String name = requiredWithMax(command.name(), MAX_NAME_LENGTH);
         Long departmentId = command.departmentId();
         if (departmentId == null) {
@@ -106,7 +113,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
         // ── 3 DB 반영 (한 트랜잭션) ──
         Employee employee = Employee.register(
-                userId, name, departmentId, command.jobPositionId(), email, phone, hiredAt);
+                userId, name, departmentId, command.jobPositionId(), email, phone, hiredAt, companyId);
         try {
             registrationWriter.register(employee, role, encodedPassword);
         } catch (DataIntegrityViolationException e) {
@@ -225,6 +232,23 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
         }
         return normalized;
+    }
+
+    /**
+     * base 사번 앞에 현재 회사코드를 붙여 전역 유일 {@code user_id} 를 만든다 (예: {@code "vitas-1234567"}).
+     * 회사 판별은 접두사가 아니라 {@code company_id} 가 담당하므로, 접두사는 회사간 사번 중복을 피하는 PK 충돌 회피 전용이다.
+     * 최종 값이 컬럼 폭({@value #MAX_USER_ID_LENGTH})을 넘으면 base 사번이 너무 긴 것 → {@code EMP_INVALID_REQUEST}(400).
+     */
+    private String prefixWithCompanyCode(String baseUserId, Long companyId) {
+        String companyCode = companyCodeQueryPort.findCodeByCompanyId(companyId);
+        if (companyCode == null) {
+            throw new IllegalStateException("회사 코드를 찾을 수 없습니다 - companyId=" + companyId);
+        }
+        String userId = companyCode + "-" + baseUserId;
+        if (userId.length() > MAX_USER_ID_LENGTH) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return userId;
     }
 
     private LocalDate parseRequiredDate(String value) {

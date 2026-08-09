@@ -15,6 +15,7 @@ public final class DepartmentPersistenceMapper {
     public static Department toDomain(DepartmentJpaEntity entity) {
         return Department.restore(
                 entity.getDepartmentId(),
+                entity.getCompanyId(),
                 entity.getName(),
                 entity.getParentId());
     }
@@ -23,6 +24,7 @@ public final class DepartmentPersistenceMapper {
     public static DepartmentJpaEntity toEntity(Department domain) {
         return new DepartmentJpaEntity(
                 domain.getDepartmentId(),
+                domain.getCompanyId(),
                 domain.getName(),
                 domain.getParentId());
     }
