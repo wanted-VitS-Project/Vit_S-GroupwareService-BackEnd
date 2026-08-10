@@ -47,6 +47,9 @@ public class CollectionRunOutboxJpaEntity {
     @JoinColumn(name = "crawl_run_id", nullable = false, updatable = false)
     private CollectionRunJpaEntity crawlRun;
 
+    @Column(name = "crawl_run_task_id", updatable = false)
+    private Long crawlRunTaskId;
+
     @Column(
             name = "attempt_id",
             nullable = false,
@@ -95,6 +98,7 @@ public class CollectionRunOutboxJpaEntity {
     public static CollectionRunOutboxJpaEntity pending(
             String eventId,
             CollectionRunJpaEntity crawlRun,
+            Long crawlRunTaskId,
             String attemptId,
             String eventType,
             JsonNode payload,
@@ -105,6 +109,7 @@ public class CollectionRunOutboxJpaEntity {
 
         entity.eventId = eventId;
         entity.crawlRun = crawlRun;
+        entity.crawlRunTaskId = crawlRunTaskId;
         entity.attemptId = attemptId;
         entity.eventType = eventType;
         entity.payload = payload;
@@ -115,6 +120,26 @@ public class CollectionRunOutboxJpaEntity {
         entity.updatedAt = now;
 
         return entity;
+    }
+
+    // Task가 없는 기존 수집 실행 Job Outbox를 생성합니다.
+    public static CollectionRunOutboxJpaEntity pending(
+            String eventId,
+            CollectionRunJpaEntity crawlRun,
+            String attemptId,
+            String eventType,
+            JsonNode payload,
+            LocalDateTime now
+    ) {
+        return pending(
+                eventId,
+                crawlRun,
+                null,
+                attemptId,
+                eventType,
+                payload,
+                now
+        );
     }
 
     // 현재 서버가 발행 작업을 일정 시간 점유합니다.

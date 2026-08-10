@@ -121,7 +121,7 @@ public class JpaCollectionRunTaskAdapter implements CollectionRunTaskPort {
 
     // 재시도할 수 없는 작업을 최종 실패 상태로 전환합니다.
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public boolean fail(
             Long taskId,
             String attemptId,
