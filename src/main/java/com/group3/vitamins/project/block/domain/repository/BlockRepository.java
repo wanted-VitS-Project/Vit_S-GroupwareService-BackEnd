@@ -3,6 +3,7 @@ package com.group3.vitamins.project.block.domain.repository;
 import com.group3.vitamins.project.block.domain.model.Block;
 import com.group3.vitamins.project.block.domain.model.BlockType;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -38,4 +39,22 @@ public interface BlockRepository {
      * (BlockCatalogPort 구현). idx_block_type_id 가 이 조회용이다.
      */
     Optional<Block> findByTypeAndTypeId(BlockType type, Long typeId);
+
+    /**
+     * 기대 버전과 DB 버전이 같을 때만 제목·담당자를 덮어쓰고 version 을 올린다.
+     * 바뀐 행 수를 돌려준다 — <b>0 이면 그 사이 남이 먼저 저장한 것이다(충돌)</b>.
+     *
+     * <p>⚠️ {@code save()} 로 대체하지 마라. 검사와 저장이 한 문장 안에서 원자적으로 일어나야
+     * 조회~저장 사이의 갱신 유실을 막는다 (`.ai/docs/global/CONCURRENCY.md` §1-3 · §6-4).
+     */
+    int updateIfVersionMatches(Long blockId, String title, String owner,
+                               LocalDateTime updatedAt, int expectedVersion);
+
+    /** 기대 버전이 같을 때만 배치를 옮긴다. 0 이면 충돌이다. */
+    int relocateIfVersionMatches(Long blockId, int rowIndex, int sortOrder, int colSpan,
+                                 LocalDateTime updatedAt, int expectedVersion);
+
+    /** 기대 버전이 같을 때만 다른 스텝으로 옮긴다. 0 이면 충돌이다. */
+    int moveToStepIfVersionMatches(Long blockId, Long stepId, int rowIndex, int sortOrder,
+                                   LocalDateTime updatedAt, int expectedVersion);
 }

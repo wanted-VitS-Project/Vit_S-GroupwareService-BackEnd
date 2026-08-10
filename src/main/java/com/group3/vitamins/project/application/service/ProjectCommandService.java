@@ -91,7 +91,13 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 saved.getCreatedAt());
     }
 
-    /** 수정 화면이 폼 전체를 보내므로 받은 값으로 덮어쓴다. null 은 해당 값을 비운다. */
+    /**
+     * 수정 화면이 폼 전체를 보내므로 받은 값으로 덮어쓴다. null 은 해당 값을 비운다.
+     *
+     * <p><b>내가 조회한 버전이 아직 최신일 때만</b> 저장된다 (`.ai/docs/global/CONCURRENCY.md`).
+     * ⚠️ {@code save()} 로 되돌리지 마라 — 검사와 저장이 한 문장이 아니면 그 틈에 남의 저장이 끼어들어
+     * <b>예외도 로그도 없이</b> 갱신이 유실된다 (§6-4).
+     */
     @Override
     public ProjectUpdateResult updateProject(UpdateProjectCommand command) {
         projectAccessUseCase.requireEditable(
@@ -101,17 +107,31 @@ public class ProjectCommandService implements ProjectCommandUseCase {
 
         validateDateRange(command.startedOn(), command.endedOn());
 
-        Project updated = projectRepository.save(project.update(
+        int expected = command.overwrite() ? project.getVersion() : command.version();
+        LocalDateTime now = LocalDateTime.now();
+
+        int updated = projectRepository.updateIfVersionMatches(
+                command.projectId(), project.getCompanyId(),
                 command.name(), command.description(), command.clientName(),
                 command.startedOn(), command.endedOn(), command.contractAmount(),
-                LocalDateTime.now()));
+                now, expected);
 
-        return new ProjectUpdateResult(updated.getProjectId(), updated.getName(),
-                updated.getClientName(), updated.getStartedOn(), updated.getEndedOn(),
-                updated.getContractAmount(), updated.getUpdatedAt());
+        if (updated == 0) {
+            throw new ConflictException(ProjectErrorCode.PROJECT_VERSION_CONFLICT);
+        }
+
+        return new ProjectUpdateResult(project.getProjectId(), command.name(),
+                command.clientName(), command.startedOn(), command.endedOn(),
+                command.contractAmount(), now, expected + 1);
     }
 
-    /** 상태를 바꾼다. 역방향도 허용하고 CLOSED 만 거부한다 (PRJ-003). */
+    /**
+     * 상태를 바꾼다. 역방향도 허용하고 CLOSED 만 거부한다 (PRJ-003).
+     *
+     * <p>⚠️ <b>종결 정보를 도메인에게 먼저 계산시키고 그 결과를 UPDATE 에 넘긴다.</b>
+     * CLOSED 에서 벗어나면 종결 사유·일시를 지우는 규칙이 {@code changeStatus} 안에 있는데,
+     * SQL 에 같은 조건을 다시 쓰면 규칙이 두 곳으로 갈라져 한쪽만 고치는 사고가 난다.
+     */
     @Override
     public ProjectStatusResult changeStatus(ChangeProjectStatusCommand command) {
         projectAccessUseCase.requireEditable(
@@ -119,11 +139,21 @@ public class ProjectCommandService implements ProjectCommandUseCase {
 
         Project project = requireProject(command.projectId());
 
-        Project updated = projectRepository.save(
-                project.changeStatus(parseStatus(command.status()), LocalDateTime.now()));
+        int expected = command.overwrite() ? project.getVersion() : command.version();
+        LocalDateTime now = LocalDateTime.now();
+        Project changed = project.changeStatus(parseStatus(command.status()), now);
 
-        return new ProjectStatusResult(updated.getProjectId(),
-                updated.getStatus().name(), updated.getUpdatedAt());
+        int updated = projectRepository.changeStatusIfVersionMatches(
+                command.projectId(), project.getCompanyId(), changed.getStatus(),
+                changed.getCloseReasonCode(), changed.getCloseReasonNote(), changed.getClosedAt(),
+                now, expected);
+
+        if (updated == 0) {
+            throw new ConflictException(ProjectErrorCode.PROJECT_VERSION_CONFLICT);
+        }
+
+        return new ProjectStatusResult(changed.getProjectId(),
+                changed.getStatus().name(), now, expected + 1);
     }
 
     /** 사유를 붙여 종결한다. 상태 제한이 없다 — 진행 중이든 정산 중이든 종결할 수 있다 (PRJ-004). */

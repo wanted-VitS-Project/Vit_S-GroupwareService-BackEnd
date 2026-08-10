@@ -49,7 +49,11 @@ public enum ProjectErrorCode implements ErrorCode {
     MEMBER_NOT_FOUND("MEMBER_NOT_FOUND",
             "참여자를 찾을 수 없습니다."),
     MEMBER_SELF_EDIT_DENIED("MEMBER_SELF_EDIT_DENIED",
-            "자기 자신의 권한 행은 변경할 수 없습니다.");
+            "자기 자신의 권한 행은 변경할 수 없습니다."),
+    PROJECT_VERSION_REQUIRED("PROJECT_VERSION_REQUIRED",
+            "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
+    PROJECT_VERSION_CONFLICT("PROJECT_VERSION_CONFLICT",
+            "다른 사용자가 먼저 수정했습니다.");
 
 
     private final String code;

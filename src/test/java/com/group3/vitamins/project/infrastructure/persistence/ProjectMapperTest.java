@@ -20,6 +20,7 @@ class ProjectMapperTest {
     private static final Long PROJECT_ID = 1L;
     private static final Long COMPANY_ID = 2L;
     private static final Long BID_NOTICE_ID = 3L;
+    private static final int VERSION = 7;
 
     @Test
     @DisplayName("도메인 → 엔티티 → 도메인 왕복에서 세 식별자가 자기 자리를 지킨다")
@@ -30,6 +31,7 @@ class ProjectMapperTest {
         assertThat(entity.getCompanyId()).isEqualTo(COMPANY_ID);
         assertThat(entity.getBidNoticeId()).isEqualTo(BID_NOTICE_ID);
         assertThat(entity.getName()).isEqualTo("하수관로 정비");
+        assertThat(entity.getVersion()).isEqualTo(VERSION);
 
         Project restored = ProjectMapper.toDomain(entity);
 
@@ -37,6 +39,8 @@ class ProjectMapperTest {
         assertThat(restored.getCompanyId()).isEqualTo(COMPANY_ID);
         assertThat(restored.getBidNoticeId()).isEqualTo(BID_NOTICE_ID);
         assertThat(restored.getName()).isEqualTo("하수관로 정비");
+        // version 이 낡거나 밀리면 저장 조건이 어긋나 모든 수정이 409 가 된다 (CONCURRENCY.md §6-3)
+        assertThat(restored.getVersion()).isEqualTo(VERSION);
     }
 
     @Test
@@ -52,6 +56,8 @@ class ProjectMapperTest {
         assertThat(created.getCompanyId()).isEqualTo(COMPANY_ID);
         assertThat(created.getBidNoticeId()).isEqualTo(BID_NOTICE_ID);
         assertThat(created.getStatus()).isEqualTo(ProjectStatus.NOT_STARTED);
+        // 신규 행은 1 부터다 — DB 의 DEFAULT 1 과 맞아야 첫 수정이 409 가 안 난다
+        assertThat(created.getVersion()).isEqualTo(1);
     }
 
     private Project sample() {
@@ -59,6 +65,6 @@ class ProjectMapperTest {
         return Project.restore(PROJECT_ID, COMPANY_ID, BID_NOTICE_ID, "하수관로 정비", "설명",
                 ProjectStatus.IN_PROGRESS, "OO시청", new BigDecimal("100000000"),
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 12, 31),
-                null, null, null, "vitas-EMP001", createdAt, createdAt, null);
+                null, null, null, VERSION, "vitas-EMP001", createdAt, createdAt, null);
     }
 }

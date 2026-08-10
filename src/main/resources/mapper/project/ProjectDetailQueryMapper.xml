@@ -38,6 +38,8 @@
                 WHERE pm.project_id = p.project_id
                   AND pm.user_id = #{requesterUserId}) AS memberPermission,
                p.created_at       AS createdAt,
+               <!-- ⚠️ ProjectDetailRow.version 과 같은 위치여야 한다 (위치 기반 매핑) -->
+               p.version          AS version,
                bc.business_category_id AS categoryId,
                bc.name                 AS categoryName,
                bc.code                 AS categoryCode,

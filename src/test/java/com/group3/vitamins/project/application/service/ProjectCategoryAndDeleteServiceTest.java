@@ -211,7 +211,7 @@ class ProjectCategoryAndDeleteServiceTest {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         given(projectRepository.findById(PROJECT_ID, COMPANY_ID)).willReturn(Optional.of(
                 Project.restore(PROJECT_ID, COMPANY_ID, bidNoticeId, "하수관로 정비", null, status,
-                        "○○시청", BigDecimal.TEN, null, null, null, null, null,
+                        "○○시청", BigDecimal.TEN, null, null, null, null, null, 1,
                         REQUESTER, createdAt, createdAt, null)));
         Mockito.lenient().when(projectRepository.save(any(Project.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

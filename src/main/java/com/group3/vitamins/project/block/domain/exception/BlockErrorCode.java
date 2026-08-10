@@ -31,7 +31,11 @@ public enum BlockErrorCode implements ErrorCode {
     ISSUE_BLOCK_STEP_MISMATCH("ISSUE_BLOCK_STEP_MISMATCH",
             "이슈와 블록이 서로 다른 스텝에 속합니다."),
     ISSUE_BLOCK_DUPLICATED("ISSUE_BLOCK_DUPLICATED",
-            "이미 연결된 이슈입니다.");
+            "이미 연결된 이슈입니다."),
+    BLOCK_VERSION_REQUIRED("BLOCK_VERSION_REQUIRED",
+            "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
+    BLOCK_VERSION_CONFLICT("BLOCK_VERSION_CONFLICT",
+            "다른 사용자가 먼저 수정했습니다.");
 
     private final String code;
     private final String message;

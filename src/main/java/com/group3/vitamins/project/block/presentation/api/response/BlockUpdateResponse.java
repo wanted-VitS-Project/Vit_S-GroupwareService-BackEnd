@@ -18,7 +18,11 @@ public record BlockUpdateResponse(
         BlockOwnerResponse owner,
 
         @Schema(description = "수정 일시")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "저장 후의 새 version. 화면 상태를 이 값으로 교체해야 "
+                + "다음 저장이 409 가 되지 않는다", example = "8")
+        int version
 ) {
 
     /** 수정 결과를 응답으로 옮긴다. */
@@ -28,6 +32,6 @@ public record BlockUpdateResponse(
                 : new BlockOwnerResponse(result.owner().userId(), result.owner().name(), result.owner().deleted());
 
         return new BlockUpdateResponse(
-                result.blockId(), result.title(), owner, result.updatedAt());
+                result.blockId(), result.title(), owner, result.updatedAt(), result.version());
     }
 }

@@ -102,7 +102,8 @@ public class ProjectQueryService implements ProjectQueryUseCase {
                 view.closeReasonCode(),
                 view.closeReasonNote(),
                 myPermission.name(),
-                view.createdAt());
+                view.createdAt(),
+                view.version());
     }
 
     /** 허용되지 않은 상태 값이면 400 을 던진다. 빈 값은 필터 미적용으로 본다. */

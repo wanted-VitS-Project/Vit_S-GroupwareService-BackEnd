@@ -131,7 +131,8 @@ public class BlockQueryService implements BlockQueryUseCase {
                 toOwner(block.getOwner(), names),
                 block.getRowIndex(), block.getSortOrder(), block.getColSpan(),
                 details.get(block.getBlockId()),
-                stat.totalCount(), stat.doneCount());
+                stat.totalCount(), stat.doneCount(),
+                block.getVersion());
     }
 
     /**

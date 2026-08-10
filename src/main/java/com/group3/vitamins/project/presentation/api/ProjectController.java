@@ -197,19 +197,24 @@ public class ProjectController {
             description = "과업명·설명·발주처·기간·계약금액을 수정한다. "
                     + "수정 화면의 폼 전체를 보내며, 보내지 않은 필드는 비워진다. "
                     + "상태 변경·종결은 별도 API 다. "
-                    + "계약금액은 project.contract_amount 한 곳에만 저장된다 (INV-08).")
+                    + "계약금액은 project.contract_amount 한 곳에만 저장된다 (INV-08). "
+                    + "상세 조회에서 받은 version 을 함께 보내야 하며, 그 사이 남이 먼저 저장했으면 409 다. "
+                    + "409 를 받으면 재조회 / 덮어쓰기(overwrite: true)를 사용자에게 묻는다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
-                            + "/ CONTRACT_AMOUNT_INVALID / COMMON_INVALID_REQUEST(형식 오류)"),
+                            + "/ CONTRACT_AMOUNT_INVALID / PROJECT_VERSION_REQUIRED "
+                            + "/ COMMON_INVALID_REQUEST(형식 오류)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨")
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "PROJECT_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{projectId}")
     public ResponseEntity<ApiResponse<ProjectUpdateResponse>> updateProject(
@@ -230,18 +235,22 @@ public class ProjectController {
     @Operation(summary = "프로젝트 상태 변경",
             description = "NOT_STARTED · IN_PROGRESS · SETTLEMENT · COMPLETED 로 바꾼다. "
                     + "역방향 전이도 막지 않는다 (PRJ-003). "
-                    + "CLOSED 는 이 API 로 설정할 수 없고 종결 API 를 쓴다.")
+                    + "CLOSED 는 이 API 로 설정할 수 없고 종결 API 를 쓴다. "
+                    + "상세 조회에서 받은 version 을 함께 보내야 하며, 그 사이 남이 먼저 저장했으면 409 다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "변경 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "PROJECT_STATUS_INVALID — 허용되지 않은 상태 값 (CLOSED 포함)"),
+                    description = "PROJECT_STATUS_INVALID — 허용되지 않은 상태 값 (CLOSED 포함) / "
+                            + "PROJECT_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨")
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "PROJECT_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{projectId}/status")
     public ResponseEntity<ApiResponse<ProjectStatusUpdateResponse>> changeStatus(

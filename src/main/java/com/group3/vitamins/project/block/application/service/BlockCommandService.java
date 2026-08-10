@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -95,6 +96,10 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     /**
      * 블록 고유값(제목·담당자)만 바꾼다. 배치는 updateLayout, 타입은 생성 후 변경 불가다
      * (상세 테이블이 달라진다).
+     *
+     * <p><b>내가 조회한 버전이 아직 최신일 때만</b> 저장된다 (`.ai/docs/global/CONCURRENCY.md`).
+     * ⚠️ {@code save()} 로 되돌리지 마라 — 검사와 저장이 한 문장이 아니면 그 틈에 남의 저장이 끼어들어
+     * <b>예외도 로그도 없이</b> 갱신이 유실된다 (§6-4).
      */
     @Override
     public BlockUpdateResult updateBlock(UpdateBlockCommand command) {
@@ -108,6 +113,7 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
             throw new ValidationException(BlockErrorCode.BLOCK_UPDATE_FIELD_REQUIRED);
         }
 
+        int expected = command.overwrite() ? block.getVersion() : command.version();
         LocalDateTime now = LocalDateTime.now();
 
         if (command.titleProvided()) {
@@ -122,12 +128,19 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
             block.changeOwner(owner == null ? null : owner.userId(), now);
         }
 
-        Block saved = blockRepository.save(block);
+        // ⚠️ 요청값이 아니라 도메인이 반영을 끝낸 최종값을 넘긴다. UPDATE 는 두 컬럼을 모두 SET 하므로
+        //    생략한 필드에 command.title() 을 그대로 넘기면 건드리지도 않은 값이 null 로 지워진다.
+        int updated = blockRepository.updateIfVersionMatches(
+                block.getBlockId(), block.getTitle(), block.getOwner(), now, expected);
+
+        if (updated == 0) {
+            throw new ConflictException(BlockErrorCode.BLOCK_VERSION_CONFLICT);
+        }
 
         //담당자를 안 건드렸으면 기존 담당자를 그대로 내려야 한다 — 이름은 관대하게 조회한다
-        return new BlockUpdateResult(saved.getBlockId(), saved.getTitle(),
-                command.ownerProvided() ? owner : describeOwner(saved.getOwner()),
-                saved.getUpdatedAt());
+        return new BlockUpdateResult(block.getBlockId(), block.getTitle(),
+                command.ownerProvided() ? owner : describeOwner(block.getOwner()),
+                now, expected + 1);
     }
 
     /**
@@ -170,16 +183,26 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
         }
 
         LocalDateTime now = LocalDateTime.now();
-        List<Block> moved = layouts.stream()
-                .map(layout -> relocate(found.get(layout.blockId()), layout, now))
-                .toList();
+        List<BlockLayoutResult> results = new ArrayList<>(layouts.size());
 
-        blockRepository.saveAll(moved);
+        for (UpdateBlockLayoutCommand.BlockLayout layout : layouts) {
+            Block block = relocate(found.get(layout.blockId()), layout, now);
 
-        return moved.stream()
-                .map(block -> new BlockLayoutResult(block.getBlockId(), block.getRowIndex(),
-                        block.getSortOrder(), block.getColSpan()))
-                .toList();
+            int updated = blockRepository.relocateIfVersionMatches(
+                    block.getBlockId(), block.getRowIndex(), block.getSortOrder(),
+                    block.getColSpan(), now, layout.version());
+
+            // ⚠️ 이 예외를 잡아서 넘기면 앞 항목만 커밋되어 그리드가 반쯤 바뀐 채 남는다.
+            //    ConflictException 은 런타임 예외라 여기서 던져야 트랜잭션 전체가 롤백된다 (§4-3).
+            if (updated == 0) {
+                throw new ConflictException(BlockErrorCode.BLOCK_VERSION_CONFLICT);
+            }
+
+            results.add(new BlockLayoutResult(block.getBlockId(), block.getRowIndex(),
+                    block.getSortOrder(), block.getColSpan(), layout.version() + 1));
+        }
+
+        return results;
     }
 
     /**
@@ -210,12 +233,29 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
             throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_INVALID);
         }
 
-        int unlinkedIssueCount = moveToStep(block, to.stepId());
+        int expected = command.overwrite() ? block.getVersion() : command.version();
+        int unlinkedIssueCount = issueBlockUnlinkPort.unlinkByBlockId(block.getBlockId());
 
-        return new BlockMoveResult(block.getBlockId(), block.getStepId(), unlinkedIssueCount);
+        LocalDateTime now = LocalDateTime.now();
+        int rowIndex = nextRowIndex(to.stepId());
+        block.moveToStep(to.stepId(), rowIndex, FIRST_INDEX, now);
+
+        int updated = blockRepository.moveToStepIfVersionMatches(
+                block.getBlockId(), to.stepId(), rowIndex, FIRST_INDEX, now, expected);
+
+        if (updated == 0) {
+            throw new ConflictException(BlockErrorCode.BLOCK_VERSION_CONFLICT);
+        }
+
+        return new BlockMoveResult(
+                block.getBlockId(), block.getStepId(), unlinkedIssueCount, expected + 1);
     }
 
-    /** 이동 본체. 권한 판정이 끝난 뒤의 처리라 cascade 경로와 공유한다. */
+    /**
+     * cascade 이동 본체 (스텝 삭제가 부른다). ⛔ 여기엔 낙관락을 걸지 않는다 —
+     * 사용자가 버전을 들고 있는 요청이 아니라 스텝 삭제가 연쇄로 옮기는 경로다
+     * (`.ai/docs/global/CONCURRENCY.md`). 사용자 이동은 {@link #moveBlock} 이 전담한다.
+     */
     private int moveToStep(Block block, Long toStepId) {
         int unlinkedIssueCount = issueBlockUnlinkPort.unlinkByBlockId(block.getBlockId());
 
@@ -363,11 +403,18 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
         return block;
     }
 
-    /** 배치 3필드는 전부 필수다. 누락을 통과시키면 블록이 조용히 0행 0열로 옮겨진다. */
+    /**
+     * 배치 3필드는 전부 필수다. 누락을 통과시키면 블록이 조용히 0행 0열로 옮겨진다.
+     * version 누락은 전용 코드로 알린다 — 0 을 채워 보내면 저장이 전부 409 가 되는데
+     * 사용자에게는 원인이 안 보인다 (§6-3).
+     */
     private void validateLayout(UpdateBlockLayoutCommand.BlockLayout layout) {
         if (layout.blockId() == null || layout.rowIndex() == null
                 || layout.sortOrder() == null || layout.colSpan() == null) {
             throw new ValidationException(BlockErrorCode.BLOCK_LAYOUT_INVALID);
+        }
+        if (layout.version() == null) {
+            throw new ValidationException(BlockErrorCode.BLOCK_VERSION_REQUIRED);
         }
         validateColSpan(layout.colSpan());
     }

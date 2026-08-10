@@ -33,7 +33,7 @@ public class ProjectDetailQueryAdapter implements ProjectDetailQueryPort {
                 head.startedOn(), head.endedOn(), head.contractAmount(),
                 head.stepCount(), head.doneStepCount(),
                 head.bidNoticeId(), head.closeReasonCode(), head.closeReasonNote(),
-                toPermission(head.memberPermission()), head.createdAt(),
+                toPermission(head.memberPermission()), head.createdAt(), head.version(),
                 categoriesOf(rows));
     }
 
