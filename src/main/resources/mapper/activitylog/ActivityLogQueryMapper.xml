@@ -45,12 +45,13 @@
                b.title AS blockTitle,
                b.type AS blockType,
                al.created_at AS createdAt
-          FROM activity_log al
+         FROM activity_log al
           JOIN block b
             ON b.block_id = al.block_id
           JOIN employee e
             ON e.user_id = al.user_id
-         WHERE b.step_id = #{stepId}
+         WHERE al.company_id = #{companyId}
+           AND b.step_id = #{stepId}
            AND al.block_id IS NOT NULL
            <if test="blockId != null">
            AND al.block_id = #{blockId}

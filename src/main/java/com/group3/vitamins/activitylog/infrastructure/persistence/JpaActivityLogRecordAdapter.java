@@ -15,15 +15,19 @@ public class JpaActivityLogRecordAdapter implements ActivityLogRecordPort {
     private final ActivityLogJpaRepository activityLogJpaRepository;
 
     @Override
-    public void record(ActivityOccurredEvent event) {
+    public void record(ActivityOccurredEvent event, Long companyId) {
         List<ActivityLogEntity> logs = event.changes().stream()
-                .map(change -> toEntity(event, change))
+                .map(change -> toEntity(event, change, companyId))
                 .toList();
 
         activityLogJpaRepository.saveAll(logs);
     }
 
-    private ActivityLogEntity toEntity(ActivityOccurredEvent event, ActivityFieldChange change) {
+    private ActivityLogEntity toEntity(
+            ActivityOccurredEvent event,
+            ActivityFieldChange change,
+            Long companyId
+    ) {
         return ActivityLogEntity.record(
                 event.action(),
                 event.blockId(),
@@ -32,7 +36,8 @@ public class JpaActivityLogRecordAdapter implements ActivityLogRecordPort {
                 change.field(),
                 change.beforeValue(),
                 change.afterValue(),
-                event.actorId()
+                event.actorId(),
+                companyId
         );
     }
 }

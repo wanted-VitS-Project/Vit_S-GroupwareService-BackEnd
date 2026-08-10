@@ -1,9 +1,9 @@
 # ActivityLog API
 
 **상태**: md 명세 기준 계약 (`../API.md` §0·§1)
+**최종 업데이트**: 2026-08-10 (멀티테넌시 1차 — `activity_log.company_id` 직접 격리·기록 스탬핑·목록 필터 적용) · **담당**: 김용준
 **최종 업데이트**: 2026-08-07 (결재선 `lines` 값을 사번→이름으로 변경, "필드별 표시 규칙" FE 가이드 섹션 신설) · **담당**: 김용준
 **최종 업데이트**: 2026-08-06 (파일 휴지통 복원·영구삭제 액션 `RESTORE`·`PURGE` 추가 — 별도 휴지통 로그 화면 없이 기존 Step/Block 활동 기록에 함께 노출) · **담당**: 김용준
-**최종 업데이트**: 2026-08-05 (API 명세 양식 정리 · field 단위 저장 반영) · **담당**: 김용준
 **Domain**: `프로젝트` · SUB-Domain `ActivityLog`
 
 > `.ai/api/*.md` 가 단일 계약이다. 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
@@ -300,6 +300,13 @@ Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 �
 - 로그 저장 실패 시 원본 데이터 변경도 함께 롤백한다.
 - Controller나 FE에서 로그 생성 API를 별도로 호출하지 않는다.
 - 각 도메인은 Activity Log Repository, Service, Port를 직접 호출하지 않는다.
+
+### 멀티테넌시 1차 — Activity Log 직접 격리
+
+- `activity_log`은 회사별 감사 타임라인이므로 `company_id`를 직접 저장한다. `block → step → project` 경로는 부모 소유권 검증에만 쓰고, 로그 행 자체의 격리를 대신하지 않는다.
+- `ActivityLogRecordService`가 동기 `BEFORE_COMMIT` 경로에서 `CurrentCompanyIdProvider`로 현재 회사를 읽어 저장한다. 타 Block 도메인은 기존 `ActivityOccurredEvent` 계약을 유지하며 `companyId`를 전달하지 않는다.
+- 목록 조회는 반드시 `activity_log.company_id = 현재 회사` 조건을 포함한다. Project 멀티테넌시 완료 뒤에는 Step·Block 소유권 검증도 `project.company_id`까지 연결해 이중으로 제한한다.
+- 마이그레이션의 `DEFAULT 1`은 기존 단일 회사 로그 백필과 배포 전환을 위한 임시값이다. 모든 기록 경로의 명시 스탬핑을 운영에서 확인한 뒤 별도 마이그레이션으로 제거한다.
 
 ## 공통 이벤트 정보
 
