@@ -50,6 +50,16 @@ public enum BiddingErrorCode implements ErrorCode {
     BIDDING_COLLECTION_RUN_NOT_FOUND(
             "BIDDING_COLLECTION_RUN_NOT_FOUND",
             "입찰 공고 수집 실행을 찾을 수 없습니다."
+    ),
+
+    BIDDING_INVALID_NOTICE_QUERY(
+            "BIDDING_INVALID_NOTICE_QUERY",
+            "입찰 공고 조회 조건이 올바르지 않습니다."
+    ),
+
+    BIDDING_NOTICE_NOT_FOUND(
+            "BIDDING_NOTICE_NOT_FOUND",
+            "입찰 공고를 찾을 수 없습니다."
     );
 
     private final String code;

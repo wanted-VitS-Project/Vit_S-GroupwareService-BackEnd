@@ -15,7 +15,6 @@ import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRun
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectedBidNoticeStorePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunStatePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
-import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskDlqPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionSourceCollectorPort;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunConditionSnapshot;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
@@ -72,7 +71,7 @@ class CollectionRunJobHandlerServiceTest {
     private CollectionRunTaskPort taskPort;
 
     @Mock
-    private CollectionRunTaskDlqPort taskDlqPort;
+    private CollectionRunTaskFailureService taskFailureService;
 
     @Mock
     private CollectionSourceCollectorPort collector;
@@ -109,7 +108,7 @@ class CollectionRunJobHandlerServiceTest {
         service = new CollectionRunJobHandlerService(
                 runStatePort,
                 taskPort,
-                taskDlqPort,
+                taskFailureService,
                 List.of(collector),
                 noticeStorePort,
                 clock
@@ -136,7 +135,7 @@ class CollectionRunJobHandlerServiceTest {
         prepareClaimedRunAndTask();
         when(collector.collect(snapshot, TARGET, 100))
                 .thenReturn(page(List.of(payload), false));
-        when(noticeStorePort.saveAll(eq("NARA"), eq(RUN_ID), anyList(), any()))
+        when(noticeStorePort.saveAll(eq(COMPANY_ID), eq("NARA"), eq(RUN_ID), anyList(), any()))
                 .thenReturn(new CollectedBidNoticeStorePort.StoreResult(1, 0, 0));
         when(taskPort.complete(
                 eq(TASK_ID), eq(ATTEMPT_ID), eq(1), eq(1), eq(0), eq(0), any()
@@ -146,7 +145,7 @@ class CollectionRunJobHandlerServiceTest {
         CollectionRunJobResult result = service.handle(job);
 
         assertThat(result.outcome()).isEqualTo(CollectionRunJobResult.Outcome.SUCCESS);
-        verify(noticeStorePort).saveAll(eq("NARA"), eq(RUN_ID), anyList(), any());
+        verify(noticeStorePort).saveAll(eq(COMPANY_ID), eq("NARA"), eq(RUN_ID), anyList(), any());
         verify(runStatePort).complete(
                 eq(RUN_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
                 eq(1), eq(1), eq(0), eq(0), any()
@@ -159,7 +158,7 @@ class CollectionRunJobHandlerServiceTest {
         prepareClaimedRunAndTask();
         when(collector.collect(snapshot, TARGET, 100))
                 .thenReturn(page(List.of(), true));
-        when(noticeStorePort.saveAll(eq("NARA"), eq(RUN_ID), anyList(), any()))
+        when(noticeStorePort.saveAll(eq(COMPANY_ID), eq("NARA"), eq(RUN_ID), anyList(), any()))
                 .thenReturn(new CollectedBidNoticeStorePort.StoreResult(0, 0, 0));
         when(taskPort.complete(any(), any(), anyInt(), anyInt(), anyInt(), anyInt(), any()))
                 .thenReturn(true);
@@ -208,6 +207,8 @@ class CollectionRunJobHandlerServiceTest {
         prepareClaimedRunAndTask();
         when(collector.collect(snapshot, TARGET, 100))
                 .thenReturn(failedPage(false));
+        when(taskFailureService.recordPermanentFailure(any(), any(), any(), any()))
+                .thenReturn(true);
         when(taskPort.summarize(RUN_ID)).thenReturn(new CollectionRunTaskSummary(
                 1, 0, 0, 0, 1,
                 0, 0, 0, 0
@@ -216,20 +217,39 @@ class CollectionRunJobHandlerServiceTest {
         CollectionRunJobResult result = service.handle(job);
 
         assertThat(result.outcome()).isEqualTo(CollectionRunJobResult.Outcome.SUCCESS);
-        verify(taskPort).fail(
-                eq(TASK_ID), eq(ATTEMPT_ID),
-                eq("CONNECTION_FAILURE"), eq("CONNECTION_FAILURE"), any()
-        );
-        verify(taskDlqPort).publish(argThat(failure ->
-                failure.runId().equals(RUN_ID)
+        verify(taskFailureService).recordPermanentFailure(
+                argThat(failure -> failure.runId().equals(RUN_ID)
                         && failure.taskId().equals(TASK_ID)
+                        && failure.companyId().equals(COMPANY_ID)
                         && failure.failureType() == CollectionRunFailureType.CONNECTION_FAILURE
-                        && failure.target().equals(TARGET)
-        ));
+                        && failure.target().equals(TARGET)),
+                eq("CONNECTION_FAILURE"),
+                eq("CONNECTION_FAILURE"),
+                any()
+        );
         verify(runStatePort).fail(
                 eq(RUN_ID), eq(ATTEMPT_ID),
                 eq("UNKNOWN_PROCESSING_ERROR"),
                 eq("all_collection_tasks_failed"), any()
+        );
+    }
+
+    @Test
+    @DisplayName("영구 실패 전이가 거부되면 실행을 재시도 상태로 되돌린다")
+    void retriesRunWhenPermanentFailureTransitionIsRejected() {
+        prepareClaimedRunAndTaskOnce();
+        when(collector.collect(snapshot, TARGET, 100)).thenReturn(failedPage(false));
+        when(taskFailureService.recordPermanentFailure(any(), any(), any(), any()))
+                .thenReturn(false);
+
+        CollectionRunJobResult result = service.handle(job);
+
+        assertThat(result.outcome()).isEqualTo(CollectionRunJobResult.Outcome.RETRYABLE_FAILURE);
+        assertThat(result.failureType())
+                .isEqualTo(CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR);
+        verify(runStatePort).prepareRetry(
+                eq(RUN_ID), eq(ATTEMPT_ID), eq("CONNECTION_FAILURE"),
+                eq("task_failure_transition_rejected"), any()
         );
     }
 

@@ -3,6 +3,10 @@ package com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.ada
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.collectionrun.application.model.ClaimedCollectionRunOutbox;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunOutbox;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRequestCombination;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunFailureType;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunTaskFailure;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.entity.CollectionRunJpaEntity;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.entity.CollectionRunOutboxJpaEntity;
@@ -22,6 +26,9 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class JpaCollectionRunOutboxStoreAdapter
         implements CollectionRunOutboxStorePort {
+
+    private static final String TASK_DLQ_EVENT_TYPE =
+            "BIDDING_COLLECTION_TASK_DLQ_REQUESTED";
 
     private final CollectionRunOutboxJpaRepository outboxRepository;
     private final SpringDataCollectionRunRepository runRepository;
@@ -47,12 +54,52 @@ public class JpaCollectionRunOutboxStoreAdapter
                 CollectionRunOutboxJpaEntity.pending(
                         outbox.eventId(),
                         runEntity,
+                        null,
                         outbox.attemptId(),
                         outbox.eventType(),
                         objectMapper.valueToTree(payload),
                         outbox.createdAt()
                 );
 
+        outboxRepository.save(entity);
+    }
+
+    // Task 실패와 함께 저장할 DLQ Outbox payload를 생성합니다.
+    @Override
+    @Transactional
+    public void saveTaskFailurePending(
+            String eventId,
+            CollectionRunTaskFailure failure,
+            LocalDateTime createdAt
+    ) {
+        CollectionRunJpaEntity runEntity =
+                runRepository.getReferenceById(failure.runId());
+        CollectionRequestCombination target = failure.target();
+        CollectionRunTaskFailurePayload payload =
+                new CollectionRunTaskFailurePayload(
+                        failure.runId(),
+                        failure.taskId(),
+                        failure.companyId(),
+                        failure.attemptId(),
+                        failure.retryCount(),
+                        failure.failureType().name(),
+                        target.noticeType().name(),
+                        target.keyword(),
+                        target.regionCode(),
+                        target.industryCode(),
+                        target.pageNumber()
+                );
+
+        CollectionRunOutboxJpaEntity entity =
+                CollectionRunOutboxJpaEntity.pending(
+                        eventId,
+                        runEntity,
+                        failure.taskId(),
+                        failure.attemptId(),
+                        TASK_DLQ_EVENT_TYPE,
+                        objectMapper.valueToTree(payload),
+                        createdAt
+                );
         outboxRepository.save(entity);
     }
 
@@ -124,10 +171,12 @@ public class JpaCollectionRunOutboxStoreAdapter
     private ClaimedCollectionRunOutbox toClaimedOutbox(
             CollectionRunOutboxJpaEntity outbox
     ) {
+        if (TASK_DLQ_EVENT_TYPE.equals(outbox.getEventType())) {
+            return toClaimedTaskFailureOutbox(outbox);
+        }
+
         CollectionRunJobPayload payload = objectMapper.convertValue(
-                outbox.getPayload(),
-                CollectionRunJobPayload.class
-        );
+                outbox.getPayload(), CollectionRunJobPayload.class);
 
         return new ClaimedCollectionRunOutbox(
                 outbox.getCrawlRunOutboxId(),
@@ -138,7 +187,43 @@ public class JpaCollectionRunOutboxStoreAdapter
                 outbox.getEventType(),
                 payload.attemptId(),
                 payload.retryCount(),
-                outbox.getPublishAttemptCount()
+                outbox.getPublishAttemptCount(),
+                null
+        );
+    }
+
+    // Task DLQ payload를 Redis 발행 모델로 복원합니다.
+    private ClaimedCollectionRunOutbox toClaimedTaskFailureOutbox(
+            CollectionRunOutboxJpaEntity outbox
+    ) {
+        CollectionRunTaskFailurePayload payload = objectMapper.convertValue(
+                outbox.getPayload(), CollectionRunTaskFailurePayload.class);
+        CollectionRunTaskFailure failure = new CollectionRunTaskFailure(
+                payload.runId(),
+                payload.taskId(),
+                payload.companyId(),
+                payload.attemptId(),
+                payload.retryCount(),
+                CollectionRunFailureType.valueOf(payload.failureType()),
+                new CollectionRequestCombination(
+                        BidNoticeType.valueOf(payload.noticeType()),
+                        payload.keyword(),
+                        payload.regionCode(),
+                        payload.industryCode(),
+                        payload.pageNumber()
+                )
+        );
+        return new ClaimedCollectionRunOutbox(
+                outbox.getCrawlRunOutboxId(),
+                payload.runId(),
+                null,
+                payload.companyId(),
+                outbox.getEventId(),
+                outbox.getEventType(),
+                payload.attemptId(),
+                payload.retryCount(),
+                outbox.getPublishAttemptCount(),
+                failure
         );
     }
 
@@ -168,5 +253,21 @@ public class JpaCollectionRunOutboxStoreAdapter
                 );
             }
         }
+    }
+
+    // DB JSON에 저장할 Task 영구 실패 payload입니다.
+    private record CollectionRunTaskFailurePayload(
+            Long runId,
+            Long taskId,
+            Long companyId,
+            String attemptId,
+            int retryCount,
+            String failureType,
+            String noticeType,
+            String keyword,
+            String regionCode,
+            String industryCode,
+            int pageNumber
+    ) {
     }
 }
