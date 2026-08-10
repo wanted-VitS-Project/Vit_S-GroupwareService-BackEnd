@@ -313,7 +313,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 
 현재 회사가 소유한 활성 수집 조건으로 입찰 공고 수집 작업을 요청한다.
 현재 범위에서는 실행 이력을 `PENDING`으로 생성하고 `runId`를 반환한다.
-Redis Stream 발행, Spring Worker 처리와 외부 수집처 호출은 후속 구현 범위다.
+Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출은 아래 후속 구현 계약을 따른다.
 
 #### Path Parameter
 
@@ -334,7 +334,7 @@ Redis Stream 발행, Spring Worker 처리와 외부 수집처 호출은 후속 �
 | 중복 실행 | 같은 조건에 `PENDING` 또는 `PROCESSING` 실행이 있으면 새 실행을 거부한다 |
 | 초기 상태 | `PENDING` |
 | 현재 실행 방식 | DB에 `crawl_run`을 `PENDING` 상태로 저장하고 `runId`를 반환한다 |
-| 후속 구현 | Redis Stream 발행, Spring Worker 처리, 외부 수집처 호출과 재시도 정책은 별도 이슈에서 확정한다 |
+| 후속 구현 | Redis Stream 작업 전달, DB Outbox 유실 방지, Spring Worker 처리와 선택적 최대 3회 재시도 계약을 적용한다 |
 | 회사 격리 | `crawl_run -> crawl_condition.company_id` 경로로 현재 회사를 검증한다 |
 
 #### Success Response
@@ -380,10 +380,10 @@ Redis Stream 발행, Spring Worker 처리와 외부 수집처 호출은 후속 �
 | 상태 | 설명 |
 |------|------|
 | `PENDING` | 현재 구현에서 생성되는 수집 실행 접수 상태 |
-| `PROCESSING` | 후속 Worker 구현에서 사용할 처리 중 상태 |
-| `COMPLETED` | 후속 Worker 구현에서 사용할 정상 완료 상태 |
-| `PARTIAL_SUCCESS` | 후속 Worker 구현에서 사용할 부분 성공 상태 |
-| `FAILED` | 후속 Worker 구현에서 사용할 실패 상태 |
+| `PROCESSING` | Worker가 실행을 점유하고 외부 수집을 처리 중인 상태 |
+| `COMPLETED` | 모든 요청 조합을 정상 처리한 상태 |
+| `PARTIAL_SUCCESS` | 일부 요청 조합은 성공했으나 일부는 최종 실패한 상태 |
+| `FAILED` | 모든 요청 조합이 실패했거나 작업을 계속할 수 없는 상태 |
 
 | 응답값 | 설명 |
 |--------|------|
@@ -430,6 +430,108 @@ Redis Stream 발행, Spring Worker 처리와 외부 수집처 호출은 후속 �
 | 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
 | 404 | `BIDDING_COLLECTION_RUN_NOT_FOUND` | 현재 회사의 실행 이력이 존재하지 않음 |
+
+---
+
+## 수집 Worker 비동기 처리 계약
+
+**상태**: ✅ 확정
+
+수집 실행 요청과 외부 API 호출을 분리하고, DB 커밋과 Redis 발행 사이의 작업 유실을 막기 위해 Redis Stream과 DB Outbox를 함께 사용한다.
+
+### 처리 흐름
+
+```text
+수집 실행 API
+→ 같은 DB 트랜잭션에서 crawl_run(PENDING)과 Outbox 저장
+→ 트랜잭션 커밋
+→ Outbox Dispatcher가 미발행 이벤트 조회
+→ Redis Stream에 작업 발행
+→ Outbox를 PUBLISHED로 변경
+→ Spring Worker가 Consumer Group으로 작업 소비
+→ crawl_run을 PROCESSING으로 전이
+→ `crawl_run.condition_snapshot`에서 요청 당시 조건을 복원
+→ 나라장터 OpenAPI 호출·공고 정규화·저장
+→ crawl_run 결과 집계와 최종 상태 저장
+→ Redis ACK
+```
+
+### Redis Stream 계약
+
+| 항목 | 규칙 |
+|------|------|
+| Stream | 입찰 수집 작업 전용 Stream을 사용하며 실제 키 이름은 운영 설정으로 주입한다 |
+| 소비 방식 | Spring Worker가 Consumer Group으로 소비한다 |
+| 메시지 원칙 | 수집 조건 전체를 넣지 않고 작업 식별에 필요한 최소 정보만 넣는다 |
+| 조건 조회 | Worker는 `runId`와 `companyId`를 검증한 뒤 `crawl_run.condition_snapshot`의 요청 당시 조건을 사용한다 |
+| 성공 처리 | 실행 결과가 DB에 커밋된 뒤 Redis 메시지를 ACK한다 |
+| 중복 메시지 | 동일한 `runId`와 `attemptId`의 재전달을 허용하고 Worker가 멱등 처리한다 |
+
+```json
+{
+  "runId": 1,
+  "conditionId": 10,
+  "companyId": 3,
+  "attemptId": "서버가 생성한 작업 시도 식별자",
+  "retryCount": 0
+}
+```
+
+### DB Outbox 계약
+
+| 항목 | 규칙 |
+|------|------|
+| 원자성 | `crawl_run`과 Outbox 이벤트는 같은 DB 트랜잭션에서 저장한다 |
+| 발행 주체 | 별도 Outbox Dispatcher가 커밋된 미발행 이벤트를 조회하여 Redis에 발행한다 |
+| 발행 성공 | Redis 발행 성공 후 Outbox 상태를 `PUBLISHED`로 변경한다 |
+| 발행 실패 | 안전한 오류 유형을 기록하고 `nextAttemptAt` 이후 최대 5회 다시 발행한다 |
+| 발행 종료 | 5회 발행 실패 또는 손상된 payload는 `FAILED`로 종료하고 운영 알림 대상으로 분류한다 |
+| 중복 가능성 | Redis 발행 성공 후 상태 변경 전에 장애가 발생할 수 있으므로 중복 발행을 허용한다 |
+| 민감 정보 | 외부 API 인증키, 원문 응답 및 개인정보를 Outbox payload와 오류에 저장하지 않는다 |
+
+Outbox는 최소한 아래 정보를 관리한다.
+
+| 필드 | 설명 |
+|------|------|
+| `outboxId` | Outbox 식별자 |
+| `runId` | 수집 실행 ID |
+| `eventType` | 수집 요청 이벤트 유형 |
+| `status` | 발행 상태 |
+| `attemptCount` | Redis 발행 시도 횟수 |
+| `nextAttemptAt` | 다음 발행 가능 시각 |
+| `publishedAt` | 발행 완료 시각 |
+| `lastError` | 민감 정보를 제거한 마지막 발행 오류 |
+| `createdAt` | 생성 시각 |
+
+### Worker 재시도 정책
+
+외부 요청 조합 하나를 독립적인 처리 단위로 보고 일시적 오류만 최대 3회 재시도한다.
+
+재시도 작업은 Redis 지연 저장소에 예약하며, 예약 저장이 성공한 뒤 현재 메시지를 ACK한다.
+처리 중 프로세스가 종료되어 PEL에 남은 메시지는 유휴 시간이 지난 뒤 다른 Consumer가 회수한다.
+
+| 실패 유형 | 재시도 | 처리 |
+|----------|--------|------|
+| 연결 실패·Timeout | O | 최대 3회 재시도 |
+| HTTP 429 | O | 최대 3회 재시도 |
+| HTTP 5xx | O | 최대 3회 재시도 |
+| HTTP 400 | X | 요청 오류로 기록하고 해당 조합 실패 처리 |
+| HTTP 401·403 | X | 인증·권한 설정 오류로 기록하고 실행 중단 |
+| 응답 파싱 실패 | X | 외부 계약 변경 가능성이 있으므로 원문을 남기지 않고 파싱 오류만 기록 |
+
+재시도 간격은 30초, 2분, 10분의 지수 백오프를 적용한다.
+
+### 최종 상태와 실패 처리
+
+| 결과 | `crawl_run.run_status` | Redis 처리 |
+|------|------------------------|------------|
+| 모든 요청 조합 성공 | `COMPLETED` | DB 커밋 후 ACK |
+| 일부 요청 조합 성공 | `PARTIAL_SUCCESS` | 성공 결과와 실패 요약을 커밋한 뒤 ACK |
+| 모든 요청 조합 실패 | `FAILED` | 실패 상태 커밋 후 DLQ 기록 및 ACK |
+| 재시도 가능한 실패 | 기존 처리 상태 유지 | 재시도 메시지를 발행한 뒤 현재 메시지 ACK |
+
+최종 실패 작업은 DLQ에 `runId`, `conditionId`, `companyId`, `attemptId`, `retryCount`, 오류 유형만 남긴다.
+외부 API 인증키와 응답 원문은 DB, Redis, DLQ 및 애플리케이션 로그에 남기지 않는다.
 
 ---
 

@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionConditionJpaEntity;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
@@ -17,6 +18,8 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -73,36 +76,77 @@ public class CollectionRunJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    // 수집 실행 도메인 모델을 DB에 저장 가능한 Entity로 구성합니다.
-    public CollectionRunJpaEntity(
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "condition_snapshot", nullable = false, columnDefinition = "JSON")
+    private JsonNode conditionSnapshot;
+
+    @Column(name = "processing_attempt_id", length = 36)
+    private String processingAttemptId;
+
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount;
+
+    @Column(name = "processing_started_at")
+    private LocalDateTime processingStartedAt;
+
+    @Column(name = "lease_expires_at")
+    private LocalDateTime leaseExpiresAt;
+
+    @Column(name = "error_code", length = 100)
+    private String errorCode;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    // 필드 이름이 드러나는 입력 모델로 Entity를 구성해 위치 기반 매핑 오류를 막습니다.
+    public static CollectionRunJpaEntity from(PersistenceValues values) {
+        CollectionRunJpaEntity entity = new CollectionRunJpaEntity();
+        entity.crawlRunId = values.crawlRunId();
+        entity.crawlCondition = values.crawlCondition();
+        entity.conditionSnapshot = values.conditionSnapshot();
+        entity.triggerType = values.triggerType();
+        entity.runStatus = values.runStatus();
+        entity.processingAttemptId = values.processingAttemptId();
+        entity.retryCount = values.retryCount();
+        entity.processingStartedAt = values.processingStartedAt();
+        entity.leaseExpiresAt = values.leaseExpiresAt();
+        entity.startedAt = values.startedAt();
+        entity.finishedAt = values.finishedAt();
+        entity.collectedCount = values.collectedCount();
+        entity.insertedCount = values.insertedCount();
+        entity.updatedCount = values.updatedCount();
+        entity.skippedCount = values.skippedCount();
+        entity.errorCode = values.errorCode();
+        entity.errorMessage = values.errorMessage();
+        entity.requestedBy = values.requestedBy();
+        entity.createdAt = values.createdAt();
+        entity.updatedAt = values.updatedAt();
+        entity.deletedAt = values.deletedAt();
+        return entity;
+    }
+
+    public record PersistenceValues(
             Long crawlRunId,
             CollectionConditionJpaEntity crawlCondition,
+            JsonNode conditionSnapshot,
             CollectionRunTriggerType triggerType,
             CollectionRunStatus runStatus,
+            String processingAttemptId,
+            int retryCount,
+            LocalDateTime processingStartedAt,
+            LocalDateTime leaseExpiresAt,
             LocalDateTime startedAt,
             LocalDateTime finishedAt,
             int collectedCount,
             int insertedCount,
             int updatedCount,
             int skippedCount,
+            String errorCode,
             String errorMessage,
             String requestedBy,
             LocalDateTime createdAt,
+            LocalDateTime updatedAt,
             LocalDateTime deletedAt
     ) {
-        this.crawlRunId = crawlRunId;
-        this.crawlCondition = crawlCondition;
-        this.triggerType = triggerType;
-        this.runStatus = runStatus;
-        this.startedAt = startedAt;
-        this.finishedAt = finishedAt;
-        this.collectedCount = collectedCount;
-        this.insertedCount = insertedCount;
-        this.updatedCount = updatedCount;
-        this.skippedCount = skippedCount;
-        this.errorMessage = errorMessage;
-        this.requestedBy = requestedBy;
-        this.createdAt = createdAt;
-        this.deletedAt = deletedAt;
     }
 }
