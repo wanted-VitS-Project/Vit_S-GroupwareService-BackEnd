@@ -1,6 +1,7 @@
 package com.group3.vitamins.project.application.service;
 
 import com.group3.vitamins.businesscategory.domain.exception.BusinessCategoryErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -53,12 +54,14 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final EmployeeLookupPort employeeLookupPort;
     private final StepStatLookupPort stepStatLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public ProjectResult createProject(CreateProjectCommand command) {
         validateDateRange(command.startedOn(), command.endedOn());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         if (command.bidNoticeId() != null) {
-            checkBidNoticeNotLinked(command.bidNoticeId());
+            checkBidNoticeNotLinked(command.bidNoticeId(), companyId);
         }
 
         List<Long> categoryIds = command.businessCategoryIds() == null
@@ -69,7 +72,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         Project saved = projectRepository.save(Project.create(
                 command.bidNoticeId(), command.name(), command.description(), command.clientName(),
                 command.startedOn(), command.endedOn(), command.contractAmount(),
-                command.requesterUserId(), now));
+                command.requesterUserId(), now, companyId));
 
         projectMemberRepository.save(
                 ProjectMember.createEditor(saved.getProjectId(), command.requesterUserId(), now));
@@ -94,8 +97,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         validateDateRange(command.startedOn(), command.endedOn());
 
@@ -115,8 +117,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         Project updated = projectRepository.save(
                 project.changeStatus(parseStatus(command.status()), LocalDateTime.now()));
@@ -131,8 +132,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         Project closed = projectRepository.save(project.close(
                 parseCloseReason(command.closeReasonCode()), command.closeReasonNote(),
@@ -208,7 +208,10 @@ public class ProjectCommandService implements ProjectCommandUseCase {
 
         projectBusinessCategoryRepository.linkAll(command.projectId(), categoryIds);
 
-        return new ProjectCategoryResult(command.projectId(), resolveCategories(
+        // ⚠️ 응답은 describeLinked 다. resolveCategories(검증용)로 돌리면 예전에 연결해 둔 카테고리가
+        //    그 사이 삭제됐을 때 개수가 안 맞아 404 가 나고, 방금 성공한 연결까지 롤백된다.
+        //    그 프로젝트는 카테고리를 영영 추가할 수 없게 된다.
+        return new ProjectCategoryResult(command.projectId(), describeLinked(
                 projectBusinessCategoryRepository.findCategoryIds(command.projectId())));
     }
 
@@ -237,8 +240,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         if (project.getStatus() != ProjectStatus.NOT_STARTED
                 || stepStatLookupPort.countByProjectId(command.projectId()).totalCount() > 0) {
@@ -256,25 +258,56 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         return categoryIds.stream().distinct().toList();
     }
 
-    /** 같은 공고로 이미 프로젝트가 만들어졌으면 막는다 — 안 막으면 UNIQUE 제약이 DB 500 으로 샌다. */
-    private void checkBidNoticeNotLinked(Long bidNoticeId) {
-        projectRepository.findByBidNoticeId(bidNoticeId).ifPresent(existing -> {
+    /** 현재 회사 소유의 프로젝트를 불러온다. 타사 프로젝트와 삭제분은 404 로 귀결된다. */
+    private Project requireProject(Long projectId) {
+        return projectRepository.findById(projectId, currentCompanyIdProvider.currentCompanyId())
+                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+    }
+
+    /**
+     * 같은 회사에서 같은 공고로 이미 프로젝트가 만들어졌으면 막는다 —
+     * 안 막으면 UNIQUE 제약이 DB 500 으로 샌다. 다른 회사가 같은 공고를 쓰는 것은 정상이라 걸리지 않는다.
+     */
+    private void checkBidNoticeNotLinked(Long bidNoticeId, Long companyId) {
+        projectRepository.findByBidNoticeId(bidNoticeId, companyId).ifPresent(existing -> {
             throw new ConflictException(ProjectErrorCode.PROJECT_BID_NOTICE_ALREADY_LINKED);
         });
     }
 
-    /** 요청된 카테고리 id 가 전부 존재하는지 확인하고 응답용 요약으로 바꾼다. */
+    /**
+     * <b>요청으로 들어온</b> 카테고리 id 가 전부 살아있는지 확인하고 응답용 요약으로 바꾼다.
+     *
+     * <p>⛔ 이미 연결된 카테고리를 여기 태우지 마라 — 그중 하나가 삭제돼 있으면 개수가 안 맞아
+     * 404 가 난다. 그건 {@link #describeLinked} 소관이다.
+     */
     private List<BusinessCategorySummary> resolveCategories(List<Long> categoryIds) {
         if (categoryIds.isEmpty()) {
             return List.of();
         }
         List<BusinessCategoryLookupPort.BusinessCategoryView> found =
-                businessCategoryLookupPort.findByIds(categoryIds);
+                businessCategoryLookupPort.findByIds(
+                        categoryIds, currentCompanyIdProvider.currentCompanyId());
         if (found.size() != Set.copyOf(categoryIds).size()) {
             throw new NotFoundException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NOT_FOUND);
         }
         return found.stream()
-                .map(view -> new BusinessCategorySummary(view.categoryId(), view.name(), view.code()))
+                // 쓰기 경로다 — findByIds 가 deleted_at IS NULL 을 보므로 삭제된 카테고리는 여기 못 온다.
+                .map(view -> new BusinessCategorySummary(view.categoryId(), view.name(), view.code(), false))
+                .toList();
+    }
+
+    /**
+     * <b>이미 연결된</b> 카테고리를 응답용 요약으로 옮긴다. 존재 검증을 하지 않는다 —
+     * 연결 시점에 이미 검증했고, 그 뒤 삭제됐다는 사실은 막을 게 아니라 알릴 값이다 (DELETE.md D-6).
+     */
+    private List<BusinessCategorySummary> describeLinked(List<Long> categoryIds) {
+        if (categoryIds.isEmpty()) {
+            return List.of();
+        }
+        return businessCategoryLookupPort.findRefsByIds(
+                        categoryIds, currentCompanyIdProvider.currentCompanyId()).stream()
+                .map(ref -> new BusinessCategorySummary(
+                        ref.categoryId(), ref.name(), ref.code(), ref.deleted()))
                 .toList();
     }
 }

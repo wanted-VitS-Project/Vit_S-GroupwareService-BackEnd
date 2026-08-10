@@ -13,7 +13,7 @@ import java.util.Optional;
 public interface ProjectDetailQueryPort {
 
     /** 없거나 논리 삭제된 프로젝트면 비어 있다 (404 판정은 호출부). */
-    Optional<ProjectDetailView> findDetail(Long projectId, String requesterUserId);
+    Optional<ProjectDetailView> findDetail(Long projectId, String requesterUserId, Long companyId);
 
     record ProjectDetailView(
             Long projectId,

@@ -61,7 +61,7 @@ public record BlockListResponse(
         static BlockItemResponse from(BlockSummary summary) {
             BlockOwnerResponse owner = summary.owner() == null
                     ? null
-                    : new BlockOwnerResponse(summary.owner().userId(), summary.owner().name());
+                    : new BlockOwnerResponse(summary.owner().userId(), summary.owner().name(), summary.owner().deleted());
 
             return new BlockItemResponse(
                     summary.blockId(), summary.type(), summary.title(), owner,

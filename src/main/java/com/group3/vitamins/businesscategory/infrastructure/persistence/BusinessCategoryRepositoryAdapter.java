@@ -15,22 +15,22 @@ public class BusinessCategoryRepositoryAdapter implements BusinessCategoryReposi
     private final SpringDataBusinessCategoryRepository springDataRepository;
 
     @Override
-    public List<BusinessCategory> search(String keyword, boolean includeDeleted) {
-        return springDataRepository.search(keyword, includeDeleted)
+    public List<BusinessCategory> search(String keyword, boolean includeDeleted, Long companyId) {
+        return springDataRepository.search(keyword, includeDeleted, companyId)
                 .stream()
                 .map(BusinessCategoryMapper::toDomain)
                 .toList();
     }
 
     @Override
-    public Optional<BusinessCategory> findByName(String name) {
-        return springDataRepository.findByName(name)
+    public Optional<BusinessCategory> findByName(String name, Long companyId) {
+        return springDataRepository.findByNameAndCompanyId(name, companyId)
                 .map(BusinessCategoryMapper::toDomain);
     }
 
     @Override
-    public Optional<BusinessCategory> findByCode(String code) {
-        return springDataRepository.findByCode(code)
+    public Optional<BusinessCategory> findByCode(String code, Long companyId) {
+        return springDataRepository.findByCodeAndCompanyId(code, companyId)
                 .map(BusinessCategoryMapper::toDomain);
     }
 
@@ -41,8 +41,9 @@ public class BusinessCategoryRepositoryAdapter implements BusinessCategoryReposi
     }
 
     @Override
-    public Optional<BusinessCategory> findActiveById(Long categoryId) {
-        return springDataRepository.findByBusinessCategoryIdAndDeletedAtIsNull(categoryId)
+    public Optional<BusinessCategory> findActiveById(Long categoryId, Long companyId) {
+        return springDataRepository
+                .findByBusinessCategoryIdAndCompanyIdAndDeletedAtIsNull(categoryId, companyId)
                 .map(BusinessCategoryMapper::toDomain);
     }
 }

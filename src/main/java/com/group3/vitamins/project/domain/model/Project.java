@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public class Project {
 
     private final Long projectId;
+    private final Long companyId;
     private Long bidNoticeId;
     private String name;
     private String description;
@@ -23,12 +24,14 @@ public class Project {
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
 
-    private Project(Long projectId, Long bidNoticeId, String name, String description, ProjectStatus status,
-                    String clientName, BigDecimal contractAmount, LocalDate startedOn, LocalDate endedOn,
+    private Project(Long projectId, Long companyId, Long bidNoticeId, String name, String description,
+                    ProjectStatus status, String clientName, BigDecimal contractAmount,
+                    LocalDate startedOn, LocalDate endedOn,
                     CloseReasonCode closeReasonCode, String closeReasonNote, LocalDateTime closedAt,
                     String createdBy, LocalDateTime createdAt, LocalDateTime updatedAt,
                     LocalDateTime deletedAt) {
         this.projectId = projectId;
+        this.companyId = companyId;
         this.bidNoticeId = bidNoticeId;
         this.name = name;
         this.description = description;
@@ -49,23 +52,23 @@ public class Project {
     /** 프로젝트를 생성한다. 상태는 항상 NOT_STARTED. bidNoticeId 는 null 이면 공고 없이 생성된다 (PRJ-001·002). */
     public static Project create(Long bidNoticeId, String name, String description, String clientName,
                                  LocalDate startedOn, LocalDate endedOn, BigDecimal contractAmount,
-                                 String createdBy, LocalDateTime now) {
-        return new Project(null, bidNoticeId, name, description, ProjectStatus.NOT_STARTED,
+                                 String createdBy, LocalDateTime now, Long companyId) {
+        return new Project(null, companyId, bidNoticeId, name, description, ProjectStatus.NOT_STARTED,
                 clientName, contractAmount, startedOn, endedOn, null, null, null,
                 createdBy, now, now, null);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
-    public static Project restore(Long projectId, Long bidNoticeId, String name, String description,
-                                  ProjectStatus status, String clientName, BigDecimal contractAmount,
-                                  LocalDate startedOn, LocalDate endedOn,
+    public static Project restore(Long projectId, Long companyId, Long bidNoticeId, String name,
+                                  String description, ProjectStatus status, String clientName,
+                                  BigDecimal contractAmount, LocalDate startedOn, LocalDate endedOn,
                                   CloseReasonCode closeReasonCode, String closeReasonNote,
                                   LocalDateTime closedAt, String createdBy,
                                   LocalDateTime createdAt, LocalDateTime updatedAt,
                                   LocalDateTime deletedAt) {
-        return new Project(projectId, bidNoticeId, name, description, status, clientName, contractAmount,
-                startedOn, endedOn, closeReasonCode, closeReasonNote, closedAt, createdBy,
-                createdAt, updatedAt, deletedAt);
+        return new Project(projectId, companyId, bidNoticeId, name, description, status, clientName,
+                contractAmount, startedOn, endedOn, closeReasonCode, closeReasonNote, closedAt,
+                createdBy, createdAt, updatedAt, deletedAt);
     }
 
     /**
@@ -131,6 +134,7 @@ public class Project {
     }
 
     public Long getProjectId() { return projectId; }
+    public Long getCompanyId() { return companyId; }
     public Long getBidNoticeId() { return bidNoticeId; }
     public String getName() { return name; }
     public String getDescription() { return description; }

@@ -25,7 +25,7 @@ public record BlockUpdateResponse(
     public static BlockUpdateResponse from(BlockUpdateResult result) {
         BlockOwnerResponse owner = result.owner() == null
                 ? null
-                : new BlockOwnerResponse(result.owner().userId(), result.owner().name());
+                : new BlockOwnerResponse(result.owner().userId(), result.owner().name(), result.owner().deleted());
 
         return new BlockUpdateResponse(
                 result.blockId(), result.title(), owner, result.updatedAt());

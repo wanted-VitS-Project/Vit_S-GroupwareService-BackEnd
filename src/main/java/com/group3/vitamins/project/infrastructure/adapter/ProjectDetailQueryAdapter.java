@@ -16,8 +16,9 @@ public class ProjectDetailQueryAdapter implements ProjectDetailQueryPort {
     private final ProjectDetailQueryMapper projectDetailQueryMapper;
 
     @Override
-    public Optional<ProjectDetailView> findDetail(Long projectId, String requesterUserId) {
-        List<ProjectDetailRow> rows = projectDetailQueryMapper.findDetail(projectId, requesterUserId);
+    public Optional<ProjectDetailView> findDetail(Long projectId, String requesterUserId, Long companyId) {
+        List<ProjectDetailRow> rows =
+                projectDetailQueryMapper.findDetail(projectId, requesterUserId, companyId);
         if (rows.isEmpty()) {
             return Optional.empty();
         }
@@ -41,7 +42,7 @@ public class ProjectDetailQueryAdapter implements ProjectDetailQueryPort {
         return rows.stream()
                 .filter(row -> row.categoryId() != null)
                 .map(row -> new BusinessCategorySummary(
-                        row.categoryId(), row.categoryName(), row.categoryCode()))
+                        row.categoryId(), row.categoryName(), row.categoryCode(), row.categoryDeleted()))
                 .toList();
     }
 

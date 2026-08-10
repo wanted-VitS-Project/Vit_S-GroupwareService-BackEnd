@@ -5,8 +5,13 @@
 
 <mapper namespace="com.group3.vitamins.project.infrastructure.adapter.ProjectListQueryMapper">
 
+    <!--
+      ⚠️ 회사 조건은 adminAll 분기 <if> 바깥에 둔다. 안에 넣으면 ADMIN 경로에서 조건이 통째로 빠져
+         전 회사 프로젝트가 목록에 뜬다. adminAll 이 넓히는 것은 "참여 여부"이지 "회사"가 아니다.
+    -->
     <sql id="listFilters">
         WHERE p.deleted_at IS NULL
+        AND p.company_id = #{companyId}
         <if test="adminAll == false">
             AND EXISTS (SELECT 1
             FROM project_member pm
@@ -51,8 +56,10 @@
         bc.business_category_id   AS categoryId,
         bc.name                   AS categoryName,
         bc.code                   AS categoryCode,
+        (bc.deleted_at IS NOT NULL) AS categoryDeleted,
         pm.user_id                AS memberUserId,
-        e.name                    AS memberName
+        e.name                    AS memberName,
+        (e.deleted_at IS NOT NULL)  AS memberDeleted
         FROM (
         SELECT p.project_id      AS projectId,
         p.name            AS name,
@@ -101,15 +108,19 @@
         ) b
         LEFT JOIN project_business_category pbc
         ON pbc.project_id = b.projectId
+        <!--
+          ⚠️ deleted_at 조건을 조인에서 뺐다 (DELETE.md D-6) — 두면 삭제된 카테고리·사원이
+             조용히 사라져 "없음" 과 구분이 안 된다. 회사 조건(company_id)은 그대로 둔다:
+             타사 데이터는 애초에 보여줄 대상이 아니라 성격이 다르다.
+        -->
         LEFT JOIN business_category bc
         ON bc.business_category_id = pbc.business_category_id
-        AND bc.deleted_at IS NULL
+        AND bc.company_id = #{companyId}
         LEFT JOIN project_member pm
         ON pm.project_id = b.projectId
         AND pm.permission &lt;&gt; 'NONE'
         LEFT JOIN employee e
         ON e.user_id = pm.user_id
-        AND e.deleted_at IS NULL
         ORDER BY b.createdAt DESC, b.projectId DESC,
         bc.business_category_id ASC, e.name ASC, pm.user_id ASC
     </select>

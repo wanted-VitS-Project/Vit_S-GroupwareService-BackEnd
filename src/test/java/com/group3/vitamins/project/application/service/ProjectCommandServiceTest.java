@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.application.service;
 
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.command.ChangeProjectStatusCommand;
@@ -18,6 +19,7 @@ import com.group3.vitamins.project.domain.model.ProjectStatus;
 import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
 import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
 import com.group3.vitamins.project.domain.repository.ProjectRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,11 +52,18 @@ class ProjectCommandServiceTest {
     @Mock private ProjectBusinessCategoryRepository projectBusinessCategoryRepository;
     @Mock private BusinessCategoryLookupPort businessCategoryLookupPort;
     @Mock private EmployeeLookupPort employeeLookupPort;
+    @Mock private CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @InjectMocks private ProjectCommandService projectCommandService;
 
     private static final LocalDate STARTED = LocalDate.of(2026, 8, 1);
     private static final LocalDate ENDED = LocalDate.of(2026, 12, 31);
+    private static final Long COMPANY_ID = 1L;
+
+    @BeforeEach
+    void 회사_컨텍스트() {
+        Mockito.lenient().when(currentCompanyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+    }
 
     @Test
     @DisplayName("받은 값으로 6필드를 전부 덮어쓴다")
@@ -238,11 +247,11 @@ class ProjectCommandServiceTest {
     private void givenProject(ProjectStatus status, CloseReasonCode closeReasonCode,
                               String closeReasonNote, LocalDateTime closedAt) {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
-        Project existing = Project.restore(12L, null, "기존 과업", "기존 설명",
+        Project existing = Project.restore(12L, COMPANY_ID, null, "기존 과업", "기존 설명",
                 status, "OO시청", new BigDecimal("100000000"), STARTED, ENDED,
                 closeReasonCode, closeReasonNote, closedAt, "E2024001", createdAt, createdAt, null);
 
-        given(projectRepository.findById(12L)).willReturn(Optional.of(existing));
+        given(projectRepository.findById(12L, COMPANY_ID)).willReturn(Optional.of(existing));
         Mockito.lenient().when(projectRepository.save(any(Project.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }

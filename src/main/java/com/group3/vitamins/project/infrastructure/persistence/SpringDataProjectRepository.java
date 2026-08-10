@@ -11,8 +11,10 @@ public interface SpringDataProjectRepository extends JpaRepository<ProjectJpaEnt
      * 논리 삭제분은 제외한다. 삭제 시 bid_notice_id 를 비우므로 삭제분이 걸릴 일은 없지만,
      * 과거 데이터가 남아 있을 수 있어 조회에서도 한 번 더 막는다.
      */
-    Optional<ProjectJpaEntity> findByBidNoticeIdAndDeletedAtIsNull(Long bidNoticeId);
+    Optional<ProjectJpaEntity> findByBidNoticeIdAndCompanyIdAndDeletedAtIsNull(
+            Long bidNoticeId, Long companyId);
 
-    /** 논리 삭제분은 조회하지 않는다. */
-    Optional<ProjectJpaEntity> findByProjectIdAndDeletedAtIsNull(Long projectId);
+    /** 회사 범위 단건 조회. 논리 삭제분과 타사 프로젝트는 조회하지 않는다. */
+    Optional<ProjectJpaEntity> findByProjectIdAndCompanyIdAndDeletedAtIsNull(
+            Long projectId, Long companyId);
 }

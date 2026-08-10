@@ -1,6 +1,8 @@
 # 🗑️ 삭제 정책 — 전 도메인 공통 규칙
 
-**최종 업데이트**: 2026-08-10 (신설 — `PRJ-V1.md` §3-1 의 `D-1`~`D-7` 을 전 도메인 기준으로 승격)
+**최종 업데이트**: 2026-08-11 (§4-1 신설 — 삭제된 사원 표시 규약 **동훈↔김동현 합의 완료**: 필드명 `deleted` · 이름 유지 · `resigned` 와 별개 · 참조 7곳 공통. §5-1 ③ 에 **「비우는가」 판정표** 신설 — 파일(연결이 끊김 → 비운다) vs 계층(연결이 남음 → 유지) · §5-2 예시 2 정정: `categoryId` 를 `CASE WHEN` 하면 접기 키가 사라져 **행이 통째로 소멸**한다)
+**최종 업데이트**: 2026-08-11 (§4 동훈 항목 적용 완료 — 검증용/조회용 포트 분리 · 이름 유지 확정 · §5-2 예시 1 갱신)
+**최종 업데이트**: 2026-08-11 (§2-2 — D-3 예외 2건 명시)
 **담당**: 김동현 (프로젝트 계층 · DevOps)
 **범위**: 사용자 조작으로 무언가를 **지금 지울 때**의 규칙
 **범위 밖**: 보존기간 만료 후 시스템이 정리하는 하드 삭제 → [`CLEANUP.md`](CLEANUP.md) (김용준 PO 소관)
@@ -85,7 +87,7 @@ Q3 ─ 내가 참조하는 게 삭제되면 화면에 뭘 띄우나?  → D-5 ·
 | `issue_assign` | `UK_issue_assign` | 담당자 재배정 | 김용준 |
 | `block_file` | **`PK(block_id, file_id)`** | 파일 재부착 — 복합 PK 라 `UNIQUE` 보다 강하다 | 김동현 |
 
-> ⚠️ **`project_member` 는 두 도메인이 걸린다** — 행 자체는 프로젝트 소관(동훈)이지만, 조회할 때 조인하는 `employee.deleted_at` 은 **사원 도메인(김동현)** 의 값이다. D-6 을 적용할 때 **양쪽이 합의**해야 한다.
+> ⚠️ **`project_member` 는 두 도메인이 걸린다** — 행 자체는 프로젝트 소관(동훈)이지만, 조회할 때 조인하는 `employee.deleted_at` 은 **사원 도메인(김동현)** 의 값이다. ✅ **합의 완료 (2026-08-11) → §4-1 이 그 결과다.** 새로 만들지 말고 §4-1 을 따르라.
 
 ### 2-2. D-3 — 하드가 실제로 실행되는 순간
 
@@ -99,6 +101,21 @@ Q3 ─ 내가 참조하는 게 삭제되면 화면에 뭘 띄우나?  → D-5 ·
 
 > `ERD.md` §5-3 — *"블록을 지울 땐 `block.deleted_at` 만 찍고 이 행은 **건드리지 않는다.**
 > 행을 지우는 건 **사용자가 연결을 끊었을 때뿐**이다."*
+
+#### ⭐ D-3 의 예외 2건 — 지우는 게 맞다 (2026-08-11 실측)
+
+⚠️ **아래 2건은 D-3 문자 그대로 읽으면 위반처럼 보이지만 올바른 코드다. 지우지 마라.**
+
+| 위치 | 하는 일 | 왜 정당한가 |
+|---|---|---|
+| **`StageCommandService.deleteStage`** — `stagePermissionDefaultRepository.deleteByStageId()` | 스테이지 삭제 시 `stage_permission_default` 를 하드 DELETE | ① 스테이지는 **복구가 없다**(`PRJ-V1.md` §3-1-1) → 재연결 가능성이 0 ② 이 행은 *"그 스테이지에 **새 스텝을 만들 때** 복사되는 기본값"* 이라, 스테이지가 죽으면 **적용 대상이 영원히 없다** ③ 판정 체인에 없다(INV-01) → 남겨도 아무것도 안 한다 |
+| **`ProjectMemberCommandService.removeMember`** — `step_permission` · `stage_permission_default` 동반 삭제 | 참여자 제외 시 그 사람의 권한 행을 함께 하드 DELETE | **연결 해제 한 건이 같은 연결의 부속을 정리하는 것**이다. 프로젝트에서 빠진 사람의 스텝·스테이지 권한은 존재 의미가 없다 |
+
+> 🚨 **이 예외를 문서에 안 적으면** 다음 사람이 *"D-3 위반이다"* 하고 그 줄을 지운다. 그러면
+> **스테이지당 N행씩 죽은 행이 영구히 쌓이고**, `uk_spd_stage_user` 때문에 같은 스테이지 이름을 다시 만들 때가 아니라
+> 그 사원을 다시 넣을 때 문제가 된다.
+
+**예외의 판정 기준** — 상위가 죽었을 때 그 연결 행이 ① **재연결될 수 있나** ② **남아서 뭔가 하나** ③ **조회에서 걸러야 할 대상인가**. 셋 다 「아니오」면 지워도 된다. 하나라도 「예」면 D-3 대로 남긴다.
 
 ---
 
@@ -137,15 +154,52 @@ Q3 ─ 내가 참조하는 게 삭제되면 화면에 뭘 띄우나?  → D-5 ·
 
 > 아래는 **2026-08-10 실측 기준**이다. 확인 후 이 표를 갱신해 주면 된다.
 
+### 4-1. ⭐ 삭제된 사원 표시 규약 — 전 도메인 공통 (2026-08-11 · 동훈 ↔ 김동현 합의 완료)
+
+`employee` 를 참조하는 곳이 **7곳**이다 — `project_member` · `step_permission` · `stage_permission_default` ·
+`issue_assign` · `block.owner` · `activity_log.user_id` · `block_file.linked_by`.
+**여기서 갈리면 화면마다 다른 규칙이 생긴다.** 아래를 그대로 쓴다.
+
+| 항목 | 규약 | 왜 |
+|---|---|---|
+| **필드명** | **`deleted`** (boolean). 참조 대상이 여럿인 응답은 `xxxDeleted` (`categoryDeleted`·`memberDeleted`·`blockDeleted`) | 파일 도메인이 이미 `blockDeleted` 로 쓰고 있다 — 새 이름을 만들지 않는다 |
+| **이름** | ⛔ **비우지 않는다.** 삭제돼도 `name` 을 그대로 내려보낸다 | 비우면 「삭제됨」·「원래 없음」·「사번이 `employee` 에 아예 없음」이 한 값으로 뭉개진다 |
+| **id (`userId`·`categoryId`)** | ⛔ **비우지 않는다.** `CASE WHEN` 금지 | 연결 행이 아직 살아 있어 참조가 유효하다. 게다가 **접기 키라 비우면 행이 사라진다** → §5-1 ③ 판정표 · §5-2 예시 2 |
+| **`name == null` 의 뜻** | **삭제가 아니라 사번이 `employee` 에 없다** = 정합성 문제 | 두 상태가 겹치면 안 된다 |
+| **`resigned` 와의 관계** | **별개 필드로 나란히 내린다.** 합치지 않는다 | 퇴사자는 계정·이력이 유효하다 (§5-3) |
+| **표시** | FE 가 이름 옆에 **배지**로 그린다. 「삭제됨」 — 백엔드는 문구를 만들지 않는다 | 문구가 응답에 박히면 다국어·톤 변경이 배포 대상이 된다 |
+| **쓰기 경로** | 삭제된 사원은 **새로 지정할 수 없다** — 검증용 조회가 `deleted_at IS NULL` 을 본다 (§4 동훈 「검증용과 조회용」) | 이미 지정된 사람을 남기는 것과, 새로 지정하게 두는 것은 다른 문제다 |
+
+> 🔒 **`business_category` 도 같은 규약을 따른다** (`deleted` · 이름 유지). 사원과 분류를 다르게 다루지 않는다.
+> ⚠️ 개인정보 마스킹이 필요해지면 **응답 필드가 아니라 표시 정책으로** 다룬다 — 규약을 바꾸려면 7곳이 함께 움직여야 한다.
+
 ### 🟢 동훈 — 프로젝트 · 스테이지 · 스텝 · 블록
 
-| 대상 | 상태 | 할 일 |
+> ✅ **2026-08-11 적용 완료.** 아래는 적용 결과다 — 다시 「할 일」로 읽지 마라.
+
+| 대상 | 상태 | 결과 |
 |---|---|---|
-| 참여자 목록 (`ProjectMemberQueryMapper`) | 🔴 **패턴 A** | `INNER JOIN employee … AND e.deleted_at IS NULL` → `LEFT JOIN` + `(e.deleted_at IS NOT NULL) AS deleted`. **지금은 삭제된 사원의 참여자 행이 목록에서 사라진다** → §5-2 예시 1. ⚠️ `employee` 는 김동현 소관이라 **필드 추가는 양쪽 합의** |
-| 프로젝트 상세·목록의 카테고리 | 🟡 **패턴 B** | `categoryDeleted` 필드 추가 → §5-2 예시 2 |
-| `BusinessCategoryLookupQueryMapper.findByIds` | 🟡 **패턴 B** | `WHERE deleted_at IS NULL` 제거 + 상태 컬럼 |
-| `block.owner` 담당자 조회 | ❓ **미확인** | 실측 필요 — `owner` 가 사번이라 `employee.deleted_at` 을 봐야 한다 |
-| 하드 4종 (`project_member`·`step_permission`·`stage_permission_default`·`project_business_category`) | ✅ 하드 | **D-3 확인** — 상위가 soft 삭제될 때 이 행을 지우면 안 된다 |
+| 참여자 목록 (`ProjectMemberQueryMapper`) | ✅ **패턴 D** | `LEFT JOIN employee` (조건 없음) + `(e.deleted_at IS NOT NULL) AS deleted`. ⚠️ **이름은 비우지 않는다** → §5-2 예시 1 |
+| 프로젝트 상세·목록의 카테고리 | ✅ **패턴 D** | `categoryDeleted` 추가. 목록(`ProjectListQueryMapper`)은 카테고리·참여자가 한 파일에 같이 있어 A·B 를 함께 고쳤다 |
+| ⭐ `block.owner` · `step.owner_user_id` · `completed_by` 담당자 조회 | ✅ **패턴 D** | `EmployeeLookupPort` 를 **용도별 2개로 쪼갰다** — 아래 표 |
+| ⭐ `BusinessCategoryLookupPort` | ✅ **용도별 2개** | 같은 이유로 쪼갰다 — 아래 표 |
+| 하드 4종 (`project_member`·`step_permission`·`stage_permission_default`·`project_business_category`) | ✅ 하드 | D-3 확인 완료 — 예외 2건은 §2-2 에 명시했다 |
+
+#### ⭐ 검증용과 조회용은 같은 쿼리를 쓰면 안 된다 (2026-08-11)
+
+⚠️ **여기가 이번 작업에서 가장 많이 틀린 지점이다.** 한 메서드로 겸하면 둘 중 하나가 반드시 깨진다.
+
+| 포트 | 검증용 (쓰기) | 조회용 (응답) |
+|---|---|---|
+| `EmployeeLookupPort` | `findNameByUserId` — `deleted_at IS NULL` **유지**. 삭제된 사원을 새로 담당자·참여자로 지정하면 안 된다 | `findRefsByUserIds` — 조건 **없음** + `deleted` 플래그. 이미 지정된 사람을 화면에서 지우지 않는다 |
+| `BusinessCategoryLookupPort` | `findByIds` — `deleted_at IS NULL` **유지**. 삭제된 카테고리를 새로 연결하면 안 된다 | `findRefsByIds` — 조건 **없음** + `deleted` 플래그 |
+
+> 🚨 **검증용 메서드로 「이미 연결된 것」을 조회하면 기능이 잠긴다.** 개수가 안 맞아 404 가 나고
+> 같은 트랜잭션의 쓰기까지 롤백된다 — `linkBusinessCategories` 가 실제로 그랬다(2026-08-11 수정).
+> 카테고리 하나가 삭제된 프로젝트는 **카테고리를 영영 추가할 수 없었다.**
+
+⚠️ **SQL 만 고치면 안 된다 — 접기(fold) 코드도 같이 본다.** `ProjectListQueryAdapter.foldMembers` 가
+`memberName != null` 로 걸러서, 쿼리에서 살려낸 행을 **자바에서 다시 죽이고 있었다.** 접기 키는 **사번**이다.
 
 ### 🟡 서정림 — 텍스트 · 체크리스트 · 이미지 · **재무(정산)**
 
@@ -161,7 +215,7 @@ Q3 ─ 내가 참조하는 게 삭제되면 화면에 뭘 띄우나?  → D-5 ·
 | 대상 | 상태 | 할 일 |
 |---|---|---|
 | `FileQueryMapper` | ✅ **기준 구현** | 없음 — D-6 패턴 D 의 모범이다. 다른 도메인이 이걸 보고 맞춘다 |
-| ⭐ **`employee.deleted_at` 제공 측** | ⚠️ **합의 필요** | 사원을 참조하는 곳이 **7곳**이다 — `project_member`·`step_permission`·`stage_permission_default`·`issue_assign`·`block.owner`·`activity_log.user_id`·`block_file.linked_by`. **삭제된 사원을 어떻게 표시할지 한 번 정해서 전 도메인이 같이 쓰는 게 낫다** (필드명·문구) |
+| ⭐ **`employee.deleted_at` 제공 측** | ✅ **합의 완료 (2026-08-11)** | 표시 규약을 **§4-1 로 못 박았다.** 사원을 참조하는 7곳(`project_member`·`step_permission`·`stage_permission_default`·`issue_assign`·`block.owner`·`activity_log.user_id`·`block_file.linked_by`)이 **같은 필드명·같은 의미**를 쓴다 |
 | `resigned_at` vs `deleted_at` 구분 | ✅ DDL 에 명시 | 없음 — 단 §5-3 을 각 도메인에 알려야 한다 |
 | `block_file` | ✅ 하드 | **D-3 확인** — 블록이 soft 삭제될 때 이 행을 지우면 안 된다 |
 
@@ -247,7 +301,21 @@ SELECT f.file_id                                        AS fileId,
 |---|---|
 | **WHERE** | **내 행에만** 쓴다 |
 | **JOIN ON** | ⛔ **쓰지 않는다** — 여기 쓰면 패턴 A·B 가 된다 |
-| **SELECT** | 참조 대상은 `CASE WHEN` + `(… IS NOT NULL) AS xxxDeleted` |
+| **SELECT** | 참조 대상은 `xxxDeleted` 플래그를 **반드시** 붙인다. 값을 `CASE WHEN` 으로 비울지는 **아래 표로 판단** |
+
+##### ⚠️ `CASE WHEN` 으로 비우는가 — 위 파일 예시를 그대로 베끼지 마라 (2026-08-11)
+
+위 SQL 은 `blockId`·`blockTitle` 을 **비운다.** 그런데 계층(참여자·카테고리·담당자)은 **비우지 않는다**(§4-1).
+둘은 모순이 아니라 **상황이 다르다.** 기준은 하나다 — **그 참조가 지금도 유효한가.**
+
+| | 파일 → 블록 | 계층 (참여자 · 카테고리 · 담당자) |
+|---|---|---|
+| 삭제 후 관계 | ⛔ **끊긴다** — 파일은 프로젝트 문서함으로 간다 (§6-6). `blockId` 를 그대로 주면 **"아직 이 블록에 붙어 있다"는 거짓말** | ✅ **남는다** — `project_member`·`project_business_category` 행이 그대로다 (D-3). 죽은 건 마스터뿐 |
+| 그래서 | `CASE WHEN` 으로 **비운다** | **비우지 않는다** |
+| 비우면 | — | 🚨 접기 키가 사라져 **행이 통째로 소멸**한다 (§5-2 예시 2) |
+
+> **판정 한 줄** — 삭제로 **연결 자체가 끊기면 비우고**, 연결이 남아 있으면 **값을 유지한다.**
+> 어느 쪽이든 `xxxDeleted` 플래그는 **항상** 붙는다. 그게 D-6 이다.
 
 #### ④ 연결 행 조회 — 상대의 `deleted_at` 으로 거른다 (D-3)
 
@@ -278,20 +346,28 @@ SELECT pm.user_id AS userId, e.name AS name,
  WHERE pm.project_id = #{projectId}
 ```
 
-**✅ After**
+**✅ After** (2026-08-11 구현 — **이름을 비우지 않는 쪽으로 확정**)
 
 ```sql
-SELECT pm.user_id                                   AS userId,
-       CASE WHEN e.deleted_at IS NULL THEN e.name END AS name,
-       (e.resigned_at IS NOT NULL)                  AS resigned,
-       (e.deleted_at  IS NOT NULL)                  AS deleted
+SELECT pm.user_id                   AS userId,
+       e.name                       AS name,        -- ⚠️ CASE WHEN 으로 비우지 않는다
+       (e.resigned_at IS NOT NULL)  AS resigned,
+       (e.deleted_at  IS NOT NULL)  AS deleted
   FROM project_member pm
   LEFT JOIN employee e ON e.user_id = pm.user_id    -- 조건 없이
  WHERE pm.project_id = #{projectId}
 ```
 
-> ⚠️ 이름을 `NULL` 로 비우면 화면에 빈칸이 뜬다. **FE 가 `deleted` 로 「삭제된 사용자」 를 렌더**하게 하거나,
-> 이름 스냅샷이 필요하면 `activity_log.target_name` 처럼 별도 컬럼을 두는 걸 검토한다 (김동현과 합의).
+> ⚠️ **`CASE WHEN e.deleted_at IS NULL THEN e.name END` 로 되돌리지 마라.** 이름을 비우면 화면이
+> 「담당자 없음」·「원래 비어 있음」과 구분이 안 되고, 사용자는 **누구를 정리해야 하는지 알 수 없다.**
+> `deleted` 플래그가 그 역할을 이미 한다 — FE 는 이름 옆에 「삭제됨」 배지를 그린다.
+>
+> 이름이 `null` 로 오는 경우는 **삭제가 아니라 사번이 `employee` 에 아예 없는 것**이다(정합성 문제).
+> 두 상태가 겹치면 안 되므로 비우지 않는다. 같은 판단을 `block.owner`·`step` 책임자·완료자에도 적용했다.
+>
+> ✅ **2026-08-11 김동현과 합의 완료 — 이 규약이 §4-1 이다.** 필드명·이름 유지 여부를 여기서 다시 정하지 마라.
+> 개인정보 마스킹이 필요해지면 **응답 필드가 아니라 표시 정책으로** 다루고, 이름 스냅샷이 필요하면
+> `activity_log.target_name` 처럼 별도 컬럼을 검토한다 (그때는 7곳이 함께 움직인다).
 
 #### 예시 2. 패턴 B → D (프로젝트 카테고리 · 동훈)
 
@@ -303,19 +379,25 @@ SELECT pm.user_id                                   AS userId,
    AND bc.deleted_at IS NULL           -- ⚠️ 여기가 문제
 ```
 
-**✅ After**
+**✅ After** (2026-08-11 구현 — **id 도 `CASE WHEN` 하지 않는다**)
 
 ```sql
-SELECT CASE WHEN bc.deleted_at IS NULL THEN bc.business_category_id END AS categoryId,
-       bc.name                                     AS categoryName,   -- 이름은 남긴다
-       (bc.deleted_at IS NOT NULL)                 AS categoryDeleted
+SELECT bc.business_category_id              AS categoryId,     -- ⚠️ CASE WHEN 금지 (아래 참조)
+       bc.name                              AS categoryName,   -- 이름은 남긴다
+       (bc.deleted_at IS NOT NULL)          AS categoryDeleted
   ...
   LEFT JOIN business_category bc
     ON bc.business_category_id = pbc.business_category_id   -- 조건 제거
 ```
 
 > 카테고리는 **이름을 남기는 게 낫다** — 사용자가 "이 프로젝트가 무슨 분류였는지" 를 알아야 한다.
-> 사원과 판단이 갈리는 지점이다: **개인정보성 값은 비우고, 분류·라벨은 남긴다.**
+> ⚠️ 사원도 같다 (2026-08-11 확정) — **값은 남기고 상태만 붙인다.** 지우는 건 `deleted` 플래그가 못 하는 일을
+> SQL 로 대신하는 것뿐이고, 그러면 「삭제됨」과 「원래 없음」이 다시 섞인다.
+
+🚨 **`categoryId` 를 `CASE WHEN` 으로 비우면 삭제된 카테고리가 응답에서 통째로 사라진다 — 패턴 A 로 되돌아간다.**
+어댑터가 **`categoryId` 를 접기(fold) 키로 쓰고, `categoryId IS NULL` 을 「연결 없는 프로젝트의 LEFT JOIN 빈 행」으로
+해석해 버리기** 때문이다 (`ProjectDetailQueryAdapter.categoriesOf` · `ProjectListQueryAdapter.foldCategories`).
+컴파일도 되고 SQL 도 돌아간다 — **행만 조용히 없어진다.** 참여자의 `memberUserId` 도 같다.
 
 #### 예시 3. 패턴 C → D (정산 입출금 · 서정림) — ⚠️ 가장 어렵다
 
@@ -356,10 +438,12 @@ LEFT JOIN cash_flow cf ON cf.cash_flow_id = (
 
 `employee` DDL 이 못 박아뒀다 — `deleted_at DATETIME NULL COMMENT '삭제일 (퇴사일 resigned_at 과 다르다)'`.
 
-| | 뜻 | 상태 |
-|---|---|---|
-| `resigned_at` | 회사를 나갔다. **계정·이력은 유효** | ✅ 이미 표시된다 |
-| `deleted_at` | 사원 데이터 자체가 삭제됐다 | 🔴 패턴 A 로 숨겨진다 |
+| | 뜻 | 응답 필드 | 상태 |
+|---|---|---|---|
+| `resigned_at` | 회사를 나갔다. **계정·이력은 유효** | `resigned` | ✅ 이미 표시된다 |
+| `deleted_at` | 사원 데이터 자체가 삭제됐다 | `deleted` | ✅ 계층 적용 완료 (2026-08-11) |
+
+> ⛔ **두 값을 하나로 합치지 마라.** 나란히 내려보낸다 — 규약은 §4-1 이다.
 
 ---
 

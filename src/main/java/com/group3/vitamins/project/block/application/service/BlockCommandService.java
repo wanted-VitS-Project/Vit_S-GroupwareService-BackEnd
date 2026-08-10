@@ -284,12 +284,36 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
     @Override
     public void moveBlocks(Collection<Long> blockIds, Long toStepId) {
-        blockIds.forEach(blockId -> moveToStep(findBlock(blockId), toStepId));
+        findBlocks(blockIds).forEach(block -> moveToStep(block, toStepId));
     }
 
     @Override
     public void deleteBlocks(Collection<Long> blockIds, String requesterUserId) {
-        blockIds.forEach(blockId -> deleteBlock(findBlock(blockId), requesterUserId));
+        findBlocks(blockIds).forEach(block -> deleteBlock(block, requesterUserId));
+    }
+
+    /**
+     * cascade 대상 블록을 한 번에 읽는다. 건마다 {@code findById} 를 돌리면 스텝 삭제 한 번이
+     * 블록 수만큼 SELECT 를 낸다.
+     *
+     * <p>⚠️ 받은 순서를 그대로 유지한다 — {@code findAllByIds} 의 반환 순서는 보장이 없는데
+     * {@code moveToStep} 이 도착 스텝의 <b>맨 아래 행</b>에 차례로 붙이므로, 순서가 흔들리면
+     * 옮겨진 블록들의 위아래가 요청과 달라진다. 예외도 로그도 없이 배치만 바뀐다.
+     *
+     * <p>이미 삭제된 id 는 결과에서 빠져 조용히 통과한다 — 삭제는 멱등해야 한다
+     * ({@code .ai/docs/global/DELETE.md} §3 레이어 2). 상세 삭제가 404 로 막히면 스텝 삭제 전체가 롤백된다.
+     */
+    private List<Block> findBlocks(Collection<Long> blockIds) {
+        if (blockIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Block> byId = blockRepository.findAllByIds(blockIds).stream()
+                .collect(Collectors.toMap(Block::getBlockId, Function.identity()));
+
+        return blockIds.stream()
+                .map(byId::get)
+                .filter(block -> block != null)
+                .toList();
     }
 
     /**
@@ -413,7 +437,8 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
         if (name == null) {
             throw new NotFoundException(ProjectErrorCode.USER_NOT_FOUND);
         }
-        return new BlockOwner(ownerUserId, name);
+        // 위에서 name == null 을 막았고 findNameByUserId 가 deleted_at IS NULL 을 보므로 삭제된 사원은 못 온다.
+        return new BlockOwner(ownerUserId, name, false);
     }
 
     /**
@@ -424,7 +449,8 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
         if (ownerUserId == null) {
             return null;
         }
-        return new BlockOwner(ownerUserId, employeeLookupPort.findNameByUserId(ownerUserId));
+        // 쓰기 경로다 — findNameByUserId 가 deleted_at IS NULL 을 검증하므로 삭제된 사원은 여기 못 온다.
+        return new BlockOwner(ownerUserId, employeeLookupPort.findNameByUserId(ownerUserId), false);
     }
 
     /** 미지정이면 맨 아래 행(max+1). 블록이 없으면 0 행부터다. */

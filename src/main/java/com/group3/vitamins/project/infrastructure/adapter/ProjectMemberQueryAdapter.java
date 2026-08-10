@@ -18,7 +18,7 @@ public class ProjectMemberQueryAdapter implements ProjectMemberQueryPort {
         return projectMemberQueryMapper.findMembers(projectId).stream()
                 .map(row -> new MemberSummary(
                         row.memberId(), row.userId(), row.name(),
-                        row.department(), row.permission(), row.resigned()))
+                        row.department(), row.permission(), row.resigned(), row.deleted()))
                 .toList();
     }
 }

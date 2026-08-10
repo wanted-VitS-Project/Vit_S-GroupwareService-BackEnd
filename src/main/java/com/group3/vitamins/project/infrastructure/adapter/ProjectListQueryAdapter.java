@@ -50,19 +50,25 @@ public class ProjectListQueryAdapter implements ProjectListQueryPort {
                 .collect(Collectors.toMap(
                         ProjectListRow::categoryId,
                         row -> new BusinessCategorySummary(
-                                row.categoryId(), row.categoryName(), row.categoryCode()),
+                                row.categoryId(), row.categoryName(), row.categoryCode(), row.categoryDeleted()),
                         (first, duplicate) -> first,
                         LinkedHashMap::new))
                 .values().stream().toList();
     }
 
-    /** 카테고리 수만큼 중복된 참여자를 사번 기준으로 접는다. 탈퇴 사원은 name 이 비어 빠진다. */
+    /**
+     * 카테고리 수만큼 중복된 참여자를 사번 기준으로 접는다.
+     *
+     * <p>⚠️ 걸러내는 기준은 <b>사번</b>이지 이름이 아니다. 이름으로 거르면 삭제된 사원의 참여자가
+     * 목록에서 통째로 사라져 SQL 에서 살려낸 행(DELETE.md 패턴 A → D)을 여기서 다시 죽인다.
+     * 사번까지 null 인 행은 참여자가 없는 프로젝트의 LEFT JOIN 빈 행이다 — 접기 키가 없어 반드시 뺀다.
+     */
     private List<MemberBrief> foldMembers(List<ProjectListRow> rows) {
         return rows.stream()
-                .filter(row -> row.memberName() != null)
+                .filter(row -> row.memberUserId() != null)
                 .collect(Collectors.toMap(
                         ProjectListRow::memberUserId,
-                        row -> new MemberBrief(row.memberUserId(), row.memberName()),
+                        row -> new MemberBrief(row.memberUserId(), row.memberName(), row.memberDeleted()),
                         (first, duplicate) -> first,
                         LinkedHashMap::new))
                 .values().stream().toList();

@@ -28,7 +28,8 @@ public record ProjectDetailRow(
         LocalDateTime createdAt,
         Long categoryId,
         String categoryName,
-        String categoryCode
+        String categoryCode,
+        boolean categoryDeleted
 
 ) {
 }

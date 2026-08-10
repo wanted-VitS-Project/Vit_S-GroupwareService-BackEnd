@@ -14,6 +14,7 @@
           FROM project_business_category pbc
           JOIN project p ON p.project_id = pbc.project_id
          WHERE p.deleted_at IS NULL
+           AND p.company_id = #{companyId}
     </select>
 
     <select id="countLinkedProjects" resultType="long">
@@ -22,6 +23,7 @@
           JOIN project p ON p.project_id = pbc.project_id
          WHERE pbc.business_category_id = #{categoryId}
            AND p.deleted_at IS NULL
+           AND p.company_id = #{companyId}
     </select>
 
 </mapper>

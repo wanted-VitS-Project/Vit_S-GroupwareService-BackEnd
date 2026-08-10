@@ -12,11 +12,11 @@
                e.name                    AS name,
                d.name                    AS department,
                pm.permission             AS permission,
-               (e.resigned_at IS NOT NULL) AS resigned
+               (e.resigned_at IS NOT NULL) AS resigned,
+               (e.deleted_at  IS NOT NULL) AS deleted
         FROM project_member pm
-                 JOIN employee e
+                 LEFT JOIN employee e
                       ON e.user_id = pm.user_id
-                          AND e.deleted_at IS NULL
                  LEFT JOIN department d
                            ON d.department_id = e.department_id
         WHERE pm.project_id = #{projectId}

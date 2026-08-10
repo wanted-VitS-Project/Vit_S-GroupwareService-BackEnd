@@ -40,14 +40,21 @@
                p.created_at       AS createdAt,
                bc.business_category_id AS categoryId,
                bc.name                 AS categoryName,
-               bc.code                 AS categoryCode
+               bc.code                 AS categoryCode,
+               (bc.deleted_at IS NOT NULL) AS categoryDeleted
         FROM project p
                  LEFT JOIN project_business_category pbc
                            ON pbc.project_id = p.project_id
+                 <!--
+                   ⚠️ 조인 조건에 bc.deleted_at IS NULL 을 두지 않는다 (DELETE.md D-6).
+                      두면 삭제된 카테고리가 조용히 빠져서 "분류 없음" 과 구분이 안 된다 —
+                      이름은 그대로 내리고 categoryDeleted 로 알린다.
+                 -->
                  LEFT JOIN business_category bc
                            ON bc.business_category_id = pbc.business_category_id
-                               AND bc.deleted_at IS NULL
+                               AND bc.company_id = #{companyId}
         WHERE p.project_id = #{projectId}
+          AND p.company_id = #{companyId}
           AND p.deleted_at IS NULL
         ORDER BY bc.business_category_id ASC
     </select>
