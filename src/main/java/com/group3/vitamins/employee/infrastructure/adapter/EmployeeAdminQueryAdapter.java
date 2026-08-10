@@ -32,8 +32,8 @@ public class EmployeeAdminQueryAdapter implements EmployeeAdminQueryPort {
     }
 
     @Override
-    public Optional<EmployeeDetailRow> findDetail(String userId) {
-        return employeeAdminQueryMapper.findDetail(userId);
+    public Optional<EmployeeDetailRow> findDetail(String userId, Long companyId) {
+        return employeeAdminQueryMapper.findDetail(userId, companyId);
     }
 
     @Override

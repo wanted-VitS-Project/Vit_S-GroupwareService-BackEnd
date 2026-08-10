@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface EmployeeReferenceQueryMapper {
 
-    boolean departmentExists(@Param("departmentId") Long departmentId);
+    boolean departmentExists(@Param("departmentId") Long departmentId, @Param("companyId") Long companyId);
 
-    boolean jobPositionExists(@Param("jobPositionId") Long jobPositionId);
+    boolean jobPositionExists(@Param("jobPositionId") Long jobPositionId, @Param("companyId") Long companyId);
 }

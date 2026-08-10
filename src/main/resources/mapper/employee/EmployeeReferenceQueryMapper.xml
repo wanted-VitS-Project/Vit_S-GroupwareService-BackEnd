@@ -12,13 +12,13 @@
 
     <select id="departmentExists" resultType="boolean">
         SELECT EXISTS(
-            SELECT 1 FROM department WHERE department_id = #{departmentId}
+            SELECT 1 FROM department WHERE department_id = #{departmentId} AND company_id = #{companyId}
         )
     </select>
 
     <select id="jobPositionExists" resultType="boolean">
         SELECT EXISTS(
-            SELECT 1 FROM job_position WHERE job_position_id = #{jobPositionId}
+            SELECT 1 FROM job_position WHERE job_position_id = #{jobPositionId} AND company_id = #{companyId}
         )
     </select>
 

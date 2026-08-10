@@ -11,6 +11,7 @@ public class JobPositionMapper {
     public static JobPosition toDomain(JobPositionJpaEntity entity) {
         return JobPosition.restore(
                 entity.getJobPositionId(),
+                entity.getCompanyId(),
                 entity.getName(),
                 entity.getSortOrder()
         );
@@ -20,6 +21,7 @@ public class JobPositionMapper {
     public static JobPositionJpaEntity toEntity(JobPosition domain) {
         return new JobPositionJpaEntity(
                 domain.getJobPositionId(),
+                domain.getCompanyId(),
                 domain.getName(),
                 domain.getSortOrder()
         );

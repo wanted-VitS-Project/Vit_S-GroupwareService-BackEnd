@@ -15,12 +15,12 @@ public class EmployeeReferenceQueryAdapter implements EmployeeReferenceQueryPort
     private final EmployeeReferenceQueryMapper employeeReferenceQueryMapper;
 
     @Override
-    public boolean departmentExists(Long departmentId) {
-        return employeeReferenceQueryMapper.departmentExists(departmentId);
+    public boolean departmentExists(Long departmentId, Long companyId) {
+        return employeeReferenceQueryMapper.departmentExists(departmentId, companyId);
     }
 
     @Override
-    public boolean jobPositionExists(Long jobPositionId) {
-        return employeeReferenceQueryMapper.jobPositionExists(jobPositionId);
+    public boolean jobPositionExists(Long jobPositionId, Long companyId) {
+        return employeeReferenceQueryMapper.jobPositionExists(jobPositionId, companyId);
     }
 }

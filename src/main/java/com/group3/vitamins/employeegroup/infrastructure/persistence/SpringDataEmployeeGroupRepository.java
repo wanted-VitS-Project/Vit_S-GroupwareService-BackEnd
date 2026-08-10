@@ -13,12 +13,16 @@ import java.util.Optional;
  */
 public interface SpringDataEmployeeGroupRepository extends JpaRepository<EmployeeGroupJpaEntity, Long> {
 
-    boolean existsByName(String name);
+    /** 회사 범위 단건 조회 (소유권 판정용) — 타사 그룹은 빈 결과. */
+    Optional<EmployeeGroupJpaEntity> findByGroupIdAndCompanyId(Long groupId, Long companyId);
 
-    boolean existsByNameAndGroupIdNot(String name, Long groupId);
+    boolean existsByNameAndCompanyId(String name, Long companyId);
 
-    /** 구성원 추가 직렬화용 배타 잠금 단건 조회 (department 선례와 동형). */
+    boolean existsByNameAndGroupIdNotAndCompanyId(String name, Long groupId, Long companyId);
+
+    /** 구성원 추가 직렬화용 배타 잠금 회사 범위 단건 조회 (department 선례와 동형). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select g from EmployeeGroupJpaEntity g where g.groupId = :groupId")
-    Optional<EmployeeGroupJpaEntity> findByIdForUpdate(@Param("groupId") Long groupId);
+    @Query("select g from EmployeeGroupJpaEntity g where g.groupId = :groupId and g.companyId = :companyId")
+    Optional<EmployeeGroupJpaEntity> findByIdForUpdate(
+            @Param("groupId") Long groupId, @Param("companyId") Long companyId);
 }

@@ -3,6 +3,7 @@ package com.group3.vitamins.jobposition.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.jobposition.application.command.CreateJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.DeleteJobPositionCommand;
 import com.group3.vitamins.jobposition.application.command.UpdateJobPositionCommand;
@@ -28,19 +29,22 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
     private final JobPositionRepository jobPositionRepository;
     private final JobPositionEmployeeCountPort jobPositionEmployeeCountPort;
     private final JobPositionAdminPolicy jobPositionAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public JobPositionResult createJobPosition(CreateJobPositionCommand command) {
         jobPositionAdminPolicy.assertAdmin(command.role());
         validateName(command.name());
-        checkNameDuplicate(command.name(), null);
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        checkNameDuplicate(command.name(), null, companyId);
 
-        // sortOrder 생략 시 마지막 순서 뒤에 붙인다 (§2)
+        // sortOrder 생략 시 마지막 순서 뒤에 붙인다 (§2) — 회사 범위 최대값 기준
         int sortOrder = command.sortOrder() != null
                 ? command.sortOrder()
-                : jobPositionRepository.nextSortOrder();
+                : jobPositionRepository.nextSortOrder(companyId);
 
-        JobPosition saved = saveHandlingNameConflict(JobPosition.create(command.name(), sortOrder));
+        JobPosition saved = saveHandlingNameConflict(
+                JobPosition.create(command.name(), sortOrder, companyId));
 
         // 생성 직후이므로 사용 인원은 항상 0
         return JobPositionResult.of(saved, 0);
@@ -55,12 +59,13 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
                     "수정할 항목이 없습니다.");
         }
 
-        JobPosition jobPosition = jobPositionRepository.findById(command.jobPositionId())
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        JobPosition jobPosition = jobPositionRepository.findById(command.jobPositionId(), companyId)
                 .orElseThrow(() -> new NotFoundException(JobPositionErrorCode.POS_NOT_FOUND));
 
         if (command.nameProvided()) {
             validateName(command.name());
-            checkNameDuplicate(command.name(), jobPosition.getJobPositionId());
+            checkNameDuplicate(command.name(), jobPosition.getJobPositionId(), companyId);
             jobPosition.rename(command.name());
         }
         if (command.sortOrderProvided()) {
@@ -77,7 +82,8 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
     public void deleteJobPosition(DeleteJobPositionCommand command) {
         jobPositionAdminPolicy.assertAdmin(command.role());
 
-        JobPosition jobPosition = jobPositionRepository.findById(command.jobPositionId())
+        JobPosition jobPosition = jobPositionRepository.findById(
+                        command.jobPositionId(), currentCompanyIdProvider.currentCompanyId())
                 .orElseThrow(() -> new NotFoundException(JobPositionErrorCode.POS_NOT_FOUND));
 
         // ⚠️ 표시용 사용 인원(countByJobPositionId)이 아니라 전체 참조 수로 판정한다.
@@ -121,9 +127,9 @@ public class JobPositionCommandService implements JobPositionCommandUseCase {
         }
     }
 
-    /** 직급명 중복 검사. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. DB UNIQUE 와 이중 방어. */
-    private void checkNameDuplicate(String name, Long excludeId) {
-        jobPositionRepository.findByName(name)
+    /** 직급명 중복 검사(회사 범위). excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. DB UNIQUE 와 이중 방어. */
+    private void checkNameDuplicate(String name, Long excludeId, Long companyId) {
+        jobPositionRepository.findByName(name, companyId)
                 .filter(existing -> !existing.getJobPositionId().equals(excludeId))
                 .ifPresent(existing -> {
                     throw new ConflictException(JobPositionErrorCode.POS_NAME_DUPLICATED);

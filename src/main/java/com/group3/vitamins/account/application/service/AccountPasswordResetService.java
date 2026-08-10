@@ -3,6 +3,7 @@ package com.group3.vitamins.account.application.service;
 import com.group3.vitamins.account.application.command.ResetPasswordsCommand;
 import com.group3.vitamins.account.application.policy.AccountAdminPolicy;
 import com.group3.vitamins.account.application.port.AccountQueryPort;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.account.application.result.AccountTargetRow;
 import com.group3.vitamins.account.application.result.PasswordResetFailureResult;
 import com.group3.vitamins.account.application.result.PasswordResetResult;
@@ -51,6 +52,7 @@ public class AccountPasswordResetService implements AccountPasswordResetUseCase 
     private final TempPasswordGenerator tempPasswordGenerator;
     private final PasswordResetMailPort mailSender;
     private final AccountAdminPolicy accountAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public PasswordResetResult resetPasswords(ResetPasswordsCommand command) {
@@ -108,7 +110,8 @@ public class AccountPasswordResetService implements AccountPasswordResetUseCase 
      * <p>존재하지 않는 사번은 화면 목록에서 선택하므로 올 수 없는 값이고, 부분 처리하면 원인을 숨긴다.
      */
     private List<AccountTargetRow> validateTargets(List<String> distinctUserIds) {
-        List<AccountTargetRow> targets = accountQueryPort.findTargets(distinctUserIds);
+        List<AccountTargetRow> targets = accountQueryPort.findTargets(
+                distinctUserIds, currentCompanyIdProvider.currentCompanyId());
         if (targets.size() != distinctUserIds.size()) {
             throw new NotFoundException(AccountErrorCode.ACC_NOT_FOUND);
         }

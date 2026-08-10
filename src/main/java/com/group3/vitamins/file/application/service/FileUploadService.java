@@ -12,6 +12,7 @@ import com.group3.vitamins.file.domain.model.FileVersion;
 import com.group3.vitamins.file.domain.repository.BlockFileRepository;
 import com.group3.vitamins.file.domain.repository.FileRepository;
 import com.group3.vitamins.file.domain.repository.FileVersionRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
@@ -54,6 +55,7 @@ public class FileUploadService implements FileUploadUseCase {
     private final PdfPageCounterPort pdfPageCounterPort;
     private final FileVersionFailureRecorder failureRecorder;
     private final FileIndexTriggerPort fileIndexTriggerPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
@@ -90,7 +92,8 @@ public class FileUploadService implements FileUploadUseCase {
                 uploaderLookupPort.findByUserId(command.requesterUserId())
                         .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_INVALID_REQUEST));
 
-        String storageKey = buildStorageKey(projectId, fileId, versionNo, extension);
+        String storageKey = buildStorageKey(
+                currentCompanyIdProvider.currentCompanyId(), projectId, fileId, versionNo, extension);
 
         FileVersion version = fileVersionRepository.save(FileVersion.startUpload(
                 fileId, versionNo, storageKey,
@@ -205,13 +208,16 @@ public class FileUploadService implements FileUploadUseCase {
     }
 
     /**
-     * 저장 키: {@code projects/{projectId}/files/{fileId}/versions/{versionNo}/{uuid}[.ext]}.
+     * 저장 키: {@code companies/{companyId}/projects/{projectId}/files/{fileId}/versions/{versionNo}/{uuid}[.ext]}.
+     * ⚠️ 멀티테넌트 — 최상위에 {@code companies/{companyId}/} 를 두어 회사별로 S3 접두사(prefix)를 분리한다.
+     * IAM 정책·수명주기·감사·삭제를 회사 단위로 걸 수 있고, 키만 봐도 어느 회사 객체인지 드러난다.
      * ⚠️ 경로에 fileVersionId 대신 versionNo 를 쓴다 — fileVersionId 는 INSERT 전에 알 수 없고
      * storageKey 는 버전 생성 시 확정돼야 하며, uuid 가 유일성을 보장하므로 안전하다(2026-08-06).
      */
-    private String buildStorageKey(long projectId, long fileId, int versionNo, String extension) {
+    private String buildStorageKey(long companyId, long projectId, long fileId, int versionNo, String extension) {
         String uuid = UUID.randomUUID().toString();
         String suffix = extension.isEmpty() ? "" : "." + extension;
-        return "projects/%d/files/%d/versions/%d/%s%s".formatted(projectId, fileId, versionNo, uuid, suffix);
+        return "companies/%d/projects/%d/files/%d/versions/%d/%s%s"
+                .formatted(companyId, projectId, fileId, versionNo, uuid, suffix);
     }
 }

@@ -6,6 +6,7 @@ import com.group3.vitamins.file.application.result.FilePreviewResult;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
 import com.group3.vitamins.file.application.result.ProjectFileResult;
 import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
+import com.group3.vitamins.file.application.result.ProjectTrashFileResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
 
 import java.util.List;
@@ -42,4 +43,7 @@ public interface FileQueryUseCase {
      * (고아 파일 포함, 휴지통 제외). 프로젝트 접근 권한(VIEWER 이상)을 따른다.
      */
     List<ProjectFileResult> getProjectFiles(Long projectId, String requesterUserId, String role);
+
+    /** 프로젝트 휴지통 모아보기(§13) — 삭제(휴지통)된 문서를 프로젝트 전체 범위로. 프로젝트 접근 권한(VIEWER 이상). */
+    List<ProjectTrashFileResult> getProjectTrashFiles(Long projectId, String requesterUserId, String role);
 }

@@ -12,6 +12,8 @@ import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileResult;
+import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
+import com.group3.vitamins.file.application.result.ProjectTrashFileResult;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
@@ -499,6 +501,92 @@ class FileQueryServiceTest {
             assertThatThrownBy(() -> service.getProjectFiles(PROJECT_ID, USER, ROLE))
                     .satisfies(hasCode(ProjectErrorCode.PROJECT_NOT_FOUND));
             verify(fileQueryPort, never()).findProjectFiles(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("§13 프로젝트 휴지통 모아보기")
+    class ProjectTrashFiles {
+
+        /** 활성 블록에 매달렸다가 문서만 삭제된 휴지통 행. */
+        private ProjectTrashFileProjection normal(Long fileId, String name, Long stepId, Long blockId, String ext) {
+            return new ProjectTrashFileProjection(
+                    stepId, "제안", blockId, "파일블록", false,
+                    fileId, name, 3, name + "_v3." + ext, ext, 5000L, LocalDateTime.now());
+        }
+
+        /** 블록도 함께 삭제된 고아 휴지통 행 — blockId·blockTitle 은 null, blockDeleted=true. */
+        private ProjectTrashFileProjection orphan(Long fileId, String name, Long stepId, String ext) {
+            return new ProjectTrashFileProjection(
+                    stepId, "제안", null, null, true,
+                    fileId, name, 1, name + "_v1." + ext, ext, 5000L, LocalDateTime.now());
+        }
+
+        @Test
+        @DisplayName("휴지통 문서를 위치·삭제시각과 함께 그대로 전달한다(파생값 없음)")
+        void passesThroughTrashRows() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenReturn(MemberPermission.VIEWER);
+            when(fileQueryPort.findProjectTrashFiles(PROJECT_ID)).thenReturn(List.of(
+                    normal(31L, "제안서", 5L, 12L, "pdf"),
+                    normal(32L, "계약서", 5L, 13L, "docx")));
+
+            List<ProjectTrashFileResult> result = service.getProjectTrashFiles(PROJECT_ID, USER, ROLE);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).fileId()).isEqualTo(31L);
+            assertThat(result.get(0).blockId()).isEqualTo(12L);
+            assertThat(result.get(0).blockDeleted()).isFalse();
+            assertThat(result.get(0).versionCount()).isEqualTo(3);
+            assertThat(result.get(0).deletedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("블록도 삭제된 고아 파일은 blockId=null·blockDeleted=true 로 내려준다")
+        void orphanFileKeepsStepButNullBlock() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenReturn(MemberPermission.VIEWER);
+            when(fileQueryPort.findProjectTrashFiles(PROJECT_ID)).thenReturn(List.of(
+                    orphan(40L, "삭제된블록문서", 7L, "pdf")));
+
+            ProjectTrashFileResult r = service.getProjectTrashFiles(PROJECT_ID, USER, ROLE).get(0);
+
+            assertThat(r.blockId()).isNull();
+            assertThat(r.blockTitle()).isNull();
+            assertThat(r.blockDeleted()).isTrue();
+            assertThat(r.stepId()).isEqualTo(7L);
+        }
+
+        @Test
+        @DisplayName("결과가 없으면 빈 목록을 돌려준다")
+        void emptyList() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenReturn(MemberPermission.VIEWER);
+            when(fileQueryPort.findProjectTrashFiles(PROJECT_ID)).thenReturn(List.of());
+
+            assertThat(service.getProjectTrashFiles(PROJECT_ID, USER, ROLE)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("프로젝트 접근 권한이 없으면(403) FILE_ACCESS_PERMISSION_REQUIRED 로 변환한다")
+        void noAccessConverted() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(ProjectErrorCode.PROJECT_ACCESS_DENIED));
+
+            assertThatThrownBy(() -> service.getProjectTrashFiles(PROJECT_ID, USER, ROLE))
+                    .satisfies(hasCode(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+            verify(fileQueryPort, never()).findProjectTrashFiles(any());
+        }
+
+        @Test
+        @DisplayName("프로젝트가 없으면(404) PROJECT_NOT_FOUND 를 그대로 전파한다")
+        void projectNotFoundPropagated() {
+            when(projectAccessUseCase.requireAccess(PROJECT_ID, USER, ROLE))
+                    .thenThrow(new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+
+            assertThatThrownBy(() -> service.getProjectTrashFiles(PROJECT_ID, USER, ROLE))
+                    .satisfies(hasCode(ProjectErrorCode.PROJECT_NOT_FOUND));
+            verify(fileQueryPort, never()).findProjectTrashFiles(any());
         }
     }
 }

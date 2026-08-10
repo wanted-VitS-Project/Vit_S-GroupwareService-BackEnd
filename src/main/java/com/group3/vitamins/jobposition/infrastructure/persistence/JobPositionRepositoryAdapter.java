@@ -15,28 +15,28 @@ public class JobPositionRepositoryAdapter implements JobPositionRepository {
     private final SpringDataJobPositionRepository springDataRepository;
 
     @Override
-    public List<JobPosition> findAllOrdered() {
-        return springDataRepository.findAllByOrderBySortOrderAscNameAsc()
+    public List<JobPosition> findAllOrdered(Long companyId) {
+        return springDataRepository.findAllByCompanyIdOrderBySortOrderAscNameAsc(companyId)
                 .stream()
                 .map(JobPositionMapper::toDomain)
                 .toList();
     }
 
     @Override
-    public Optional<JobPosition> findByName(String name) {
-        return springDataRepository.findByName(name)
+    public Optional<JobPosition> findByName(String name, Long companyId) {
+        return springDataRepository.findByNameAndCompanyId(name, companyId)
                 .map(JobPositionMapper::toDomain);
     }
 
     @Override
-    public Optional<JobPosition> findById(Long jobPositionId) {
-        return springDataRepository.findById(jobPositionId)
+    public Optional<JobPosition> findById(Long jobPositionId, Long companyId) {
+        return springDataRepository.findByJobPositionIdAndCompanyId(jobPositionId, companyId)
                 .map(JobPositionMapper::toDomain);
     }
 
     @Override
-    public int nextSortOrder() {
-        Integer max = springDataRepository.findMaxSortOrder();
+    public int nextSortOrder(Long companyId) {
+        Integer max = springDataRepository.findMaxSortOrder(companyId);
         return (max == null ? 0 : max) + 1;
     }
 

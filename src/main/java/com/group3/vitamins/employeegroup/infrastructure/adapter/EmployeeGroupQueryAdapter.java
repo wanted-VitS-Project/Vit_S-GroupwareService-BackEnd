@@ -18,13 +18,13 @@ public class EmployeeGroupQueryAdapter implements EmployeeGroupQueryPort {
     private final EmployeeGroupQueryMapper mapper;
 
     @Override
-    public List<GroupListRow> findGroups(String keyword) {
-        return mapper.findGroups(keyword);
+    public List<GroupListRow> findGroups(String keyword, Long companyId) {
+        return mapper.findGroups(keyword, companyId);
     }
 
     @Override
-    public Optional<GroupListRow> findGroup(Long groupId) {
-        return Optional.ofNullable(mapper.findGroup(groupId));
+    public Optional<GroupListRow> findGroup(Long groupId, Long companyId) {
+        return Optional.ofNullable(mapper.findGroup(groupId, companyId));
     }
 
     @Override
@@ -38,10 +38,10 @@ public class EmployeeGroupQueryAdapter implements EmployeeGroupQueryPort {
     }
 
     @Override
-    public List<EmployeeRefRow> findEmployeeRefs(Collection<String> userIds) {
+    public List<EmployeeRefRow> findEmployeeRefs(Collection<String> userIds, Long companyId) {
         if (userIds == null || userIds.isEmpty()) {
             return List.of();
         }
-        return mapper.findEmployeeRefs(userIds);
+        return mapper.findEmployeeRefs(userIds, companyId);
     }
 }

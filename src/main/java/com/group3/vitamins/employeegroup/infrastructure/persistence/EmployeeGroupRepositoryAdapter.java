@@ -25,23 +25,25 @@ public class EmployeeGroupRepositoryAdapter implements EmployeeGroupRepository {
     }
 
     @Override
-    public Optional<EmployeeGroup> findById(Long groupId) {
-        return springDataRepository.findById(groupId).map(EmployeeGroupPersistenceMapper::toDomain);
+    public Optional<EmployeeGroup> findById(Long groupId, Long companyId) {
+        return springDataRepository.findByGroupIdAndCompanyId(groupId, companyId)
+                .map(EmployeeGroupPersistenceMapper::toDomain);
     }
 
     @Override
-    public Optional<EmployeeGroup> findByIdForUpdate(Long groupId) {
-        return springDataRepository.findByIdForUpdate(groupId).map(EmployeeGroupPersistenceMapper::toDomain);
+    public Optional<EmployeeGroup> findByIdForUpdate(Long groupId, Long companyId) {
+        return springDataRepository.findByIdForUpdate(groupId, companyId)
+                .map(EmployeeGroupPersistenceMapper::toDomain);
     }
 
     @Override
-    public boolean existsByName(String name) {
-        return springDataRepository.existsByName(name);
+    public boolean existsByName(String name, Long companyId) {
+        return springDataRepository.existsByNameAndCompanyId(name, companyId);
     }
 
     @Override
-    public boolean existsByNameExcludingSelf(String name, Long groupId) {
-        return springDataRepository.existsByNameAndGroupIdNot(name, groupId);
+    public boolean existsByNameExcludingSelf(String name, Long groupId, Long companyId) {
+        return springDataRepository.existsByNameAndGroupIdNotAndCompanyId(name, groupId, companyId);
     }
 
     @Override

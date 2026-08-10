@@ -15,6 +15,7 @@
           FROM account a
           JOIN employee e ON e.user_id = a.user_id
          WHERE a.user_id = #{userId}
+           AND e.company_id = #{companyId}
     </select>
 
     <select id="findTargets"
@@ -26,7 +27,8 @@
                e.is_system AS isSystem
           FROM account a
           JOIN employee e ON e.user_id = a.user_id
-         WHERE a.user_id IN
+         WHERE e.company_id = #{companyId}
+           AND a.user_id IN
         <foreach item="id" collection="userIds" open="(" separator="," close=")">
             #{id}
         </foreach>

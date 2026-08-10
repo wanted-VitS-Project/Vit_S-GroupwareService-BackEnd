@@ -9,6 +9,7 @@ import com.group3.vitamins.account.application.service.AccountCommandService;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.session.SessionTerminator;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -37,6 +39,7 @@ class AccountCommandServiceTest {
     private AccountJpaRepository accountRepository;
     private AccountQueryPort accountQueryPort;
     private SessionTerminator sessionTerminator;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private AccountCommandService accountCommandService;
 
     @BeforeEach
@@ -44,15 +47,18 @@ class AccountCommandServiceTest {
         accountRepository = Mockito.mock(AccountJpaRepository.class);
         accountQueryPort = Mockito.mock(AccountQueryPort.class);
         sessionTerminator = Mockito.mock(SessionTerminator.class);
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         // ADMIN 판정은 순수 컴포넌트라 실제 인스턴스를 그대로 쓴다.
         accountCommandService = new AccountCommandService(
-                accountRepository, accountQueryPort, sessionTerminator, new AccountAdminPolicy());
+                accountRepository, accountQueryPort, sessionTerminator, new AccountAdminPolicy(),
+                currentCompanyIdProvider);
     }
 
     /** 존재하고 시스템 계정이 아닌 정상 대상(MEMBER · ACTIVE)을 세팅한다. */
     private AccountEntity givenNormalTarget() {
         AccountEntity entity = AccountEntity.issue(TARGET_ID, "$argon2id$stored", "MEMBER");
-        when(accountQueryPort.findTarget(TARGET_ID))
+        when(accountQueryPort.findTarget(TARGET_ID, 1L))
                 .thenReturn(Optional.of(new AccountTargetRow(TARGET_ID, "홍길동", "hong@vit.com", "MEMBER", false)));
         when(accountRepository.findByUserId(TARGET_ID)).thenReturn(Optional.of(entity));
         return entity;
@@ -79,7 +85,7 @@ class AccountCommandServiceTest {
             assertThatThrownBy(() -> accountCommandService.changeRole(
                     new ChangeRoleCommand(ADMIN_ID, "MASTER", TARGET_ID, "MEMBER")))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-            verify(accountQueryPort, never()).findTarget(anyString());
+            verify(accountQueryPort, never()).findTarget(anyString(), anyLong());
         }
 
         @Test
@@ -109,7 +115,7 @@ class AccountCommandServiceTest {
         @Test
         @DisplayName("계정이 없으면 ACC_NOT_FOUND")
         void rejectsMissingAccount() {
-            when(accountQueryPort.findTarget(TARGET_ID)).thenReturn(Optional.empty());
+            when(accountQueryPort.findTarget(TARGET_ID, 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> accountCommandService.changeRole(
                     new ChangeRoleCommand(ADMIN_ID, "ADMIN", TARGET_ID, "MASTER")))
@@ -119,7 +125,7 @@ class AccountCommandServiceTest {
         @Test
         @DisplayName("시스템 계정은 대상이 될 수 없다 — ACC_SYSTEM_ACCOUNT_NOT_ALLOWED")
         void rejectsSystemAccount() {
-            when(accountQueryPort.findTarget(TARGET_ID))
+            when(accountQueryPort.findTarget(TARGET_ID, 1L))
                     .thenReturn(Optional.of(new AccountTargetRow(TARGET_ID, "시스템", null, "ADMIN", true)));
 
             assertThatThrownBy(() -> accountCommandService.changeRole(

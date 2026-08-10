@@ -23,9 +23,10 @@ public class Employee {
     private final String phone;
     private final LocalDate hiredAt;
     private final LocalDate resignedAt;
+    private final Long companyId;
 
     private Employee(String userId, String name, boolean system, Long departmentId, Long jobPositionId,
-                     String email, String phone, LocalDate hiredAt, LocalDate resignedAt) {
+                     String email, String phone, LocalDate hiredAt, LocalDate resignedAt, Long companyId) {
         this.userId = userId;
         this.name = name;
         this.system = system;
@@ -35,6 +36,7 @@ public class Employee {
         this.phone = phone;
         this.hiredAt = hiredAt;
         this.resignedAt = resignedAt;
+        this.companyId = companyId;
     }
 
     /**
@@ -42,23 +44,23 @@ public class Employee {
      * 계정은 이 객체가 아니라 등록 유스케이스가 함께 발급한다.
      */
     public static Employee register(String userId, String name, Long departmentId, Long jobPositionId,
-                                    String email, String phone, LocalDate hiredAt) {
-        return new Employee(userId, name, false, departmentId, jobPositionId, email, phone, hiredAt, null);
+                                    String email, String phone, LocalDate hiredAt, Long companyId) {
+        return new Employee(userId, name, false, departmentId, jobPositionId, email, phone, hiredAt, null, companyId);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
     public static Employee restore(String userId, String name, boolean system, Long departmentId, Long jobPositionId,
-                                   String email, String phone, LocalDate hiredAt, LocalDate resignedAt) {
-        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
+                                   String email, String phone, LocalDate hiredAt, LocalDate resignedAt, Long companyId) {
+        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt, companyId);
     }
 
     /**
-     * 정보 수정 (`employee.md` §4). 사번·시스템여부·퇴사일은 이 API 로 바꾸지 않으므로 유지한다.
+     * 정보 수정 (`employee.md` §4). 사번·시스템여부·퇴사일·회사는 이 API 로 바꾸지 않으므로 유지한다.
      * 부분 수정(전달한 필드만)은 서비스가 현재값과 병합해 최종값을 넘긴다 — 여기서는 그 최종 상태를 만든다.
      */
     public Employee withInfo(String name, String phone, String email,
                              Long departmentId, Long jobPositionId, LocalDate hiredAt) {
-        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt);
+        return new Employee(userId, name, system, departmentId, jobPositionId, email, phone, hiredAt, resignedAt, companyId);
     }
 
     public boolean isSystem() {
@@ -75,6 +77,10 @@ public class Employee {
 
     public String getUserId() {
         return userId;
+    }
+
+    public Long getCompanyId() {
+        return companyId;
     }
 
     public String getName() {

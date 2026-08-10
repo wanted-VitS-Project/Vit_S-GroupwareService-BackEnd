@@ -10,6 +10,7 @@ import com.group3.vitamins.employee.application.result.EmployeeGroupRow;
 import com.group3.vitamins.employee.application.result.EmployeeListRow;
 import com.group3.vitamins.employee.application.result.EmployeePage;
 import com.group3.vitamins.employee.application.service.EmployeeAdminQueryService;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.employee.application.usecase.EmployeeAdminQueryUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.global.domain.common.error.DomainException;
@@ -29,6 +30,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,12 +39,15 @@ import static org.mockito.Mockito.when;
 class EmployeeAdminQueryServiceTest {
 
     private EmployeeAdminQueryPort port;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeAdminQueryService service;
 
     @BeforeEach
     void setUp() {
         port = Mockito.mock(EmployeeAdminQueryPort.class);
-        service = new EmployeeAdminQueryService(port, new EmployeeAdminPolicy());
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
+        service = new EmployeeAdminQueryService(port, new EmployeeAdminPolicy(), currentCompanyIdProvider);
     }
 
     @Nested
@@ -102,6 +107,7 @@ class EmployeeAdminQueryServiceTest {
             assertThat(c.offset()).isEqualTo(30); // 2 * 15
             assertThat(c.limit()).isEqualTo(15);
             assertThat(c.resignedOnly()).isFalse(); // resigned 미지정 → 재직자만
+            assertThat(c.companyId()).isEqualTo(1L); // 현재 회사 범위로 조회 — 회사 격리 계약
         }
 
         @Test
@@ -169,13 +175,13 @@ class EmployeeAdminQueryServiceTest {
         void rejectsNonAdmin() {
             assertThatThrownBy(() -> service.getEmployee("MEMBER", "EMP001"))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
-            verify(port, never()).findDetail(any());
+            verify(port, never()).findDetail(any(), anyLong());
         }
 
         @Test
         @DisplayName("사원이 없으면 EMP_NOT_FOUND")
         void notFound() {
-            when(port.findDetail("EMP999")).thenReturn(Optional.empty());
+            when(port.findDetail("EMP999", 1L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.getEmployee("ADMIN", "EMP999"))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_NOT_FOUND));
@@ -185,7 +191,7 @@ class EmployeeAdminQueryServiceTest {
         @Test
         @DisplayName("시스템 계정이면 ACC_SYSTEM_ACCOUNT_NOT_ALLOWED — 존재해도 403")
         void systemAccountForbidden() {
-            when(port.findDetail("ADMIN001")).thenReturn(Optional.of(detailRow("ADMIN001", true)));
+            when(port.findDetail("ADMIN001", 1L)).thenReturn(Optional.of(detailRow("ADMIN001", true)));
 
             assertThatThrownBy(() -> service.getEmployee("ADMIN", "ADMIN001"))
                     .satisfies(hasCode(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED));
@@ -195,7 +201,7 @@ class EmployeeAdminQueryServiceTest {
         @Test
         @DisplayName("정상 사원이면 상세 + 소속 그룹을 함께 반환한다")
         void returnsDetailWithGroups() {
-            when(port.findDetail("EMP001")).thenReturn(Optional.of(detailRow("EMP001", false)));
+            when(port.findDetail("EMP001", 1L)).thenReturn(Optional.of(detailRow("EMP001", false)));
             when(port.findGroups("EMP001")).thenReturn(List.of(new EmployeeGroupRow(5L, "TF-신사업")));
 
             EmployeeAdminQueryUseCase.EmployeeDetail detail = service.getEmployee("ADMIN", "EMP001");
