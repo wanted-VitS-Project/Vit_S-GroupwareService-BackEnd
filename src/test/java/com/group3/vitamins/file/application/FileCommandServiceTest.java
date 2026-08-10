@@ -90,12 +90,14 @@ class FileCommandServiceTest {
 
     // ---- 헬퍼 ---------------------------------------------------------------
 
+    private static final int VERSION = 3;
+
     private File activeFile() {
-        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, null);
+        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, null, VERSION);
     }
 
     private File trashedFile() {
-        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now());
+        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now(), VERSION);
     }
 
     private FileVersion version(long versionId, String storageKey) {
@@ -131,21 +133,24 @@ class FileCommandServiceTest {
     class Rename {
 
         private RenameFileCommand cmd(String name) {
-            return new RenameFileCommand(FILE_ID, name, USER, ROLE);
+            return new RenameFileCommand(FILE_ID, name, VERSION, false, USER, ROLE);
+        }
+
+        private RenameFileCommand cmd(String name, int version, boolean overwrite) {
+            return new RenameFileCommand(FILE_ID, name, version, overwrite, USER, ROLE);
         }
 
         @Test
-        @DisplayName("표시명을 바꾸고 저장한다")
+        @DisplayName("표시명을 바꾸고 저장한다 — version 은 +1 되어 돌아온다")
         void renames() {
-            File file = activeFile();
-            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             stubEditable();
-            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(fileRepository.renameIfVersionMatches(FILE_ID, "제안서_최종", VERSION)).thenReturn(1);
 
             FileRenameResult result = service.rename(cmd("  제안서_최종  "));
 
             assertThat(result.name()).isEqualTo("제안서_최종"); // 앞뒤 공백은 정리한다
-            assertThat(file.getName()).isEqualTo("제안서_최종");
+            assertThat(result.version()).isEqualTo(VERSION + 1); // 성공하면 다음 저장용 새 버전
 
             // 활동 로그: MODIFY + fileName 변경 전·후
             ActivityOccurredEvent event = captureEvent();
@@ -164,10 +169,9 @@ class FileCommandServiceTest {
         @Test
         @DisplayName("이름이 그대로면 저장은 해도 로그는 남기지 않는다")
         void sameNameNoLog() {
-            File file = activeFile(); // 이름 "제안서"
-            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile())); // 이름 "제안서"
             stubEditable();
-            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(fileRepository.renameIfVersionMatches(FILE_ID, "제안서", VERSION)).thenReturn(1);
 
             service.rename(cmd("제안서"));
 
@@ -215,6 +219,41 @@ class FileCommandServiceTest {
 
             assertThatThrownBy(() -> service.rename(cmd("새이름")))
                     .satisfies(hasCode(FileErrorCode.FILE_EDIT_PERMISSION_REQUIRED));
+        }
+
+        @Test
+        @DisplayName("그 사이 남이 먼저 저장했으면(0행) FILE_VERSION_CONFLICT")
+        void conflict() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            stubEditable();
+            when(fileRepository.renameIfVersionMatches(FILE_ID, "새이름", VERSION)).thenReturn(0); // 0행 = 충돌
+
+            assertThatThrownBy(() -> service.rename(cmd("새이름")))
+                    .satisfies(hasCode(FileErrorCode.FILE_VERSION_CONFLICT));
+            verify(domainEventPublisher, never()).publish(any());
+        }
+
+        @Test
+        @DisplayName("덮어쓰기는 DB 현재 버전을 기대값으로 써서 통과시킨다")
+        void overwriteForcesCurrentVersion() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile())); // DB version = 3
+            stubEditable();
+            // 클라가 낡은 버전 1 을 보냈지만 overwrite=true 라 DB 현재값(3)을 조건으로 쓴다
+            when(fileRepository.renameIfVersionMatches(FILE_ID, "강제", VERSION)).thenReturn(1);
+
+            FileRenameResult result = service.rename(cmd("강제", 1, true));
+
+            assertThat(result.version()).isEqualTo(VERSION + 1);
+        }
+
+        @Test
+        @DisplayName("version 이 1 미만이면(누락 포함) FILE_INVALID_REQUEST")
+        void invalidVersion() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            stubEditable();
+
+            assertThatThrownBy(() -> service.rename(cmd("새이름", 0, false)))
+                    .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
         }
     }
 

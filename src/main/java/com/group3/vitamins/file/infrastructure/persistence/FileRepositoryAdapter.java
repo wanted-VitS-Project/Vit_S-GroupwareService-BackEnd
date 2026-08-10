@@ -27,6 +27,11 @@ public class FileRepositoryAdapter implements FileRepository {
     }
 
     @Override
+    public int renameIfVersionMatches(Long fileId, String name, int expectedVersion) {
+        return springDataRepository.renameIfVersionMatches(fileId, name, expectedVersion);
+    }
+
+    @Override
     public void deleteById(Long fileId) {
         // deleteById + flush — file DELETE(및 block_file CASCADE)를 쓰기 시점에 즉시 실행한다.
         // 저장소(S3) 삭제 전에 DB 제약을 확정시켜, FK 문제가 있으면 여기서 터지게 한다(지연 flush 함정 회피).

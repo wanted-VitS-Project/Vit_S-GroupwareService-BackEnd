@@ -14,7 +14,8 @@ public final class FilePersistenceMapper {
                 entity.getProjectId(),
                 entity.getName(),
                 entity.getCreatedBy(),
-                entity.getDeletedAt()
+                entity.getDeletedAt(),
+                entity.getVersion()
         );
     }
 
@@ -24,7 +25,8 @@ public final class FilePersistenceMapper {
                 domain.getProjectId(),
                 domain.getName(),
                 domain.getCreatedBy(),
-                domain.getDeletedAt()
+                domain.getDeletedAt(),
+                domain.getVersion()
         );
     }
 }

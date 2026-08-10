@@ -15,6 +15,12 @@ public interface FileRepository {
     /** 생성·수정을 저장한다. 제약 위반을 쓰기 시점에 동기 발생시켜야 하므로 어댑터는 saveAndFlush 로 구현한다. */
     File save(File file);
 
+    /**
+     * 낙관락 조건부 표시명 수정(§4). 기대 버전과 DB 버전이 같을 때만 이름을 바꾸고 version 을 +1 한다.
+     * 바뀐 행 수를 돌려준다 — 0 이면 충돌(그 사이 남이 먼저 저장)이라 서비스가 409 로 변환한다.
+     */
+    int renameIfVersionMatches(Long fileId, String name, int expectedVersion);
+
     /** 삭제 여부와 무관하게 문서를 찾는다(복구·상태 판정은 서비스가 deletedAt 으로 한다). */
     Optional<File> findById(Long fileId);
 
