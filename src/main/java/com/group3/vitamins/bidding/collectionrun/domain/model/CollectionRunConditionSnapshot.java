@@ -17,6 +17,7 @@ public record CollectionRunConditionSnapshot(
     public CollectionRunConditionSnapshot {
         Objects.requireNonNull(sourceCode, "수집처 코드는 필수입니다.");
         Objects.requireNonNull(conditionName, "수집 조건명은 필수입니다.");
+        Objects.requireNonNull(noticeTypes, "공고 유형 목록은 필수입니다.");
         Objects.requireNonNull(filters, "수집 필터는 필수입니다.");
         noticeTypes = List.copyOf(noticeTypes);
     }

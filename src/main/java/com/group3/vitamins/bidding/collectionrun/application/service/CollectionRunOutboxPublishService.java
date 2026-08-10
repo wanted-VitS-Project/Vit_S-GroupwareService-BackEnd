@@ -78,7 +78,7 @@ public class CollectionRunOutboxPublishService {
             outboxStorePort.markPublishFailed(
                     outbox.outboxId(),
                     lockOwner,
-                    exception.getClass().getSimpleName(),
+                    "REDIS_PUBLISH_FAILED",
                     nextAvailableAt
             );
 
@@ -87,7 +87,7 @@ public class CollectionRunOutboxPublishService {
                     outbox.runId(),
                     outbox.attemptId(),
                     outbox.publishAttemptCount(),
-                    exception.getClass().getSimpleName()
+                    "REDIS_PUBLISH_FAILED"
             );
             return false;
         }

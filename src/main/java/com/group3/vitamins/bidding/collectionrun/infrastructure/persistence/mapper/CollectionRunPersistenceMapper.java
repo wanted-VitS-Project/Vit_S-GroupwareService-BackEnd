@@ -34,7 +34,8 @@ public class CollectionRunPersistenceMapper {
                 entity.getErrorMessage(),
                 entity.getRequestedBy(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                entity.getDeletedAt()
         );
     }
 
@@ -43,7 +44,7 @@ public class CollectionRunPersistenceMapper {
             CollectionRun run,
             CollectionConditionJpaEntity conditionEntity
     ) {
-        return new CollectionRunJpaEntity(
+        return CollectionRunJpaEntity.from(new CollectionRunJpaEntity.PersistenceValues(
                 run.runId(),
                 conditionEntity,
                 snapshotJsonMapper.toJson(run.conditionSnapshot()),
@@ -64,7 +65,7 @@ public class CollectionRunPersistenceMapper {
                 run.requestedBy(),
                 run.createdAt(),
                 run.updatedAt(),
-                null
-        );
+                run.deletedAt()
+        ));
     }
 }

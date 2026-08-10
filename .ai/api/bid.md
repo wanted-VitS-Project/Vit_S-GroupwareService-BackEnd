@@ -450,7 +450,7 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 → Outbox를 PUBLISHED로 변경
 → Spring Worker가 Consumer Group으로 작업 소비
 → crawl_run을 PROCESSING으로 전이
-→ 수집 조건을 DB에서 다시 조회
+→ `crawl_run.condition_snapshot`에서 요청 당시 조건을 복원
 → 나라장터 OpenAPI 호출·공고 정규화·저장
 → crawl_run 결과 집계와 최종 상태 저장
 → Redis ACK
@@ -463,7 +463,7 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 | Stream | 입찰 수집 작업 전용 Stream을 사용하며 실제 키 이름은 운영 설정으로 주입한다 |
 | 소비 방식 | Spring Worker가 Consumer Group으로 소비한다 |
 | 메시지 원칙 | 수집 조건 전체를 넣지 않고 작업 식별에 필요한 최소 정보만 넣는다 |
-| 조건 조회 | Worker는 `conditionId`와 `companyId`로 현재 수집 조건을 DB에서 다시 읽는다 |
+| 조건 조회 | Worker는 `runId`와 `companyId`를 검증한 뒤 `crawl_run.condition_snapshot`의 요청 당시 조건을 사용한다 |
 | 성공 처리 | 실행 결과가 DB에 커밋된 뒤 Redis 메시지를 ACK한다 |
 | 중복 메시지 | 동일한 `runId`와 `attemptId`의 재전달을 허용하고 Worker가 멱등 처리한다 |
 
@@ -484,7 +484,8 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 | 원자성 | `crawl_run`과 Outbox 이벤트는 같은 DB 트랜잭션에서 저장한다 |
 | 발행 주체 | 별도 Outbox Dispatcher가 커밋된 미발행 이벤트를 조회하여 Redis에 발행한다 |
 | 발행 성공 | Redis 발행 성공 후 Outbox 상태를 `PUBLISHED`로 변경한다 |
-| 발행 실패 | 오류를 기록하고 `nextAttemptAt` 이후 다시 발행한다 |
+| 발행 실패 | 안전한 오류 유형을 기록하고 `nextAttemptAt` 이후 최대 5회 다시 발행한다 |
+| 발행 종료 | 5회 발행 실패 또는 손상된 payload는 `FAILED`로 종료하고 운영 알림 대상으로 분류한다 |
 | 중복 가능성 | Redis 발행 성공 후 상태 변경 전에 장애가 발생할 수 있으므로 중복 발행을 허용한다 |
 | 민감 정보 | 외부 API 인증키, 원문 응답 및 개인정보를 Outbox payload와 오류에 저장하지 않는다 |
 
@@ -505,6 +506,9 @@ Outbox는 최소한 아래 정보를 관리한다.
 ### Worker 재시도 정책
 
 외부 요청 조합 하나를 독립적인 처리 단위로 보고 일시적 오류만 최대 3회 재시도한다.
+
+재시도 작업은 Redis 지연 저장소에 예약하며, 예약 저장이 성공한 뒤 현재 메시지를 ACK한다.
+처리 중 프로세스가 종료되어 PEL에 남은 메시지는 유휴 시간이 지난 뒤 다른 Consumer가 회수한다.
 
 | 실패 유형 | 재시도 | 처리 |
 |----------|--------|------|

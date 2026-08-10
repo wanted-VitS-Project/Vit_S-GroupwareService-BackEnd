@@ -11,7 +11,8 @@ public final class CollectionRunOutbox {
     // Redis Stream 발행 여부를 나타냅니다.
     public enum PublishStatus {
         PENDING,
-        PUBLISHED
+        PUBLISHED,
+        FAILED
     }
 
     // 수집 실행과 같은 트랜잭션에서 저장할 Outbox 정보입니다.

@@ -27,6 +27,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CollectionRunOutboxJpaEntity {
 
+    private static final int MAX_PUBLISH_ATTEMPT_COUNT = 5;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "crawl_run_outbox_id")
@@ -157,6 +159,9 @@ public class CollectionRunOutboxJpaEntity {
             return false;
         }
 
+        this.publishStatus = publishAttemptCount >= MAX_PUBLISH_ATTEMPT_COUNT
+                ? CollectionRunOutbox.PublishStatus.FAILED
+                : CollectionRunOutbox.PublishStatus.PENDING;
         this.availableAt = nextAvailableAt;
         this.lockOwner = null;
         this.lockExpiresAt = null;
@@ -164,6 +169,15 @@ public class CollectionRunOutboxJpaEntity {
         this.updatedAt = now;
 
         return true;
+    }
+
+    // 역직렬화할 수 없는 Outbox는 재시도하지 않고 안전한 실패 코드로 종료합니다.
+    public void markInvalidPayload(LocalDateTime now) {
+        this.publishStatus = CollectionRunOutbox.PublishStatus.FAILED;
+        this.lockOwner = null;
+        this.lockExpiresAt = null;
+        this.lastErrorMessage = "INVALID_OUTBOX_PAYLOAD";
+        this.updatedAt = now;
     }
 
     // 다른 서버가 점유한 Outbox를 잘못 변경하지 못하게 확인합니다.

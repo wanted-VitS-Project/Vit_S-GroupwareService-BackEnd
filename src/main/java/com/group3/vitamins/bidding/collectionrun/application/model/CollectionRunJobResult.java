@@ -2,7 +2,7 @@ package com.group3.vitamins.bidding.collectionrun.application.model;
 
 public record CollectionRunJobResult(
         Outcome outcome,
-        String errorType
+        CollectionRunFailureType failureType
 ) {
     public enum Outcome {
         SUCCESS,
@@ -14,11 +14,11 @@ public record CollectionRunJobResult(
         return new CollectionRunJobResult(Outcome.SUCCESS, null);
     }
 
-    public static CollectionRunJobResult retryableFailure(String errorType) {
-        return new CollectionRunJobResult(Outcome.RETRYABLE_FAILURE, errorType);
+    public static CollectionRunJobResult retryableFailure(CollectionRunFailureType failureType) {
+        return new CollectionRunJobResult(Outcome.RETRYABLE_FAILURE, failureType);
     }
 
-    public static CollectionRunJobResult permanentFailure(String errorType) {
-        return new CollectionRunJobResult(Outcome.PERMANENT_FAILURE, errorType);
+    public static CollectionRunJobResult permanentFailure(CollectionRunFailureType failureType) {
+        return new CollectionRunJobResult(Outcome.PERMANENT_FAILURE, failureType);
     }
 }

@@ -102,7 +102,7 @@ class CollectionRunOutboxPublishServiceTest {
             verify(outboxStorePort).markPublishFailed(
                     1L,
                     LOCK_OWNER,
-                    "IllegalStateException",
+                    "REDIS_PUBLISH_FAILED",
                     NOW.plusSeconds(30)
             );
             verify(outboxStorePort, never()).markPublished(

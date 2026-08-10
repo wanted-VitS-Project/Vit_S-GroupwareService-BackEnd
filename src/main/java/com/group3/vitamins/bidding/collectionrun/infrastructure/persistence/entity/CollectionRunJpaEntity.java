@@ -98,8 +98,34 @@ public class CollectionRunJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // 수집 실행 도메인 모델을 DB에 저장 가능한 Entity로 구성합니다.
-    public CollectionRunJpaEntity(
+    // 필드 이름이 드러나는 입력 모델로 Entity를 구성해 위치 기반 매핑 오류를 막습니다.
+    public static CollectionRunJpaEntity from(PersistenceValues values) {
+        CollectionRunJpaEntity entity = new CollectionRunJpaEntity();
+        entity.crawlRunId = values.crawlRunId();
+        entity.crawlCondition = values.crawlCondition();
+        entity.conditionSnapshot = values.conditionSnapshot();
+        entity.triggerType = values.triggerType();
+        entity.runStatus = values.runStatus();
+        entity.processingAttemptId = values.processingAttemptId();
+        entity.retryCount = values.retryCount();
+        entity.processingStartedAt = values.processingStartedAt();
+        entity.leaseExpiresAt = values.leaseExpiresAt();
+        entity.startedAt = values.startedAt();
+        entity.finishedAt = values.finishedAt();
+        entity.collectedCount = values.collectedCount();
+        entity.insertedCount = values.insertedCount();
+        entity.updatedCount = values.updatedCount();
+        entity.skippedCount = values.skippedCount();
+        entity.errorCode = values.errorCode();
+        entity.errorMessage = values.errorMessage();
+        entity.requestedBy = values.requestedBy();
+        entity.createdAt = values.createdAt();
+        entity.updatedAt = values.updatedAt();
+        entity.deletedAt = values.deletedAt();
+        return entity;
+    }
+
+    public record PersistenceValues(
             Long crawlRunId,
             CollectionConditionJpaEntity crawlCondition,
             JsonNode conditionSnapshot,
@@ -122,26 +148,5 @@ public class CollectionRunJpaEntity {
             LocalDateTime updatedAt,
             LocalDateTime deletedAt
     ) {
-        this.crawlRunId = crawlRunId;
-        this.crawlCondition = crawlCondition;
-        this.conditionSnapshot = conditionSnapshot;
-        this.triggerType = triggerType;
-        this.runStatus = runStatus;
-        this.processingAttemptId = processingAttemptId;
-        this.retryCount = retryCount;
-        this.processingStartedAt = processingStartedAt;
-        this.leaseExpiresAt = leaseExpiresAt;
-        this.startedAt = startedAt;
-        this.finishedAt = finishedAt;
-        this.collectedCount = collectedCount;
-        this.insertedCount = insertedCount;
-        this.updatedCount = updatedCount;
-        this.skippedCount = skippedCount;
-        this.errorCode = errorCode;
-        this.errorMessage = errorMessage;
-        this.requestedBy = requestedBy;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-        this.deletedAt = deletedAt;
     }
 }

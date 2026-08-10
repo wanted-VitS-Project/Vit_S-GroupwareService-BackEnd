@@ -111,6 +111,7 @@ class CollectionRunServiceTest {
         assertThat(saved.requestedBy()).isEqualTo(USER_ID);
         assertThat(saved.runStatus())
                 .isEqualTo(CollectionRunStatus.PENDING);
+        assertThat(saved.conditionSnapshot()).isEqualTo(testSnapshot());
 
         ArgumentCaptor<CollectionRunOutbox.Pending> outboxCaptor =
                 ArgumentCaptor.forClass(CollectionRunOutbox.Pending.class);
@@ -151,6 +152,7 @@ class CollectionRunServiceTest {
         verify(runRepository, never())
                 .existsActiveByConditionId(any());
         verify(runRepository, never()).save(any());
+        verify(outboxStorePort, never()).savePending(any());
     }
 
     @Test
@@ -179,6 +181,7 @@ class CollectionRunServiceTest {
         verify(runRepository, never())
                 .existsActiveByConditionId(any());
         verify(runRepository, never()).save(any());
+        verify(outboxStorePort, never()).savePending(any());
     }
 
     @Test
@@ -205,6 +208,7 @@ class CollectionRunServiceTest {
         );
 
         verify(runRepository, never()).save(any());
+        verify(outboxStorePort, never()).savePending(any());
     }
 
     @Test
@@ -255,6 +259,7 @@ class CollectionRunServiceTest {
         verify(conditionPort, never())
                 .findOwnedConditionForUpdate(any(), any());
         verify(runRepository, never()).save(any());
+        verify(outboxStorePort, never()).savePending(any());
     }
 
     @Test
@@ -305,7 +310,8 @@ class CollectionRunServiceTest {
                 run.errorMessage(),
                 run.requestedBy(),
                 run.createdAt(),
-                run.updatedAt()
+                run.updatedAt(),
+                run.deletedAt()
         );
     }
 
@@ -333,7 +339,8 @@ class CollectionRunServiceTest {
                 null,
                 USER_ID,
                 now.minusMinutes(1),
-                now
+                now,
+                null
         );
     }
 

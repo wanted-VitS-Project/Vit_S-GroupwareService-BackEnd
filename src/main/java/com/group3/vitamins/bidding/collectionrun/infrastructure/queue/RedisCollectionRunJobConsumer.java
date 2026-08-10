@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.collectionrun.infrastructure.queue;
 
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunJob;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunJobResult;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunFailureType;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunJobHandlerPort;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.PendingMessage;
+import org.springframework.data.redis.connection.stream.PendingMessages;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
@@ -18,8 +21,12 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.data.domain.Range;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,12 +46,16 @@ public class RedisCollectionRunJobConsumer {
 
     private final StringRedisTemplate redisTemplate;
     private final CollectionRunJobHandlerPort jobHandlerPort;
+    private final Clock clock;
 
     @Value("${bidding.collection.stream-key:bidding:collection:jobs}")
     private String streamKey;
 
     @Value("${bidding.collection.dlq-stream-key:bidding:collection:jobs:dlq}")
     private String dlqStreamKey;
+
+    @Value("${bidding.collection.retry-key:bidding:collection:jobs:retry}")
+    private String retryKey;
 
     @Value("${bidding.collection.worker.group:bidding-collection-workers}")
     private String consumerGroup;
@@ -54,6 +65,9 @@ public class RedisCollectionRunJobConsumer {
 
     @Value("${bidding.collection.worker.batch-size:10}")
     private int batchSize;
+
+    @Value("${bidding.collection.worker.pending-min-idle-ms:60000}")
+    private long pendingMinIdleMs;
 
     // 최초 실행 시 Redis Stream과 Consumer Group을 멱등하게 준비합니다.
     @PostConstruct
@@ -82,6 +96,8 @@ public class RedisCollectionRunJobConsumer {
                     "${bidding.collection.worker.poll-delay-ms:1000}"
     )
     public void consume() {
+        recoverIdlePendingMessages();
+
         List<MapRecord<String, Object, Object>> records =
                 redisTemplate.opsForStream().read(
                         Consumer.from(consumerGroup, consumerName),
@@ -111,12 +127,12 @@ public class RedisCollectionRunJobConsumer {
                 case RETRYABLE_FAILURE -> handleRetryableFailure(
                         record,
                         job,
-                        result.errorType()
+                        result.failureType()
                 );
                 case PERMANENT_FAILURE -> moveToDlqAndAcknowledge(
                         record,
                         job,
-                        result.errorType()
+                        result.failureType()
                 );
             }
         } catch (IllegalArgumentException exception) {
@@ -133,36 +149,42 @@ public class RedisCollectionRunJobConsumer {
     private void handleRetryableFailure(
             MapRecord<String, Object, Object> record,
             CollectionRunJob job,
-            String errorType
+            CollectionRunFailureType failureType
     ) {
         if (job.retryCount() >= MAX_RETRY_COUNT) {
-            moveToDlqAndAcknowledge(record, job, errorType);
+            moveToDlqAndAcknowledge(record, job, failureType);
             return;
         }
 
-        Map<String, String> retryFields = jobFields(
-                new CollectionRunJob(
-                        job.runId(),
-                        job.conditionId(),
-                        job.companyId(),
-                        UUID.randomUUID().toString(),
-                        job.retryCount() + 1
-                )
+        CollectionRunJob retryJob = new CollectionRunJob(
+                job.runId(),
+                job.conditionId(),
+                job.companyId(),
+                UUID.randomUUID().toString(),
+                job.retryCount() + 1
         );
 
-        redisTemplate.opsForStream().add(
-                MapRecord.create(streamKey, retryFields)
+        boolean scheduled = Boolean.TRUE.equals(
+                redisTemplate.opsForZSet().add(
+                        retryKey,
+                        serialize(retryJob),
+                        Instant.now(clock).plus(retryDelay(job.retryCount()))
+                                .toEpochMilli()
+                )
         );
+        if (!scheduled) {
+            throw new IllegalStateException("재시도 예약에 실패했습니다.");
+        }
         acknowledge(record);
     }
 
     private void moveToDlqAndAcknowledge(
             MapRecord<String, Object, Object> record,
             CollectionRunJob job,
-            String errorType
+            CollectionRunFailureType failureType
     ) {
         Map<String, String> fields = jobFields(job);
-        fields.put("errorType", safeErrorType(errorType));
+        fields.put("errorType", safeFailureType(failureType).name());
 
         redisTemplate.opsForStream().add(
                 MapRecord.create(dlqStreamKey, fields)
@@ -238,13 +260,98 @@ public class RedisCollectionRunJobConsumer {
         return value.toString();
     }
 
-    private String safeErrorType(String errorType) {
-        if (errorType == null || errorType.isBlank()) {
-            return "UNKNOWN_PROCESSING_ERROR";
+    private CollectionRunFailureType safeFailureType(
+            CollectionRunFailureType failureType
+    ) {
+        return failureType == null
+                ? CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR
+                : failureType;
+    }
+
+    // 처리 중 중단되어 PEL에 남은 메시지를 유휴 시간 이후 현재 Consumer가 회수합니다.
+    private void recoverIdlePendingMessages() {
+        PendingMessages pendingMessages = redisTemplate.opsForStream().pending(
+                streamKey,
+                consumerGroup,
+                Range.unbounded(),
+                batchSize
+        );
+        if (pendingMessages == null || pendingMessages.isEmpty()) {
+            return;
         }
-        return errorType.length() <= 100
-                ? errorType
-                : errorType.substring(0, 100);
+
+        for (PendingMessage pending : pendingMessages) {
+            if (pending.getElapsedTimeSinceLastDelivery().toMillis()
+                    < pendingMinIdleMs) {
+                continue;
+            }
+            List<MapRecord<String, Object, Object>> claimed =
+                    redisTemplate.opsForStream().claim(
+                            streamKey,
+                            consumerGroup,
+                            consumerName,
+                            Duration.ofMillis(pendingMinIdleMs),
+                            pending.getId()
+                    );
+            if (claimed != null) {
+                claimed.forEach(this::process);
+            }
+        }
+    }
+
+    // 예약 시각이 지난 재시도 작업만 다시 원본 Stream으로 이동합니다.
+    @Scheduled(fixedDelayString = "${bidding.collection.worker.retry-poll-delay-ms:1000}")
+    public void dispatchDueRetries() {
+        var dueJobs = redisTemplate.opsForZSet().rangeByScore(
+                retryKey,
+                0,
+                Instant.now(clock).toEpochMilli(),
+                0,
+                batchSize
+        );
+        if (dueJobs == null) {
+            return;
+        }
+        for (String serialized : dueJobs) {
+            CollectionRunJob job = deserialize(serialized);
+            redisTemplate.opsForStream().add(
+                    MapRecord.create(streamKey, jobFields(job))
+            );
+            redisTemplate.opsForZSet().remove(retryKey, serialized);
+        }
+    }
+
+    private Duration retryDelay(int currentRetryCount) {
+        return switch (currentRetryCount) {
+            case 0 -> Duration.ofSeconds(30);
+            case 1 -> Duration.ofMinutes(2);
+            default -> Duration.ofMinutes(10);
+        };
+    }
+
+    private String serialize(CollectionRunJob job) {
+        return String.join(
+                "|",
+                job.runId().toString(),
+                job.conditionId().toString(),
+                job.companyId().toString(),
+                job.attemptId(),
+                String.valueOf(job.retryCount())
+        );
+    }
+
+    private CollectionRunJob deserialize(String value) {
+        String[] fields = value.split("\\|", -1);
+        if (fields.length != 5) {
+            throw new IllegalArgumentException("재시도 작업 형식이 잘못되었습니다.");
+        }
+        return new CollectionRunJob(
+                Long.valueOf(fields[0]),
+                Long.valueOf(fields[1]),
+                Long.valueOf(fields[2]),
+                fields[3],
+                Integer.parseInt(fields[4])
+        );
     }
 
     private boolean containsBusyGroup(Throwable throwable) {
