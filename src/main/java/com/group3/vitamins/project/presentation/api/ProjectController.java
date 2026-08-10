@@ -2,16 +2,21 @@ package com.group3.vitamins.project.presentation.api;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
+import com.group3.vitamins.project.application.command.DeleteProjectCommand;
+import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
 import com.group3.vitamins.project.application.query.ProjectDetailQuery;
 import com.group3.vitamins.project.application.query.ProjectListQuery;
 import com.group3.vitamins.project.application.query.ProjectProgressQuery;
+import com.group3.vitamins.project.application.result.ProjectCategoryResult;
 import com.group3.vitamins.project.application.result.ProjectDetailResult;
 import com.group3.vitamins.project.application.result.ProjectPageResult;
 import com.group3.vitamins.project.application.result.ProjectProgressResult;
 import com.group3.vitamins.project.application.result.ProjectResult;
 import com.group3.vitamins.project.application.usecase.ProjectCommandUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectQueryUseCase;
+import com.group3.vitamins.project.presentation.api.request.ProjectCategoryLinkRequest;
 import com.group3.vitamins.project.presentation.api.request.ProjectCreateRequest;
+import com.group3.vitamins.project.presentation.api.response.ProjectCategoryLinkResponse;
 import com.group3.vitamins.project.presentation.api.response.ProjectCreateResponse;
 import com.group3.vitamins.project.presentation.api.response.ProjectDetailResponse;
 import com.group3.vitamins.project.presentation.api.response.ProjectListResponse;
@@ -284,5 +289,96 @@ public class ProjectController {
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         ProjectCloseResponse.from(result)));
+    }
+
+    @Operation(summary = "사업 카테고리 연결",
+            description = "프로젝트에 사업 카테고리를 연결한다 (PRJ-007). "
+                    + "응답에는 연결 후 전체 카테고리가 담긴다 — 방금 추가한 것만이 아니다. "
+                    + "이미 연결된 카테고리가 하나라도 섞이면 409 다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
+                    description = "연결 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "CATEGORY_IDS_REQUIRED — 카테고리 ID 목록이 비어 있음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND / BUSINESS_CATEGORY_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "BUSINESS_CATEGORY_DUPLICATED — 이미 연결된 카테고리")
+    })
+    @PostMapping("/{projectId}/business-categories")
+    public ResponseEntity<ApiResponse<ProjectCategoryLinkResponse>> linkBusinessCategories(
+            @Parameter(description = "프로젝트 ID")
+            @PathVariable Long projectId,
+            @Valid @RequestBody ProjectCategoryLinkRequest request,
+            Authentication authentication
+    ) {
+        ProjectCategoryResult result = projectCommandUseCase.linkBusinessCategories(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.status(201).body(
+                ApiResponse.created(ProjectResponseMessage.SUCCESS,
+                        ProjectCategoryLinkResponse.from(result)));
+    }
+
+    @Operation(summary = "사업 카테고리 해제",
+            description = "프로젝트-카테고리 연결을 끊는다. 연결 행 자체를 지우는 하드 삭제다 — "
+                    + "논리 삭제로 두면 UNIQUE 를 시체가 점유해 같은 카테고리를 다시 못 붙인다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "해제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND / BUSINESS_CATEGORY_NOT_LINKED")
+    })
+    @DeleteMapping("/{projectId}/business-categories/{categoryId}")
+    public ResponseEntity<ApiResponse<Void>> unlinkBusinessCategory(
+            @Parameter(description = "프로젝트 ID")
+            @PathVariable Long projectId,
+            @Parameter(description = "해제할 사업 카테고리 ID")
+            @PathVariable Long categoryId,
+            Authentication authentication
+    ) {
+        projectCommandUseCase.unlinkBusinessCategory(new UnlinkBusinessCategoryCommand(
+                projectId, categoryId, authentication.getName(),
+                RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success(ProjectResponseMessage.SUCCESS));
+    }
+
+    @Operation(summary = "프로젝트 삭제",
+            description = "진행 전이고 스텝이 0개일 때만 논리 삭제한다 (PRJ-014). "
+                    + "이미 굴러간 프로젝트는 삭제가 아니라 종결(POST /close)로 남긴다. "
+                    + "블록 수는 따로 보지 않는다 — 블록은 스텝에만 붙으므로 스텝이 0개면 블록도 0개다. "
+                    + "삭제 시 연결된 공고를 비운다 — 안 그러면 그 공고로 프로젝트를 다시 못 만든다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "PROJECT_DELETE_NOT_ALLOWED — 진행 전이 아니거나 스텝이 남아 있음")
+    })
+    @DeleteMapping("/{projectId}")
+    public ResponseEntity<ApiResponse<Void>> deleteProject(
+            @Parameter(description = "삭제할 프로젝트 ID")
+            @PathVariable Long projectId,
+            Authentication authentication
+    ) {
+        projectCommandUseCase.deleteProject(new DeleteProjectCommand(
+                projectId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success(ProjectResponseMessage.SUCCESS));
     }
 }

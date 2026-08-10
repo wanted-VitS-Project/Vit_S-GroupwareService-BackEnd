@@ -18,8 +18,20 @@ public enum StepErrorCode implements ErrorCode {
             "스텝을 찾을 수 없습니다."),
     STEP_ACCESS_DENIED("STEP_ACCESS_DENIED",
             "스텝에 접근할 권한이 없습니다."),
+    STEP_ORDER_INVALID("STEP_ORDER_INVALID",
+            "순서 목록이 비었거나 순서 값이 중복됩니다."),
+    STEP_STATUS_INVALID("STEP_STATUS_INVALID",
+            "허용되지 않은 상태 값입니다."),
+    OPEN_ISSUE_ACTION_REQUIRED("OPEN_ISSUE_ACTION_REQUIRED",
+            "미완료 이슈 처리 방식을 선택해 주세요."),
+    OPEN_ISSUE_ACTION_INVALID("OPEN_ISSUE_ACTION_INVALID",
+            "허용되지 않은 이슈 처리 방식입니다."),
     STEP_EDIT_DENIED("STEP_EDIT_DENIED",
-            "스텝을 편집할 권한이 없습니다.");
+            "스텝을 편집할 권한이 없습니다."),
+    STEP_PERMISSION_INVALID("STEP_PERMISSION_INVALID",
+            "허용되지 않은 권한 등급입니다."),
+    STEP_PERMISSION_NOT_FOUND("STEP_PERMISSION_NOT_FOUND",
+            "스텝 권한 오버라이드를 찾을 수 없습니다.");
 
     private final String code;
     private final String message;

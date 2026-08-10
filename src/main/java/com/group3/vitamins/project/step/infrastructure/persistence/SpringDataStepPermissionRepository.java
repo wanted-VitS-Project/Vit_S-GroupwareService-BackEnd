@@ -16,6 +16,10 @@ public interface SpringDataStepPermissionRepository
 
     Optional<StepPermissionJpaEntity> findByStepIdAndUserId(Long stepId, String userId);
 
+    List<StepPermissionJpaEntity> findByStepId(Long stepId);
+
+    long deleteByStepIdAndUserId(Long stepId, String userId);
+
     @Modifying
     @Query("DELETE FROM StepPermissionJpaEntity sp "
             + "WHERE sp.userId = :userId "
