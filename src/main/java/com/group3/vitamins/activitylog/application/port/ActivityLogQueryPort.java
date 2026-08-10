@@ -13,5 +13,11 @@ public interface ActivityLogQueryPort {
 
     Optional<BlockStepResult> findBlockStep(Long blockId);
 
-    List<ActivityLogLookupResult> findActivityLogs(Long stepId, Long blockId, Long cursor, int limit);
+    List<ActivityLogLookupResult> findActivityLogs(
+            Long stepId,
+            Long blockId,
+            Long cursor,
+            int limit,
+            Long companyId
+    );
 }

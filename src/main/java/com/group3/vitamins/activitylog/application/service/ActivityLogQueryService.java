@@ -7,6 +7,7 @@ import com.group3.vitamins.activitylog.application.result.ActivityLogPageResult;
 import com.group3.vitamins.activitylog.application.result.ActivityLogResult;
 import com.group3.vitamins.activitylog.application.usecase.ActivityLogQueryUseCase;
 import com.group3.vitamins.activitylog.domain.exception.ActivityLogErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -29,11 +30,13 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
     private static final Set<String> GLOBAL_ACCESS_ROLES = Set.of("ADMIN", "MASTER");
 
     private final ActivityLogQueryPort activityLogQueryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public ActivityLogPageResult getActivityLogs(ActivityLogListQuery query) {
         int size = resolveSize(query.size());
         validateCursor(query.cursor());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
 
         var step = activityLogQueryPort.findStepAccess(query.stepId(), query.requesterUserId())
                 .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
@@ -42,7 +45,7 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
         validateBlockFilter(query.stepId(), query.blockId());
 
         List<ActivityLogLookupResult> rows = activityLogQueryPort.findActivityLogs(
-                query.stepId(), query.blockId(), query.cursor(), size + 1);
+                query.stepId(), query.blockId(), query.cursor(), size + 1, companyId);
 
         boolean hasNext = rows.size() > size;
         List<ActivityLogLookupResult> pageRows = hasNext ? rows.subList(0, size) : rows;

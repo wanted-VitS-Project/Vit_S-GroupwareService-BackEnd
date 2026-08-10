@@ -77,7 +77,8 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
 
         issueRepository.saveAssignees(saved.getIssueId(), assigneeIds);
         issueRepository.saveBlockLinks(saved.getIssueId(), blockIds);
-        publishIssueAssignedNotifications(saved.getIssueId(), saved.getTitle(), assigneeIds);
+        publishIssueAssignedNotifications(
+                saved.getIssueId(), step.projectId(), step.stepId(), saved.getTitle(), assigneeIds);
 
         return toResult(saved, assignees, blocks);
     }
@@ -108,7 +109,8 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
             issueRepository.deleteAssignees(issue.getIssueId());
             issueRepository.saveAssignees(issue.getIssueId(), assigneeIds);
             publishIssueAssignedNotifications(
-                    issue.getIssueId(), title, newlyAddedAssigneeIds(previousAssigneeIds, assigneeIds));
+                    issue.getIssueId(), step.projectId(), step.stepId(), title,
+                    newlyAddedAssigneeIds(previousAssigneeIds, assigneeIds));
         }
         if (command.blockIds().present()) {
             issueBlockPort.validateLinkable(step.stepId(), blockIds);
@@ -287,14 +289,18 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
                 .toList();
     }
 
-    private void publishIssueAssignedNotifications(Long issueId, String issueTitle, List<String> recipientUserIds) {
+    private void publishIssueAssignedNotifications(
+            Long issueId, Long projectId, Long stepId, String issueTitle, List<String> recipientUserIds) {
         if (recipientUserIds.isEmpty()) {
             return;
         }
         String message = issueTitle + " 이슈 담당자로 지정되었습니다.";
+        // FE 라우팅에 issueId만으로는 부족하다 — 상세 화면 URL이 projectId/stepId를 함께 요구해서
+        // 결재의 revisionId와 같은 방식으로 클릭 시점 스냅샷을 targetContext에 담는다.
+        Map<String, Object> targetContext = Map.of("projectId", projectId, "stepId", stepId);
         recipientUserIds.forEach(userId -> domainEventPublisher.publish(NotificationRequestedEvent.of(
                 userId, NOTIFICATION_TYPE_ASSIGNED, NOTIFICATION_TITLE_ASSIGNED, message,
-                NOTIFICATION_TARGET_TYPE, issueId, null)));
+                NOTIFICATION_TARGET_TYPE, issueId, targetContext)));
     }
 
     private IssueResult findLatestResult(Long issueId) {

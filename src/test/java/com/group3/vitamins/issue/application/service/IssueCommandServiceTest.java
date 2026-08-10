@@ -28,6 +28,7 @@ import org.mockito.InOrder;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -92,14 +93,14 @@ class IssueCommandServiceTest {
                         && notification.notificationType().equals("ISSUE_ASSIGNED")
                         && notification.targetType().equals("ISSUE")
                         && notification.targetId().equals(101L)
-                        && notification.targetContext() == null));
+                        && notification.targetContext().equals(Map.of("projectId", 20L, "stepId", 10L))));
         verify(domainEventPublisher).publish(argThat(event ->
                 event instanceof NotificationRequestedEvent notification
                         && notification.recipientUserId().equals("EMP005")
                         && notification.notificationType().equals("ISSUE_ASSIGNED")
                         && notification.targetType().equals("ISSUE")
                         && notification.targetId().equals(101L)
-                        && notification.targetContext() == null));
+                        && notification.targetContext().equals(Map.of("projectId", 20L, "stepId", 10L))));
     }
 
     @Test
@@ -150,7 +151,7 @@ class IssueCommandServiceTest {
                         && notification.notificationType().equals("ISSUE_ASSIGNED")
                         && notification.targetType().equals("ISSUE")
                         && notification.targetId().equals(101L)
-                        && notification.targetContext() == null));
+                        && notification.targetContext().equals(Map.of("projectId", 20L, "stepId", 10L))));
     }
 
     @Test

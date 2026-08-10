@@ -3,6 +3,7 @@
 **상태**: `✅ 확정`
 **최종 업데이트**: 2026-08-07 · **담당**: 김용준
 **최종 업데이트**: 2026-08-09 (담당자 지정 알림 정책 추가 — 신규 추가 담당자에게만 `ISSUE_ASSIGNED` 발행, 신규 에러코드 없음)
+**최종 업데이트**: 2026-08-10 (`ISSUE_ASSIGNED`의 `targetContext`를 `null`에서 `{projectId, stepId}`로 변경 — FE 상세 라우팅에 두 값이 필요하다고 확인됨. **프론트 공유 필요**)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -84,7 +85,7 @@
 | 발행 시점 | 이슈 생성 시 담당자 전체, 이슈 수정 시 기존에 없던 신규 추가 담당자 |
 | 미발행 | 담당자 유지, 담당자 해제, 이슈 삭제, 상태 변경 |
 | 알림 유형 | `ISSUE_ASSIGNED` |
-| 이동 대상 | `targetType=ISSUE`, `targetId=issueId`, `targetContext=null` |
+| 이동 대상 | `targetType=ISSUE`, `targetId=issueId`, `targetContext={"projectId": projectId, "stepId": stepId}` |
 | 접근 판정 | 알림 도메인은 이동 대상만 반환하고, 실제 조회 가능 여부는 기존 이슈 상세 API의 Step 접근 권한이 판단 |
 | 에러코드 | 신규 추가 없음. 이슈 삭제는 기존 `ISS_NOT_FOUND`, Step 접근 불가는 기존 `ISS_ACCESS_PERMISSION_REQUIRED` |
 
