@@ -282,7 +282,7 @@
 | `httpStatus` | int | HTTP 상태 코드 |
 | `message` | String | 응답 메시지 |
 | `data.settleId` | Long | 수정할 정산 블록 ID |
-| `data.recommendRoundNo` | Int | 같은 프로젝트·같은 타입 정산 블록 개수(이 블록 제외) + 1. **이 블록에 이미 내용이 있으면(재수정) null** |
+| `data.recommendRoundNo` | Int | 같은 프로젝트·같은 타입에 지금까지 존재했던(삭제 포함) `round_no` 중 최댓값 + 1(하나도 없으면 1). **이 블록에 이미 내용이 있으면(재수정) null** |
 | `data.recommendTotalAmount` | Long | 같은 프로젝트·같은 타입의 다른 정산 블록 중 이미 값이 채워진 총 예정 금액. **이 블록에 이미 내용이 있으면(재수정) null** |
 | `data.originalAccountNumber` | String | 마스킹 없는 원본 계좌번호. 이 블록에 **이미 내용이 있고** 요청한 `type`이 `OUTCOME`인 경우에만 값이 있다(그 외 null) |
 
