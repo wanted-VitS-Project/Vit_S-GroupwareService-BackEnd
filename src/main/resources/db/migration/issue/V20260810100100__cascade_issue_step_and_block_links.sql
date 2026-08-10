@@ -1,7 +1,12 @@
--- ⚠️ DROP과 ADD를 한 ALTER TABLE 문으로 합치지 않는다 — 같은 이름의 FK를 한 문장에서
--- DROP+ADD 하면 MySQL/InnoDB가 ADD의 이름 중복 검사를 DROP 반영 전에 수행해
--- "Error 1826: Duplicate foreign key constraint name"으로 실패한다(실제 재현됨).
--- FK 이름을 그대로 유지해야 하므로(추적성, CLEANUP.md §3-4) 두 문장으로 분리한다.
+-- ⚠️ FK 공백을 만들지 않기 위해 임시 FK를 먼저 추가한다.
+-- DROP과 ADD를 한 ALTER TABLE 문으로 합치면 같은 이름의 FK 추가가 실패할 수 있으므로,
+-- 임시 FK로 참조 무결성을 유지한 뒤 기존 이름의 FK를 교체한다.
+ALTER TABLE issue
+    ADD CONSTRAINT fk_issue_step_cascade_tmp
+        FOREIGN KEY (step_id) REFERENCES step (step_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE;
+
 ALTER TABLE issue
     DROP FOREIGN KEY FK_issue_step;
 
@@ -11,6 +16,14 @@ ALTER TABLE issue
         ON UPDATE CASCADE
         ON DELETE CASCADE;
 
+ALTER TABLE issue
+    DROP FOREIGN KEY fk_issue_step_cascade_tmp;
+
+ALTER TABLE issue_block
+    ADD CONSTRAINT fk_ib_block_cascade_tmp
+        FOREIGN KEY (block_id) REFERENCES block (block_id)
+        ON DELETE CASCADE;
+
 ALTER TABLE issue_block
     DROP FOREIGN KEY fk_ib_block;
 
@@ -18,3 +31,6 @@ ALTER TABLE issue_block
     ADD CONSTRAINT fk_ib_block
         FOREIGN KEY (block_id) REFERENCES block (block_id)
         ON DELETE CASCADE;
+
+ALTER TABLE issue_block
+    DROP FOREIGN KEY fk_ib_block_cascade_tmp;
