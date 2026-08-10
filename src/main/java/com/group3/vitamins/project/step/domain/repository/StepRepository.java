@@ -3,6 +3,8 @@ package com.group3.vitamins.project.step.domain.repository;
 import com.group3.vitamins.project.step.domain.model.Step;
 import com.group3.vitamins.project.step.domain.model.StepStatus;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Collection;
@@ -36,4 +38,28 @@ public interface StepRepository {
 
     /** 스테이지 하나에 속한 미삭제 스텝 전부. 스테이지 삭제·권한 일괄 적용에서 쓴다. */
     List<Step> findAllByStageId(Long stageId);
+
+    /**
+     * 기대 버전과 DB 버전이 같을 때만 이름·기간·책임자를 덮어쓰고 version 을 올린다.
+     * 바뀐 행 수를 돌려준다 — <b>0 이면 그 사이 남이 먼저 저장한 것이다(충돌)</b>.
+     *
+     * <p>⚠️ {@code save()} 로 대체하지 마라. 검사와 저장이 한 문장 안에서 원자적으로 일어나야
+     * 조회~저장 사이의 갱신 유실을 막는다 (`.ai/docs/global/CONCURRENCY.md` §1-3 · §6-4).
+     */
+    int updateIfVersionMatches(Long stepId, String name, LocalDate startedOn, LocalDate endedOn,
+                               String ownerUserId, LocalDateTime updatedAt, int expectedVersion);
+
+    /**
+     * 기대 버전이 같을 때만 상태를 바꾼다. 0 이면 충돌이다.
+     *
+     * <p>완료 정보는 <b>도메인이 계산한 값을 그대로</b> 넘긴다 — DONE 이탈 시 null 로 지우는 규칙이
+     * 도메인에 있어서, SQL 에 같은 조건을 다시 쓰면 규칙이 두 곳으로 갈라진다.
+     */
+    int changeStatusIfVersionMatches(Long stepId, StepStatus status, LocalDateTime completedAt,
+                                     String completedBy, LocalDateTime updatedAt,
+                                     int expectedVersion);
+
+    /** 기대 버전이 같을 때만 위치를 옮긴다. stageId 가 null 이면 미소속이다. 0 이면 충돌이다. */
+    int moveIfVersionMatches(Long stepId, Long stageId, int sortOrder,
+                             LocalDateTime updatedAt, int expectedVersion);
 }

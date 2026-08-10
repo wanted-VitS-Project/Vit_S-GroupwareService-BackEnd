@@ -13,6 +13,10 @@ public record ReorderStepsCommand(
         String role
 ) {
 
-    public record Item(Long stepId, Long stageId, int sortOrder) {
+    /**
+     * @param version 이 스텝을 조회했을 때의 버전. <b>항목마다 따로 검사한다</b> —
+     *                하나라도 어긋나면 요청 전체가 롤백된다 (`CONCURRENCY.md` §4-2)
+     */
+    public record Item(Long stepId, Long stageId, int sortOrder, int version) {
     }
 }

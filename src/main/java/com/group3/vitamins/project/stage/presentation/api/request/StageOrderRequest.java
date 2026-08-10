@@ -32,7 +32,12 @@ public record StageOrderRequest(
             @NotNull(message = "STAGE_ORDER_INVALID|정렬 순서가 없습니다.")
             @Positive(message = "STAGE_ORDER_INVALID|정렬 순서는 1 이상이어야 합니다.")
             @Schema(description = "새 정렬 순서", example = "1")
-            Integer sortOrder
+            Integer sortOrder,
+
+            @NotNull(message = "STAGE_VERSION_REQUIRED|버전 정보가 없습니다. 화면을 새로고침해 주세요.")
+            @Schema(description = "이 스테이지를 조회했을 때의 version. "
+                    + "항목마다 따로 검사하며 하나라도 어긋나면 요청 전체가 409 다", example = "7")
+            Integer version
     ) {
     }
 
@@ -41,7 +46,7 @@ public record StageOrderRequest(
                 projectId,
                 orders.stream()
                         .map(item -> new ReorderStagesCommand.Item(
-                                item.stageId(), item.sortOrder()))
+                                item.stageId(), item.sortOrder(), item.version()))
                         .toList(),
                 requesterUserId, role);
     }

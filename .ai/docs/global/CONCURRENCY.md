@@ -1,5 +1,6 @@
 # 🔒 동시수정 정합성 — 낙관적 락 표준
 
+**최종 업데이트**: 2026-08-11 (§9-2 신설 — 스텝 낙관락 구현 · §7 번호 대역 재배정 · §3-3 정정)
 **최종 업데이트**: 2026-08-10 (신설 — 동시수정 방어를 **낙관락 단일 정책**으로 확정. Redis 편집 잠금·SSE 사전 차단 폐기)
 **담당**: 김동현 (DevOps)
 **적용 범위**: 프로젝트 협업 영역 전 도메인 (10개 테이블 + 묶음 4종)
@@ -154,7 +155,7 @@ Stage stage = requireEditableStage(...);
 Stage updated = stageRepository.save(stage.rename(command.name()));
 ```
 
-### 3-1. `db/migration/project/V20260811100000__add_version_project_domain.sql`
+### 3-1. `db/migration/project/V20260811120000__add_version_project_domain.sql`
 
 **무엇**: 프로젝트 계열 4테이블에 version 추가
 **왜**: 기존 행은 전부 1로 시작해야 프론트가 받은 값과 맞물린다
@@ -183,25 +184,25 @@ private int version;
 
 ### 3-3. `project/stage/domain/model/Stage.java`
 
-**무엇**: version 필드 + `rename` 시 증가
-**왜**: 도메인이 "몇 번째 상태인지" 를 들고 있어야 저장 조건으로 쓸 수 있다
+**무엇**: version 필드 (읽어온 시점의 값)
+**왜**: 도메인이 "몇 번째 상태인지" 를 들고 있어야 **덮어쓰기 기대값**으로 쓸 수 있다
+
+⚠️ **도메인은 version 을 절대 올리지 않는다.** `+1` 은 `WHERE` 와 같은 문장 안에서 **DB 가** 한다.
+도메인이 든 version 은 *"내가 읽어온 시점의 값"* 이고, 그게 곧 **저장 조건**이다.
+`rename()` 안에서 올리면 `overwrite` 가 쓰는 `stage.getVersion()` 이 DB+1 이 되어 **덮어쓰기가 전부 409** 가 된다.
 
 ```java
-private int version;
+private final int version;                  // 조회 시점 값. 도메인에서 증가시키지 않는다
 
 public static Stage restore(Long stageId, Long projectId, String name, int sortOrder,
                             int version,                       // ⭐추가
                             LocalDateTime createdAt, LocalDateTime deletedAt) { ... }
 
-/** 이름을 바꾸고 버전을 올린다. 저장은 이전 버전을 조건으로 건다. */
-public Stage rename(String name) {
-    this.name = name;
-    this.version = this.version + 1;
-    return this;
-}
-
 public int getVersion() { return version; }
 ```
+
+> 📌 `rename()` 은 **삭제했다.** `renameIfVersionMatches` 가 이름 변경을 통째로 대체하므로
+> 도메인 메서드를 거칠 일이 없다. `moveTo()` 는 순서 변경 결과값 계산에 여전히 쓰인다.
 
 ### 3-4. `project/stage/domain/repository/StageRepository.java`
 
@@ -470,28 +471,36 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 
 | 파일 | 테이블 |
 |---|---|
-| `db/migration/project/V20260811100000__add_version_project_domain.sql` | `project` · `stage` · `step` · `block` |
-| `db/migration/text/V20260811110000__add_version_text.sql` | `text` |
-| `db/migration/image/V20260811120000__add_version_image.sql` | `image` ⚠️ `image_block` 이 아니다 — 캡션은 자식 `image` 행에 있다 |
-| `db/migration/settlement/V20260811130000__add_version_settlement.sql` | `settlement_block` |
-| `db/migration/approval/V20260811140000__add_version_approval_revision.sql` | `approval_revision` |
-| `db/migration/issue/V20260811150000__add_version_issue_file.sql` | `issue` · `file` |
+| `db/migration/project/V20260811120000__add_version_project_domain.sql` | `project` · `stage` · `step` · `block` |
+| `db/migration/text/V20260811130000__add_version_text.sql` | `text` |
+| `db/migration/image/V20260811140000__add_version_image.sql` | `image` ⚠️ `image_block` 이 아니다 — 캡션은 자식 `image` 행에 있다 |
+| `db/migration/settlement/V20260811150000__add_version_settlement.sql` | `settlement_block` |
+| `db/migration/approval/V20260811160000__add_version_approval_revision.sql` | `approval_revision` |
+| `db/migration/issue/V20260811170000__add_version_issue_file.sql` | `issue` · `file` |
 
 ### 7-2. ⚠️ 번호 대역을 미리 배정한다
 
-**`out-of-order: false` 다.** 현재 최신이 `V20260810090100` 이므로 전부 그보다 커야 하고,
-담당자 6명이 각자 번호를 정하면 **나중에 머지된 쪽이 `validate` 에서 막힌다.**
+**`out-of-order: false` 다.** 담당자 6명이 각자 번호를 정하면 **나중에 머지된 쪽이 `validate` 에서 막힌다.**
 
-| 담당 | 배정 번호 |
-|---|---|
-| 동훈 (project 계열) | `V20260811100000` |
-| 정림 (text) | `V20260811110000` |
-| 정림 (image) | `V20260811120000` |
-| 정산 담당 | `V20260811130000` |
-| 강욱 (approval) | `V20260811140000` |
-| 이슈·파일 담당 | `V20260811150000` |
+🚨 **버전 번호는 폴더가 달라도 충돌한다.** `locations: classpath:db/migration` 이 하위를 재귀 스캔하므로
+`project/V…100000` 과 `tenant/V…100000` 이 함께 있으면 앱이 기동조차 못 한다
+(`FlywayException: Found more than one migration with version …`).
+
+**2026-08-11 재배정.** 최초 배정(`…100000`~`…150000`)이 나중에 머지된 `tenant` 마이그레이션
+(`V20260811100000` · `V20260811100100` · `V20260811110000`)과 겹쳐 **전 대역을 뒤로 밀었다.**
+
+| 담당 | 배정 번호 | (구) 최초 배정 |
+|---|---|---|
+| 동훈 (project 계열) | **`V20260811120000`** | ~~`V20260811100000`~~ |
+| 정림 (text) | **`V20260811130000`** | ~~`V20260811110000`~~ |
+| 정림 (image) | **`V20260811140000`** | ~~`V20260811120000`~~ |
+| 정산 담당 | **`V20260811150000`** | ~~`V20260811130000`~~ |
+| 강욱 (approval) | **`V20260811160000`** | ~~`V20260811140000`~~ |
+| 이슈·파일 담당 | **`V20260811170000`** | ~~`V20260811150000`~~ |
 
 ⛔ **배정받은 번호를 임의로 바꾸지 마라.** 바꿔야 하면 이 문서를 먼저 고친다.
+⛔ **아직 배포되지 않은 파일만 rename 할 수 있다.** 이미 운영 DB 에 적용된 파일의 번호를 바꾸면
+`flyway_schema_history` 와 어긋나 `validate` 가 막는다.
 
 ---
 
@@ -517,10 +526,15 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 | 순서 | 내용 | 담당 | 상태 |
 |:--:|---|---|---|
 | 1 | 이 문서 작성 | 김동현 | ✅ 완료 |
-| 2 | **스테이지 낙관락 실구현** (참조 구현 검증) | 김동현 | ✅ 완료 — 마이그레이션 1 + Java 16 · 전체 테스트 706개 통과 |
-| 3 | `PRJ-V1-REALTIME.md` 개정 (잠금 정책 → 낙관락) + FE 통보 | 김동현 | ⬜ |
-| 4 | `project`·`step`·`block` 낙관락 (마이그레이션 컬럼은 2번에서 이미 넣었다) | 김동현 | ⬜ |
-| 5 | 나머지 6개 도메인 각자 구현 | 담당자 6명 | ⬜ (선행: 2) |
+| 2 | **스테이지 낙관락 실구현** (참조 구현 검증) | 김동현 | ✅ 완료 — 마이그레이션 1 + Java 16 |
+| 3 | `PRJ-V1-REALTIME.md` 개정 (잠금 정책 → 낙관락) + FE 통보 | 김동현 | ✅ 완료 (2026-08-11) |
+| 4 | **스텝 낙관락** | 김동현 | ✅ 완료 (2026-08-11) — Java 24 · 조건부 UPDATE 3종 |
+| 5 | `block` → `project` 낙관락 (마이그레이션 컬럼은 2번에서 이미 넣었다) | 김동현 | ⬜ |
+| 6 | 나머지 6개 도메인 각자 구현 | 담당자 6명 | ⬜ (선행: 2) |
+
+> 📌 **2·4 검증 (2026-08-11)**: `compileJava`·`compileTestJava` 통과 + stage·step 테스트 **65개 전부 통과**
+> (StageCommandService 15 · StageStepPermission 6 · StepCommandService 18 · StepDelete 8 · StepPermission 9 · StepStatusCommandService 9).
+> ⚠️ **전체 스위트는 아직 못 돌렸다** — 같은 시각 멀티테넌시(`companyId`) 작업이 병렬로 진행돼 빌드 산출물이 계속 바뀐다.
 
 ⚠️ **2번을 먼저 끝냈다.** 문서만 주고 6명이 동시에 시작하면 §6 의 함정이 6번 반복된다.
 
@@ -528,14 +542,42 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 
 | 구분 | 파일 |
 |---|---|
-| 🆕 마이그레이션 | `project/V20260811100000__add_version_project_domain.sql` (project·stage·step·block 4테이블) |
+| 🆕 마이그레이션 | `project/V20260811120000__add_version_project_domain.sql` (project·stage·step·block 4테이블) |
 | infra | `StageJpaEntity` · `StageMapper` · `SpringDataStageRepository`(조건부 UPDATE 2개) · `StageRepositoryAdapter` |
 | domain | `Stage` · `StageRepository` · `StageErrorCode`(`STAGE_VERSION_REQUIRED`·`STAGE_VERSION_CONFLICT`) |
 | app | `UpdateStageCommand` · `ReorderStagesCommand` · `StageCommandService` · `StageQueryService` · `StageResult` · `StageOrderResult` · `StageSummary` |
 | web | `StageUpdateRequest` · `StageOrderRequest` · `StageUpdateResponse` · `StageOrderResponse` · `StageListResponse` · `StageController` · `ProjectStageController`(409 Swagger) |
 | test | `StageCommandServiceTest`(충돌·덮어쓰기·부분롤백 3건 추가) · `StageStepPermissionServiceTest` |
 
-> 📌 **`project`·`step`·`block` 은 컬럼만 먼저 들어갔고 코드는 아직이다.** `DEFAULT 1` 이라 기존 동작에 영향은 없다.
+> 📌 **`project`·`block` 은 컬럼만 먼저 들어갔고 코드는 아직이다.** `DEFAULT 1` 이라 기존 동작에 영향은 없다.
+
+### 9-2. 스텝 구현 — 스테이지와 다른 점 (2026-08-11)
+
+| 구분 | 파일 |
+|---|---|
+| infra | `StepJpaEntity` · `StepMapper` · `SpringDataStepRepository`(조건부 UPDATE **3종**) · `StepRepositoryAdapter` |
+| domain | `Step` · `StepRepository` · `StepErrorCode`(`STEP_VERSION_REQUIRED`·`STEP_VERSION_CONFLICT`) |
+| app | `UpdateStepCommand` · `ChangeStepStatusCommand` · `ReorderStepsCommand` · `StepUpdateResult` · `StepStatusResult` · `StepOrderResult` · `StepSummary` · `StepDetailResult` · `StepCommandService` · `StepQueryService` |
+| web | `StepUpdateRequest` · `StepStatusUpdateRequest` · `StepOrderRequest` · 응답 5종 · `StepController` · `ProjectStepController`(409 Swagger) |
+| test | `StepCommandServiceTest`(충돌·덮어쓰기·부분롤백 3건 추가) · `StepStatusCommandServiceTest`(충돌 1건 추가) · `StepDeleteServiceTest` · `StepPermissionServiceTest` |
+
+**스테이지는 UPDATE 가 2종인데 스텝은 3종이다** — 바뀌는 필드 묶음이 API 마다 달라서다.
+
+| 포트 | SET 하는 것 |
+|---|---|
+| `updateIfVersionMatches` | `name` · `startedOn` · `endedOn` · `ownerUserId` · `updatedAt` |
+| `changeStatusIfVersionMatches` | `status` · **`completedAt` · `completedBy`** · `updatedAt` |
+| `moveIfVersionMatches` | `stageId` · `sortOrder` · `updatedAt` |
+
+⚠️ **`changeStatus` 는 완료 정보까지 함께 SET 해야 한다.** DONE 에서 벗어나면 완료자·완료시각을 지우는
+규칙이 도메인 `Step.changeStatus` 안에 있다. SQL 에 같은 조건을 다시 쓰면 규칙이 두 곳으로 갈라지므로,
+**도메인이 계산한 결과값을 그대로 UPDATE 에 넘긴다.** 빠뜨리면 상태만 바뀌고 완료 기록이 DB 에 남는데
+**예외도 안 나고 응답도 정상**이라 조회 화면을 봐야만 드러난다.
+
+⛔ **`completeStep` 에는 version 을 걸지 않는다.** "이미 DONE 이면 그대로 둔다" 규칙이 두 번째 요청을
+이미 막고 있어서, 낙관락을 더 걸면 정상 동작(둘이 동시에 완료를 눌렀는데 결과가 같음)에 409 모달만 띄운다.
+
+⛔ **`deleteStep` · `StepRelocationService` 도 제외다.** 여전히 `save()` 를 쓴다 — 스테이지 삭제 cascade 경로다.
 
 ---
 
@@ -554,4 +596,5 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 | 날짜 | 내용 | 담당 |
 |---|---|---|
 | 2026-08-10 | 신설 — 낙관락 단일 정책 확정. Redis 편집 잠금·SSE 사전 차단 폐기. 대상 9테이블, 스테이지 참조 구현, 마이그레이션 번호 대역 배정 | 김동현 |
+| 2026-08-11 | **스텝 낙관락 구현** (§9-2 신설 — 조건부 UPDATE 3종 · `changeStatus` 완료정보 동반 SET · `completeStep` 제외 근거) · §7 **마이그레이션 번호 대역 전면 재배정**(tenant 와 충돌) · §3-3 정정(도메인은 version 을 올리지 않는다 · `rename()` 삭제) | 김동현 |
 | 2026-08-10 | ⭐ **§4 묶음 version 컬럼 4종 폐기** — 순서 변경이 이미 항목마다 `save()` 를 돌고 있어(`StageCommandService.reorderStages`) **개별 version + 전체 롤백**으로 동일한 결과를 얻는다. 새 컬럼 0개·새 포트 0개. §7 마이그레이션도 `ADD COLUMN version` 한 줄씩으로 단순화 · §6 함정에 부분 커밋·MyBatis 위치 매핑 2건 추가 | 김동현 |

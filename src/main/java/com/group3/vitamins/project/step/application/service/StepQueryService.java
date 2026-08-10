@@ -62,7 +62,7 @@ public class StepQueryService implements StepQueryUseCase {
 
         Map<Long, IssueStatLookupPort.IssueStatView> issueStats = issueStatLookupPort
                 .countByStepIds(visible.stream().map(Step::getStepId).toList());
-        Map<String, String> names = findNames(visible.stream()
+        Map<String, EmployeeLookupPort.EmployeeRef> names = findNames(visible.stream()
                 .map(Step::getOwnerUserId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
@@ -88,7 +88,7 @@ public class StepQueryService implements StepQueryUseCase {
                 .countByStepIds(List.of(step.getStepId()))
                 .getOrDefault(step.getStepId(), IssueStatLookupPort.IssueStatView.empty());
 
-        Map<String, String> names = findNames(
+        Map<String, EmployeeLookupPort.EmployeeRef> names = findNames(
                 Stream.of(step.getOwnerUserId(), step.getCompletedBy())
                         .filter(Objects::nonNull)
                         .collect(Collectors.toSet()));
@@ -100,7 +100,7 @@ public class StepQueryService implements StepQueryUseCase {
                 stat.totalCount(), stat.doneCount(), stat.inProgressCount(),
                 progressRate(stat),
                 toPerson(step.getCompletedBy(), names),
-                step.getCompletedAt(), myPermission.name());
+                step.getCompletedAt(), myPermission.name(), step.getVersion());
     }
 
     /** 스텝별 유효 권한. NONE 인 스텝은 키를 넣지 않아 목록에서 빠진다 (STP-010). */
@@ -123,7 +123,7 @@ public class StepQueryService implements StepQueryUseCase {
 
     private StepSummary toSummary(Step step, Map<Long, MemberPermission> permissions,
                                   Map<Long, IssueStatLookupPort.IssueStatView> issueStats,
-                                  Map<String, String> names) {
+                                  Map<String, EmployeeLookupPort.EmployeeRef> names) {
         IssueStatLookupPort.IssueStatView stat = issueStats.getOrDefault(
                 step.getStepId(), IssueStatLookupPort.IssueStatView.empty());
 
@@ -133,7 +133,8 @@ public class StepQueryService implements StepQueryUseCase {
                 toPerson(step.getOwnerUserId(), names),
                 stat.totalCount(), stat.doneCount(), stat.inProgressCount(),
                 progressRate(stat),
-                permissions.get(step.getStepId()).name());
+                permissions.get(step.getStepId()).name(),
+                step.getVersion());
     }
 
     /** 완료 이슈 / 전체 이슈 비율. 이슈가 없으면 null 을 돌려 응답에서 빠지게 한다 (INV-04). */
@@ -144,15 +145,23 @@ public class StepQueryService implements StepQueryUseCase {
         return stat.doneCount() * 100 / stat.totalCount();
     }
 
-    /** 사번을 안 보냈으면 null, 이름을 못 찾으면 사번만 담는다 (퇴사자 등으로 조회가 비어도 응답이 깨지지 않게). */
-    private StepPerson toPerson(String userId, Map<String, String> names) {
+    /**
+     * 사번을 안 보냈으면 null, 사번을 못 찾으면 사번만 담는다 (응답이 깨지지 않게).
+     *
+     * <p>삭제된 사원은 이름을 그대로 담고 {@code deleted = true} 로 알린다 (DELETE.md D-6).
+     * 이름이 {@code null} 인 건 <b>사번이 employee 에 아예 없다</b>는 뜻이다.
+     */
+    private StepPerson toPerson(String userId, Map<String, EmployeeLookupPort.EmployeeRef> names) {
         if (userId == null) {
             return null;
         }
-        return new StepPerson(userId, names.get(userId));
+        EmployeeLookupPort.EmployeeRef ref = names.get(userId);
+        return ref == null
+                ? new StepPerson(userId, null, false)
+                : new StepPerson(userId, ref.name(), ref.deleted());
     }
 
-    private Map<String, String> findNames(Set<String> userIds) {
-        return employeeLookupPort.findNamesByUserIds(userIds);
+    private Map<String, EmployeeLookupPort.EmployeeRef> findNames(Set<String> userIds) {
+        return employeeLookupPort.findRefsByUserIds(userIds);
     }
 }

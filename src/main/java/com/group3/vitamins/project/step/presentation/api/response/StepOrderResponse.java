@@ -22,13 +22,17 @@ public record StepOrderResponse(
             Long stageId,
 
             @Schema(description = "정렬 순서", example = "1")
-            int sortOrder
+            int sortOrder,
+
+            @Schema(description = "저장 후의 새 version", example = "8")
+            int version
     ) {
     }
 
     public static StepOrderResponse from(List<StepOrderResult> results) {
         return new StepOrderResponse(results.stream()
-                .map(result -> new Item(result.stepId(), result.stageId(), result.sortOrder()))
+                .map(result -> new Item(result.stepId(), result.stageId(),
+                        result.sortOrder(), result.version()))
                 .toList());
     }
 }

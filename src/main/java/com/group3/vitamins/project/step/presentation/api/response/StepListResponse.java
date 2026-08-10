@@ -63,20 +63,24 @@ public record StepListResponse(
             Integer progressRate,
 
             @Schema(description = "요청자의 스텝 권한", example = "EDITOR")
-            String myPermission
+            String myPermission,
+
+            @Schema(description = "낙관적 락 버전. 수정·상태변경·순서 요청에 그대로 실어 보낸다",
+                    example = "7")
+            int version
     ) {
 
         static StepItemResponse from(StepSummary summary) {
             StepPersonResponse owner = summary.owner() == null
                     ? null
-                    : new StepPersonResponse(summary.owner().userId(), summary.owner().name());
+                    : new StepPersonResponse(summary.owner().userId(), summary.owner().name(), summary.owner().deleted());
 
             return new StepItemResponse(
                     summary.stepId(), summary.stageId(), summary.name(), summary.status(),
                     summary.sortOrder(), summary.startedOn(), summary.endedOn(), owner,
                     summary.totalIssueCount(), summary.doneIssueCount(),
                     summary.inProgressIssueCount(), summary.progressRate(),
-                    summary.myPermission());
+                    summary.myPermission(), summary.version());
         }
     }
 }
