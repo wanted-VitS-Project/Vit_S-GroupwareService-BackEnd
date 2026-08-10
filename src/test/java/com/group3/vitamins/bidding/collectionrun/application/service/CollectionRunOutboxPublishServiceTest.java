@@ -1,8 +1,10 @@
 package com.group3.vitamins.bidding.collectionrun.application.service;
 
 import com.group3.vitamins.bidding.collectionrun.application.model.ClaimedCollectionRunOutbox;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunTaskFailure;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunJobPublisherPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskDlqPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,6 +26,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CollectionRunOutboxPublishService")
@@ -39,6 +42,9 @@ class CollectionRunOutboxPublishServiceTest {
     @Mock
     private CollectionRunJobPublisherPort jobPublisherPort;
 
+    @Mock
+    private CollectionRunTaskDlqPort taskDlqPort;
+
     private CollectionRunOutboxPublishService service;
 
     @BeforeEach
@@ -50,6 +56,7 @@ class CollectionRunOutboxPublishServiceTest {
         service = new CollectionRunOutboxPublishService(
                 outboxStorePort,
                 jobPublisherPort,
+                taskDlqPort,
                 clock,
                 300
         );
@@ -111,6 +118,27 @@ class CollectionRunOutboxPublishServiceTest {
                     org.mockito.ArgumentMatchers.any(LocalDateTime.class)
             );
         }
+
+        @Test
+        @DisplayName("Task DLQ Outbox는 일반 Job Stream이 아닌 DLQ Stream으로 발행한다")
+        void publishesTaskFailureToDlqStream() {
+            CollectionRunTaskFailure failure = mock(CollectionRunTaskFailure.class);
+            ClaimedCollectionRunOutbox outbox = new ClaimedCollectionRunOutbox(
+                    2L, 11L, null, 31L,
+                    "event-2", "BIDDING_COLLECTION_TASK_DLQ_REQUESTED",
+                    "attempt-2", 3, 1, failure
+            );
+            when(outboxStorePort.claimPublishable(
+                    LOCK_OWNER, 10, NOW, NOW.plusSeconds(300)
+            )).thenReturn(List.of(outbox));
+
+            int publishedCount = service.publishBatch(LOCK_OWNER, 10);
+
+            assertThat(publishedCount).isEqualTo(1);
+            verify(taskDlqPort).publish(failure);
+            verify(jobPublisherPort, never()).publish(outbox);
+            verify(outboxStorePort).markPublished(2L, LOCK_OWNER, NOW);
+        }
     }
 
     @Nested
@@ -147,7 +175,8 @@ class CollectionRunOutboxPublishServiceTest {
                 "BIDDING_COLLECTION_RUN_REQUESTED",
                 "attempt-1",
                 0,
-                publishAttemptCount
+                publishAttemptCount,
+                null
         );
     }
 }

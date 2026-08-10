@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.entity.*;
 import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.repository.*;
+import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionSource;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionSourceRepository;
 import com.group3.vitamins.bidding.collectionrun.application.model.*;
@@ -27,12 +28,14 @@ public class JpaCollectedBidNoticeStoreAdapter
     private final SpringDataBidNoticeRepository noticeRepository;
     private final SpringDataBidNoticeRawRepository rawRepository;
     private final BidNoticeAttachmentSynchronizer attachmentSynchronizer;
+    private final CompanyBidNoticeStatePort companyStatePort;
     private final ObjectMapper objectMapper;
 
     // 공고, 원문, 첨부파일을 같은 트랜잭션에서 저장합니다.
     @Override
     @Transactional
     public StoreResult saveAll(
+            Long companyId,
             String sourceCode,
             Long runId,
             List<CollectedBidNoticePayload> payloads,
@@ -112,6 +115,14 @@ public class JpaCollectedBidNoticeStoreAdapter
 
         rawRepository.saveAll(newRawEntities);
         attachmentSynchronizer.synchronize(attachments, crawledAt);
+        companyStatePort.observeAll(
+                companyId,
+                notices.values().stream()
+                        .map(BidNoticeJpaEntity::getBidNoticeId)
+                        .toList(),
+                runId,
+                crawledAt
+        );
 
         return new StoreResult(inserted, updated, skipped);
     }

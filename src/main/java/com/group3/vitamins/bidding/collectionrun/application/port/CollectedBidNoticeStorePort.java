@@ -9,6 +9,7 @@ public interface CollectedBidNoticeStorePort {
 
     // 한 페이지에서 수집한 공고와 원문을 같은 저장 흐름으로 반영합니다.
     StoreResult saveAll(
+            Long companyId,
             String sourceCode,
             Long runId,
             List<CollectedBidNoticePayload> payloads,

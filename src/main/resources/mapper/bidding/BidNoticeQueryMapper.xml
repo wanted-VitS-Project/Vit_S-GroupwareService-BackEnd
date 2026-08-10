@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.group3.vitamins.bidding.bidnotice.infrastructure.query.BidNoticeQueryMapper">
+
+    <sql id="noticeJoins">
+        FROM company_bid_notice_state state
+        JOIN bid_notice notice
+          ON notice.bid_notice_id = state.bid_notice_id
+         AND notice.deleted_at IS NULL
+        JOIN crawl_source source
+          ON source.crawl_source_id = notice.crawl_source_id
+         AND source.deleted_at IS NULL
+        LEFT JOIN business_category category
+          ON category.business_category_id = notice.business_category_id
+         AND category.deleted_at IS NULL
+    </sql>
+
+    <sql id="noticeFilters">
+        WHERE state.company_id = #{companyId}
+        <if test="query.startDate != null">
+            AND notice.announced_at <![CDATA[>=]]> #{query.startDate}
+        </if>
+        <if test="query.endDate != null">
+            AND notice.announced_at <![CDATA[<]]> DATE_ADD(#{query.endDate}, INTERVAL 1 DAY)
+        </if>
+        <if test="query.noticeAgency != null and query.noticeAgency != ''">
+            AND notice.notice_agency LIKE CONCAT('%', #{query.noticeAgency}, '%')
+        </if>
+        <if test="query.businessCategoryId != null">
+            AND notice.business_category_id = #{query.businessCategoryId}
+        </if>
+        <if test="query.region != null and query.region != ''">
+            AND notice.region_limit_text LIKE CONCAT('%', #{query.region}, '%')
+        </if>
+        <if test="query.deadlineSoon != null and query.deadlineSoon">
+            AND notice.bid_deadline_at BETWEEN CURRENT_TIMESTAMP AND DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY)
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (notice.notice_name LIKE CONCAT('%', #{query.keyword}, '%')
+              OR notice.notice_agency LIKE CONCAT('%', #{query.keyword}, '%')
+              OR notice.demand_agency LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query.noticeStatus != null and query.noticeStatus != ''">
+            AND state.notice_status = #{query.noticeStatus}
+        </if>
+    </sql>
+
+    <select id="findAll"
+            resultType="com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeListItemResult">
+        SELECT
+            notice.bid_notice_id AS notice_id,
+            notice.notice_name,
+            source.source_code,
+            source.source_name,
+            notice.source_url,
+            notice.notice_agency,
+            notice.business_category_id,
+            category.name AS business_category_name,
+            notice.base_amount,
+            notice.estimated_amount,
+            notice.announced_at,
+            notice.bid_deadline_at,
+            DATEDIFF(DATE(notice.bid_deadline_at), CURRENT_DATE) AS d_day,
+            CASE WHEN state.first_seen_run_id = (
+                SELECT MAX(latest_run.crawl_run_id)
+                FROM crawl_run latest_run
+                JOIN crawl_condition latest_condition
+                  ON latest_condition.crawl_condition_id = latest_run.crawl_condition_id
+                WHERE latest_condition.company_id = #{companyId}
+                  AND latest_run.run_status IN ('COMPLETED', 'PARTIAL_SUCCESS')
+                  AND latest_run.deleted_at IS NULL
+            ) THEN TRUE ELSE FALSE END AS is_new,
+            state.notice_status,
+            (
+                SELECT MIN(project_table.project_id)
+                FROM project project_table
+                JOIN employee creator ON creator.user_id = project_table.created_by
+                WHERE project_table.bid_notice_id = notice.bid_notice_id
+                  AND creator.company_id = #{companyId}
+                  AND project_table.deleted_at IS NULL
+            ) AS project_id
+        <include refid="noticeJoins"/>
+        <include refid="noticeFilters"/>
+        <choose>
+            <when test="query.sort == 'DEADLINE_ASC'">
+                ORDER BY notice.bid_deadline_at IS NULL, notice.bid_deadline_at ASC, notice.bid_notice_id DESC
+            </when>
+            <when test="query.sort == 'AMOUNT_DESC'">
+                ORDER BY notice.estimated_amount IS NULL, notice.estimated_amount DESC, notice.bid_notice_id DESC
+            </when>
+            <otherwise>
+                ORDER BY notice.announced_at DESC, notice.bid_notice_id DESC
+            </otherwise>
+        </choose>
+        LIMIT #{query.size} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        <include refid="noticeJoins"/>
+        <include refid="noticeFilters"/>
+    </select>
+
+    <select id="findDetail"
+            resultType="com.group3.vitamins.bidding.bidnotice.infrastructure.query.BidNoticeDetailRow">
+        SELECT
+            notice.bid_notice_id AS notice_id,
+            notice.external_id,
+            notice.notice_ord AS notice_order,
+            notice.notice_name,
+            notice.notice_type,
+            notice.external_notice_status,
+            notice.notice_agency,
+            notice.demand_agency,
+            state.notice_status,
+            state.dismiss_reason,
+            (
+                SELECT MIN(project_table.project_id)
+                FROM project project_table
+                JOIN employee creator ON creator.user_id = project_table.created_by
+                WHERE project_table.bid_notice_id = notice.bid_notice_id
+                  AND creator.company_id = #{companyId}
+                  AND project_table.deleted_at IS NULL
+            ) AS project_id,
+            source.source_code,
+            source.source_name,
+            notice.source_url,
+            notice.has_attachment,
+            notice.announced_at,
+            notice.bid_start_at,
+            notice.question_deadline_at,
+            notice.application_deadline_at,
+            notice.bid_deadline_at,
+            notice.opening_at,
+            DATEDIFF(DATE(notice.bid_deadline_at), CURRENT_DATE) AS d_day,
+            notice.base_amount,
+            notice.estimated_amount,
+            notice.price_range_text,
+            notice.minimum_bid_rate_text,
+            notice.participation_qualification_text,
+            notice.region_limit_text,
+            notice.business_limit_text,
+            notice.joint_contract_allowed,
+            notice.joint_contract_text,
+            notice.contract_method,
+            notice.evaluation_method
+        FROM company_bid_notice_state state
+        JOIN bid_notice notice
+          ON notice.bid_notice_id = state.bid_notice_id
+         AND notice.deleted_at IS NULL
+        JOIN crawl_source source
+          ON source.crawl_source_id = notice.crawl_source_id
+         AND source.deleted_at IS NULL
+        WHERE state.company_id = #{companyId}
+          AND state.bid_notice_id = #{noticeId}
+    </select>
+
+    <select id="findAttachments"
+            resultType="com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeDetailResult$Attachment">
+        SELECT attachment_order, file_name, source_url
+        FROM bid_notice_attachment
+        WHERE bid_notice_id = #{noticeId}
+          AND deleted_at IS NULL
+        ORDER BY attachment_order ASC
+    </select>
+</mapper>
