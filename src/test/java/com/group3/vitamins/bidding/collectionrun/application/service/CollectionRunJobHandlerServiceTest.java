@@ -207,6 +207,8 @@ class CollectionRunJobHandlerServiceTest {
         prepareClaimedRunAndTask();
         when(collector.collect(snapshot, TARGET, 100))
                 .thenReturn(failedPage(false));
+        when(taskFailureService.recordPermanentFailure(any(), any(), any(), any()))
+                .thenReturn(true);
         when(taskPort.summarize(RUN_ID)).thenReturn(new CollectionRunTaskSummary(
                 1, 0, 0, 0, 1,
                 0, 0, 0, 0
@@ -218,6 +220,7 @@ class CollectionRunJobHandlerServiceTest {
         verify(taskFailureService).recordPermanentFailure(
                 argThat(failure -> failure.runId().equals(RUN_ID)
                         && failure.taskId().equals(TASK_ID)
+                        && failure.companyId().equals(COMPANY_ID)
                         && failure.failureType() == CollectionRunFailureType.CONNECTION_FAILURE
                         && failure.target().equals(TARGET)),
                 eq("CONNECTION_FAILURE"),
@@ -228,6 +231,25 @@ class CollectionRunJobHandlerServiceTest {
                 eq(RUN_ID), eq(ATTEMPT_ID),
                 eq("UNKNOWN_PROCESSING_ERROR"),
                 eq("all_collection_tasks_failed"), any()
+        );
+    }
+
+    @Test
+    @DisplayName("영구 실패 전이가 거부되면 실행을 재시도 상태로 되돌린다")
+    void retriesRunWhenPermanentFailureTransitionIsRejected() {
+        prepareClaimedRunAndTaskOnce();
+        when(collector.collect(snapshot, TARGET, 100)).thenReturn(failedPage(false));
+        when(taskFailureService.recordPermanentFailure(any(), any(), any(), any()))
+                .thenReturn(false);
+
+        CollectionRunJobResult result = service.handle(job);
+
+        assertThat(result.outcome()).isEqualTo(CollectionRunJobResult.Outcome.RETRYABLE_FAILURE);
+        assertThat(result.failureType())
+                .isEqualTo(CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR);
+        verify(runStatePort).prepareRetry(
+                eq(RUN_ID), eq(ATTEMPT_ID), eq("CONNECTION_FAILURE"),
+                eq("task_failure_transition_rejected"), any()
         );
     }
 

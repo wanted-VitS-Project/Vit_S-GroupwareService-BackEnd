@@ -31,8 +31,18 @@
         </foreach>
         AS incoming
         ON DUPLICATE KEY UPDATE
-            last_seen_run_id = incoming.last_seen_run_id,
-            last_seen_at = incoming.last_seen_at,
-            updated_at = incoming.last_seen_at
+            first_seen_run_id = IF(
+                incoming.first_seen_at < first_seen_at,
+                incoming.first_seen_run_id,
+                first_seen_run_id
+            ),
+            first_seen_at = LEAST(first_seen_at, incoming.first_seen_at),
+            last_seen_run_id = IF(
+                incoming.last_seen_at > last_seen_at,
+                incoming.last_seen_run_id,
+                last_seen_run_id
+            ),
+            last_seen_at = GREATEST(last_seen_at, incoming.last_seen_at),
+            updated_at = GREATEST(last_seen_at, incoming.last_seen_at)
     </insert>
 </mapper>

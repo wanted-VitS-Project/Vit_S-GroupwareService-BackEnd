@@ -9,6 +9,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 
 class CompanyBidNoticeStateRepositoryAdapterTest {
@@ -29,5 +30,15 @@ class CompanyBidNoticeStateRepositoryAdapterTest {
                 eq(runId),
                 eq(now)
         );
+    }
+
+    @Test
+    void doesNotCallMapperWhenNoticeIdsAreEmpty() {
+        CompanyBidNoticeStateMapper mapper = mock(CompanyBidNoticeStateMapper.class);
+
+        new CompanyBidNoticeStateRepositoryAdapter(mapper)
+                .observeAll(10L, List.of(), 20L, LocalDateTime.now());
+
+        verifyNoInteractions(mapper);
     }
 }

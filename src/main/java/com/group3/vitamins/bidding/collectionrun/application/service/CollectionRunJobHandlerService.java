@@ -163,7 +163,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
             );
         }
 
-        taskFailureService.recordPermanentFailure(new CollectionRunTaskFailure(
+        boolean recorded = taskFailureService.recordPermanentFailure(new CollectionRunTaskFailure(
                 job.runId(),
                 task.taskId(),
                 job.companyId(),
@@ -172,6 +172,16 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
                 failure.failureType(),
                 task.target()
         ), errorCode, errorCode, now);
+        if (!recorded) {
+            runStatePort.prepareRetry(
+                    job.runId(), job.attemptId(), errorCode,
+                    "task_failure_transition_rejected", now
+            );
+            return CollectionRunJobResult.retryableFailure(
+                    CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR,
+                    task.target()
+            );
+        }
         return null;
     }
 

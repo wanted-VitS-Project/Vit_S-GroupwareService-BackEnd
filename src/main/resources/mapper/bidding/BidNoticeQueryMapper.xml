@@ -62,7 +62,7 @@
             notice.estimated_amount,
             notice.announced_at,
             notice.bid_deadline_at,
-            DATEDIFF(DATE(notice.bid_deadline_at), CURRENT_DATE) AS d_day,
+            NULL AS d_day,
             CASE WHEN state.first_seen_run_id = (
                 SELECT MAX(latest_run.crawl_run_id)
                 FROM crawl_run latest_run
@@ -134,7 +134,7 @@
             notice.application_deadline_at,
             notice.bid_deadline_at,
             notice.opening_at,
-            DATEDIFF(DATE(notice.bid_deadline_at), CURRENT_DATE) AS d_day,
+            NULL AS d_day,
             notice.base_amount,
             notice.estimated_amount,
             notice.price_range_text,

@@ -151,7 +151,7 @@ class CollectionRunOutboxPublishServiceTest {
             assertThatThrownBy(() -> service.publishBatch(" ", 10))
                     .isInstanceOf(IllegalArgumentException.class);
 
-            verifyNoInteractions(outboxStorePort, jobPublisherPort);
+            verifyNoInteractions(outboxStorePort, jobPublisherPort, taskDlqPort);
         }
 
         @Test
@@ -160,7 +160,7 @@ class CollectionRunOutboxPublishServiceTest {
             assertThatThrownBy(() -> service.publishBatch(LOCK_OWNER, 101))
                     .isInstanceOf(IllegalArgumentException.class);
 
-            verifyNoInteractions(outboxStorePort, jobPublisherPort);
+            verifyNoInteractions(outboxStorePort, jobPublisherPort, taskDlqPort);
         }
     }
 
