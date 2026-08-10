@@ -1,0 +1,193 @@
+package com.group3.vitamins.project.application.service;
+
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.project.application.command.DeleteProjectCommand;
+import com.group3.vitamins.project.application.command.LinkBusinessCategoriesCommand;
+import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
+import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
+import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.port.StepStatLookupPort;
+import com.group3.vitamins.project.application.result.ProjectCategoryResult;
+import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import com.group3.vitamins.project.domain.model.Project;
+import com.group3.vitamins.project.domain.model.ProjectStatus;
+import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
+import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
+import com.group3.vitamins.project.domain.repository.ProjectRepository;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.BDDMockito.given;
+
+/** 사업 카테고리 연결·해제 (#52) 와 프로젝트 삭제 (#51). 생성·수정은 ProjectCommandServiceTest 소관이다. */
+@ExtendWith(MockitoExtension.class)
+class ProjectCategoryAndDeleteServiceTest {
+
+    @Mock private ProjectRepository projectRepository;
+    @Mock private ProjectMemberRepository projectMemberRepository;
+    @Mock private ProjectBusinessCategoryRepository projectBusinessCategoryRepository;
+    @Mock private BusinessCategoryLookupPort businessCategoryLookupPort;
+    @Mock private EmployeeLookupPort employeeLookupPort;
+    @Mock private StepStatLookupPort stepStatLookupPort;
+    @Mock private ProjectAccessUseCase projectAccessUseCase;
+
+    @InjectMocks private ProjectCommandService projectCommandService;
+
+    private static final Long PROJECT_ID = 12L;
+    private static final String REQUESTER = "E2024001";
+
+    // ────────────────────────────── 카테고리 연결 ──────────────────────────────
+
+    @Test
+    @DisplayName("연결 후 전체 카테고리를 돌려준다 — 방금 추가한 것만이 아니다")
+    void 연결() {
+        given(businessCategoryLookupPort.findByIds(List.of(4L))).willReturn(List.of(
+                new BusinessCategoryLookupPort.BusinessCategoryView(4L, "상하수도", null)));
+        given(projectBusinessCategoryRepository.findCategoryIds(PROJECT_ID))
+                .willReturn(List.of(1L), List.of(1L, 4L));
+        given(businessCategoryLookupPort.findByIds(List.of(1L, 4L))).willReturn(List.of(
+                new BusinessCategoryLookupPort.BusinessCategoryView(1L, "환경", "ENV"),
+                new BusinessCategoryLookupPort.BusinessCategoryView(4L, "상하수도", null)));
+
+        ProjectCategoryResult result = projectCommandService.linkBusinessCategories(
+                new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(4L), REQUESTER, "USER"));
+
+        assertThat(result.businessCategories()).hasSize(2);
+        Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
+    }
+
+    @Test
+    @DisplayName("빈 목록은 400 이다")
+    void 연결_빈_목록() {
+        assertThatThrownBy(() -> projectCommandService.linkBusinessCategories(
+                new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(), REQUESTER, "USER")))
+                .isInstanceOf(ValidationException.class);
+
+        Mockito.verifyNoInteractions(projectBusinessCategoryRepository);
+    }
+
+    @Test
+    @DisplayName("이미 연결된 카테고리가 섞이면 409 다")
+    void 연결_중복() {
+        given(businessCategoryLookupPort.findByIds(List.of(1L))).willReturn(List.of(
+                new BusinessCategoryLookupPort.BusinessCategoryView(1L, "환경", "ENV")));
+        given(projectBusinessCategoryRepository.findCategoryIds(PROJECT_ID))
+                .willReturn(List.of(1L));
+
+        assertThatThrownBy(() -> projectCommandService.linkBusinessCategories(
+                new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(1L), REQUESTER, "USER")))
+                .isInstanceOf(ConflictException.class);
+
+        Mockito.verify(projectBusinessCategoryRepository, Mockito.never())
+                .linkAll(any(), anyList());
+    }
+
+    @Test
+    @DisplayName("없는 카테고리는 404 다")
+    void 연결_카테고리_없음() {
+        given(businessCategoryLookupPort.findByIds(List.of(99L))).willReturn(List.of());
+
+        assertThatThrownBy(() -> projectCommandService.linkBusinessCategories(
+                new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(99L), REQUESTER, "USER")))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    // ────────────────────────────── 카테고리 해제 ──────────────────────────────
+
+    @Test
+    @DisplayName("연결 행이 없으면 404 다")
+    void 해제_연결_없음() {
+        given(projectBusinessCategoryRepository.unlink(PROJECT_ID, 4L)).willReturn(false);
+
+        assertThatThrownBy(() -> projectCommandService.unlinkBusinessCategory(
+                new UnlinkBusinessCategoryCommand(PROJECT_ID, 4L, REQUESTER, "USER")))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    // ────────────────────────────── 프로젝트 삭제 ──────────────────────────────
+
+    @Test
+    @DisplayName("진행 전 + 스텝 0개면 논리 삭제하고 공고 연결을 비운다")
+    void 삭제() {
+        givenProject(ProjectStatus.NOT_STARTED, 7L);
+        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
+                .willReturn(new StepStatLookupPort.StepStatView(0, 0));
+
+        projectCommandService.deleteProject(
+                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER"));
+
+        Project saved = captureSaved();
+        assertThat(saved.getDeletedAt()).isNotNull();
+        // 안 비우면 uk_project_bid_notice 때문에 그 공고로 프로젝트를 다시 못 만든다.
+        assertThat(saved.getBidNoticeId()).isNull();
+    }
+
+    @Test
+    @DisplayName("스텝이 남아 있으면 409 다 — 종결로 처리해야 한다")
+    void 삭제_스텝_있음() {
+        givenProject(ProjectStatus.NOT_STARTED, null);
+        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
+                .willReturn(new StepStatLookupPort.StepStatView(3, 1));
+
+        assertThatThrownBy(() -> projectCommandService.deleteProject(
+                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
+                .isInstanceOf(ConflictException.class);
+
+        Mockito.verify(projectRepository, Mockito.never()).save(any(Project.class));
+    }
+
+    @Test
+    @DisplayName("진행 전이 아니면 409 다 — 스텝을 세지도 않는다")
+    void 삭제_진행중() {
+        givenProject(ProjectStatus.IN_PROGRESS, null);
+
+        assertThatThrownBy(() -> projectCommandService.deleteProject(
+                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
+                .isInstanceOf(ConflictException.class);
+
+        Mockito.verifyNoInteractions(stepStatLookupPort);
+    }
+
+    @Test
+    @DisplayName("없는 프로젝트는 404 다")
+    void 삭제_프로젝트_없음() {
+        given(projectRepository.findById(PROJECT_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> projectCommandService.deleteProject(
+                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    private void givenProject(ProjectStatus status, Long bidNoticeId) {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
+        given(projectRepository.findById(PROJECT_ID)).willReturn(Optional.of(
+                Project.restore(PROJECT_ID, bidNoticeId, "하수관로 정비", null, status,
+                        "○○시청", BigDecimal.TEN, null, null, null, null, null,
+                        REQUESTER, createdAt, createdAt, null)));
+        Mockito.lenient().when(projectRepository.save(any(Project.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private Project captureSaved() {
+        ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
+        Mockito.verify(projectRepository).save(captor.capture());
+        return captor.getValue();
+    }
+}

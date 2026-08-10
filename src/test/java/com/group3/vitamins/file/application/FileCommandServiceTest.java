@@ -1,5 +1,7 @@
 package com.group3.vitamins.file.application;
 
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.file.application.command.PermanentDeleteFileCommand;
 import com.group3.vitamins.file.application.command.RenameFileCommand;
 import com.group3.vitamins.file.application.command.RestoreFileCommand;
@@ -20,6 +22,7 @@ import com.group3.vitamins.file.domain.model.FileVersion;
 import com.group3.vitamins.file.domain.model.UploadStatus;
 import com.group3.vitamins.file.domain.repository.FileRepository;
 import com.group3.vitamins.file.domain.repository.FileVersionRepository;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.project.domain.model.MemberPermission;
@@ -65,6 +68,7 @@ class FileCommandServiceTest {
     private ApprovalLockQueryPort approvalLockQueryPort;
     private FileStoragePort fileStoragePort;
     private FileDerivedDataCleanupPort fileDerivedDataCleanupPort;
+    private DomainEventPublisher domainEventPublisher;
     private FileCommandService service;
 
     @BeforeEach
@@ -77,9 +81,11 @@ class FileCommandServiceTest {
         approvalLockQueryPort = Mockito.mock(ApprovalLockQueryPort.class);
         fileStoragePort = Mockito.mock(FileStoragePort.class);
         fileDerivedDataCleanupPort = Mockito.mock(FileDerivedDataCleanupPort.class);
+        domainEventPublisher = Mockito.mock(DomainEventPublisher.class);
         service = new FileCommandService(
                 fileRepository, fileVersionRepository, fileQueryPort, blockCatalogPort,
-                stepAccessUseCase, approvalLockQueryPort, fileStoragePort, fileDerivedDataCleanupPort);
+                stepAccessUseCase, approvalLockQueryPort, fileStoragePort, fileDerivedDataCleanupPort,
+                domainEventPublisher);
     }
 
     // ---- 헬퍼 ---------------------------------------------------------------
@@ -113,6 +119,13 @@ class FileCommandServiceTest {
                 .isEqualTo(expected);
     }
 
+    /** 발행된 활동 로그 이벤트 1건을 캡처한다. */
+    private ActivityOccurredEvent captureEvent() {
+        ArgumentCaptor<ActivityOccurredEvent> captor = ArgumentCaptor.forClass(ActivityOccurredEvent.class);
+        verify(domainEventPublisher).publish(captor.capture());
+        return captor.getValue();
+    }
+
     @Nested
     @DisplayName("§4 문서명 수정")
     class Rename {
@@ -133,6 +146,32 @@ class FileCommandServiceTest {
 
             assertThat(result.name()).isEqualTo("제안서_최종"); // 앞뒤 공백은 정리한다
             assertThat(file.getName()).isEqualTo("제안서_최종");
+
+            // 활동 로그: MODIFY + fileName 변경 전·후
+            ActivityOccurredEvent event = captureEvent();
+            assertThat(event.action()).isEqualTo(ActivityLogAction.MODIFY);
+            assertThat(event.blockId()).isEqualTo(BLOCK_ID);
+            assertThat(event.resourceId()).isEqualTo(FILE_ID);
+            assertThat(event.resourceName()).isEqualTo("제안서_최종");
+            assertThat(event.changes()).singleElement()
+                    .satisfies(c -> {
+                        assertThat(c.field()).isEqualTo("fileName");
+                        assertThat(c.beforeValue()).isEqualTo("제안서");
+                        assertThat(c.afterValue()).isEqualTo("제안서_최종");
+                    });
+        }
+
+        @Test
+        @DisplayName("이름이 그대로면 저장은 해도 로그는 남기지 않는다")
+        void sameNameNoLog() {
+            File file = activeFile(); // 이름 "제안서"
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
+            stubEditable();
+            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.rename(cmd("제안서"));
+
+            verify(domainEventPublisher, never()).publish(any());
         }
 
         @Test
@@ -200,6 +239,13 @@ class FileCommandServiceTest {
 
             assertThat(result.deletedAt()).isNotNull();
             assertThat(file.isDeleted()).isTrue();
+
+            // 활동 로그: 휴지통 이동 = DELETE
+            ActivityOccurredEvent event = captureEvent();
+            assertThat(event.action()).isEqualTo(ActivityLogAction.DELETE);
+            assertThat(event.blockId()).isEqualTo(BLOCK_ID);
+            assertThat(event.resourceId()).isEqualTo(FILE_ID);
+            assertThat(event.resourceName()).isEqualTo("제안서");
         }
 
         @Test
@@ -294,6 +340,18 @@ class FileCommandServiceTest {
             ArgumentCaptor<Collection<String>> keys = ArgumentCaptor.forClass(Collection.class);
             verify(fileStoragePort).deleteObjects(keys.capture());
             assertThat(keys.getValue()).containsExactlyInAnyOrder("key-1", "key-2");
+
+            // ⭐ 함정 검증: blockId 는 file 삭제(block_file CASCADE) 前에 잡혀야 한다.
+            InOrder blockOrder = inOrder(fileQueryPort, fileRepository);
+            blockOrder.verify(fileQueryPort, Mockito.atLeastOnce()).findBlockIdByFileId(FILE_ID);
+            blockOrder.verify(fileRepository).deleteById(FILE_ID);
+
+            // 활동 로그: 영구 삭제 = PURGE, 삭제 전 blockId·파일명이 실린다.
+            ActivityOccurredEvent event = captureEvent();
+            assertThat(event.action()).isEqualTo(ActivityLogAction.PURGE);
+            assertThat(event.blockId()).isEqualTo(BLOCK_ID);
+            assertThat(event.resourceId()).isEqualTo(FILE_ID);
+            assertThat(event.resourceName()).isEqualTo("제안서");
         }
 
         @Test
@@ -384,6 +442,12 @@ class FileCommandServiceTest {
             assertThat(file.isDeleted()).isFalse();
             assertThat(result.blockId()).isEqualTo(BLOCK_ID);
             assertThat(result.blockDeleted()).isFalse();
+
+            // 활동 로그: 복원 = RESTORE
+            ActivityOccurredEvent event = captureEvent();
+            assertThat(event.action()).isEqualTo(ActivityLogAction.RESTORE);
+            assertThat(event.blockId()).isEqualTo(BLOCK_ID);
+            assertThat(event.resourceId()).isEqualTo(FILE_ID);
         }
 
         @Test
@@ -402,6 +466,29 @@ class FileCommandServiceTest {
             assertThat(file.isDeleted()).isFalse();
             assertThat(result.blockId()).isNull();
             assertThat(result.blockDeleted()).isTrue();
+
+            // ⭐ 함정 검증: 결과는 blockDeleted=true 라도, 로그는 원래(soft delete 된) 블록으로 남는다.
+            // block_file 링크 행은 블록 삭제에도 남아 원래 blockId 를 돌려주기 때문이다.
+            ActivityOccurredEvent event = captureEvent();
+            assertThat(event.action()).isEqualTo(ActivityLogAction.RESTORE);
+            assertThat(event.blockId()).isEqualTo(BLOCK_ID);
+        }
+
+        @Test
+        @DisplayName("복구는 됐지만 블록 링크 자체가 사라졌으면 로그는 건너뛴다(작업은 성공)")
+        void restoreWithNoBlockLinkSkipsLog() {
+            File file = trashedFile();
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
+            stubRestorable();
+            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            // 링크 행 자체가 없다 → linkedBlockId=null → 이벤트 blockId 가 null 이라 발행을 건너뛴다.
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.empty());
+
+            FileRestoreResult result = service.restore(cmd());
+
+            assertThat(file.isDeleted()).isFalse();
+            assertThat(result.blockDeleted()).isTrue();
+            verify(domainEventPublisher, never()).publish(any());
         }
 
         @Test

@@ -1,0 +1,66 @@
+package com.group3.vitamins.bidding.collectioncondition.presentation.api.response;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.group3.vitamins.bidding.collectioncondition.application.result.CollectionConditionResult;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+public record CollectionConditionResponse(
+
+        @Schema(description = "수집 조건 ID")
+        Long conditionId,
+
+        @Schema(description = "수집처 코드")
+        String sourceCode,
+
+        @Schema(description = "수집처 이름")
+        String sourceName,
+
+        @Schema(description = "수집 조건 이름")
+        String conditionName,
+
+        @Schema(description = "수집할 공고 유형")
+        List<BidNoticeType> noticeTypes,
+
+        @Schema(description = "공고 필터 설정")
+        CollectionConditionFilterResponse filters,
+
+        @JsonProperty("isActive")
+        @Schema(description = "수집 조건 활성화 여부")
+        boolean active,
+
+        @Schema(description = "마지막 수집 성공 시각")
+        LocalDateTime lastSuccessAt,
+
+        @Schema(description = "마지막 수집 건수")
+        Integer lastCollectedCount,
+
+        @Schema(description = "생성 시각")
+        LocalDateTime createdAt,
+
+        @Schema(description = "수정 시각")
+        LocalDateTime updatedAt
+) {
+
+    // 애플리케이션 조회 결과를 수집 조건 API 응답으로 변환합니다.
+    public static CollectionConditionResponse from(
+            CollectionConditionResult result
+    ) {
+        return new CollectionConditionResponse(
+                result.conditionId(),
+                result.sourceCode(),
+                result.sourceName(),
+                result.conditionName(),
+                result.noticeTypes(),
+                CollectionConditionFilterResponse.from(result.filters()),
+                result.active(),
+                result.lastSuccessAt(),
+                result.lastCollectedCount(),
+                result.createdAt(),
+                result.updatedAt()
+        );
+    }
+}

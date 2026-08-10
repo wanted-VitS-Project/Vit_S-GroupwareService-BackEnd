@@ -32,6 +32,24 @@ public class Stage {
         return new Stage(stageId, projectId, name, sortOrder, createdAt, deletedAt);
     }
 
+    /** 이름만 바꾼다 (STG-001). 순서는 순서 변경 API 소관이다. */
+    public Stage rename(String name) {
+        this.name = name;
+        return this;
+    }
+
+    /** 정렬 순서를 바꾼다 (STG-002). ⛔ 하위 스텝은 건드리지 않는다. */
+    public Stage moveTo(int sortOrder) {
+        this.sortOrder = sortOrder;
+        return this;
+    }
+
+    /** 논리 삭제한다 (INV-05). 하위 스텝은 함께 삭제되지 않고 이전된다 (STG-003). */
+    public Stage delete(LocalDateTime now) {
+        this.deletedAt = now;
+        return this;
+    }
+
     public Long getStageId() { return stageId; }
     public Long getProjectId() { return projectId; }
     public String getName() { return name; }

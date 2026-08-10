@@ -5,9 +5,14 @@ import com.group3.vitamins.global.domain.common.error.exception.ConflictExceptio
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.command.CreateProjectCommand;
+import com.group3.vitamins.project.application.command.DeleteProjectCommand;
+import com.group3.vitamins.project.application.command.LinkBusinessCategoriesCommand;
+import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
+import com.group3.vitamins.project.application.result.ProjectCategoryResult;
 import com.group3.vitamins.project.application.result.ProjectResult;
 import com.group3.vitamins.project.application.usecase.ProjectCommandUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
@@ -46,6 +51,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final ProjectBusinessCategoryRepository projectBusinessCategoryRepository;
     private final BusinessCategoryLookupPort businessCategoryLookupPort;
     private final EmployeeLookupPort employeeLookupPort;
+    private final StepStatLookupPort stepStatLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
 
     @Override
@@ -181,6 +187,73 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         if (startedOn != null && endedOn != null && startedOn.isAfter(endedOn)) {
             throw new ValidationException(ProjectErrorCode.PROJECT_DATE_RANGE_INVALID);
         }
+    }
+
+    /**
+     * 사업 카테고리를 연결한다 (PRJ-007). 응답에는 <b>연결 후 전체</b> 카테고리를 담는다 —
+     * 화면이 방금 추가분만 받아서 목록을 갱신하면 기존 연결이 사라진 것처럼 보인다.
+     */
+    @Override
+    public ProjectCategoryResult linkBusinessCategories(LinkBusinessCategoriesCommand command) {
+        projectAccessUseCase.requireEditable(
+                command.projectId(), command.requesterUserId(), command.role());
+
+        List<Long> categoryIds = requireCategoryIds(command.categoryIds());
+        resolveCategories(categoryIds);
+
+        List<Long> linked = projectBusinessCategoryRepository.findCategoryIds(command.projectId());
+        if (categoryIds.stream().anyMatch(linked::contains)) {
+            throw new ConflictException(ProjectErrorCode.BUSINESS_CATEGORY_DUPLICATED);
+        }
+
+        projectBusinessCategoryRepository.linkAll(command.projectId(), categoryIds);
+
+        return new ProjectCategoryResult(command.projectId(), resolveCategories(
+                projectBusinessCategoryRepository.findCategoryIds(command.projectId())));
+    }
+
+    /** 연결을 끊는다. 조인 행이라 하드 삭제다 — soft 로 두면 UNIQUE 를 시체가 점유해 재연결이 막힌다. */
+    @Override
+    public void unlinkBusinessCategory(UnlinkBusinessCategoryCommand command) {
+        projectAccessUseCase.requireEditable(
+                command.projectId(), command.requesterUserId(), command.role());
+
+        if (!projectBusinessCategoryRepository.unlink(command.projectId(), command.categoryId())) {
+            throw new NotFoundException(ProjectErrorCode.BUSINESS_CATEGORY_NOT_LINKED);
+        }
+    }
+
+    /**
+     * 논리 삭제한다 (PRJ-014). <b>진행 전 + 스텝 0개</b> 일 때만 허용한다 —
+     * 이미 굴러간 프로젝트는 삭제가 아니라 종결(close)로 남긴다.
+     *
+     * <p>블록 수는 따로 세지 않는다. {@code block.step_id} 가 NOT NULL 이라
+     * <b>스텝이 0개면 블록도 0개</b>다 — 두 번 세면 쿼리만 늘고 판정은 같다.
+     *
+     * <p>⚠️ 하위 정리를 하지 않는다. 스텝이 없다는 것이 전제라 지울 대상 자체가 없다.
+     */
+    @Override
+    public void deleteProject(DeleteProjectCommand command) {
+        projectAccessUseCase.requireEditable(
+                command.projectId(), command.requesterUserId(), command.role());
+
+        Project project = projectRepository.findById(command.projectId())
+                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+
+        if (project.getStatus() != ProjectStatus.NOT_STARTED
+                || stepStatLookupPort.countByProjectId(command.projectId()).totalCount() > 0) {
+            throw new ConflictException(ProjectErrorCode.PROJECT_DELETE_NOT_ALLOWED);
+        }
+
+        projectRepository.save(project.delete(LocalDateTime.now()));
+    }
+
+    /** 빈 목록은 거부한다. 중복은 제거해 같은 카테고리를 두 번 넣는 요청을 그대로 통과시킨다. */
+    private List<Long> requireCategoryIds(List<Long> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) {
+            throw new ValidationException(ProjectErrorCode.CATEGORY_IDS_REQUIRED);
+        }
+        return categoryIds.stream().distinct().toList();
     }
 
     /** 같은 공고로 이미 프로젝트가 만들어졌으면 막는다 — 안 막으면 UNIQUE 제약이 DB 500 으로 샌다. */

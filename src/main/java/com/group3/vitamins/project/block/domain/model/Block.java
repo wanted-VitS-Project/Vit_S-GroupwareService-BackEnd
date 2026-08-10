@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 public class Block {
 
     private final Long blockId;
-    private final Long stepId;
+    private Long stepId;
     private String title;
     private final BlockType type;
     private Long typeId;
@@ -79,6 +79,17 @@ public class Block {
         this.rowIndex = rowIndex;
         this.sortOrder = sortOrder;
         this.colSpan = colSpan;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 다른 스텝으로 옮긴다 (BLK-014). 도착 스텝 기준으로 배치를 다시 잡는다 —
+     * 원래 rowIndex 를 그대로 들고 가면 도착 스텝의 기존 블록과 좌표가 겹쳐 그리드가 깨진다.
+     */
+    public void moveToStep(Long stepId, int rowIndex, int sortOrder, LocalDateTime now) {
+        this.stepId = stepId;
+        this.rowIndex = rowIndex;
+        this.sortOrder = sortOrder;
         this.updatedAt = now;
     }
 
