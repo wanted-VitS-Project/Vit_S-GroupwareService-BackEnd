@@ -9,9 +9,9 @@ import java.util.List;
 public interface SpringDataBidNoticeAttachmentRepository
         extends JpaRepository<BidNoticeAttachmentJpaEntity, Long> {
 
-    // 여러 공고의 활성 첨부파일을 한 번에 조회합니다.
+    // 여러 공고의 삭제 이력을 포함한 첨부파일을 한 번에 조회합니다.
     List<BidNoticeAttachmentJpaEntity>
-    findAllByBidNoticeIdInAndDeletedAtIsNull(
+    findAllByBidNoticeIdIn(
             Collection<Long> bidNoticeIds
     );
 }

@@ -66,7 +66,7 @@ public class NaraCollectionSourceAdapter implements CollectionSourceCollectorPor
             return failurePage(
                     target,
                     CollectionRunFailureType.CONNECTION_FAILURE,
-                    true
+                    exception.isRetryable()
             );
         }
     }

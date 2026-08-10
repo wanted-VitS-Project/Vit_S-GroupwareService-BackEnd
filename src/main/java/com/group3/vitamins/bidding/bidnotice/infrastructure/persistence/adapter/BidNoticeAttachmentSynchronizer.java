@@ -27,7 +27,7 @@ public class BidNoticeAttachmentSynchronizer {
         Map<AttachmentKey, BidNoticeAttachmentJpaEntity> existing =
                 new HashMap<>();
 
-        repository.findAllByBidNoticeIdInAndDeletedAtIsNull(
+        repository.findAllByBidNoticeIdIn(
                 incomingByNoticeId.keySet()
         ).forEach(entity -> existing.put(
                 new AttachmentKey(
@@ -40,6 +40,12 @@ public class BidNoticeAttachmentSynchronizer {
         List<BidNoticeAttachmentJpaEntity> changed = new ArrayList<>();
 
         incomingByNoticeId.forEach((noticeId, attachments) -> {
+            // 외부 API가 첨부 목록을 생략한 경우 기존 첨부를 삭제된 것으로 해석하지 않습니다.
+            if (attachments == null || attachments.isEmpty()) {
+                existing.keySet().removeIf(key -> key.bidNoticeId().equals(noticeId));
+                return;
+            }
+
             for (CollectedBidNotice.Attachment attachment : attachments) {
                 AttachmentKey key =
                         new AttachmentKey(noticeId, attachment.order());

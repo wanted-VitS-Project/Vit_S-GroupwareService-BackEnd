@@ -133,7 +133,8 @@ public class RedisCollectionRunJobConsumer {
                 case RETRYABLE_FAILURE -> handleRetryableFailure(
                         record,
                         job,
-                        result.failureType()
+                        result.failureType(),
+                        result.retryTarget()
                 );
                 case PERMANENT_FAILURE -> moveToDlqAndAcknowledge(
                         record,
@@ -155,7 +156,8 @@ public class RedisCollectionRunJobConsumer {
     private void handleRetryableFailure(
             MapRecord<String, Object, Object> record,
             CollectionRunJob job,
-            CollectionRunFailureType failureType
+            CollectionRunFailureType failureType,
+            CollectionRequestCombination retryTarget
     ) {
         if (job.retryCount() >= MAX_RETRY_COUNT) {
             moveToDlqAndAcknowledge(record, job, failureType);
@@ -168,7 +170,7 @@ public class RedisCollectionRunJobConsumer {
                 job.companyId(),
                 UUID.randomUUID().toString(),
                 job.retryCount() + 1,
-                job.retryTarget()
+                retryTarget
         );
 
         boolean scheduled = Boolean.TRUE.equals(

@@ -11,13 +11,11 @@ public record NaraBidNoticeClientProperties(
         String serviceKey,
         int pageSize,
         Duration connectTimeout,
-        Duration readTimeout
+        Duration readTimeout,
+        int maxInMemorySize
 ) {
 
     public NaraBidNoticeClientProperties {
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new IllegalArgumentException("나라장터 API base-url은 필수입니다.");
-        }
         if (pageSize < 1 || pageSize > 999) {
             throw new IllegalArgumentException("나라장터 API page-size는 1~999여야 합니다.");
         }
@@ -31,6 +29,9 @@ public record NaraBidNoticeClientProperties(
                 || readTimeout.isNegative()
                 || readTimeout.isZero()) {
             throw new IllegalArgumentException("read-timeout은 0보다 커야 합니다.");
+        }
+        if (maxInMemorySize < 1) {
+            throw new IllegalArgumentException("max-in-memory-size는 1 이상이어야 합니다.");
         }
     }
 }

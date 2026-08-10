@@ -81,7 +81,11 @@ class NaraCollectionSourceAdapterTest {
     @DisplayName("외부 API 연결 실패는 재시도 가능한 실패로 반환한다")
     void returnsRetryableFailure() {
         when(client.searchServiceNotices(any()))
-                .thenThrow(new NaraBidNoticeClientException("temporary failure"));
+                .thenThrow(new NaraBidNoticeClientException(
+                        "temporary failure",
+                        true,
+                        new RuntimeException("connection failed")
+                ));
 
         CollectedBidNoticePage result = adapter.collect(snapshot("NARA"), TARGET, 100);
 

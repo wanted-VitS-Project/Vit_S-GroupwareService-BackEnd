@@ -68,11 +68,16 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
 
         CollectionRequestCombination retryTarget = job.retryTarget();
         while (true) {
+            CollectionRunTask candidate = retryTarget == null
+                    ? taskPort.findNextProcessableTask(job.runId(), LocalDateTime.now(clock))
+                    .orElse(null)
+                    : null;
             CollectionRequestCombination target = retryTarget != null
                     ? retryTarget
-                    : taskPort.findNextProcessableTask(job.runId(), LocalDateTime.now(clock))
-                    .map(CollectionRunTask::target)
-                    .orElse(null);
+                    : candidate == null ? null : candidate.target();
+            int taskRetryCount = candidate == null
+                    ? job.retryCount()
+                    : candidate.retryCount();
             retryTarget = null;
 
             if (target == null) {
@@ -83,7 +88,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
                             job.runId(),
                             target,
                             job.attemptId(),
-                            job.retryCount(),
+                            taskRetryCount,
                             LocalDateTime.now(clock),
                             LocalDateTime.now(clock).plus(LEASE_DURATION)
                     )
@@ -144,10 +149,13 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
         LocalDateTime now = LocalDateTime.now(clock);
         String errorCode = failure.failureType().name();
 
-        if (failure.retryable() && job.retryCount() < MAX_RETRY_COUNT) {
+        if (failure.retryable() && task.retryCount() < MAX_RETRY_COUNT) {
             taskPort.prepareRetry(task.taskId(), job.attemptId(), errorCode, errorCode, now);
             runStatePort.prepareRetry(job.runId(), job.attemptId(), errorCode, errorCode, now);
-            return CollectionRunJobResult.retryableFailure(failure.failureType());
+            return CollectionRunJobResult.retryableFailure(
+                    failure.failureType(),
+                    task.target()
+            );
         }
 
         taskPort.fail(task.taskId(), job.attemptId(), errorCode, errorCode, now);
@@ -165,7 +173,8 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
                     "unfinished_collection_tasks", now
             );
             return CollectionRunJobResult.retryableFailure(
-                    CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR
+                    CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR,
+                    null
             );
         }
 

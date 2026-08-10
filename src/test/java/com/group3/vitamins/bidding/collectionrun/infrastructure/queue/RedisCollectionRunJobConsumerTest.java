@@ -104,7 +104,14 @@ class RedisCollectionRunJobConsumerTest {
         )).thenReturn(List.of(record));
         when(handlerPort.handle(any(CollectionRunJob.class)))
                 .thenReturn(CollectionRunJobResult.retryableFailure(
-                        CollectionRunFailureType.TIMEOUT
+                        CollectionRunFailureType.TIMEOUT,
+                        new CollectionRequestCombination(
+                                BidNoticeType.SERVICE,
+                                "스마트시티|통합관제",
+                                "11",
+                                "6202",
+                                2
+                        )
                 ));
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.add(eq(RETRY_KEY), any(), anyDouble()))

@@ -3,11 +3,18 @@ package com.group3.vitamins.bidding.collectionrun.infrastructure.client.nara.exc
 // 나라장터 API 호출 또는 응답 변환 실패를 나타냅니다.
 public class NaraBidNoticeClientException extends RuntimeException {
 
+    private final boolean retryable;
+
     public NaraBidNoticeClientException(String message) {
-        super(message);
+        this(message, false, null);
     }
 
-    public NaraBidNoticeClientException(String message, Throwable cause) {
+    public NaraBidNoticeClientException(String message, boolean retryable, Throwable cause) {
         super(message, cause);
+        this.retryable = retryable;
+    }
+
+    public boolean isRetryable() {
+        return retryable;
     }
 }

@@ -6,6 +6,8 @@ import com.group3.vitamins.bidding.collectionrun.infrastructure.client.nara.exce
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriBuilder;
 
 import java.net.URI;
@@ -67,10 +69,24 @@ public class NaraBidNoticeWebClient implements NaraBidNoticeClient {
             return response;
         } catch (NaraBidNoticeClientException exception) {
             throw exception;
+        } catch (WebClientResponseException exception) {
+            throw new NaraBidNoticeClientException(
+                    "나라장터 입찰공고 API가 HTTP 오류를 반환했습니다.",
+                    exception.getStatusCode().is5xxServerError(),
+                    exception
+            );
+        } catch (WebClientRequestException exception) {
+            throw new NaraBidNoticeClientException(
+                    "나라장터 입찰공고 API에 연결하지 못했습니다.",
+                    true,
+                    exception
+            );
         } catch (Exception exception) {
             // 인증키가 포함된 실제 요청 URL을 예외 메시지에 남기지 않습니다.
             throw new NaraBidNoticeClientException(
-                    "나라장터 입찰공고 API 호출에 실패했습니다."
+                    "나라장터 입찰공고 API 호출에 실패했습니다.",
+                    true,
+                    exception
             );
         }
     }
@@ -116,6 +132,11 @@ public class NaraBidNoticeWebClient implements NaraBidNoticeClient {
     }
 
     private void validateConfiguration() {
+        if (properties.baseUrl() == null || properties.baseUrl().isBlank()) {
+            throw new NaraBidNoticeClientException(
+                    "나라장터 API 기본 주소가 설정되지 않았습니다."
+            );
+        }
         if (properties.serviceKey() == null || properties.serviceKey().isBlank()) {
             throw new NaraBidNoticeClientException(
                     "나라장터 API 인증키가 설정되지 않았습니다."

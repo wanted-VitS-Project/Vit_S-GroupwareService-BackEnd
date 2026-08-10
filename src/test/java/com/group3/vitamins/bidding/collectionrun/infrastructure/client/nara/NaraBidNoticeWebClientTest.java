@@ -84,7 +84,8 @@ class NaraBidNoticeWebClientTest {
                         "test-key",
                         100,
                         Duration.ofSeconds(5),
-                        Duration.ofSeconds(15)
+                        Duration.ofSeconds(15),
+                        2_097_152
                 );
 
         return new NaraBidNoticeWebClient(webClient, properties);

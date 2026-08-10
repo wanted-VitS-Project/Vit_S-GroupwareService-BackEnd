@@ -33,9 +33,13 @@ public class NaraBidNoticeClientConfig {
                         )
                 ));
 
-        return builder
-                .baseUrl(properties.baseUrl())
+        WebClient.Builder configuredBuilder = builder
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
+                .codecs(configurer -> configurer.defaultCodecs()
+                        .maxInMemorySize(properties.maxInMemorySize()));
+        if (properties.baseUrl() != null && !properties.baseUrl().isBlank()) {
+            configuredBuilder.baseUrl(properties.baseUrl());
+        }
+        return configuredBuilder.build();
     }
 }
