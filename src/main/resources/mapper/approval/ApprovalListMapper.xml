@@ -24,6 +24,9 @@
     <sql id="whereClause">
         <where>
             a.deleted_at IS NULL
+            <!-- 회사(테넌트) 격리 — 결재의 회사는 기안자 소속으로 정한다.
+                 이미 조인된 employee 를 쓰므로 조인 추가가 없고, block_id 가 NULL 인 독립 결재도 살아남는다. -->
+            AND drafter.company_id = #{companyId}
             <if test="drafterId != null">AND a.user_id = #{drafterId}</if>
             <if test="status != null">AND a.status = #{status}</if>
             <if test="fromDate != null">AND a.created_at &gt;= #{fromDate}</if>

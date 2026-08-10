@@ -63,7 +63,7 @@ public class GlobalExceptionHandler {
      *
      * <p>기본 동작으로는 {@code @NotBlank}·{@code @Size} 위반이 전부 {@code COMMON_INVALID_REQUEST} 로
      * 나가 <b>명세가 정한 도메인 에러코드를 내려줄 수 없었다</b>. 그래서 검증을 애노테이션으로 못 쓰고
-     * 서비스에서 손으로 던져 왔다 (`BCT-V1-API.md` §3-5 B2).
+     * 서비스에서 손으로 던져 왔다 ({@code .ai/docs/domain/관리자/BCT-V1-API.md} §3-5 B2).
      *
      * <p>구분자가 없는 기존 메시지("사번을 입력해 주세요.", "must not be blank")는 이 패턴에 걸리지 않아
      * <b>지금까지와 완전히 동일하게</b> {@code COMMON_INVALID_REQUEST} 로 나간다.

@@ -8,6 +8,7 @@ import com.group3.vitamins.project.application.command.AddMemberCommand;
 import com.group3.vitamins.project.application.command.ChangeMemberPermissionCommand;
 import com.group3.vitamins.project.application.command.RemoveMemberCommand;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.port.StagePermissionDefaultCleanupPort;
 import com.group3.vitamins.project.application.port.StepPermissionCleanupPort;
 import com.group3.vitamins.project.application.result.MemberResult;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
@@ -31,6 +32,7 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
     private final ProjectMemberRepository projectMemberRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final StepPermissionCleanupPort stepPermissionCleanupPort;
+    private final StagePermissionDefaultCleanupPort stagePermissionDefaultCleanupPort;
 
     /** 참여자를 한 명 추가한다. 응답에 쓸 이름을 조회하면서 사원 존재 여부도 함께 판정한다. */
     @Override
@@ -83,7 +85,11 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
                 null, updated.getPermission().name());
     }
 
-    /** 참여자를 프로젝트에서 제거한다. 스텝 권한 오버라이드도 함께 지운다. */
+    /**
+     * 참여자를 프로젝트에서 제거한다. 스텝 권한 오버라이드와 스테이지 권한 기본값도 함께 지운다.
+     *
+     * <p>🚨 기본값 정리를 빼면 재초대 후 새 스텝에서 죽은 권한이 되살아난다 (STG-004).
+     */
     @Override
     public void removeMember(RemoveMemberCommand command) {
         //권한 검증
@@ -98,6 +104,10 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
 
         //스텝 오버라이드 정리
         stepPermissionCleanupPort.deleteByProjectIdAndUserId(
+                member.getProjectId(), member.getUserId());
+
+        //스테이지 권한 기본값 정리
+        stagePermissionDefaultCleanupPort.deleteByProjectIdAndUserId(
                 member.getProjectId(), member.getUserId());
 
         //프로젝트 제거

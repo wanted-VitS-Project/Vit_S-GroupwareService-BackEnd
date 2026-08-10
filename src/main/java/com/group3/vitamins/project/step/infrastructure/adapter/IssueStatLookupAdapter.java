@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -24,5 +25,15 @@ public class IssueStatLookupAdapter implements IssueStatLookupPort {
                         IssueStatRow::stepId,
                         row -> new IssueStatView(
                                 row.totalCount(), row.doneCount(), row.inProgressCount())));
+    }
+
+    @Override
+    public List<Long> findOpenIssueIds(Long stepId) {
+        return issueStatQueryMapper.findOpenIssueIds(stepId);
+    }
+
+    @Override
+    public List<Long> findAllIssueIds(Long stepId) {
+        return issueStatQueryMapper.findAllIssueIds(stepId);
     }
 }

@@ -23,6 +23,6 @@ public class ApprovalEmployeeCatalogAdapter implements EmployeeCatalogPort {
         return authQueryMapper.findProfile(userId)
                 .map(profile -> new EmployeeSummary(
                         profile.userId(), profile.name(), profile.jobPositionName(),
-                        profile.departmentPath(), profile.role()));
+                        profile.departmentPath(), profile.role(), profile.companyId()));
     }
 }

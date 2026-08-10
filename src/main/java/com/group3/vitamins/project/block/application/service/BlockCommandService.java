@@ -6,13 +6,17 @@ import com.group3.vitamins.global.domain.common.error.exception.ValidationExcept
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.block.application.command.CreateBlockCommand;
 import com.group3.vitamins.project.block.application.command.DeleteBlockCommand;
+import com.group3.vitamins.project.block.application.command.MoveBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockLayoutCommand;
 import com.group3.vitamins.project.block.application.port.BlockDetailPort;
+import com.group3.vitamins.project.block.application.port.IssueBlockUnlinkPort;
 import com.group3.vitamins.project.block.application.result.BlockLayoutResult;
+import com.group3.vitamins.project.block.application.result.BlockMoveResult;
 import com.group3.vitamins.project.block.application.result.BlockOwner;
 import com.group3.vitamins.project.block.application.result.BlockResult;
 import com.group3.vitamins.project.block.application.result.BlockUpdateResult;
+import com.group3.vitamins.project.block.application.usecase.BlockCascadeUseCase;
 import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
 import com.group3.vitamins.project.block.domain.exception.BlockErrorCode;
 import com.group3.vitamins.project.block.domain.model.Block;
@@ -25,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +40,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class BlockCommandService implements BlockCommandUseCase {
+public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUseCase {
 
     private static final int TITLE_MAX_LENGTH = 200;
     private static final int MIN_COL_SPAN = 1;
@@ -46,7 +51,7 @@ public class BlockCommandService implements BlockCommandUseCase {
     private final BlockRepository blockRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
-    private final BlockDeleteLockRegistry blockDeleteLockRegistry;
+    private final IssueBlockUnlinkPort issueBlockUnlinkPort;
     private final StepAccessUseCase stepAccessUseCase;
 
     @Override
@@ -177,7 +182,65 @@ public class BlockCommandService implements BlockCommandUseCase {
                 .toList();
     }
 
-    /** 잠금 4종을 확인한 뒤 블록과 상세 행을 같은 트랜잭션에서 논리 삭제한다. 하드 삭제는 없다 (INV-05). */
+    /**
+     * 같은 프로젝트의 다른 스텝으로 옮긴다 (BLK-014).
+     *
+     * <p>⚠️ 권한을 <b>양쪽 다</b> 확인한다. 출발 스텝만 보면 접근 권한이 없는 스텝으로 블록을 밀어넣을 수 있다.
+     * 그 판정 결과에서 두 스텝의 projectId 를 얻어 같은 프로젝트인지도 함께 본다 —
+     * Block 은 projectId 를 갖지 않아 이 경로 말고는 알 방법이 없다.
+     *
+     * <p>issue_block 연결은 끊는다. 블록과 이슈는 같은 스텝이어야 하는데(BLK-009 · INV-06)
+     * 옮기면 그 전제가 깨진다.
+     */
+    @Override
+    public BlockMoveResult moveBlock(MoveBlockCommand command) {
+
+        if (command.stepId() == null) {
+            throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_REQUIRED);
+        }
+
+        Block block = findBlock(command.blockId());
+
+        StepAccessUseCase.StepAccessView from = stepAccessUseCase.requireEditable(
+                block.getStepId(), command.requesterUserId(), command.role());
+        StepAccessUseCase.StepAccessView to = stepAccessUseCase.requireEditable(
+                command.stepId(), command.requesterUserId(), command.role());
+
+        if (from.stepId().equals(to.stepId()) || !from.projectId().equals(to.projectId())) {
+            throw new ValidationException(BlockErrorCode.BLOCK_MOVE_TARGET_INVALID);
+        }
+
+        int unlinkedIssueCount = moveToStep(block, to.stepId());
+
+        return new BlockMoveResult(block.getBlockId(), block.getStepId(), unlinkedIssueCount);
+    }
+
+    /** 이동 본체. 권한 판정이 끝난 뒤의 처리라 cascade 경로와 공유한다. */
+    private int moveToStep(Block block, Long toStepId) {
+        int unlinkedIssueCount = issueBlockUnlinkPort.unlinkByBlockId(block.getBlockId());
+
+        block.moveToStep(toStepId, nextRowIndex(toStepId), FIRST_INDEX, LocalDateTime.now());
+        blockRepository.save(block);
+        return unlinkedIssueCount;
+    }
+
+    /** 도착 스텝의 맨 아래 새 행에 붙인다. 원래 좌표를 들고 가면 기존 블록과 겹쳐 그리드가 깨진다. */
+    private int nextRowIndex(Long stepId) {
+        return blockRepository.findMaxRowIndex(stepId)
+                .map(max -> max + 1)
+                .orElse(FIRST_INDEX);
+    }
+
+    /**
+     * 블록과 상세 행을 같은 트랜잭션에서 논리 삭제한다. 하드 삭제는 없다 (INV-05).
+     *
+     * <p>⛔ 삭제 잠금 4종은 폐기됐다 (2026-08-09 · BLK-008). 막아도 탈출구가 재무팀 호출뿐이라
+     * 사용자가 갇혔다 — 막는 대신 블록을 옮길 수단을 준다 (BLK-014).
+     * 재무 연결 해제(BLK-013)는 재무 접근 경로와 함께 별도로 붙는다 — 대상은
+     * {@code cash_flow.settle_block_id}·{@code tax_invoice.settle_block_id} 다.
+     *
+     * <p>⛔ 복구(휴지통)도 없다. 되돌리고 싶으면 삭제 전에 옮긴다 (BLK-014) — `PRJ-V1.md` §3-1.
+     */
     @Override
     public void deleteBlock(DeleteBlockCommand command) {
 
@@ -185,11 +248,14 @@ public class BlockCommandService implements BlockCommandUseCase {
         stepAccessUseCase.requireEditable(
                 block.getStepId(), command.requesterUserId(), command.role());
 
-        if (blockDeleteLockRegistry.isLocked(
-                block.getType(), block.getBlockId(), block.getTypeId())) {
-            throw new ConflictException(BlockErrorCode.BLOCK_DELETE_LOCKED);
-        }
+        deleteBlock(block, command.requesterUserId());
 
+        // 블록 삭제 활동 로그(§5.1)는 여기서 발행해야 하지만 활동기록 공통 컴포넌트(#43)가
+        // 아직 없다. 타입별 도메인에서 발행하면 어댑터 없는 타입(FILE·APPROVAL)이 영구 누락된다.
+    }
+
+    /** 삭제 본체. 권한 판정이 끝난 뒤의 처리라 cascade 경로와 공유한다. */
+    private void deleteBlock(Block block, String requesterUserId) {
         LocalDateTime now = LocalDateTime.now();
 
         // ⚠️ 상세를 먼저 지운다. 순서를 뒤집으면 block.deleted_at 이 유실된다 —
@@ -199,13 +265,31 @@ public class BlockCommandService implements BlockCommandUseCase {
         // 상세만 지워져 조회에는 그대로 뜨는 상태가 된다 (2026-08-05 런타임 검증으로 발견).
         // 같은 트랜잭션이라 중간 상태는 밖에서 보이지 않는다 — BLK-007(판정 주인은 block.deleted_at)은
         // 읽기 규칙이고 쓰기 순서 규칙이 아니다.
-        unlinkDetail(block, command.requesterUserId(), now);
+        unlinkDetail(block, requesterUserId, now);
 
         block.delete(now);
         blockRepository.save(block);
+    }
 
-        // 블록 삭제 활동 로그(§5.1)는 여기서 발행해야 하지만 활동기록 공통 컴포넌트(#43)가
-        // 아직 없다. 타입별 도메인에서 발행하면 어댑터 없는 타입(FILE·APPROVAL)이 영구 누락된다.
+    /**
+     * 스텝 삭제가 부르는 블록 정리 (STP-013). 권한은 호출자가 프로젝트 EDITOR 로 이미 판정했다 —
+     * 여기서 스텝 EDITOR 를 다시 보면 오버라이드 하나로 삭제 전체가 403 롤백된다.
+     */
+    @Override
+    public List<Long> findBlockIds(Long stepId) {
+        return blockRepository.findByStepId(stepId).stream()
+                .map(Block::getBlockId)
+                .toList();
+    }
+
+    @Override
+    public void moveBlocks(Collection<Long> blockIds, Long toStepId) {
+        blockIds.forEach(blockId -> moveToStep(findBlock(blockId), toStepId));
+    }
+
+    @Override
+    public void deleteBlocks(Collection<Long> blockIds, String requesterUserId) {
+        blockIds.forEach(blockId -> deleteBlock(findBlock(blockId), requesterUserId));
     }
 
     /**
