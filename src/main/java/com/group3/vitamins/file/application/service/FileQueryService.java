@@ -12,6 +12,7 @@ import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileVersionSingleResult;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileResult;
+import com.group3.vitamins.file.application.result.ProjectTrashFileResult;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionResult;
 import com.group3.vitamins.file.application.result.VersionHistoryResult;
@@ -190,6 +191,19 @@ public class FileQueryService implements FileQueryUseCase {
                         p.fileId(), p.name(), p.latestVersionId(), p.latestVersionNo(), p.versionCount(),
                         p.originalFileName(), p.extension(), p.sizeBytes(), isPreviewable(p.extension()),
                         p.uploaderName(), p.uploaderDepartment(), p.uploaderPosition(), p.updatedAt()))
+                .toList();
+    }
+
+    @Override
+    public List<ProjectTrashFileResult> getProjectTrashFiles(Long projectId, String requesterUserId, String role) {
+        requireProjectAccess(projectId, requesterUserId, role);
+
+        // §12 와 동일하게 프로젝트 접근 권한만 확인하고, 휴지통 문서를 그대로 내린다(파생값 없음 → 1:1 매핑).
+        return fileQueryPort.findProjectTrashFiles(projectId).stream()
+                .map(p -> new ProjectTrashFileResult(
+                        p.stepId(), p.stepName(), p.blockId(), p.blockTitle(), p.blockDeleted(),
+                        p.fileId(), p.name(), p.versionCount(),
+                        p.originalFileName(), p.extension(), p.sizeBytes(), p.deletedAt()))
                 .toList();
     }
 

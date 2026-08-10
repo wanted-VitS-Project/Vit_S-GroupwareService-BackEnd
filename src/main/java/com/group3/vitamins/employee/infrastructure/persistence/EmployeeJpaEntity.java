@@ -70,13 +70,16 @@ public class EmployeeJpaEntity implements Persistable<String> {
     @Column(name = "resigned_at")
     private LocalDate resignedAt;
 
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     /** 신규 여부 — persist(INSERT) 강제용. 영속화되거나 로드되면 false 로 내려간다. 컬럼이 아니다. */
     @Transient
     @Getter(AccessLevel.NONE)
     private boolean isNew = true;
 
     public EmployeeJpaEntity(String userId, String name, boolean system, Long departmentId, Long jobPositionId,
-                             String email, String phone, LocalDate hiredAt, LocalDate resignedAt) {
+                             String email, String phone, LocalDate hiredAt, LocalDate resignedAt, Long companyId) {
         this.userId = userId;
         this.name = name;
         this.system = system;
@@ -86,6 +89,7 @@ public class EmployeeJpaEntity implements Persistable<String> {
         this.phone = phone;
         this.hiredAt = hiredAt;
         this.resignedAt = resignedAt;
+        this.companyId = companyId;
     }
 
     @Override

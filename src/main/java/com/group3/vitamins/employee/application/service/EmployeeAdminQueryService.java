@@ -11,6 +11,7 @@ import com.group3.vitamins.employee.application.result.EmployeeListRow;
 import com.group3.vitamins.employee.application.result.EmployeePage;
 import com.group3.vitamins.employee.application.usecase.EmployeeAdminQueryUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -41,6 +42,7 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
 
     private final EmployeeAdminQueryPort employeeAdminQueryPort;
     private final EmployeeAdminPolicy employeeAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public EmployeePage listEmployees(EmployeeListQuery query) {
@@ -60,7 +62,8 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
     public EmployeeDetail getEmployee(String requesterRole, String userId) {
         employeeAdminPolicy.assertAdmin(requesterRole);
 
-        EmployeeDetailRow employee = employeeAdminQueryPort.findDetail(userId)
+        EmployeeDetailRow employee = employeeAdminQueryPort
+                .findDetail(userId, currentCompanyIdProvider.currentCompanyId())
                 .orElseThrow(() -> new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND));
 
         // 시스템 계정(ADMIN 공용·배치)은 인사관리 대상이 아니다. 존재는 하므로 404 가 아니라 403 으로 막는다.
@@ -127,7 +130,8 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
                 mustChangePassword,
                 resignedOnly,
                 offset,
-                query.size());
+                query.size(),
+                currentCompanyIdProvider.currentCompanyId());
     }
 
     /** 앞뒤 공백 제거 후 빈 문자열은 null 로 눕힌다 (필터 미적용과 동일 취급). */

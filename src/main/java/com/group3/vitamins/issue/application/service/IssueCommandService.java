@@ -1,5 +1,6 @@
 package com.group3.vitamins.issue.application.service;
 
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.command.ChangeIssueStatusCommand;
@@ -20,6 +21,7 @@ import com.group3.vitamins.issue.domain.IssueStatus;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import com.group3.vitamins.issue.domain.model.Issue;
 import com.group3.vitamins.issue.domain.repository.IssueRepository;
+import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,12 +39,16 @@ import java.util.stream.Collectors;
 public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUseCase {
 
     private static final int TITLE_MAX_LENGTH = 200;
+    private static final String NOTIFICATION_TARGET_TYPE = "ISSUE";
+    private static final String NOTIFICATION_TYPE_ASSIGNED = "ISSUE_ASSIGNED";
+    private static final String NOTIFICATION_TITLE_ASSIGNED = "이슈 담당자 지정";
 
     private final IssueRepository issueRepository;
     private final IssueStepAccessPort issueStepAccessPort;
     private final IssueAssigneePort issueAssigneePort;
     private final IssueBlockPort issueBlockPort;
     private final IssueQueryPort issueQueryPort;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public IssueResult createIssue(CreateIssueCommand command) {
@@ -71,6 +77,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
 
         issueRepository.saveAssignees(saved.getIssueId(), assigneeIds);
         issueRepository.saveBlockLinks(saved.getIssueId(), blockIds);
+        publishIssueAssignedNotifications(saved.getIssueId(), saved.getTitle(), assigneeIds);
 
         return toResult(saved, assignees, blocks);
     }
@@ -96,9 +103,12 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
         List<Long> blockIds = normalizePatchList(command.blockIds());
 
         if (command.assigneeIds().present()) {
+            List<String> previousAssigneeIds = currentAssigneeIds(issue.getIssueId());
             issueAssigneePort.validateAssignable(step.projectId(), assigneeIds);
             issueRepository.deleteAssignees(issue.getIssueId());
             issueRepository.saveAssignees(issue.getIssueId(), assigneeIds);
+            publishIssueAssignedNotifications(
+                    issue.getIssueId(), title, newlyAddedAssigneeIds(previousAssigneeIds, assigneeIds));
         }
         if (command.blockIds().present()) {
             issueBlockPort.validateLinkable(step.stepId(), blockIds);
@@ -262,6 +272,29 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
             throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
         }
         return normalize(field.value());
+    }
+
+    private List<String> currentAssigneeIds(Long issueId) {
+        return issueQueryPort.findAssignees(List.of(issueId)).stream()
+                .map(IssueQueryPort.AssigneeResult::userId)
+                .distinct()
+                .toList();
+    }
+
+    private List<String> newlyAddedAssigneeIds(List<String> previousAssigneeIds, List<String> nextAssigneeIds) {
+        return nextAssigneeIds.stream()
+                .filter(userId -> !previousAssigneeIds.contains(userId))
+                .toList();
+    }
+
+    private void publishIssueAssignedNotifications(Long issueId, String issueTitle, List<String> recipientUserIds) {
+        if (recipientUserIds.isEmpty()) {
+            return;
+        }
+        String message = issueTitle + " 이슈 담당자로 지정되었습니다.";
+        recipientUserIds.forEach(userId -> domainEventPublisher.publish(NotificationRequestedEvent.of(
+                userId, NOTIFICATION_TYPE_ASSIGNED, NOTIFICATION_TITLE_ASSIGNED, message,
+                NOTIFICATION_TARGET_TYPE, issueId, null)));
     }
 
     private IssueResult findLatestResult(Long issueId) {

@@ -24,16 +24,29 @@
 | 하위 단위 | 없음. 페이지 권한 하나가 그 페이지의 모든 메뉴를 연다 |
 | 노출 vs 접근 | **분리한다.** 메뉴가 보인다고 들어갈 수 있는 것은 아니다 (`permission: NONE`) |
 
-⭐ **카탈로그 6개 확정** (2026-08-03 재확정 · **실제 사이드바 기준**)
+⭐ **카탈로그 11개 확정** (2026-08-10 확장 · **실제 상단바 8탭 + 사이드바 기준**)
+
+> 2026-08-03 의 6개안에서, 상단바·사이드바에 실재하는 메뉴를 빠짐없이 담도록 5개(`HOME`·`NOTIFICATION`·`APPROVAL`·`COMPANY_STATUS`·`ADMIN_CONSOLE`)를 추가했다.
+> ⚠️ **추가된 5개는 전부 role 로 열린다** — `page_permission` 행이 생기지 않는다. **부여 대상은 여전히 `BIDDING`·`FINANCE` 2개뿐**이다(§2·DB 규칙 불변).
 
 | pageCode | 메뉴 | 노출 | 접근 |
 |---|---|---|---|
+| `HOME` | 홈 / 대시보드 | **전원** | 노출되면 항상 가능 |
+| `NOTIFICATION` | 알림 | **전원** | 〃 |
+| `APPROVAL` | 결재관리 | **전원** | 〃 |
 | `BIDDING` | **공고 조회 · 입찰 관리** | **전원** | `ADMIN`·`MASTER` 무조건 · `MEMBER` 는 **부여받아야** |
-| `FINANCE` | 재무 관리 | **전원** | 〃 |
 | `PROJECT_CREATE` | 프로젝트 생성 | `ADMIN` 제외 | 노출되면 항상 가능 |
 | `MY_PROJECT` | 내 프로젝트 | `ADMIN` 제외 | 〃 |
+| `FINANCE` | 재무 관리 | **전원** | `ADMIN`·`MASTER` 무조건 · `MEMBER` 는 **부여받아야** |
+| `COMPANY_STATUS` | 전사현황 | `ADMIN`·`MASTER` 만 | 노출되면 항상 가능 |
 | `TEMPLATE` | 템플릿 관리 | `ADMIN` 만 | 〃 |
+| `ADMIN_CONSOLE` | 관리자 | `ADMIN` 만 | 〃 |
 | `SETTINGS` | 설정 | **전원** | 〃 — 단 **하위 항목이 role 별로 다르다** |
+
+> 🧭 **상단바 "프로젝트" 탭은 별도 코드가 없다** — `PROJECT_CREATE`·`MY_PROJECT` 를 담는 컨테이너라 그 둘의 노출로 표시된다.
+> 🧭 **`ADMIN_CONSOLE`(관리자) vs `SETTINGS`(설정) 분리** — 관리자는 ADMIN 전용 콘솔(사원·부서·직급·권한 부여), 설정은 전원의 내 정보·비밀번호. 상단바가 둘을 별도 탭으로 두므로 코드도 나눈다.
+> 🧭 **`HOME` = 상단바 홈 = 사이드바 Dashboard** (동일 코드).
+> ⭐ **`COMPANY_STATUS`(전사현황)가 MASTER 서열이 여는 전용 화면**이다 — `ADMIN`·`MASTER` 는 `GLOBAL_ROLE` 로 열람, `MEMBER` 는 미반환.
 
 🚨 **노출과 접근은 다르다** (2026-08-03 확정). `MEMBER` 에게 `BIDDING`·`FINANCE` 는 **메뉴가 보이되
 클릭하면 "권한 없음"** 이다. 기능의 존재를 알리고 관리자에게 요청할 경로를 만들기 위함이다.
@@ -51,7 +64,7 @@
 (위 "하위 단위 없음 — 페이지 권한 하나가 그 페이지의 모든 메뉴를 연다" 규칙 그대로).
 
 🚨 **DB `page_code` 컬럼에 들어가는 값은 `BIDDING` · `FINANCE` 2개뿐이다.**
-나머지 4개는 role 로 열리므로 `page_permission` 행이 아예 생기지 않는다. 카탈로그(6) ≠ 부여 대상(2).
+나머지 9개는 role 로 열리므로 `page_permission` 행이 아예 생기지 않는다. 카탈로그(11) ≠ 부여 대상(2).
 
 ⛔ **폐기된 5개안** — `PROJECT_MANAGEMENT` · `BUDGET_STATUS` · `DISCLOSURE_STATUS` · `HR_APPOINTMENT` · `PAYROLL`.
 와이어프레임 기준으로 지었으나 **대응 화면이 존재하지 않는다**(실제 사이드바와 하나도 일치하지 않음).
@@ -65,7 +78,7 @@
 |---|---|---|
 | `GRANTED` | ADMIN 이 명시적으로 부여 (`MEMBER` 한정) | 가능 |
 | `GLOBAL_ROLE` | **`ADMIN` 또는 `MASTER` 라서** 열람됨. 부여 기록이 없다 (`PAGE-004`) | **불가** |
-| `ADMIN_ONLY` | `ADMIN` 전용 페이지 — `TEMPLATE` (`PAGE-003`) | **불가** |
+| `ADMIN_ONLY` | `ADMIN` 전용 페이지 — `TEMPLATE`·`ADMIN_CONSOLE` (`PAGE-003`) | **불가** |
 | `DEFAULT` | 기본 노출 — `PROJECT_CREATE` · `MY_PROJECT` · `SETTINGS`, 그리고 **미부여 상태의** `BIDDING`·`FINANCE` | **불가** |
 
 ⭐ **`permission` 은 3값이다** — `NONE` · `VIEWER` · `EDITOR` (2026-08-03 `NONE` 추가).
@@ -104,24 +117,28 @@
 ⛔ **응답에 있다고 들어갈 수 있는 것은 아니다.** `permission: NONE` 은 **버튼은 그리되 접근은 막으라**는 뜻이다.
 `MEMBER` 가 부여받기 전의 `BIDDING`·`FINANCE` 가 이 상태다.
 
-⭐ **role 별 반환 범위** (2026-08-03 재확정)
+⭐ **role 별 반환 범위** (2026-08-10 · 11코드)
 
 | pageCode | 메뉴 | `ADMIN` | `MASTER` | `MEMBER` |
 |---|---|---|---|---|
+| `HOME` | 홈 / 대시보드 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
+| `NOTIFICATION` | 알림 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
+| `APPROVAL` | 결재관리 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
 | `BIDDING` | 공고 조회 · 입찰 관리 | `EDITOR`·`GLOBAL_ROLE` | `EDITOR`·`GLOBAL_ROLE` | **부여 시** 그 등급·`GRANTED` / **미부여 시 `NONE`·`DEFAULT`** |
-| `FINANCE` | 재무 관리 | `EDITOR`·`GLOBAL_ROLE` | `EDITOR`·`GLOBAL_ROLE` | 〃 |
 | `PROJECT_CREATE` | 프로젝트 생성 | ❌ 미반환 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
 | `MY_PROJECT` | 내 프로젝트 | ❌ 미반환 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
+| `FINANCE` | 재무 관리 | `EDITOR`·`GLOBAL_ROLE` | `EDITOR`·`GLOBAL_ROLE` | **부여 시** 그 등급·`GRANTED` / **미부여 시 `NONE`·`DEFAULT`** |
+| `COMPANY_STATUS` | 전사현황 | `EDITOR`·`GLOBAL_ROLE` | `EDITOR`·`GLOBAL_ROLE` | ❌ 미반환 |
 | `TEMPLATE` | 템플릿 관리 | `EDITOR`·`ADMIN_ONLY` | ❌ 미반환 | ❌ 미반환 |
+| `ADMIN_CONSOLE` | 관리자 | `EDITOR`·`ADMIN_ONLY` | ❌ 미반환 | ❌ 미반환 |
 | `SETTINGS` | 설정 | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` | `EDITOR`·`DEFAULT` |
 
-**`MEMBER` · 아무 부여 없음 — 5개가 내려간다**
+**`MEMBER` · 아무 부여 없음 — 8개가 내려간다** (미반환: `COMPANY_STATUS`·`TEMPLATE`·`ADMIN_CONSOLE`)
 
 | pageCode | permission | source |
 |---|---|---|
-| `BIDDING` | **`NONE`** | `DEFAULT` |
-| `FINANCE` | **`NONE`** | `DEFAULT` |
-| `PROJECT_CREATE` · `MY_PROJECT` · `SETTINGS` | `EDITOR` | `DEFAULT` |
+| `BIDDING` · `FINANCE` | **`NONE`** | `DEFAULT` |
+| `HOME` · `NOTIFICATION` · `APPROVAL` · `PROJECT_CREATE` · `MY_PROJECT` · `SETTINGS` | `EDITOR` | `DEFAULT` |
 
 프론트는 `NONE` 을 회색 처리하거나 클릭 시 "권한이 없습니다" 를 띄운다.
 
@@ -289,9 +306,8 @@ role 로 여는 페이지(`SETTINGS`·`TEMPLATE`·`PROJECT_CREATE`·`MY_PROJECT`
 - [x] `2026-08-03` ~~`global/` 문서의 `page_code` 를 5개로 수정~~ → **5개안 폐기.** 실제 사이드바 기준 카탈로그 6개로 재확정하고 `global/PERMISSION.md`·`PAGE.md` 도 함께 갱신 완료
 - [x] `2026-08-03` `pageCode` 코드값 확정 — 실제 메뉴에 대응하는 6개
 - [x] `2026-08-03` ~~`PAGE-003` 폐기 처리~~ → **유지.** `ADMIN_ONLY` 가 되살아났다 (`SETTINGS`·`TEMPLATE`)
-- [ ] 🔴 **`홈` · `알림` · `결재관리` · `전사현황` 이 사이드바에 없다** — `PAGE.md` 는 최상위 탭 8개라고 적혀 있다.
-      특히 **`전사현황` 이 없으면 `MASTER` 서열이 여는 전용 화면이 하나도 없다.** 상단바 별도 여부 확인 필요
-- [ ] `내 프로젝트` 도 `ADMIN` 제외가 맞는지 최종 확인 (현재 제외로 기재)
+- [x] `2026-08-10` ~~🔴 `홈`·`알림`·`결재관리`·`전사현황` 이 사이드바에 없다~~ → **해소.** 상단바 8탭 확인(스크린샷) 후 카탈로그를 **11개로 확장** — `HOME`·`NOTIFICATION`·`APPROVAL`·`COMPANY_STATUS`·`ADMIN_CONSOLE` 추가. `COMPANY_STATUS`(전사현황)=MASTER+ADMIN 전용으로 **MASTER 전용 화면 확보**.
+- [x] `2026-08-10` `내 프로젝트`·`프로젝트 생성` 은 `ADMIN` 제외 확정 — "내 것이 생기는 화면"(project_member 사람 등록) 기준. 나머지(공고·재무·전사현황·템플릿·관리자·설정·홈·알림·결재)는 ADMIN 도 본다.
 
 ## 팀 문서와의 관계
 

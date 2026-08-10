@@ -1,5 +1,8 @@
 package com.group3.vitamins.file.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.file.application.command.PermanentDeleteFileCommand;
 import com.group3.vitamins.file.application.command.RenameFileCommand;
 import com.group3.vitamins.file.application.command.RestoreFileCommand;
@@ -22,9 +25,11 @@ import com.group3.vitamins.file.domain.repository.FileVersionRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -42,6 +47,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class FileCommandService implements FileCommandUseCase {
 
     /** 문서명 최대 길이(§4). */
@@ -58,6 +64,7 @@ public class FileCommandService implements FileCommandUseCase {
     private final ApprovalLockQueryPort approvalLockQueryPort;
     private final FileStoragePort fileStoragePort;
     private final FileDerivedDataCleanupPort fileDerivedDataCleanupPort;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public FileRenameResult rename(RenameFileCommand command) {
@@ -67,9 +74,18 @@ public class FileCommandService implements FileCommandUseCase {
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
         requireEditable(command.fileId(), command.requesterUserId(), command.role());
 
+        String before = file.getName();
         String name = validateName(command.name());
         file.rename(name);
         File saved = fileRepository.save(file);
+
+        // 활동 로그(문서명 수정 = MODIFY) — 실제로 이름이 바뀐 경우에만 발행한다 (§파일 rename).
+        if (!java.util.Objects.equals(before, saved.getName())) {
+            Long blockId = fileQueryPort.findBlockIdByFileId(command.fileId()).orElse(null);
+            publishActivity(ActivityLogAction.MODIFY, blockId, saved.getFileId(), saved.getName(),
+                    command.requesterUserId(),
+                    List.of(new ActivityFieldChange("fileName", before, saved.getName())));
+        }
 
         return new FileRenameResult(saved.getFileId(), saved.getName());
     }
@@ -93,8 +109,16 @@ public class FileCommandService implements FileCommandUseCase {
                                     .formatted(approval.title()));
                 });
 
+        // 링크는 휴지통 이동에 영향받지 않지만, 발행값을 확정하려고 삭제 전에 blockId 를 잡는다.
+        Long blockId = fileQueryPort.findBlockIdByFileId(command.fileId()).orElse(null);
+
         file.moveToTrash(LocalDateTime.now());
         File saved = fileRepository.save(file);
+
+        // 활동 로그(휴지통 이동 = DELETE) — resourceName 은 삭제 전 파일명(이동해도 name 은 그대로) (§파일 trash).
+        publishActivity(ActivityLogAction.DELETE, blockId, saved.getFileId(), saved.getName(),
+                command.requesterUserId(),
+                List.of(new ActivityFieldChange(null, null, null)));
 
         return new FileTrashResult(saved.getFileId(), saved.getDeletedAt());
     }
@@ -122,6 +146,12 @@ public class FileCommandService implements FileCommandUseCase {
         boolean blockAlive = linkedBlockId != null
                 && blockCatalogPort.resolveAttachableBlockStepId(linkedBlockId).isPresent();
 
+        // 활동 로그(복원 = RESTORE) — 블록이 soft delete 됐어도 link 행은 남아 원래 blockId 로 발행한다.
+        // 블록 활동 스트림에 함께 노출하는 게 컨벤션이라(별도 휴지통 화면 없음) 살아있음 여부와 무관하게 원래 블록에 건다.
+        publishActivity(ActivityLogAction.RESTORE, linkedBlockId, saved.getFileId(), saved.getName(),
+                command.requesterUserId(),
+                List.of(new ActivityFieldChange(null, null, null)));
+
         return new FileRestoreResult(
                 saved.getFileId(), saved.getName(),
                 blockAlive ? linkedBlockId : null, !blockAlive);
@@ -146,6 +176,11 @@ public class FileCommandService implements FileCommandUseCase {
             throw new ConflictException(FileErrorCode.FILE_APPROVAL_REFERENCED);
         }
 
+        // ⚠️ 발행값은 삭제 前에 캡처한다 — block_file 이 fk_block_file_file 로 ON DELETE CASCADE 라
+        //    file 을 지운 뒤 findBlockIdByFileId 하면 링크가 이미 사라져 empty 가 된다(PURGE 로그 유실).
+        String purgedName = file.getName();
+        Long purgedBlockId = fileQueryPort.findBlockIdByFileId(command.fileId()).orElse(null);
+
         // 저장소 키 수집(UPLOADING/FAILED 포함 — 미완료 버전도 객체가 있을 수 있다).
         List<FileVersion> versions = fileVersionRepository.findByFileId(command.fileId());
         List<String> storageKeys = versions.stream().map(FileVersion::getStorageKey).toList();
@@ -162,8 +197,28 @@ public class FileCommandService implements FileCommandUseCase {
         // "S3 는 지웠는데 DB 는 롤백" 유실을 막는다(§7). 커밋 뒤 S3 실패는 허용(DB 는 지워졌고 남은 키는 정리 대상).
         runAfterCommit(() -> fileStoragePort.deleteObjects(storageKeys));
 
+        // 활동 로그(영구 삭제 = PURGE) — 삭제 전에 잡아둔 blockId·파일명으로 발행한다.
+        publishActivity(ActivityLogAction.PURGE, purgedBlockId, command.fileId(), purgedName,
+                command.requesterUserId(),
+                List.of(new ActivityFieldChange(null, null, null)));
+
         // storageDeletedCount = 삭제를 요청한 객체 수. 실제 삭제는 커밋 후라 응답 시점엔 알 수 없다.
         return new FilePermanentDeleteResult(command.fileId(), versions.size(), storageKeys.size());
+    }
+
+    /**
+     * 활동 로그를 발행하되, 붙일 블록이 없으면(링크 유실된 고아 파일) 건너뛴다.
+     * ActivityOccurredEvent 는 blockId 가 null 이면 예외를 던지므로, 로그 하나 때문에
+     * 파일 작업(삭제·복원 등) 자체가 실패하지 않도록 여기서 방어한다.
+     */
+    private void publishActivity(ActivityLogAction action, Long blockId, Long resourceId,
+                                 String resourceName, String actorId, List<ActivityFieldChange> changes) {
+        if (blockId == null) {
+            log.warn("활동 로그 건너뜀(블록 링크 없음) - action={}, fileId={}", action, resourceId);
+            return;
+        }
+        domainEventPublisher.publish(
+                ActivityOccurredEvent.of(action, blockId, resourceId, resourceName, actorId, changes));
     }
 
     /** 트랜잭션이 있으면 커밋 성공 후 실행하고, 없으면(예: 단위 테스트) 즉시 실행한다. */

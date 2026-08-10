@@ -185,4 +185,47 @@
          ORDER BY b.step_id ASC, b.block_id ASC, bf.linked_at ASC, f.file_id ASC
     </select>
 
+    <!--
+      §13 프로젝트 휴지통 모아보기. §12 와 조인 구조는 같고 (문서→최신 완료 버전→블록→스텝, 고아 파일 포함),
+      필터만 f.deleted_at IS NOT NULL(휴지통) 로 뒤집는다. latest 버전 ID·차수·업로더·미리보기는 내리지 않고
+      (복구·영구삭제 전용 화면) 휴지통 진입 시각(f.deleted_at)을 deletedAt 으로 준다.
+      ⚠️ 파일 휴지통 이동은 file.deleted_at 만 설정하고 file_version.deleted_at 은 건드리지 않으므로
+      (§3 블록 휴지통과 동일 전제) 아래 vc/lv 조인(fv.deleted_at IS NULL)이 트래시 문서에도 그대로 성립한다.
+      정렬은 deletedAt 내림차순(이미지 휴지통과 통일) · 동시각 tie 는 file_id 로 결정적으로.
+    -->
+    <select id="findProjectTrashFiles"
+            resultType="com.group3.vitamins.file.application.result.ProjectTrashFileProjection">
+        SELECT b.step_id                                              AS stepId,
+               s.name                                                 AS stepName,
+               CASE WHEN b.deleted_at IS NULL THEN b.block_id END      AS blockId,
+               CASE WHEN b.deleted_at IS NULL THEN b.title END         AS blockTitle,
+               (b.deleted_at IS NOT NULL)                             AS blockDeleted,
+               f.file_id                                              AS fileId,
+               f.name                                                 AS name,
+               vc.cnt                                                 AS versionCount,
+               lv.original_file_name                                  AS originalFileName,
+               lv.extension                                           AS extension,
+               lv.size_bytes                                          AS sizeBytes,
+               f.deleted_at                                           AS deletedAt
+          FROM file f
+          JOIN block_file bf ON bf.file_id = f.file_id
+          JOIN block b ON b.block_id = bf.block_id
+          JOIN step s ON s.step_id = b.step_id
+          JOIN (
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                  JOIN file fj ON fj.file_id = fv.file_id AND fj.project_id = #{projectId}
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NOT NULL
+         ORDER BY f.deleted_at DESC, f.file_id ASC
+    </select>
+
 </mapper>

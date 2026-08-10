@@ -21,13 +21,13 @@ public class EmployeeBulkReferenceQueryAdapter implements EmployeeBulkReferenceQ
     private final EmployeeBulkReferenceQueryMapper mapper;
 
     @Override
-    public Map<String, Long> resolveDepartmentIdsByName(Collection<String> names) {
-        return toMap(names, mapper::findUniqueDepartmentIdsByName);
+    public Map<String, Long> resolveDepartmentIdsByName(Collection<String> names, Long companyId) {
+        return toMap(names, companyId, mapper::findUniqueDepartmentIdsByName);
     }
 
     @Override
-    public Map<String, Long> resolveJobPositionIdsByName(Collection<String> names) {
-        return toMap(names, mapper::findJobPositionIdsByName);
+    public Map<String, Long> resolveJobPositionIdsByName(Collection<String> names, Long companyId) {
+        return toMap(names, companyId, mapper::findJobPositionIdsByName);
     }
 
     @Override
@@ -38,12 +38,12 @@ public class EmployeeBulkReferenceQueryAdapter implements EmployeeBulkReferenceQ
         return Set.copyOf(mapper.findExistingUserIds(userIds));
     }
 
-    private Map<String, Long> toMap(Collection<String> names,
-                                    java.util.function.Function<Collection<String>, java.util.List<NameIdRow>> query) {
+    private Map<String, Long> toMap(Collection<String> names, Long companyId,
+                                    java.util.function.BiFunction<Collection<String>, Long, java.util.List<NameIdRow>> query) {
         if (names == null || names.isEmpty()) {
             return Map.of();
         }
-        return query.apply(names).stream()
+        return query.apply(names, companyId).stream()
                 .collect(Collectors.toMap(NameIdRow::name, NameIdRow::id));
     }
 }

@@ -17,6 +17,6 @@ import java.util.List;
 @Mapper
 public interface EmployeeSearchQueryMapper {
 
-    /** 이름 부분 일치 결재자 후보. 시스템 계정·퇴사자·삭제 사원 제외 (`employee.md` §9). */
-    List<EmployeeSearchRow> searchByName(@Param("name") String name);
+    /** 이름 부분 일치 결재자 후보(회사 범위). 시스템 계정·퇴사자·삭제 사원 제외 (`employee.md` §9). */
+    List<EmployeeSearchRow> searchByName(@Param("name") String name, @Param("companyId") Long companyId);
 }

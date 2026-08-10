@@ -3,6 +3,7 @@ package com.group3.vitamins.file.infrastructure.adapter;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
+import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -28,4 +29,6 @@ public interface FileQueryMapper {
     List<ProjectFileVersionProjection> findProjectFileVersions(@Param("projectId") Long projectId);
 
     List<ProjectFileProjection> findProjectFiles(@Param("projectId") Long projectId);
+
+    List<ProjectTrashFileProjection> findProjectTrashFiles(@Param("projectId") Long projectId);
 }

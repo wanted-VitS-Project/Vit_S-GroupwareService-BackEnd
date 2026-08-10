@@ -1,8 +1,12 @@
 package com.group3.vitamins.file.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.file.application.command.CompleteFileUploadCommand;
 import com.group3.vitamins.file.application.command.StartFileUploadCommand;
 import com.group3.vitamins.file.application.port.*;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.file.application.result.FileUploadStartResult;
 import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.usecase.FileUploadUseCase;
@@ -12,6 +16,7 @@ import com.group3.vitamins.file.domain.model.FileVersion;
 import com.group3.vitamins.file.domain.repository.BlockFileRepository;
 import com.group3.vitamins.file.domain.repository.FileRepository;
 import com.group3.vitamins.file.domain.repository.FileVersionRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
@@ -22,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -54,6 +60,8 @@ public class FileUploadService implements FileUploadUseCase {
     private final PdfPageCounterPort pdfPageCounterPort;
     private final FileVersionFailureRecorder failureRecorder;
     private final FileIndexTriggerPort fileIndexTriggerPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
@@ -90,7 +98,8 @@ public class FileUploadService implements FileUploadUseCase {
                 uploaderLookupPort.findByUserId(command.requesterUserId())
                         .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_INVALID_REQUEST));
 
-        String storageKey = buildStorageKey(projectId, fileId, versionNo, extension);
+        String storageKey = buildStorageKey(
+                currentCompanyIdProvider.currentCompanyId(), projectId, fileId, versionNo, extension);
 
         FileVersion version = fileVersionRepository.save(FileVersion.startUpload(
                 fileId, versionNo, storageKey,
@@ -151,6 +160,17 @@ public class FileUploadService implements FileUploadUseCase {
         File file = fileRepository.findById(saved.getFileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
 
+        // 활동 로그(업로드 완료 = CREATE) — 새 문서 첫 버전이든 기존 문서 새 버전이든 완료 시점에 발행한다
+        // (§파일 upload). blockId 는 위에서 resolveAttachableBlockStepId 판정에 쓴 그 링크로 non-null 이 보장된다.
+        domainEventPublisher.publish(ActivityOccurredEvent.of(
+                ActivityLogAction.CREATE,
+                blockId,
+                file.getFileId(),
+                file.getName(),
+                command.requesterUserId(),
+                List.of(new ActivityFieldChange(null, null, null))
+        ));
+
         return toDetail(file, saved);
     }
 
@@ -205,13 +225,16 @@ public class FileUploadService implements FileUploadUseCase {
     }
 
     /**
-     * 저장 키: {@code projects/{projectId}/files/{fileId}/versions/{versionNo}/{uuid}[.ext]}.
+     * 저장 키: {@code companies/{companyId}/projects/{projectId}/files/{fileId}/versions/{versionNo}/{uuid}[.ext]}.
+     * ⚠️ 멀티테넌트 — 최상위에 {@code companies/{companyId}/} 를 두어 회사별로 S3 접두사(prefix)를 분리한다.
+     * IAM 정책·수명주기·감사·삭제를 회사 단위로 걸 수 있고, 키만 봐도 어느 회사 객체인지 드러난다.
      * ⚠️ 경로에 fileVersionId 대신 versionNo 를 쓴다 — fileVersionId 는 INSERT 전에 알 수 없고
      * storageKey 는 버전 생성 시 확정돼야 하며, uuid 가 유일성을 보장하므로 안전하다(2026-08-06).
      */
-    private String buildStorageKey(long projectId, long fileId, int versionNo, String extension) {
+    private String buildStorageKey(long companyId, long projectId, long fileId, int versionNo, String extension) {
         String uuid = UUID.randomUUID().toString();
         String suffix = extension.isEmpty() ? "" : "." + extension;
-        return "projects/%d/files/%d/versions/%d/%s%s".formatted(projectId, fileId, versionNo, uuid, suffix);
+        return "companies/%d/projects/%d/files/%d/versions/%d/%s%s"
+                .formatted(companyId, projectId, fileId, versionNo, uuid, suffix);
     }
 }

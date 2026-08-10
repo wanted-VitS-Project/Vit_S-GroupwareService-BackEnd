@@ -1,5 +1,10 @@
 package com.group3.vitamins.file.application;
 
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+
 import com.group3.vitamins.file.application.command.CompleteFileUploadCommand;
 import com.group3.vitamins.file.application.command.StartFileUploadCommand;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
@@ -27,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.time.Instant;
@@ -63,6 +69,7 @@ class FileUploadServiceTest {
     private PdfPageCounterPort pdfPageCounterPort;
     private FileVersionFailureRecorder failureRecorder;
     private FileIndexTriggerPort fileIndexTriggerPort;
+    private DomainEventPublisher domainEventPublisher;
     private FileUploadService service;
 
     @BeforeEach
@@ -78,10 +85,13 @@ class FileUploadServiceTest {
         pdfPageCounterPort = Mockito.mock(PdfPageCounterPort.class);
         failureRecorder = Mockito.mock(FileVersionFailureRecorder.class);
         fileIndexTriggerPort = Mockito.mock(FileIndexTriggerPort.class);
+        CurrentCompanyIdProvider currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
+        domainEventPublisher = Mockito.mock(DomainEventPublisher.class);
         service = new FileUploadService(
                 blockCatalogPort, stepAccessUseCase, fileRepository, fileVersionRepository,
                 blockFileRepository, fileQueryPort, uploaderLookupPort, fileStoragePort, pdfPageCounterPort,
-                failureRecorder, fileIndexTriggerPort);
+                failureRecorder, fileIndexTriggerPort, currentCompanyIdProvider, domainEventPublisher);
     }
 
     private void stubBlockAndEditable() {
@@ -102,7 +112,7 @@ class FileUploadServiceTest {
 
     private FileVersion uploadingVersion(Long id, Long fileId, int versionNo, String ext) {
         return FileVersion.restore(id, fileId, versionNo, UploadStatus.UPLOADING,
-                "projects/100/files/31/versions/" + versionNo + "/uuid." + ext,
+                "companies/1/projects/100/files/31/versions/" + versionNo + "/uuid." + ext,
                 "제안서_v" + versionNo + "." + ext, ext, "application/pdf", 5000L, null, null, "초안",
                 USER, "이영희", "제안팀", "선임연구원", null, null);
     }
@@ -242,6 +252,15 @@ class FileUploadServiceTest {
             assertThat(result.name()).isEqualTo("제안서");
             assertThat(version.getUploadStatus()).isEqualTo(UploadStatus.COMPLETED);
             verify(fileIndexTriggerPort, times(1)).triggerIndexing(74L);
+
+            // 활동 로그: 업로드 완료 = CREATE, blockId·fileId·파일명이 실린다.
+            ArgumentCaptor<ActivityOccurredEvent> event = ArgumentCaptor.forClass(ActivityOccurredEvent.class);
+            verify(domainEventPublisher).publish(event.capture());
+            assertThat(event.getValue().action()).isEqualTo(ActivityLogAction.CREATE);
+            assertThat(event.getValue().blockId()).isEqualTo(BLOCK_ID);
+            assertThat(event.getValue().resourceId()).isEqualTo(31L);
+            assertThat(event.getValue().resourceName()).isEqualTo("제안서");
+            assertThat(event.getValue().actorId()).isEqualTo(USER);
         }
 
         @Test
