@@ -33,6 +33,7 @@ import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalListMapper;
 import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLinePreviewRow;
 import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalListRow;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,7 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
     private final ApprovalLineDetailPort approvalLineDetailPort;
     private final ApprovalListMapper approvalListMapper;
     private final BlockCatalogPort blockCatalogPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public ApprovalRevisionDetail getRevisionDetail(GetApprovalRevisionQuery query) {
@@ -72,7 +74,7 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         viewPolicy.assertViewable(approval, lines, query.requesterId());
 
         EmployeeSummary drafter = employeeCatalogPort.findEmployee(approval.getDrafterId())
-                .orElse(new EmployeeSummary(approval.getDrafterId(), null, null, null, null));
+                .orElse(new EmployeeSummary(approval.getDrafterId(), null, null, null, null, null));
 
         List<ApprovalDocumentView> documents = approvalRepository.findDocumentsByRevisionId(query.revisionId())
                 .stream()
@@ -114,12 +116,14 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
             default -> drafterId = query.requesterId(); // "drafted" (기본값)
         }
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+
         long totalElements = approvalListMapper.countApprovals(
-                query.status(), drafterId, approverId, activeApproverId,
+                companyId, query.status(), drafterId, approverId, activeApproverId,
                 query.fromDate(), query.toDate(), query.keyword(), query.revisionNo());
 
         List<ApprovalListRow> rows = approvalListMapper.findApprovals(
-                query.status(), drafterId, approverId, activeApproverId,
+                companyId, query.status(), drafterId, approverId, activeApproverId,
                 query.fromDate(), query.toDate(), query.keyword(), query.revisionNo(),
                 query.page() * query.size(), query.size());
 
@@ -157,7 +161,7 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         viewPolicy.assertViewable(approval, lines, query.requesterId());
 
         EmployeeSummary drafter = employeeCatalogPort.findEmployee(approval.getDrafterId())
-                .orElse(new EmployeeSummary(approval.getDrafterId(), null, null, null, null));
+                .orElse(new EmployeeSummary(approval.getDrafterId(), null, null, null, null, null));
 
         List<ApprovalDocumentView> documents = approvalRepository.findDocumentsByRevisionId(revision.getRevisionId())
                 .stream()

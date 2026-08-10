@@ -198,6 +198,6 @@ class ApprovalCommandServiceActivityLogTest {
     }
 
     private EmployeeSummary employee(String userId, String name) {
-        return new EmployeeSummary(userId, name, null, null, null);
+        return new EmployeeSummary(userId, name, null, null, null, null);
     }
 }
