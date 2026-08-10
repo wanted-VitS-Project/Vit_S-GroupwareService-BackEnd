@@ -1,12 +1,15 @@
 package com.group3.vitamins.bidding.collectioncondition.application.service;
 
 import com.group3.vitamins.bidding.collectioncondition.application.command.CreateCollectionConditionCommand;
+import com.group3.vitamins.bidding.collectioncondition.application.command.UpdateCollectionConditionCommand;
+import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.*;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionConditionRepository;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionSourceRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,7 @@ class CollectionConditionServiceTest {
     private CollectionConditionRepository conditionRepository;
     private CollectionSourceRepository sourceRepository;
     private CurrentCompanyIdProvider companyIdProvider;
+    private BiddingAccessPolicy biddingAccessPolicy;
     private CollectionConditionService service;
 
     @BeforeEach
@@ -35,13 +39,15 @@ class CollectionConditionServiceTest {
         conditionRepository = mock(CollectionConditionRepository.class);
         sourceRepository = mock(CollectionSourceRepository.class);
         companyIdProvider = mock(CurrentCompanyIdProvider.class);
+        biddingAccessPolicy = mock(BiddingAccessPolicy.class);
 
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
 
         service = new CollectionConditionService(
                 conditionRepository,
                 sourceRepository,
-                companyIdProvider
+                companyIdProvider,
+                biddingAccessPolicy
         );
     }
 
@@ -51,8 +57,9 @@ class CollectionConditionServiceTest {
         when(conditionRepository.findAllNotDeleted(COMPANY_ID))
                 .thenReturn(List.of());
 
-        assertThat(service.getAll()).isEmpty();
+        assertThat(service.getAll(USER_ID, "ADMIN")).isEmpty();
 
+        verify(biddingAccessPolicy).assertAccess(USER_ID, "ADMIN");
         verify(conditionRepository).findAllNotDeleted(COMPANY_ID);
     }
 
@@ -114,7 +121,8 @@ class CollectionConditionServiceTest {
                         List.of(BidNoticeType.CONSTRUCTION, BidNoticeType.SERVICE),
                         filters,
                         true,
-                        USER_ID
+                        USER_ID,
+                        "ADMIN"
                 );
 
         assertError(
@@ -136,7 +144,8 @@ class CollectionConditionServiceTest {
                         List.of(BidNoticeType.SERVICE),
                         validFilter(),
                         null,
-                        USER_ID
+                        USER_ID,
+                        "ADMIN"
                 );
 
         assertError(
@@ -154,8 +163,109 @@ class CollectionConditionServiceTest {
                 List.of(BidNoticeType.SERVICE),
                 validFilter(),
                 true,
-                USER_ID
+                USER_ID,
+                "ADMIN"
         );
+    }
+
+    @Test
+    @DisplayName("공백 키워드가 포함되면 등록을 거부한다")
+    void rejectsBlankKeyword() {
+        CollectionConditionFilter filter = new CollectionConditionFilter(
+                List.of(" "), List.of("11"), List.of("6202"),
+                null, null, true, InternationalBidType.DOMESTIC
+        );
+
+        assertError(
+                () -> service.create(new CreateCollectionConditionCommand(
+                        "NARA", "수집 조건", List.of(BidNoticeType.SERVICE),
+                        filter, true, USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_INVALID_COLLECTION_CONDITION
+        );
+
+        verify(conditionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("입찰 관리 권한이 없으면 조건 등록을 거부한다")
+    void rejectsCreateWithoutBiddingAccess() {
+        doThrow(new ForbiddenException(
+                BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED
+        )).when(biddingAccessPolicy).assertAccess(USER_ID, "MEMBER");
+
+        CreateCollectionConditionCommand command = new CreateCollectionConditionCommand(
+                "NARA", "수집 조건", List.of(BidNoticeType.SERVICE),
+                validFilter(), true, USER_ID, "MEMBER"
+        );
+
+        assertError(
+                () -> service.create(command),
+                BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED
+        );
+        verify(conditionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("수정 요청도 외부 API 호출 조합 제한을 적용한다")
+    void rejectsUpdateWithTooManyQueryCombinations() {
+        CollectionConditionFilter filters = new CollectionConditionFilter(
+                List.of("키워드1", "키워드2"),
+                List.of("11", "26", "41"),
+                List.of("6201", "6202"),
+                null, null, true, InternationalBidType.DOMESTIC
+        );
+        UpdateCollectionConditionCommand command = new UpdateCollectionConditionCommand(
+                1L, "과다 호출 조건",
+                List.of(BidNoticeType.CONSTRUCTION, BidNoticeType.SERVICE),
+                filters, true, USER_ID, "ADMIN"
+        );
+
+        assertError(
+                () -> service.update(command),
+                BiddingErrorCode.BIDDING_COLLECTION_QUERY_LIMIT_EXCEEDED
+        );
+        verify(conditionRepository, never()).findNotDeletedById(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("현재 회사가 소유한 수집 조건의 내용을 전체 교체한다")
+    void updatesOwnedCondition() {
+        CollectionCondition condition = CollectionCondition.create(
+                COMPANY_ID, "NARA", "기존 조건",
+                List.of(BidNoticeType.CONSTRUCTION), validFilter(), true,
+                USER_ID, java.time.LocalDateTime.now()
+        );
+        CollectionCondition restored = CollectionCondition.restore(
+                1L, COMPANY_ID, condition.getSourceCode(), condition.getConditionName(),
+                condition.getNoticeTypes(), condition.getFilters(), condition.isActive(),
+                null, null, USER_ID, java.time.LocalDateTime.now(), null, null
+        );
+        CollectionConditionFilter replacement = new CollectionConditionFilter(
+                List.of("교체 키워드"), List.of("26"), List.of("7101"),
+                null, null, false, InternationalBidType.INTERNATIONAL
+        );
+        UpdateCollectionConditionCommand command = new UpdateCollectionConditionCommand(
+                1L, "변경 조건", List.of(BidNoticeType.SERVICE), replacement,
+                false, USER_ID, "ADMIN"
+        );
+
+        when(conditionRepository.findNotDeletedById(1L, COMPANY_ID))
+                .thenReturn(Optional.of(restored));
+        when(conditionRepository.save(any(CollectionCondition.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(sourceRepository.findNotDeletedByCode("NARA"))
+                .thenReturn(Optional.of(new CollectionSource(
+                        1L, "NARA", "나라장터", "OPEN_API", true
+                )));
+
+        service.update(command);
+
+        assertThat(restored.getConditionName()).isEqualTo("변경 조건");
+        assertThat(restored.getNoticeTypes()).containsExactly(BidNoticeType.SERVICE);
+        assertThat(restored.getFilters().keywords()).containsExactly("교체 키워드");
+        assertThat(restored.isActive()).isFalse();
+        verify(conditionRepository).findNotDeletedById(1L, COMPANY_ID);
     }
 
     private CollectionConditionFilter validFilter() {

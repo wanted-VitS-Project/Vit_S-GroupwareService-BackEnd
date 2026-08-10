@@ -3,6 +3,7 @@ package com.group3.vitamins.bidding.collectioncondition.application.service;
 import com.group3.vitamins.bidding.collectioncondition.application.command.CreateCollectionConditionCommand;
 import com.group3.vitamins.bidding.collectioncondition.application.command.UpdateCollectionConditionCommand;
 import com.group3.vitamins.bidding.collectioncondition.application.result.CollectionConditionResult;
+import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.bidding.collectioncondition.application.usecase.CollectionConditionUseCase;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
@@ -30,15 +31,20 @@ public class CollectionConditionService implements CollectionConditionUseCase {
     private static final int MAX_SOURCE_CODE_LENGTH = 30;
     private static final int MAX_CONDITION_NAME_LENGTH = 100;
     private static final int MAX_QUERY_COMBINATION_COUNT = 20;
+    private static final int MAX_KEYWORD_LENGTH = 100;
+    private static final int MAX_REGION_CODE_LENGTH = 20;
+    private static final int MAX_INDUSTRY_CODE_LENGTH = 30;
 
     private final CollectionConditionRepository conditionRepository;
     private final CollectionSourceRepository sourceRepository;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final BiddingAccessPolicy biddingAccessPolicy;
 
     // 현재 회사가 소유한 수집 조건 목록만 조회합니다.
     @Override
     @Transactional(readOnly = true)
-    public List<CollectionConditionResult> getAll() {
+    public List<CollectionConditionResult> getAll(String userId, String role) {
+        biddingAccessPolicy.assertAccess(userId, role);
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<CollectionCondition> conditions =
                 conditionRepository.findAllNotDeleted(companyId);
@@ -62,6 +68,7 @@ public class CollectionConditionService implements CollectionConditionUseCase {
             CreateCollectionConditionCommand command
     ) {
         validateCreateCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         CollectionSource source = getAvailableSource(command.sourceCode());
@@ -87,6 +94,7 @@ public class CollectionConditionService implements CollectionConditionUseCase {
             UpdateCollectionConditionCommand command
     ) {
         validateUpdateCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
 
@@ -161,10 +169,12 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                 || noticeTypes == null
                 || noticeTypes.isEmpty()
                 || filters == null
+                || filters.keywords() == null
                 || filters.keywords().isEmpty()) {
             throw invalidCondition();
         }
 
+        validateFilterStrings(filters);
         validateEstimatedPriceRange(filters);
         validateQueryCombinationCount(noticeTypes.size(), filters);
     }
@@ -190,7 +200,8 @@ public class CollectionConditionService implements CollectionConditionUseCase {
             int noticeTypeCount,
             CollectionConditionFilter filters
     ) {
-        int keywordCount = filters.keywords().size();
+        // 키워드는 필수지만 검증 순서가 바뀌어도 조합 수가 0이 되지 않게 방어합니다.
+        int keywordCount = atLeastOne(filters.keywords().size());
         int regionCount = atLeastOne(filters.regionCodes().size());
         int industryCount = atLeastOne(filters.industryCodes().size());
 
@@ -204,6 +215,21 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                     BiddingErrorCode.BIDDING_COLLECTION_QUERY_LIMIT_EXCEEDED
             );
         }
+    }
+
+    // 외부 수집 요청에 사용되는 문자열이 공백이 아니고 허용 길이 안인지 검증합니다.
+    private void validateFilterStrings(CollectionConditionFilter filters) {
+        if (containsInvalidValue(filters.keywords(), MAX_KEYWORD_LENGTH)
+                || containsInvalidValue(filters.regionCodes(), MAX_REGION_CODE_LENGTH)
+                || containsInvalidValue(filters.industryCodes(), MAX_INDUSTRY_CODE_LENGTH)) {
+            throw invalidCondition();
+        }
+    }
+
+    // 목록에 null·공백·길이 초과 값이 하나라도 있는지 확인합니다.
+    private boolean containsInvalidValue(List<String> values, int maxLength) {
+        return values == null || values.stream()
+                .anyMatch(value -> isBlank(value) || value.length() > maxLength);
     }
 
     // 등록에 사용할 수 있는 활성 수집처를 반환합니다.

@@ -7,13 +7,14 @@ import com.group3.vitamins.bidding.collectioncondition.presentation.api.request.
 import com.group3.vitamins.bidding.collectioncondition.presentation.api.response.CollectionConditionListResponse;
 import com.group3.vitamins.bidding.collectioncondition.presentation.api.response.CollectionConditionResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
+import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,10 +53,15 @@ public class CollectionConditionController {
             )
     })
     @GetMapping
-    public ResponseEntity<ApiResponse<CollectionConditionListResponse>> getAll() {
+    public ResponseEntity<ApiResponse<CollectionConditionListResponse>> getAll(
+            Authentication authentication
+    ) {
         CollectionConditionListResponse response =
                 CollectionConditionListResponse.from(
-                        collectionConditionUseCase.getAll()
+                        collectionConditionUseCase.getAll(
+                                authentication.getName(),
+                                RequesterRole.from(authentication)
+                        )
                 );
 
         return ResponseEntity.ok(
@@ -92,11 +98,14 @@ public class CollectionConditionController {
     })
     @PostMapping
     public ResponseEntity<ApiResponse<CollectionConditionResponse>> create(
-            @AuthenticationPrincipal String userId,
-            @RequestBody CreateCollectionConditionRequest request
+            @RequestBody CreateCollectionConditionRequest request,
+            Authentication authentication
     ) {
         CollectionConditionResult result =
-                collectionConditionUseCase.create(request.toCommand(userId));
+                collectionConditionUseCase.create(request.toCommand(
+                        authentication.getName(),
+                        RequesterRole.from(authentication)
+                ));
 
         return ResponseEntity.status(201).body(
                 ApiResponse.created(
@@ -135,14 +144,18 @@ public class CollectionConditionController {
     })
     @PatchMapping("/{conditionId}")
     public ResponseEntity<ApiResponse<CollectionConditionResponse>> update(
-            @AuthenticationPrincipal String userId,
             @Parameter(description = "수정할 수집 조건 ID")
             @PathVariable Long conditionId,
-            @RequestBody UpdateCollectionConditionRequest request
+            @RequestBody UpdateCollectionConditionRequest request,
+            Authentication authentication
     ) {
         CollectionConditionResult result =
                 collectionConditionUseCase.update(
-                        request.toCommand(conditionId, userId)
+                        request.toCommand(
+                                conditionId,
+                                authentication.getName(),
+                                RequesterRole.from(authentication)
+                        )
                 );
 
         return ResponseEntity.ok(

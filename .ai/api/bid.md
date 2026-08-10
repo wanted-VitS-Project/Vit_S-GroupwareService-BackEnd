@@ -312,7 +312,8 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 **상태**: ✅ 확정
 
 현재 회사가 소유한 활성 수집 조건으로 입찰 공고 수집 작업을 요청한다.
-수집 작업은 Redis Stream을 통해 Spring Worker가 비동기로 처리한다.
+현재 범위에서는 실행 이력을 `PENDING`으로 생성하고 `runId`를 반환한다.
+Redis Stream 발행, Spring Worker 처리와 외부 수집처 호출은 후속 구현 범위다.
 
 #### Path Parameter
 
@@ -332,10 +333,8 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 | 활성 조건 | `is_active = true`인 조건만 실행할 수 있다 |
 | 중복 실행 | 같은 조건에 `PENDING` 또는 `PROCESSING` 실행이 있으면 새 실행을 거부한다 |
 | 초기 상태 | `PENDING` |
-| 실행 방식 | DB에 `crawl_run`을 저장한 뒤 Redis Stream 작업을 발행한다 |
-| 작업 처리 | Spring Worker가 작업을 소비하고 나라장터 API를 호출한다 |
-| 재시도 | 네트워크 오류, HTTP 429, HTTP 5xx만 최대 3회 재시도한다 |
-| 재시도 제외 | 요청값 오류와 인증 오류는 재시도하지 않는다 |
+| 현재 실행 방식 | DB에 `crawl_run`을 `PENDING` 상태로 저장하고 `runId`를 반환한다 |
+| 후속 구현 | Redis Stream 발행, Spring Worker 처리, 외부 수집처 호출과 재시도 정책은 별도 이슈에서 확정한다 |
 | 회사 격리 | `crawl_run -> crawl_condition.company_id` 경로로 현재 회사를 검증한다 |
 
 #### Success Response
@@ -380,11 +379,11 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 
 | 상태 | 설명 |
 |------|------|
-| `PENDING` | 작업 접수 후 Worker 처리 대기 |
-| `PROCESSING` | 외부 공고 수집 및 저장 진행 중 |
-| `COMPLETED` | 모든 호출과 저장이 정상 완료됨 |
-| `PARTIAL_SUCCESS` | 일부 검색 조합은 성공하고 일부는 실패함 |
-| `FAILED` | 유효한 결과를 저장하지 못하고 실행이 종료됨 |
+| `PENDING` | 현재 구현에서 생성되는 수집 실행 접수 상태 |
+| `PROCESSING` | 후속 Worker 구현에서 사용할 처리 중 상태 |
+| `COMPLETED` | 후속 Worker 구현에서 사용할 정상 완료 상태 |
+| `PARTIAL_SUCCESS` | 후속 Worker 구현에서 사용할 부분 성공 상태 |
+| `FAILED` | 후속 Worker 구현에서 사용할 실패 상태 |
 
 | 응답값 | 설명 |
 |--------|------|

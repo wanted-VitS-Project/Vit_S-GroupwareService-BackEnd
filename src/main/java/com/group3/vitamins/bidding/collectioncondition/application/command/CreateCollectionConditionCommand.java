@@ -12,6 +12,7 @@ public record CreateCollectionConditionCommand(
         List<BidNoticeType> noticeTypes,
         CollectionConditionFilter filters,
         Boolean active,
-        String userId
+        String userId,
+        String role
 ) {
 }

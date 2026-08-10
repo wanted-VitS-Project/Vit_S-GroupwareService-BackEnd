@@ -28,14 +28,15 @@ public record CreateCollectionConditionRequest(
 ) {
 
     // HTTP 요청과 현재 인증 사용자를 등록 Command로 변환합니다.
-    public CreateCollectionConditionCommand toCommand(String userId) {
+    public CreateCollectionConditionCommand toCommand(String userId, String role) {
         return new CreateCollectionConditionCommand(
                 sourceCode,
                 conditionName,
                 noticeTypes,
                 filters == null ? null : filters.toDomain(),
                 isActive,
-                userId
+                userId,
+                role
         );
     }
 }

@@ -8,6 +8,10 @@ import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatu
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
 import com.group3.vitamins.bidding.collectionrun.presentation.api.response.CollectionRunResponse;
 import com.group3.vitamins.bidding.collectionrun.presentation.api.response.StartCollectionRunResponse;
+import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,6 +84,48 @@ class CollectionRunControllerTest {
                     .isEqualTo(CONDITION_ID);
             assertThat(commandCaptor.getValue().userId()).isEqualTo(USER_ID);
         }
+
+        @Test
+        @DisplayName("진행 중인 실행이 있으면 충돌 예외를 전달한다")
+        void propagatesAlreadyProcessingConflict() {
+            ConflictException expected = new ConflictException(
+                    BiddingErrorCode.BIDDING_COLLECTION_RUN_ALREADY_PROCESSING
+            );
+            when(collectionRunUseCase.start(
+                    new StartCollectionRunCommand(CONDITION_ID, USER_ID)
+            )).thenThrow(expected);
+
+            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID))
+                    .isSameAs(expected);
+        }
+
+        @Test
+        @DisplayName("수집 조건이 없으면 찾을 수 없음 예외를 전달한다")
+        void propagatesConditionNotFound() {
+            NotFoundException expected = new NotFoundException(
+                    BiddingErrorCode.BIDDING_COLLECTION_CONDITION_NOT_FOUND
+            );
+            when(collectionRunUseCase.start(
+                    new StartCollectionRunCommand(CONDITION_ID, USER_ID)
+            )).thenThrow(expected);
+
+            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID))
+                    .isSameAs(expected);
+        }
+
+        @Test
+        @DisplayName("비활성 수집 조건이면 검증 예외를 전달한다")
+        void propagatesInactiveCondition() {
+            ValidationException expected = new ValidationException(
+                    BiddingErrorCode.BIDDING_INACTIVE_COLLECTION_CONDITION
+            );
+            when(collectionRunUseCase.start(
+                    new StartCollectionRunCommand(CONDITION_ID, USER_ID)
+            )).thenThrow(expected);
+
+            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID))
+                    .isSameAs(expected);
+        }
     }
 
     @Nested
@@ -121,6 +168,19 @@ class CollectionRunControllerTest {
             verify(collectionRunUseCase).get(
                     new GetCollectionRunQuery(RUN_ID)
             );
+        }
+
+        @Test
+        @DisplayName("현재 회사의 실행이 없으면 찾을 수 없음 예외를 전달한다")
+        void propagatesRunNotFound() {
+            NotFoundException expected = new NotFoundException(
+                    BiddingErrorCode.BIDDING_COLLECTION_RUN_NOT_FOUND
+            );
+            when(collectionRunUseCase.get(new GetCollectionRunQuery(RUN_ID)))
+                    .thenThrow(expected);
+
+            assertThatThrownBy(() -> controller.get(RUN_ID))
+                    .isSameAs(expected);
         }
     }
 

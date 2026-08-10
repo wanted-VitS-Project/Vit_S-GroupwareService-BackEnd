@@ -27,7 +27,8 @@ public record UpdateCollectionConditionRequest(
     // Path의 조건 ID와 인증 사용자를 수정 Command로 변환합니다.
     public UpdateCollectionConditionCommand toCommand(
             Long conditionId,
-            String userId
+            String userId,
+            String role
     ) {
         return new UpdateCollectionConditionCommand(
                 conditionId,
@@ -35,7 +36,8 @@ public record UpdateCollectionConditionRequest(
                 noticeTypes,
                 filters == null ? null : filters.toDomain(),
                 isActive,
-                userId
+                userId,
+                role
         );
     }
 }

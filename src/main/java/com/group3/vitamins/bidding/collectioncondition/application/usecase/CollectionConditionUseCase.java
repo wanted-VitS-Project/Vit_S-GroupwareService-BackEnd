@@ -8,8 +8,8 @@ import java.util.List;
 
 public interface CollectionConditionUseCase {
 
-    // 논리 삭제되지 않은 모든 수집 조건을 조회합니다.
-    List<CollectionConditionResult> getAll();
+    // 현재 회사에서 접근 권한이 있는 사용자의 수집 조건만 조회합니다.
+    List<CollectionConditionResult> getAll(String userId, String role);
 
     // 새로운 수집 조건을 등록합니다.
     CollectionConditionResult create(CreateCollectionConditionCommand command);

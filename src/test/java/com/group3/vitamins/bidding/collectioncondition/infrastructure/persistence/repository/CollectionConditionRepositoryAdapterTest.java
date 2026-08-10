@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.enabled=false",
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
+// 운영 초기화 SQL 대신 Hibernate가 만든 H2 스키마만 사용하는 저장소 단위 테스트입니다.
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({
         CollectionConditionRepositoryAdapter.class,
@@ -107,7 +108,45 @@ class CollectionConditionRepositoryAdapterTest {
         assertThat(results.get(0).getCompanyId()).isEqualTo(COMPANY_ID);
     }
 
+    @Test
+    @DisplayName("논리 삭제된 수집 조건은 단건과 목록 조회에서 제외한다")
+    void excludesDeletedCondition() {
+        CollectionCondition saved = adapter.save(condition(COMPANY_ID));
+        saved.delete(LocalDateTime.now());
+        adapter.save(saved);
+
+        assertThat(adapter.findNotDeletedById(
+                saved.getConditionId(), COMPANY_ID
+        )).isEmpty();
+        assertThat(adapter.findAllNotDeleted(COMPANY_ID)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("목록은 최근 등록된 수집 조건부터 반환한다")
+    void listsNewestConditionFirst() {
+        CollectionCondition oldCondition = conditionAt(
+                COMPANY_ID, "이전 조건", LocalDateTime.of(2026, 8, 10, 10, 0)
+        );
+        CollectionCondition newCondition = conditionAt(
+                COMPANY_ID, "최근 조건", LocalDateTime.of(2026, 8, 10, 11, 0)
+        );
+        adapter.save(oldCondition);
+        adapter.save(newCondition);
+
+        assertThat(adapter.findAllNotDeleted(COMPANY_ID))
+                .extracting(CollectionCondition::getConditionName)
+                .containsExactly("최근 조건", "이전 조건");
+    }
+
     private CollectionCondition condition(Long companyId) {
+        return conditionAt(companyId, "수도권 스마트시티", LocalDateTime.now());
+    }
+
+    private CollectionCondition conditionAt(
+            Long companyId,
+            String name,
+            LocalDateTime createdAt
+    ) {
         CollectionConditionFilter filter = new CollectionConditionFilter(
                 List.of("스마트시티", "통합관제"),
                 List.of("11", "41"),
@@ -121,12 +160,12 @@ class CollectionConditionRepositoryAdapterTest {
         return CollectionCondition.create(
                 companyId,
                 "NARA",
-                "수도권 스마트시티",
+                name,
                 List.of(BidNoticeType.CONSTRUCTION, BidNoticeType.SERVICE),
                 filter,
                 true,
                 "EMP001",
-                LocalDateTime.now()
+                createdAt
         );
     }
 
