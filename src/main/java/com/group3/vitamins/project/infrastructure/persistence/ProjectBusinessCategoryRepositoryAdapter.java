@@ -27,4 +27,10 @@ public class ProjectBusinessCategoryRepositoryAdapter implements ProjectBusiness
                 .toList();
     }
 
+    @Override
+    public boolean unlink(Long projectId, Long businessCategoryId) {
+        return springDataRepository
+                .deleteByProjectIdAndBusinessCategoryId(projectId, businessCategoryId) > 0;
+    }
+
 }

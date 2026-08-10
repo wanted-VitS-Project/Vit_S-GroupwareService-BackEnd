@@ -8,4 +8,6 @@ public interface SpringDataProjectBusinessCategoryRepository
         extends JpaRepository<ProjectBusinessCategoryJpaEntity, Long> {
 
     List<ProjectBusinessCategoryJpaEntity> findByProjectId(Long projectId);
+
+    long deleteByProjectIdAndBusinessCategoryId(Long projectId, Long businessCategoryId);
 }

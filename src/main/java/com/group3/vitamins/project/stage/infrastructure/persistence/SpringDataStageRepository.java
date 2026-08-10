@@ -4,7 +4,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface SpringDataStageRepository extends JpaRepository<StageJpaEntity, Long> {
 
@@ -14,6 +16,11 @@ public interface SpringDataStageRepository extends JpaRepository<StageJpaEntity,
     Integer findMaxSortOrder(@Param("projectId") Long projectId);
 
     List<StageJpaEntity> findByProjectIdAndDeletedAtIsNullOrderBySortOrderAsc(Long projectId);
+
+    Optional<StageJpaEntity> findByStageIdAndDeletedAtIsNull(Long stageId);
+
+    List<StageJpaEntity> findByStageIdInAndProjectIdAndDeletedAtIsNull(
+            Collection<Long> stageIds, Long projectId);
 
     boolean existsByStageIdAndProjectIdAndDeletedAtIsNull(Long stageId, Long projectId);
 }

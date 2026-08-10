@@ -5,9 +5,12 @@ import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.block.application.command.DeleteBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockCommand;
+import com.group3.vitamins.project.block.application.result.BlockMoveResult;
 import com.group3.vitamins.project.block.application.result.BlockUpdateResult;
 import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
+import com.group3.vitamins.project.block.presentation.api.request.BlockMoveRequest;
 import com.group3.vitamins.project.block.presentation.api.request.BlockUpdateRequest;
+import com.group3.vitamins.project.block.presentation.api.response.BlockMoveResponse;
 import com.group3.vitamins.project.block.presentation.api.response.BlockUpdateResponse;
 import com.group3.vitamins.project.presentation.api.ProjectResponseMessage;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,6 +19,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -72,9 +76,10 @@ public class BlockController {
     }
 
     @Operation(summary = "블록 삭제",
-            description = "잠금 4종(입금 연결 입금확인 · 계산서 연결 조회 · 진행 중 결재 · 결재 대상 파일)을 "
-                    + "검사한 뒤 논리 삭제한다. 하드 삭제 API 는 존재하지 않는다. "
-                    + "타입별 상세 행도 같은 트랜잭션에서 함께 삭제된다.")
+            description = "블록을 논리 삭제한다. 하드 삭제 API 는 존재하지 않는다. "
+                    + "타입별 상세 행도 같은 트랜잭션에서 함께 삭제된다. "
+                    + "⛔ 삭제 잠금 4종은 폐기됐다(2026-08-09) — 막는 대신 옮길 수단을 준다. "
+                    + "입금·계산서 연결 해제는 별도 작업으로 붙는다(BLK-013).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "삭제 성공"),
@@ -83,9 +88,7 @@ public class BlockController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "BLOCK_NOT_FOUND — 블록이 존재하지 않음"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "BLOCK_DELETE_LOCKED — 잠금 대상 블록")
+                    description = "BLOCK_NOT_FOUND — 블록이 존재하지 않음")
     })
     @DeleteMapping("/{blockId}")
     public ResponseEntity<ApiResponse<Void>> deleteBlock(
@@ -97,6 +100,41 @@ public class BlockController {
                 blockId, authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success(ProjectResponseMessage.SUCCESS));
+    }
+
+    @Operation(summary = "블록 이동",
+            description = "블록을 같은 프로젝트의 다른 스텝으로 옮긴다(BLK-014). "
+                    + "출발·도착 양쪽 스텝의 EDITOR 여야 한다. "
+                    + "⚠️ 연결된 이슈가 있으면 issue_block 연결이 끊긴다 — 블록과 이슈는 같은 스텝이어야 하기 때문이다"
+                    + "(BLK-009 · INV-06). 끊긴 수는 응답의 unlinkedIssueCount 로 내려간다. "
+                    + "배치는 도착 스텝의 맨 아래 새 행에 붙는다 — 정렬은 배치 변경 API 로 조정한다. "
+                    + "⛔ 다른 프로젝트로는 못 옮긴다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이동 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "BLOCK_MOVE_TARGET_REQUIRED / BLOCK_MOVE_TARGET_INVALID"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "STEP_EDIT_DENIED — 출발 또는 도착 스텝의 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "BLOCK_NOT_FOUND / STEP_NOT_FOUND")
+    })
+    @PatchMapping("/{blockId}/step")
+    public ResponseEntity<ApiResponse<BlockMoveResponse>> moveBlock(
+            @Parameter(description = "옮길 블록 ID")
+            @PathVariable Long blockId,
+            @Valid @RequestBody BlockMoveRequest request,
+            Authentication authentication
+    ) {
+        BlockMoveResult result = blockCommandUseCase.moveBlock(
+                request.toCommand(blockId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        BlockMoveResponse.from(result)));
     }
 
     /**
