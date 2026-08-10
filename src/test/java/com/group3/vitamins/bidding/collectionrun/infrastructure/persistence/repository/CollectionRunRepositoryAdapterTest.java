@@ -195,7 +195,9 @@ class CollectionRunRepositoryAdapterTest {
                 condition.getSourceCode(),
                 condition.getConditionName(),
                 condition.getNoticeTypes(),
-                condition.getFilters()
+                condition.getFilters(),
+                LocalDateTime.of(2026, 8, 9, 0, 0),
+                LocalDateTime.of(2026, 8, 10, 0, 0)
         );
     }
 

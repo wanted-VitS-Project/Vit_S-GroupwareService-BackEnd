@@ -1,4 +1,4 @@
-package com.group3.vitamins.bidding.presentation;
+package com.group3.vitamins.bidding.legacy.presentation;
 
 import com.group3.vitamins.bidding.collectionrun.application.command.StartCollectionRunCommand;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
