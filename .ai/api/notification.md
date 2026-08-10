@@ -145,7 +145,7 @@
 ```
 
 ```json
-{ "httpStatus": 200, "message": "알림 이동 대상 조회 성공", "data": { "type": "ISSUE", "targetId": 12, "extra": null } }
+{ "httpStatus": 200, "message": "알림 이동 대상 조회 성공", "data": { "type": "ISSUE", "targetId": 12, "extra": { "projectId": 3, "stepId": 10 } } }
 ```
 
 ```json

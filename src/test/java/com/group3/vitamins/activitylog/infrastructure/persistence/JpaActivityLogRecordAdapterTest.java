@@ -34,7 +34,7 @@ class JpaActivityLogRecordAdapterTest {
                 )
         );
 
-        adapter.record(event);
+        adapter.record(event, 7L);
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         ArgumentCaptor<Iterable<ActivityLogEntity>> captor = ArgumentCaptor.forClass((Class) Iterable.class);
@@ -52,6 +52,7 @@ class JpaActivityLogRecordAdapterTest {
                     assertThat(log.getResourceId()).isEqualTo(20L);
                     assertThat(log.getResourceName()).isEqualTo("체크리스트 항목");
                     assertThat(log.getUserId()).isEqualTo("EMP001");
+                    assertThat(log.getCompanyId()).isEqualTo(7L);
                 });
     }
 

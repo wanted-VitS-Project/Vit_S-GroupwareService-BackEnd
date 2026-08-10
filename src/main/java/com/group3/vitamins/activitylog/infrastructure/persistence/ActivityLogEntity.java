@@ -26,6 +26,9 @@ public class ActivityLogEntity {
     @Column(name = "activity_log_id")
     private Long activityLogId;
 
+    @Column(name = "company_id", nullable = false, updatable = false)
+    private Long companyId;
+
     @Convert(converter = ActivityLogActionConverter.class)
     @Column(name = "act", nullable = false,
             columnDefinition = "enum('create','delete','modify','restore','purge')")
@@ -64,9 +67,11 @@ public class ActivityLogEntity {
             String field,
             String beforeValue,
             String afterValue,
-            String userId
+            String userId,
+            Long companyId
     ) {
         ActivityLogEntity log = new ActivityLogEntity();
+        log.companyId = companyId;
         log.act = act;
         log.blockId = blockId;
         log.resourceId = resourceId;

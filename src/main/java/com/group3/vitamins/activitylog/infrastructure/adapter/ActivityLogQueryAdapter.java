@@ -29,8 +29,14 @@ public class ActivityLogQueryAdapter implements ActivityLogQueryPort {
     }
 
     @Override
-    public List<ActivityLogLookupResult> findActivityLogs(Long stepId, Long blockId, Long cursor, int limit) {
-        return activityLogQueryMapper.findActivityLogs(stepId, blockId, cursor, limit).stream()
+    public List<ActivityLogLookupResult> findActivityLogs(
+            Long stepId,
+            Long blockId,
+            Long cursor,
+            int limit,
+            Long companyId
+    ) {
+        return activityLogQueryMapper.findActivityLogs(stepId, blockId, cursor, limit, companyId).stream()
                 .map(this::toResult)
                 .toList();
     }

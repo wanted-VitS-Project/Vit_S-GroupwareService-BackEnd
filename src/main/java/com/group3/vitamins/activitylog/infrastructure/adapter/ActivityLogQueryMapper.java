@@ -20,6 +20,7 @@ public interface ActivityLogQueryMapper {
             @Param("stepId") Long stepId,
             @Param("blockId") Long blockId,
             @Param("cursor") Long cursor,
-            @Param("limit") int limit
+            @Param("limit") int limit,
+            @Param("companyId") Long companyId
     );
 }
