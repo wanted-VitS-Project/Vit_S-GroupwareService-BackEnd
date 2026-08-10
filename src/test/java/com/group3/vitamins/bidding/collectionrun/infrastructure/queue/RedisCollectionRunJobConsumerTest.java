@@ -1,5 +1,8 @@
 package com.group3.vitamins.bidding.collectionrun.infrastructure.queue;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRequestCombination;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunFailureType;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunJob;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunJobResult;
@@ -73,7 +76,8 @@ class RedisCollectionRunJobConsumerTest {
         consumer = new RedisCollectionRunJobConsumer(
                 redisTemplate,
                 handlerPort,
-                clock
+                clock,
+                new ObjectMapper().findAndRegisterModules()
         );
         ReflectionTestUtils.setField(consumer, "streamKey", STREAM);
         ReflectionTestUtils.setField(consumer, "dlqStreamKey", STREAM + ":dlq");
@@ -89,8 +93,8 @@ class RedisCollectionRunJobConsumerTest {
 
     @Test
     @DisplayName("일시 실패 작업은 30초 뒤 재시도로 예약한 후 ACK한다")
-    void schedulesRetryBeforeAcknowledging() {
-        MapRecord<String, Object, Object> record = jobRecord("1-0", 0);
+    void schedulesRetryBeforeAcknowledging() throws Exception {
+        MapRecord<String, Object, Object> record = retryTargetJobRecord("1-0", 0);
         when(streamOperations.pending(STREAM, GROUP, Range.unbounded(), 10))
                 .thenReturn(new PendingMessages(GROUP, List.of()));
         when(streamOperations.read(
@@ -108,11 +112,25 @@ class RedisCollectionRunJobConsumerTest {
 
         consumer.consume();
 
+        ArgumentCaptor<String> valueCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Double> scoreCaptor = ArgumentCaptor.forClass(Double.class);
         verify(zSetOperations).add(
                 eq(RETRY_KEY),
-                any(),
+                valueCaptor.capture(),
                 scoreCaptor.capture()
+        );
+        CollectionRunJob retryJob = new ObjectMapper()
+                .findAndRegisterModules()
+                .readValue(valueCaptor.getValue(), CollectionRunJob.class);
+        assertThat(retryJob.retryCount()).isEqualTo(1);
+        assertThat(retryJob.retryTarget()).isEqualTo(
+                new CollectionRequestCombination(
+                        BidNoticeType.SERVICE,
+                        "스마트시티|통합관제",
+                        "11",
+                        "6202",
+                        2
+                )
         );
         assertThat(scoreCaptor.getValue())
                 .isEqualTo(Instant.parse("2026-08-10T07:30:30Z").toEpochMilli());
@@ -166,6 +184,28 @@ class RedisCollectionRunJobConsumerTest {
                         "companyId", "3",
                         "attemptId", "attempt-id",
                         "retryCount", String.valueOf(retryCount)
+                )
+        ).withId(RecordId.of(recordId));
+    }
+
+    // 재시도할 외부 API 요청 조합이 포함된 Redis 메시지를 만듭니다.
+    private MapRecord<String, Object, Object> retryTargetJobRecord(
+            String recordId,
+            int retryCount
+    ) {
+        return MapRecord.create(
+                STREAM,
+                Map.<Object, Object>of(
+                        "runId", "1",
+                        "conditionId", "2",
+                        "companyId", "3",
+                        "attemptId", "attempt-id",
+                        "retryCount", String.valueOf(retryCount),
+                        "retryNoticeType", "SERVICE",
+                        "retryKeyword", "스마트시티|통합관제",
+                        "retryRegionCode", "11",
+                        "retryIndustryCode", "6202",
+                        "retryPageNumber", "2"
                 )
         ).withId(RecordId.of(recordId));
     }

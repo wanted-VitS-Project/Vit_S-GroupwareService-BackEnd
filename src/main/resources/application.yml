@@ -173,3 +173,13 @@ vitamate:
 settlement:
   account-number:
     encryption-key: ${SETTLEMENT_ACCOUNT_ENC_KEY}
+
+
+#나라장터
+bidding:
+  nara:
+    base-url: ${NARA_API_BASE_URL:https://apis.data.go.kr/1230000/ad/BidPublicInfoService}
+    service-key: ${NARA_API_SERVICE_KEY:}
+    page-size: ${NARA_API_PAGE_SIZE:100}
+    connect-timeout: ${NARA_API_CONNECT_TIMEOUT:5s}
+    read-timeout: ${NARA_API_READ_TIMEOUT:15s}

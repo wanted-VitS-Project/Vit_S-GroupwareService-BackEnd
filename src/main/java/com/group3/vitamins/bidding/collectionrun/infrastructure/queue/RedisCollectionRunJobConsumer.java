@@ -1,5 +1,10 @@
 package com.group3.vitamins.bidding.collectionrun.infrastructure.queue;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRequestCombination;
+
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunJob;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunJobResult;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunFailureType;
@@ -47,6 +52,7 @@ public class RedisCollectionRunJobConsumer {
     private final StringRedisTemplate redisTemplate;
     private final CollectionRunJobHandlerPort jobHandlerPort;
     private final Clock clock;
+    private final ObjectMapper objectMapper;
 
     @Value("${bidding.collection.stream-key:bidding:collection:jobs}")
     private String streamKey;
@@ -161,13 +167,14 @@ public class RedisCollectionRunJobConsumer {
                 job.conditionId(),
                 job.companyId(),
                 UUID.randomUUID().toString(),
-                job.retryCount() + 1
+                job.retryCount() + 1,
+                job.retryTarget()
         );
 
         boolean scheduled = Boolean.TRUE.equals(
                 redisTemplate.opsForZSet().add(
                         retryKey,
-                        serialize(retryJob),
+                        serializeJob(retryJob),
                         Instant.now(clock).plus(retryDelay(job.retryCount()))
                                 .toEpochMilli()
                 )
@@ -214,7 +221,8 @@ public class RedisCollectionRunJobConsumer {
                 parseLong(fields, "conditionId"),
                 parseLong(fields, "companyId"),
                 required(fields, "attemptId"),
-                parseInt(fields, "retryCount")
+                parseInt(fields, "retryCount"),
+                parseRetryTarget(fields)
         );
     }
 
@@ -225,7 +233,48 @@ public class RedisCollectionRunJobConsumer {
         fields.put("companyId", String.valueOf(job.companyId()));
         fields.put("attemptId", job.attemptId());
         fields.put("retryCount", String.valueOf(job.retryCount()));
+        CollectionRequestCombination retryTarget = job.retryTarget();
+        if (retryTarget != null) {
+            fields.put("retryNoticeType", retryTarget.noticeType().name());
+            putIfPresent(fields, "retryKeyword", retryTarget.keyword());
+            putIfPresent(fields, "retryRegionCode", retryTarget.regionCode());
+            putIfPresent(fields, "retryIndustryCode", retryTarget.industryCode());
+            fields.put("retryPageNumber", String.valueOf(retryTarget.pageNumber()));
+        }
         return fields;
+    }
+
+    private CollectionRequestCombination parseRetryTarget(
+            Map<Object, Object> fields
+    ) {
+        String noticeType = optional(fields, "retryNoticeType");
+        if (noticeType == null) {
+            return null;
+        }
+        return new CollectionRequestCombination(
+                BidNoticeType.valueOf(noticeType),
+                optional(fields, "retryKeyword"),
+                optional(fields, "retryRegionCode"),
+                optional(fields, "retryIndustryCode"),
+                parseInt(fields, "retryPageNumber")
+        );
+    }
+
+    private void putIfPresent(
+            Map<String, String> fields,
+            String name,
+            String value
+    ) {
+        if (value != null) {
+            fields.put(name, value);
+        }
+    }
+
+    private String optional(Map<Object, Object> fields, String name) {
+        Object value = fields.get(name);
+        return value == null || value.toString().isBlank()
+                ? null
+                : value.toString();
     }
 
     private void acknowledge(MapRecord<String, Object, Object> record) {
@@ -313,7 +362,7 @@ public class RedisCollectionRunJobConsumer {
             return;
         }
         for (String serialized : dueJobs) {
-            CollectionRunJob job = deserialize(serialized);
+            CollectionRunJob job = deserializeJob(serialized);
             redisTemplate.opsForStream().add(
                     MapRecord.create(streamKey, jobFields(job))
             );
@@ -329,29 +378,28 @@ public class RedisCollectionRunJobConsumer {
         };
     }
 
-    private String serialize(CollectionRunJob job) {
-        return String.join(
-                "|",
-                job.runId().toString(),
-                job.conditionId().toString(),
-                job.companyId().toString(),
-                job.attemptId(),
-                String.valueOf(job.retryCount())
-        );
+    // 구분자 충돌 없이 재시도 대상 조합 전체를 JSON으로 보존합니다.
+    private String serializeJob(CollectionRunJob job) {
+        try {
+            return objectMapper.writeValueAsString(job);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException(
+                    "재시도 작업을 직렬화할 수 없습니다.",
+                    exception
+            );
+        }
     }
 
-    private CollectionRunJob deserialize(String value) {
-        String[] fields = value.split("\\|", -1);
-        if (fields.length != 5) {
-            throw new IllegalArgumentException("재시도 작업 형식이 잘못되었습니다.");
+    // 지연 저장소의 JSON을 조합 정보가 포함된 작업으로 복원합니다.
+    private CollectionRunJob deserializeJob(String value) {
+        try {
+            return objectMapper.readValue(value, CollectionRunJob.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException(
+                    "재시도 작업 형식이 올바르지 않습니다.",
+                    exception
+            );
         }
-        return new CollectionRunJob(
-                Long.valueOf(fields[0]),
-                Long.valueOf(fields[1]),
-                Long.valueOf(fields[2]),
-                fields[3],
-                Integer.parseInt(fields[4])
-        );
     }
 
     private boolean containsBusyGroup(Throwable throwable) {
