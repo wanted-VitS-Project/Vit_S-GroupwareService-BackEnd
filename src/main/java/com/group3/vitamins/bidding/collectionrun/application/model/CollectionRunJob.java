@@ -7,7 +7,8 @@ public record CollectionRunJob(
         Long conditionId,
         Long companyId,
         String attemptId,
-        int retryCount
+        int retryCount,
+        CollectionRequestCombination retryTarget
 ) {
     public CollectionRunJob {
         Objects.requireNonNull(runId, "수집 실행 ID는 필수입니다.");

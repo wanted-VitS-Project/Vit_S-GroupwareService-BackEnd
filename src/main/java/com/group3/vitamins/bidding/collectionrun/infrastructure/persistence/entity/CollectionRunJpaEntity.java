@@ -80,7 +80,10 @@ public class CollectionRunJpaEntity {
     @Column(name = "condition_snapshot", nullable = false, columnDefinition = "JSON")
     private JsonNode conditionSnapshot;
 
-    @Column(name = "processing_attempt_id", length = 36)
+    @Column(
+            name = "processing_attempt_id",
+            columnDefinition = "CHAR(36)"
+    )
     private String processingAttemptId;
 
     @Column(name = "retry_count", nullable = false)

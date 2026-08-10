@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.presentation;
 
+import com.group3.vitamins.bidding.legacy.presentation.CollectionRunController;
 import com.group3.vitamins.bidding.collectionrun.application.command.StartCollectionRunCommand;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
 import com.group3.vitamins.bidding.collectionrun.application.result.CollectionRunResult;
