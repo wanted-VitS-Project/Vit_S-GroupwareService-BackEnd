@@ -19,7 +19,8 @@ import java.util.List;
 @Mapper
 public interface ApprovalListMapper {
 
-    long countApprovals(@Param("status") String status,
+    long countApprovals(@Param("companyId") Long companyId,
+                         @Param("status") String status,
                          @Param("drafterId") String drafterId,
                          @Param("approverId") String approverId,
                          @Param("activeApproverId") String activeApproverId,
@@ -28,7 +29,8 @@ public interface ApprovalListMapper {
                          @Param("keyword") String keyword,
                          @Param("revisionNo") Integer revisionNo);
 
-    List<ApprovalListRow> findApprovals(@Param("status") String status,
+    List<ApprovalListRow> findApprovals(@Param("companyId") Long companyId,
+                                         @Param("status") String status,
                                          @Param("drafterId") String drafterId,
                                          @Param("approverId") String approverId,
                                          @Param("activeApproverId") String activeApproverId,

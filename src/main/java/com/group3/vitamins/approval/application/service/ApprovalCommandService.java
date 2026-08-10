@@ -212,7 +212,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         List<ApprovalLine> newLines = approvalRepository.replaceLines(newRevision.getRevisionId(), resumedLineInputs);
         List<EmployeeSummary> employees = resumedFrom.stream()
                 .map(line -> employeeCatalogPort.findEmployee(line.getApproverId())
-                        .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null)))
+                        .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null, null)))
                 .toList();
 
         log.info("재상신 회차 생성 완료 - approvalId={}, newRevisionId={}, revisionNo={}",
@@ -229,7 +229,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         List<ApprovalLine> lines = approvalRepository.findLinesByRevisionId(draftRevision.getRevisionId());
         List<EmployeeSummary> employees = lines.stream()
                 .map(line -> employeeCatalogPort.findEmployee(line.getApproverId())
-                        .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null)))
+                        .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null, null)))
                 .toList();
 
         return new ApprovalResubmissionResult(draftRevision, documents,

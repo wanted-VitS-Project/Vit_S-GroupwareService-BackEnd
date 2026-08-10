@@ -6,6 +6,7 @@ import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,9 +30,12 @@ public class ApprovalViewPolicy {
                     ApprovalLineStatus.REJECTED, ApprovalLineStatus.CANCELED);
 
     private final EmployeeCatalogPort employeeCatalogPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     /** 기안자 · ACTIVE 이상 결재자(과거 이력 포함) · MASTER(+ADMIN) 만 조회 가능. 아니면 403 */
     public void assertViewable(Approval approval, List<ApprovalLine> lines, String requesterId) {
+        assertSameCompany(approval, requesterId);
+
         if (approval.getDrafterId().equals(requesterId)) {
             return;
         }
@@ -51,5 +55,25 @@ public class ApprovalViewPolicy {
 
         log.warn("결재 상세조회 - 조회 권한 없음 approvalId={}, requesterId={}", approval.getApprovalId(), requesterId);
         throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    /**
+     * 회사(테넌트) 경계 검사 — 결재의 회사는 <b>기안자의 소속</b>으로 정한다.
+     *
+     * <p>role 검사보다 <b>먼저</b> 수행한다. 뒤에 두면 타 회사 {@code MASTER}·{@code ADMIN} 이
+     * 이미 통과한 뒤라 의미가 없다.
+     *
+     * <p>기안자를 못 찾으면(사원 삭제 등) 회사를 확정할 수 없으므로 통과시키지 않는다 —
+     * 조회 실패가 열람 허용으로 이어지면 안 된다.
+     */
+    private void assertSameCompany(Approval approval, String requesterId) {
+        Long approvalCompanyId = employeeCatalogPort.findEmployee(approval.getDrafterId())
+                .map(EmployeeSummary::companyId)
+                .orElse(null);
+
+        if (approvalCompanyId == null || !approvalCompanyId.equals(currentCompanyIdProvider.currentCompanyId())) {
+            log.warn("결재 상세조회 - 회사 불일치 approvalId={}, requesterId={}", approval.getApprovalId(), requesterId);
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+        }
     }
 }

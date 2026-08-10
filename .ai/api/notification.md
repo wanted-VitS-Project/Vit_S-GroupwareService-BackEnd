@@ -229,6 +229,61 @@ domainEventPublisher.publish(NotificationRequestedEvent.of(
 
 이 경우 이동 대상 조회는 `type=NONE`을 반환한다(에러 아님). 목록·읽음·삭제는 동일하게 동작한다.
 
+### 3. 여러 명에게 보낼 때 — **사람 수만큼 발행한다**
+
+이벤트 하나에 수신자 목록을 담는 필드는 **없다.** 알림은 수신자 1명당 1행이라(`GEN-004`),
+받는 사람마다 이벤트를 하나씩 발행한다. 각자 따로 읽음·삭제할 수 있어야 하므로 행이 나뉘어야 한다.
+
+```java
+// 프로젝트 참여자 전원에게 초대 알림
+List<String> memberIds = List.of("EMP001", "EMP002", "EMP003");
+
+memberIds.forEach(userId ->
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                userId, "PROJECT_INVITED", "프로젝트 초대",
+                project.getName() + "에 초대되었습니다.",
+                "PROJECT", project.getProjectId(), null)));
+```
+
+**주의**
+
+- **본인은 제외해야 하는 경우가 많다.** 초대한 사람에게 "당신이 초대됐습니다"가 가면 어색하다.
+  ```java
+  memberIds.stream()
+          .filter(userId -> !userId.equals(actorId))   // 행위자 제외
+          .forEach(...);
+  ```
+- 같은 사람에게 **중복 발행하지 않도록** 목록에 중복이 없는지 확인한다(알림 쪽에서 걸러주지 않는다).
+- 수신자가 많아도 반복 발행이면 충분하다 — 리스너가 커밋 후 각각 저장한다.
+
+### 4. `targetContext`에 뭘 넣어야 하나 ⭐
+
+**판단 기준은 "우리 도메인 데이터"가 아니라 "프론트가 그 화면을 여는 데 필요한 것"이다.**
+
+`targetId`(PK) 하나만으로 화면이 열리면 `null`을 넣고, 부족하면 부족한 값을 채운다.
+
+| 도메인 | 화면을 열려면 | `targetContext` |
+|---|---|---|
+| 프로젝트 | 프로젝트 PK 하나면 충분 | `null` |
+| 결재 | 어느 **회차**인지 필요 | `Map.of("revisionId", revisionId)` |
+| 이슈 | 프로젝트·스텝 **경로**가 필요 | `Map.of("projectId", ..., "stepId", ...)` |
+
+```java
+// 이슈 — 계층 경로가 필요한 경우
+domainEventPublisher.publish(NotificationRequestedEvent.of(
+        userId, "ISSUE_ASSIGNED", "이슈 배정",
+        issue.getTitle() + " 이슈 담당자로 지정되었습니다.",
+        "ISSUE", issueId,
+        Map.of("projectId", step.projectId(), "stepId", step.stepId())));
+```
+
+> 🚨 **모르겠으면 프론트에 "이 화면 여는 데 뭐가 필요해?"라고 물어보는 게 가장 빠르다.**
+> `null`로 두면 알림은 정상 생성되고 클릭도 되는데 **화면 이동만 조용히 실패**한다 —
+> 에러가 안 나서 늦게 발견된다(실제로 이슈에서 한 번 겪었다).
+
+**넣지 말 것** — 제목·작성자명 같은 **표시용** 데이터. 그건 `title`/`message`가 담당한다.
+이동 데이터와 표시 데이터가 섞이면 도메인마다 JSON 구조가 제각각 커진다.
+
 ### 지켜야 할 규칙
 
 | 규칙 | 안 지키면 |
