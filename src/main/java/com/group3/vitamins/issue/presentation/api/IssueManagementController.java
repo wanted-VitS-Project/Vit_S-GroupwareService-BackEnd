@@ -110,7 +110,9 @@ public class IssueManagementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "ISS_EDIT_PERMISSION_REQUIRED — Step 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "ISS_NOT_FOUND / ISS_ASSIGNEE_NOT_FOUND / ISS_BLOCK_NOT_FOUND")
+                    description = "ISS_NOT_FOUND / ISS_ASSIGNEE_NOT_FOUND / ISS_BLOCK_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "ISSUE_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{issueId}")
     public ResponseEntity<ApiResponse<IssueDetailResponse>> updateIssue(
@@ -143,7 +145,9 @@ public class IssueManagementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "ISS_EDIT_PERMISSION_REQUIRED — Step 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "ISS_NOT_FOUND — Issue 없음 또는 논리 삭제됨")
+                    description = "ISS_NOT_FOUND — Issue 없음 또는 논리 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "ISSUE_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{issueId}/status")
     public ResponseEntity<ApiResponse<IssueStatusChangeResponse>> changeIssueStatus(
@@ -154,7 +158,7 @@ public class IssueManagementController {
             Authentication authentication
     ) {
         IssueStatusChangeRequest safeRequest = request == null
-                ? new IssueStatusChangeRequest(null)
+                ? new IssueStatusChangeRequest(null, null)
                 : request;
         IssueStatusResult result = issueCommandUseCase.changeIssueStatus(
                 safeRequest.toCommand(issueId, authentication.getName(), RequesterRole.from(authentication)));

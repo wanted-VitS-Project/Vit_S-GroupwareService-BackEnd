@@ -16,6 +16,7 @@ public class IssueMapper {
                 entity.getDueDate(),
                 entity.getStatus(),
                 entity.getPriority(),
+                entity.getVersion(),
                 entity.getCreatedBy(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
@@ -37,6 +38,7 @@ public class IssueMapper {
                 issue.getCreatedBy(),
                 issue.getCreatedAt(),
                 issue.getUpdatedAt(),
+                issue.getVersion(),
                 issue.getDeletedAt());
     }
 }

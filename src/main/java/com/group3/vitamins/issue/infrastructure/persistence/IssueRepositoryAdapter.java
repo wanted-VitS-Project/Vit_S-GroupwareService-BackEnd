@@ -32,6 +32,33 @@ public class IssueRepositoryAdapter implements IssueRepository {
     }
 
     @Override
+    public int updateFieldsIfVersionMatches(Issue issue, int expectedVersion) {
+        return springDataIssueRepository.updateFieldsIfVersionMatches(
+                issue.getIssueId(),
+                issue.getTitle(),
+                issue.getContent(),
+                issue.getDueDate(),
+                issue.getPriority(),
+                expectedVersion
+        );
+    }
+
+    @Override
+    public int touchIfVersionMatches(Long issueId, int expectedVersion) {
+        return springDataIssueRepository.touchIfVersionMatches(issueId, expectedVersion);
+    }
+
+    @Override
+    public int changeStatusIfVersionMatches(Issue issue, int expectedVersion) {
+        return springDataIssueRepository.changeStatusIfVersionMatches(
+                issue.getIssueId(),
+                issue.getStatus(),
+                issue.getCompletedAt(),
+                expectedVersion
+        );
+    }
+
+    @Override
     public void saveAssignees(Long issueId, List<String> userIds) {
         springDataIssueAssignRepository.saveAll(userIds.stream()
                 .map(userId -> IssueAssignEntity.link(issueId, userId))

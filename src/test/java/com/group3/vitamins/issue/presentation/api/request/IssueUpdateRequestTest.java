@@ -22,6 +22,7 @@ class IssueUpdateRequestTest {
     void from_distinguishesAbsentAndNull() throws Exception {
         IssueUpdateRequest request = IssueUpdateRequest.from(objectMapper.readTree("""
                 {
+                  "version": 1,
                   "content": null,
                   "dueDate": null,
                   "assigneeIds": []
@@ -29,6 +30,7 @@ class IssueUpdateRequestTest {
                 """));
 
         assertThat(request.title().present()).isFalse();
+        assertThat(request.version()).isEqualTo(1);
         assertThat(request.content().present()).isTrue();
         assertThat(request.content().value()).isNull();
         assertThat(request.dueDate().present()).isTrue();
@@ -43,6 +45,7 @@ class IssueUpdateRequestTest {
     void from_parsesDateAndLists() throws Exception {
         IssueUpdateRequest request = IssueUpdateRequest.from(objectMapper.readTree("""
                 {
+                  "version": 3,
                   "dueDate": "2026-08-07",
                   "assigneeIds": ["EMP003", "EMP005"],
                   "blockIds": [15, 18]
@@ -50,6 +53,7 @@ class IssueUpdateRequestTest {
                 """));
 
         assertThat(request.dueDate().value()).isEqualTo(LocalDate.of(2026, 8, 7));
+        assertThat(request.version()).isEqualTo(3);
         assertThat(request.assigneeIds().value()).containsExactly("EMP003", "EMP005");
         assertThat(request.blockIds().value()).containsExactly(15L, 18L);
     }
@@ -59,6 +63,7 @@ class IssueUpdateRequestTest {
     void from_invalidDate() throws Exception {
         assertInvalid("""
                 {
+                  "version": 1,
                   "dueDate": "2026-08-07T18:00:00"
                 }
                 """);
@@ -70,11 +75,13 @@ class IssueUpdateRequestTest {
         List<String> invalidRequests = List.of(
                 """
                 {
+                  "version": 1,
                   "title": ["제안서"]
                 }
                 """,
                 """
                 {
+                  "version": 1,
                   "content": {
                     "text": "공고 요구사항"
                   }
@@ -82,6 +89,7 @@ class IssueUpdateRequestTest {
                 """,
                 """
                 {
+                  "version": 1,
                   "priority": true
                 }
                 """
@@ -96,11 +104,13 @@ class IssueUpdateRequestTest {
         List<String> invalidRequests = List.of(
                 """
                 {
+                  "version": 1,
                   "dueDate": 20260807
                 }
                 """,
                 """
                 {
+                  "version": 1,
                   "dueDate": {
                     "date": "2026-08-07"
                   }
@@ -108,6 +118,7 @@ class IssueUpdateRequestTest {
                 """,
                 """
                 {
+                  "version": 1,
                   "dueDate": ["2026-08-07"]
                 }
                 """
@@ -122,11 +133,13 @@ class IssueUpdateRequestTest {
         List<String> invalidRequests = List.of(
                 """
                 {
+                  "version": 1,
                   "assigneeIds": ["EMP003", null]
                 }
                 """,
                 """
                 {
+                  "version": 1,
                   "assigneeIds": ["EMP003", {
                     "userId": "EMP005"
                   }]
@@ -134,6 +147,7 @@ class IssueUpdateRequestTest {
                 """,
                 """
                 {
+                  "version": 1,
                   "assigneeIds": ["EMP003", 5]
                 }
                 """
@@ -148,16 +162,19 @@ class IssueUpdateRequestTest {
         List<String> invalidRequests = List.of(
                 """
                 {
+                  "version": 1,
                   "blockIds": [15, null]
                 }
                 """,
                 """
                 {
+                  "version": 1,
                   "blockIds": [15, "18"]
                 }
                 """,
                 """
                 {
+                  "version": 1,
                   "blockIds": [15, 18.5]
                 }
                 """
@@ -172,11 +189,13 @@ class IssueUpdateRequestTest {
         List<String> invalidRequests = List.of(
                 """
                 {
+                  "version": 1,
                   "assigneeIds": "EMP003"
                 }
                 """,
                 """
                 {
+                  "version": 1,
                   "blockIds": {
                     "blockId": 15
                   }
@@ -192,6 +211,7 @@ class IssueUpdateRequestTest {
     void from_nullRelationList() throws Exception {
         IssueUpdateRequest request = IssueUpdateRequest.from(objectMapper.readTree("""
                 {
+                  "version": 1,
                   "assigneeIds": null,
                   "blockIds": null
                 }
@@ -201,6 +221,27 @@ class IssueUpdateRequestTest {
         assertThat(request.assigneeIds().value()).isNull();
         assertThat(request.blockIds().present()).isTrue();
         assertThat(request.blockIds().value()).isNull();
+    }
+
+    @Test
+    @DisplayName("version은 1 이상의 정수로 반드시 전달해야 한다")
+    void from_requiresPositiveIntegralVersion() {
+        List<String> invalidRequests = List.of(
+                """
+                { "title": "제안서" }
+                """,
+                """
+                { "version": 0, "title": "제안서" }
+                """,
+                """
+                { "version": 1.5, "title": "제안서" }
+                """,
+                """
+                { "version": "1", "title": "제안서" }
+                """
+        );
+
+        invalidRequests.forEach(this::assertInvalid);
     }
 
     private void assertInvalid(String json) {

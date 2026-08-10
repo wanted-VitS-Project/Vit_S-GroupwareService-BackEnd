@@ -40,6 +40,7 @@ class IssueQueryServiceTest {
         IssueListQuery query = new IssueListQuery(10L, null, "EMP001", "MEMBER");
         IssueResult issue = new IssueResult(
                 101L,
+                1,
                 10L,
                 "경쟁사 제안서 벤치마킹",
                 null,
@@ -104,6 +105,7 @@ class IssueQueryServiceTest {
         IssueDetailQuery query = new IssueDetailQuery(101L, "EMP001", "MEMBER");
         IssueResult issue = new IssueResult(
                 101L,
+                1,
                 10L,
                 "경쟁사 제안서 벤치마킹",
                 null,
@@ -157,6 +159,7 @@ class IssueQueryServiceTest {
         IssueDetailQuery query = new IssueDetailQuery(101L, "EMP001", "MEMBER");
         IssueResult issue = new IssueResult(
                 101L,
+                1,
                 10L,
                 "경쟁사 제안서 벤치마킹",
                 null,
@@ -187,6 +190,7 @@ class IssueQueryServiceTest {
         IssueCalendarQuery query = new IssueCalendarQuery("EMP001");
         IssueQueryPort.CalendarIssueResult row = new IssueQueryPort.CalendarIssueResult(
                 101L,
+                1,
                 "제안서 1차 초안 작성",
                 "IN_PROGRESS",
                 "HIGH",
@@ -203,6 +207,7 @@ class IssueQueryServiceTest {
         assertThat(result.issues()).containsExactly(
                 new IssueCalendarResult.CalendarIssueResult(
                         101L,
+                        1,
                         "제안서 1차 초안 작성",
                         "IN_PROGRESS",
                         "HIGH",

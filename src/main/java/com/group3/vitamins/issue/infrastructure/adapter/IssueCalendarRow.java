@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record IssueCalendarRow(
         Long issueId,
+        int version,
         String title,
         String status,
         String priority,
