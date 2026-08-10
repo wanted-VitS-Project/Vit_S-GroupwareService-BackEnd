@@ -20,6 +20,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -139,7 +140,7 @@ public class IssueManagementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "이슈 상태 변경 성공 또는 동일 상태 멱등 처리"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "ISS_STATUS_REQUIRED / ISS_INVALID_STATUS"),
+                    description = "ISS_STATUS_REQUIRED / ISS_INVALID_STATUS / ISS_INVALID_REQUEST"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
@@ -154,7 +155,7 @@ public class IssueManagementController {
             @Parameter(description = "상태를 변경할 이슈 ID")
             @PathVariable Long issueId,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true)
-            @RequestBody(required = false) IssueStatusChangeRequest request,
+            @Valid @RequestBody(required = false) IssueStatusChangeRequest request,
             Authentication authentication
     ) {
         IssueStatusChangeRequest safeRequest = request == null

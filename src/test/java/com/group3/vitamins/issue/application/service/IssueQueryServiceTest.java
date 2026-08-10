@@ -40,7 +40,7 @@ class IssueQueryServiceTest {
         IssueListQuery query = new IssueListQuery(10L, null, "EMP001", "MEMBER");
         IssueResult issue = new IssueResult(
                 101L,
-                1,
+                7,
                 10L,
                 "경쟁사 제안서 벤치마킹",
                 null,
@@ -64,6 +64,7 @@ class IssueQueryServiceTest {
 
         assertThat(result.issues()).hasSize(1);
         IssueResult actual = result.issues().get(0);
+        assertThat(actual.version()).isEqualTo(7);
         assertThat(actual.assignees()).containsExactly(
                 new IssueResult.AssigneeResult("EMP001", "김용준")
         );
@@ -105,7 +106,7 @@ class IssueQueryServiceTest {
         IssueDetailQuery query = new IssueDetailQuery(101L, "EMP001", "MEMBER");
         IssueResult issue = new IssueResult(
                 101L,
-                1,
+                8,
                 10L,
                 "경쟁사 제안서 벤치마킹",
                 null,
@@ -128,6 +129,7 @@ class IssueQueryServiceTest {
         IssueResult result = service.getIssue(query);
 
         assertThat(result.issueId()).isEqualTo(101L);
+        assertThat(result.version()).isEqualTo(8);
         assertThat(result.stepId()).isEqualTo(10L);
         assertThat(result.assignees()).containsExactly(
                 new IssueResult.AssigneeResult("EMP001", "김용준")
@@ -190,7 +192,7 @@ class IssueQueryServiceTest {
         IssueCalendarQuery query = new IssueCalendarQuery("EMP001");
         IssueQueryPort.CalendarIssueResult row = new IssueQueryPort.CalendarIssueResult(
                 101L,
-                1,
+                9,
                 "제안서 1차 초안 작성",
                 "IN_PROGRESS",
                 "HIGH",
@@ -207,7 +209,7 @@ class IssueQueryServiceTest {
         assertThat(result.issues()).containsExactly(
                 new IssueCalendarResult.CalendarIssueResult(
                         101L,
-                        1,
+                        9,
                         "제안서 1차 초안 작성",
                         "IN_PROGRESS",
                         "HIGH",
@@ -218,6 +220,7 @@ class IssueQueryServiceTest {
                         "OO시 스마트도로 구축"
                 )
         );
+        assertThat(result.issues().get(0).version()).isEqualTo(9);
         verify(issueQueryPort).findMyCalendarIssues("EMP001");
         verifyNoInteractions(issueStepAccessPort);
     }

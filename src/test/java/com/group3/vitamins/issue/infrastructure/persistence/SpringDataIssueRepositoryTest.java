@@ -102,6 +102,21 @@ class SpringDataIssueRepositoryTest {
         assertThat(updated.getFinishDay()).isEqualTo(completedAt);
     }
 
+    @Test
+    @DisplayName("관계 전용 수정도 기대 버전이 같을 때만 버전을 증가시킨다")
+    void touchIfVersionMatches() {
+        IssueEntity issue = saveIssue(IssueStatus.TO_DO, null);
+
+        assertThat(repository.touchIfVersionMatches(issue.getIssueId(), 1)).isEqualTo(1);
+        assertThat(repository.touchIfVersionMatches(issue.getIssueId(), 1)).isZero();
+
+        entityManager.clear();
+        IssueEntity updated = repository.findByIssueIdAndDeletedAtIsNull(issue.getIssueId()).orElseThrow();
+        assertThat(updated.getVersion()).isEqualTo(2);
+        assertThat(updated.getTitle()).isEqualTo("기존 제목");
+        assertThat(updated.getContent()).isEqualTo("기존 내용");
+    }
+
     private IssueEntity saveIssue(IssueStatus status, LocalDateTime completedAt) {
         return repository.saveAndFlush(new IssueEntity(
                 null,

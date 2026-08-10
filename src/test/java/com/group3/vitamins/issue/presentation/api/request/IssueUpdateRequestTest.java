@@ -234,6 +234,9 @@ class IssueUpdateRequestTest {
                 { "version": 0, "title": "제안서" }
                 """,
                 """
+                { "version": -1, "title": "제안서" }
+                """,
+                """
                 { "version": 1.5, "title": "제안서" }
                 """,
                 """

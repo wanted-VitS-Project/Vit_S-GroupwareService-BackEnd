@@ -2,9 +2,9 @@
 
 **상태**: `✅ 확정`
 **담당**: 김용준
+**최종 업데이트**: 2026-08-11 (상태 변경 요청의 `status`·`version` HTTP 경계 검증 보강 — version 누락·0·음수는 `400 ISS_INVALID_REQUEST`)
 **최종 업데이트**: 2026-08-11 (이슈 수정·상태 변경에 `version` 기반 낙관적 락 적용 — 조회 응답의 `version`을 수정 요청에 필수 전달, 불일치 시 `409 ISSUE_VERSION_CONFLICT`. 프론트 draft 보존·필드 단위 병합 UX는 별도 명세)
 **최종 업데이트**: 2026-08-10 (조회/수정 권한 게이트 분리 — 목록·상세 조회는 project 권한만 확인, 생성·수정·상태변경·삭제만 step EDITOR 확인. 신규 에러코드 없음, `ISS_ACCESS_PERMISSION_REQUIRED` 의미만 변경)
-**최종 업데이트**: 2026-08-10 (프로젝트 단위 이슈 목록 조회 신규 추가 — `GET /api/v1/projects/{projectId}/issues`. Step별로 묶어 반환, 이슈 없는 Step도 포함, 삭제된 Step은 제외, Step별·전체 이슈 진척도(`totalIssueCount`·`doneIssueCount`·`inProgressIssueCount`·`progressRate`) 포함)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -468,6 +468,7 @@ null   → 400
 | 200 | – | 변경 성공 또는 동일 상태 멱등 처리 |
 | 400 | `ISS_STATUS_REQUIRED` | 상태가 전달되지 않음 |
 | 400 | `ISS_INVALID_STATUS` | 허용하지 않는 상태값 |
+| 400 | `ISS_INVALID_REQUEST` | version 누락 또는 1 미만 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 논리 삭제됨 |
