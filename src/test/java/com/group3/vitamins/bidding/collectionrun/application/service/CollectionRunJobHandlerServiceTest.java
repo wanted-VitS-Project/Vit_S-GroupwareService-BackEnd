@@ -15,6 +15,7 @@ import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRun
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectedBidNoticeStorePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunStatePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskDlqPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionSourceCollectorPort;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunConditionSnapshot;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
@@ -37,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
@@ -68,6 +70,9 @@ class CollectionRunJobHandlerServiceTest {
 
     @Mock
     private CollectionRunTaskPort taskPort;
+
+    @Mock
+    private CollectionRunTaskDlqPort taskDlqPort;
 
     @Mock
     private CollectionSourceCollectorPort collector;
@@ -104,6 +109,7 @@ class CollectionRunJobHandlerServiceTest {
         service = new CollectionRunJobHandlerService(
                 runStatePort,
                 taskPort,
+                taskDlqPort,
                 List.of(collector),
                 noticeStorePort,
                 clock
@@ -214,6 +220,12 @@ class CollectionRunJobHandlerServiceTest {
                 eq(TASK_ID), eq(ATTEMPT_ID),
                 eq("CONNECTION_FAILURE"), eq("CONNECTION_FAILURE"), any()
         );
+        verify(taskDlqPort).publish(argThat(failure ->
+                failure.runId().equals(RUN_ID)
+                        && failure.taskId().equals(TASK_ID)
+                        && failure.failureType() == CollectionRunFailureType.CONNECTION_FAILURE
+                        && failure.target().equals(TARGET)
+        ));
         verify(runStatePort).fail(
                 eq(RUN_ID), eq(ATTEMPT_ID),
                 eq("UNKNOWN_PROCESSING_ERROR"),

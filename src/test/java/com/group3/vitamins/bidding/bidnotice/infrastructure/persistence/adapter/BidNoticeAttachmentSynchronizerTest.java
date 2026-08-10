@@ -66,4 +66,32 @@ class BidNoticeAttachmentSynchronizerTest {
         verify(existing, never()).softDelete(any(LocalDateTime.class));
         verify(repository).saveAll(List.of());
     }
+
+    @Test
+    @DisplayName("첨부 목록이 있으면 응답에서 누락된 기존 첨부파일만 삭제한다")
+    void deletesOnlyMissingAttachmentFromNonEmptyResponse() {
+        BidNoticeAttachmentJpaEntity retained = mock(BidNoticeAttachmentJpaEntity.class);
+        when(retained.getBidNoticeId()).thenReturn(10L);
+        when(retained.getAttachmentOrder()).thenReturn((short) 1);
+        BidNoticeAttachmentJpaEntity missing = mock(BidNoticeAttachmentJpaEntity.class);
+        when(missing.getBidNoticeId()).thenReturn(10L);
+        when(missing.getAttachmentOrder()).thenReturn((short) 2);
+        when(repository.findAllByBidNoticeIdIn(anyCollection()))
+                .thenReturn(List.of(retained, missing));
+        CollectedBidNotice.Attachment incoming =
+                new CollectedBidNotice.Attachment(1, "공고문.pdf", "https://example.test/file");
+
+        synchronizer.synchronize(
+                Map.of(10L, List.of(incoming)),
+                LocalDateTime.of(2026, 8, 10, 22, 0)
+        );
+
+        verify(retained).updateFrom(eq(incoming), any(LocalDateTime.class));
+        verify(retained, never()).softDelete(any(LocalDateTime.class));
+        verify(missing).softDelete(any(LocalDateTime.class));
+        ArgumentCaptor<List<BidNoticeAttachmentJpaEntity>> captor =
+                ArgumentCaptor.forClass(List.class);
+        verify(repository).saveAll(captor.capture());
+        assertThat(captor.getValue()).containsExactlyInAnyOrder(retained, missing);
+    }
 }
