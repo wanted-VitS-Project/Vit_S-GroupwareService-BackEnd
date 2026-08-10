@@ -3,6 +3,7 @@ package com.group3.vitamins.bidding.collectionrun.application.service;
 import com.group3.vitamins.bidding.collectionrun.application.model.ClaimedCollectionRunOutbox;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunJobPublisherPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskDlqPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,12 +18,14 @@ public class CollectionRunOutboxPublishService {
 
     private final CollectionRunOutboxStorePort outboxStorePort;
     private final CollectionRunJobPublisherPort jobPublisherPort;
+    private final CollectionRunTaskDlqPort taskDlqPort;
     private final Clock clock;
     private final int lockSeconds;
 
     public CollectionRunOutboxPublishService(
             CollectionRunOutboxStorePort outboxStorePort,
             CollectionRunJobPublisherPort jobPublisherPort,
+            CollectionRunTaskDlqPort taskDlqPort,
             Clock clock,
             @Value("${bidding.collection.outbox.lock-seconds:300}") int lockSeconds
     ) {
@@ -33,6 +36,7 @@ public class CollectionRunOutboxPublishService {
         }
         this.outboxStorePort = outboxStorePort;
         this.jobPublisherPort = jobPublisherPort;
+        this.taskDlqPort = taskDlqPort;
         this.clock = clock;
         this.lockSeconds = lockSeconds;
     }
@@ -64,7 +68,7 @@ public class CollectionRunOutboxPublishService {
             String lockOwner
     ) {
         try {
-            jobPublisherPort.publish(outbox);
+            publishToTargetStream(outbox);
             outboxStorePort.markPublished(
                     outbox.outboxId(),
                     lockOwner,
@@ -91,6 +95,15 @@ public class CollectionRunOutboxPublishService {
             );
             return false;
         }
+    }
+
+    // Outbox 이벤트 종류에 맞는 Redis Stream으로 발행합니다.
+    private void publishToTargetStream(ClaimedCollectionRunOutbox outbox) {
+        if (outbox.isTaskFailureEvent()) {
+            taskDlqPort.publish(outbox.taskFailure());
+            return;
+        }
+        jobPublisherPort.publish(outbox);
     }
 
     private long retryDelaySeconds(int publishAttemptCount) {

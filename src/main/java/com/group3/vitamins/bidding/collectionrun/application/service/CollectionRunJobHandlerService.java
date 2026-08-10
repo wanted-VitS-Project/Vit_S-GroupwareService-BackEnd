@@ -13,7 +13,6 @@ import com.group3.vitamins.bidding.collectionrun.application.port.CollectedBidNo
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunJobHandlerPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunStatePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
-import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskDlqPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionSourceCollectorPort;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
 import org.springframework.stereotype.Service;
@@ -32,7 +31,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
 
     private final CollectionRunStatePort runStatePort;
     private final CollectionRunTaskPort taskPort;
-    private final CollectionRunTaskDlqPort taskDlqPort;
+    private final CollectionRunTaskFailureService taskFailureService;
     private final List<CollectionSourceCollectorPort> collectors;
     private final CollectedBidNoticeStorePort noticeStorePort;
     private final Clock clock;
@@ -40,14 +39,14 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
     public CollectionRunJobHandlerService(
             CollectionRunStatePort runStatePort,
             CollectionRunTaskPort taskPort,
-            CollectionRunTaskDlqPort taskDlqPort,
+            CollectionRunTaskFailureService taskFailureService,
             List<CollectionSourceCollectorPort> collectors,
             CollectedBidNoticeStorePort noticeStorePort,
             Clock clock
     ) {
         this.runStatePort = runStatePort;
         this.taskPort = taskPort;
-        this.taskDlqPort = taskDlqPort;
+        this.taskFailureService = taskFailureService;
         this.collectors = collectors;
         this.noticeStorePort = noticeStorePort;
         this.clock = clock;
@@ -124,6 +123,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
             }
 
             CollectedBidNoticeStorePort.StoreResult stored = noticeStorePort.saveAll(
+                    job.companyId(),
                     run.conditionSnapshot().sourceCode(),
                     job.runId(),
                     page.notices(),
@@ -163,8 +163,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
             );
         }
 
-        taskPort.fail(task.taskId(), job.attemptId(), errorCode, errorCode, now);
-        taskDlqPort.publish(new CollectionRunTaskFailure(
+        boolean recorded = taskFailureService.recordPermanentFailure(new CollectionRunTaskFailure(
                 job.runId(),
                 task.taskId(),
                 job.companyId(),
@@ -172,7 +171,17 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
                 task.retryCount(),
                 failure.failureType(),
                 task.target()
-        ));
+        ), errorCode, errorCode, now);
+        if (!recorded) {
+            runStatePort.prepareRetry(
+                    job.runId(), job.attemptId(), errorCode,
+                    "task_failure_transition_rejected", now
+            );
+            return CollectionRunJobResult.retryableFailure(
+                    CollectionRunFailureType.UNKNOWN_PROCESSING_ERROR,
+                    task.target()
+            );
+        }
         return null;
     }
 
