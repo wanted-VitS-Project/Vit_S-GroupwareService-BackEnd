@@ -171,7 +171,8 @@ public class IssueQueryService implements IssueQueryUseCase {
                 .getOrDefault(issue.issueId(), List.of()).stream()
                 .map(row -> new IssueResult.AssigneeResult(
                         row.userId(),
-                        row.name()
+                        row.name(),
+                        row.resignedAt()
                 ))
                 .toList();
         List<IssueResult.BlockResult> relatedBlocks = blocksByIssueId

@@ -62,7 +62,8 @@ public class IssueQueryAdapter implements IssueQueryPort {
                 .map(row -> new AssigneeResult(
                         row.issueId(),
                         row.userId(),
-                        row.name()
+                        row.name(),
+                        row.resignedAt()
                 ))
                 .toList();
     }

@@ -331,7 +331,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
                 issue.completedAt(),
                 assigneesByIssueId.getOrDefault(issue.issueId(), List.of()).stream()
                         .map(assignee -> new IssueResult.AssigneeResult(
-                                assignee.userId(), assignee.name()))
+                                assignee.userId(), assignee.name(), assignee.resignedAt()))
                         .toList(),
                 blocksByIssueId.getOrDefault(issue.issueId(), List.of()).stream()
                         .map(block -> new IssueResult.BlockResult(
@@ -354,7 +354,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
                 issue.getCompletedAt(),
                 assignees.stream()
                         .map(assignee -> new IssueResult.AssigneeResult(
-                                assignee.userId(), assignee.name()))
+                                assignee.userId(), assignee.name(), assignee.resignedAt()))
                         .toList(),
                 blocks.stream()
                         .map(block -> new IssueResult.BlockResult(

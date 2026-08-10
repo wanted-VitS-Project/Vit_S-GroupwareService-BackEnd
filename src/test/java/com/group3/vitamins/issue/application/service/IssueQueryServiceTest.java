@@ -14,6 +14,7 @@ import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -53,7 +54,7 @@ class IssueQueryServiceTest {
 
         when(issueQueryPort.findIssues(10L, null)).thenReturn(List.of(issue));
         when(issueQueryPort.findAssignees(List.of(101L))).thenReturn(List.of(
-                new IssueQueryPort.AssigneeResult(101L, "EMP001", "김용준")
+                new IssueQueryPort.AssigneeResult(101L, "EMP001", "김용준", LocalDate.of(2026, 8, 1))
         ));
         when(issueQueryPort.findRelatedBlocks(List.of(101L))).thenReturn(List.of(
                 new IssueQueryPort.RelatedBlockResult(101L, 15L, "제안서 작성 체크리스트", "CHECKLIST")
@@ -64,7 +65,7 @@ class IssueQueryServiceTest {
         assertThat(result.issues()).hasSize(1);
         IssueResult actual = result.issues().get(0);
         assertThat(actual.assignees()).containsExactly(
-                new IssueResult.AssigneeResult("EMP001", "김용준")
+                new IssueResult.AssigneeResult("EMP001", "김용준", LocalDate.of(2026, 8, 1))
         );
         assertThat(actual.relatedBlocks()).containsExactly(
                 new IssueResult.BlockResult(15L, "제안서 작성 체크리스트", "CHECKLIST")
@@ -117,7 +118,7 @@ class IssueQueryServiceTest {
 
         when(issueQueryPort.findIssue(101L)).thenReturn(Optional.of(issue));
         when(issueQueryPort.findAssignees(List.of(101L))).thenReturn(List.of(
-                new IssueQueryPort.AssigneeResult(101L, "EMP001", "김용준")
+                new IssueQueryPort.AssigneeResult(101L, "EMP001", "김용준", LocalDate.of(2026, 8, 1))
         ));
         when(issueQueryPort.findRelatedBlocks(List.of(101L))).thenReturn(List.of(
                 new IssueQueryPort.RelatedBlockResult(101L, 15L, "제안서 작성 체크리스트", "CHECKLIST")
@@ -128,7 +129,7 @@ class IssueQueryServiceTest {
         assertThat(result.issueId()).isEqualTo(101L);
         assertThat(result.stepId()).isEqualTo(10L);
         assertThat(result.assignees()).containsExactly(
-                new IssueResult.AssigneeResult("EMP001", "김용준")
+                new IssueResult.AssigneeResult("EMP001", "김용준", LocalDate.of(2026, 8, 1))
         );
         assertThat(result.relatedBlocks()).containsExactly(
                 new IssueResult.BlockResult(15L, "제안서 작성 체크리스트", "CHECKLIST")

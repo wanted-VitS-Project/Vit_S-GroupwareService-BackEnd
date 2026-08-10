@@ -1,5 +1,6 @@
 package com.group3.vitamins.activitylog.infrastructure.adapter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public record ActivityLogRow(
@@ -12,6 +13,7 @@ public record ActivityLogRow(
         String afterValue,
         String actorUserId,
         String actorName,
+        LocalDate actorResignedAt,
         Long blockId,
         String blockTitle,
         String blockType,

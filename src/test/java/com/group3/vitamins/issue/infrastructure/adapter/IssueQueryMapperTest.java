@@ -17,6 +17,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -95,6 +96,41 @@ class IssueQueryMapperTest {
             Optional<IssueRow> result = session.getMapper(IssueQueryMapper.class).findIssue(102L);
 
             assertThat(result).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("퇴사한 담당자도 이슈 연결을 유지하며 이름과 퇴사일을 함께 조회한다")
+    void findAssignees_keepsResignedEmployee() throws Exception {
+        LocalDate resignedAt = LocalDate.of(2026, 8, 1);
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertEmployee(session, "EMP001", "김용준", resignedAt);
+            insertAssignee(session, 1L, 101L, "EMP001");
+            session.commit();
+
+            List<IssueAssigneeRow> rows = session.getMapper(IssueQueryMapper.class)
+                    .findAssignees(List.of(101L));
+
+            assertThat(rows).containsExactly(
+                    new IssueAssigneeRow(101L, "EMP001", "김용준", resignedAt));
+        }
+    }
+
+    @Test
+    @DisplayName("담당자 지정 검증용 사원 조회가 퇴사일을 함께 반환한다")
+    void findAssigneeCandidates_returnsResignedAt() throws Exception {
+        LocalDate resignedAt = LocalDate.of(2026, 8, 1);
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertEmployee(session, "EMP001", "김용준", resignedAt);
+            session.commit();
+
+            List<IssueAssigneeCandidateRow> rows = session.getMapper(IssueQueryMapper.class)
+                    .findAssigneeCandidates(List.of("EMP001"));
+
+            assertThat(rows).containsExactly(
+                    new IssueAssigneeCandidateRow("EMP001", "김용준", resignedAt));
         }
     }
 
@@ -223,6 +259,7 @@ class IssueQueryMapperTest {
              Connection connection = session.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("DROP TABLE IF EXISTS issue_assign");
+            statement.execute("DROP TABLE IF EXISTS employee");
             statement.execute("DROP TABLE IF EXISTS issue");
             statement.execute("DROP TABLE IF EXISTS step");
             statement.execute("DROP TABLE IF EXISTS project");
@@ -244,6 +281,13 @@ class IssueQueryMapperTest {
                         issue_assign_id BIGINT PRIMARY KEY,
                         issue_id BIGINT NOT NULL,
                         user_id VARCHAR(20) NOT NULL
+                    )
+                    """);
+            statement.execute("""
+                    CREATE TABLE employee (
+                        user_id VARCHAR(20) PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        resigned_at DATE NULL
                     )
                     """);
             statement.execute("""
@@ -273,6 +317,19 @@ class IssueQueryMapperTest {
             statement.setLong(1, issueAssignId);
             statement.setLong(2, issueId);
             statement.setString(3, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertEmployee(SqlSession session, String userId, String name, LocalDate resignedAt)
+            throws Exception {
+        try (PreparedStatement statement = session.getConnection().prepareStatement("""
+                INSERT INTO employee (user_id, name, resigned_at)
+                VALUES (?, ?, ?)
+                """)) {
+            statement.setString(1, userId);
+            statement.setString(2, name);
+            statement.setObject(3, resignedAt);
             statement.executeUpdate();
         }
     }

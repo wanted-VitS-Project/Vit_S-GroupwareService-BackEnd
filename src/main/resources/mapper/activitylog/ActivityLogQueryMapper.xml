@@ -41,6 +41,7 @@
                al.after_value AS afterValue,
                al.user_id AS actorUserId,
                e.name AS actorName,
+               e.resigned_at AS actorResignedAt,
                b.block_id AS blockId,
                b.title AS blockTitle,
                b.type AS blockType,

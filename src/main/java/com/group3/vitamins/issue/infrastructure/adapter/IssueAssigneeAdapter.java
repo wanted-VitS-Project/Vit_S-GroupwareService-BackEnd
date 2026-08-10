@@ -4,7 +4,6 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.port.IssueAssigneePort;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
-import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.domain.model.MemberPermission;
 import lombok.RequiredArgsConstructor;
@@ -13,13 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class IssueAssigneeAdapter implements IssueAssigneePort {
 
-    private final EmployeeLookupPort employeeLookupPort;
+    private final IssueQueryMapper issueQueryMapper;
     private final ProjectAccessUseCase projectAccessUseCase;
 
     @Override
@@ -28,8 +28,9 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
             return List.of();
         }
 
-        Map<String, String> names = employeeLookupPort.findNamesByUserIds(userIds);
-        if (names.size() != userIds.size()) {
+        Map<String, IssueAssigneeCandidateRow> candidates = issueQueryMapper.findAssigneeCandidates(userIds).stream()
+                .collect(Collectors.toMap(IssueAssigneeCandidateRow::userId, candidate -> candidate));
+        if (candidates.size() != userIds.size()) {
             throw new NotFoundException(IssueErrorCode.ISS_ASSIGNEE_NOT_FOUND);
         }
 
@@ -38,7 +39,10 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
         }
 
         return userIds.stream()
-                .map(userId -> new AssigneeView(userId, names.get(userId)))
+                .map(userId -> {
+                    IssueAssigneeCandidateRow candidate = candidates.get(userId);
+                    return new AssigneeView(userId, candidate.name(), candidate.resignedAt());
+                })
                 .toList();
     }
 
