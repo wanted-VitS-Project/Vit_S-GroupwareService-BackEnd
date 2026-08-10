@@ -5,6 +5,45 @@
 
 <mapper namespace="com.group3.vitamins.issue.infrastructure.adapter.IssueQueryMapper">
 
+    <select id="findProjectId" resultType="java.lang.Long">
+        SELECT s.project_id
+          FROM step s
+         WHERE s.step_id = #{stepId}
+           AND s.deleted_at IS NULL
+    </select>
+
+    <select id="findStepsByProject"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.StepSummaryRow">
+        SELECT s.step_id AS stepId,
+               s.name AS stepName
+          FROM step s
+         WHERE s.project_id = #{projectId}
+           AND s.deleted_at IS NULL
+         ORDER BY s.sort_order ASC
+    </select>
+
+    <select id="findIssuesByProject"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueRow">
+        SELECT i.issue_id AS issueId,
+               i.step_id AS stepId,
+               i.title AS title,
+               i.content AS content,
+               CASE i.status
+                    WHEN 'TO_DO' THEN 'TODO'
+                    ELSE i.status
+               END AS status,
+               i.priority AS priority,
+               i.due_date AS dueDate,
+               i.finish_day AS completedAt
+          FROM issue i
+          JOIN step s
+            ON s.step_id = i.step_id
+           AND s.deleted_at IS NULL
+         WHERE s.project_id = #{projectId}
+           AND i.deleted_at IS NULL
+         ORDER BY s.sort_order ASC, i.issue_id DESC
+    </select>
+
     <select id="findBlockStep"
             resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueBlockStepRow">
         SELECT b.block_id AS blockId,

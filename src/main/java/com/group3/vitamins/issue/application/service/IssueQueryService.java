@@ -7,8 +7,10 @@ import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
 import com.group3.vitamins.issue.application.query.IssueCalendarQuery;
 import com.group3.vitamins.issue.application.query.IssueDetailQuery;
 import com.group3.vitamins.issue.application.query.IssueListQuery;
+import com.group3.vitamins.issue.application.query.IssueProjectListQuery;
 import com.group3.vitamins.issue.application.result.IssueCalendarResult;
 import com.group3.vitamins.issue.application.result.IssueListResult;
+import com.group3.vitamins.issue.application.result.IssueProjectListResult;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.usecase.IssueQueryUseCase;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
@@ -89,6 +91,63 @@ public class IssueQueryService implements IssueQueryUseCase {
                         row.projectName()
                 ))
                 .toList());
+    }
+
+    @Override
+    public IssueProjectListResult getIssuesByProject(IssueProjectListQuery query) {
+        issueStepAccessPort.requireProjectAccess(query.projectId(), query.requesterUserId(), query.role());
+
+        List<IssueQueryPort.StepSummaryResult> steps = issueQueryPort.findStepsByProject(query.projectId());
+        List<IssueResult> issues = withRelationsBatch(issueQueryPort.findIssuesByProject(query.projectId()));
+
+        Map<Long, List<IssueResult>> issuesByStepId = issues.stream()
+                .collect(Collectors.groupingBy(IssueResult::stepId));
+
+        List<IssueProjectListResult.StepIssuesResult> stepResults = steps.stream()
+                .map(step -> {
+                    List<IssueResult> stepIssues = issuesByStepId.getOrDefault(step.stepId(), List.of());
+                    IssueProjectListResult.ProgressResult stepProgress = progressOf(stepIssues);
+                    return new IssueProjectListResult.StepIssuesResult(
+                            step.stepId(),
+                            step.stepName(),
+                            stepProgress.totalIssueCount(),
+                            stepProgress.doneIssueCount(),
+                            stepProgress.inProgressIssueCount(),
+                            stepProgress.progressRate(),
+                            stepIssues);
+                })
+                .toList();
+
+        return new IssueProjectListResult(progressOf(issues), stepResults);
+    }
+
+    private List<IssueResult> withRelationsBatch(List<IssueResult> issues) {
+        if (issues.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> issueIds = issues.stream()
+                .map(IssueResult::issueId)
+                .toList();
+        Map<Long, List<IssueQueryPort.AssigneeResult>> assigneesByIssueId =
+                issueQueryPort.findAssignees(issueIds).stream()
+                        .collect(Collectors.groupingBy(IssueQueryPort.AssigneeResult::issueId));
+        Map<Long, List<IssueQueryPort.RelatedBlockResult>> blocksByIssueId =
+                issueQueryPort.findRelatedBlocks(issueIds).stream()
+                        .collect(Collectors.groupingBy(IssueQueryPort.RelatedBlockResult::issueId));
+
+        return issues.stream()
+                .map(issue -> withRelations(issue, assigneesByIssueId, blocksByIssueId))
+                .toList();
+    }
+
+    /** 완료율은 totalIssueCount가 0이면 null — 0/0 나눗셈을 응답에 노출하지 않는다(Step 진척도와 동일 규칙). */
+    private IssueProjectListResult.ProgressResult progressOf(List<IssueResult> issues) {
+        int total = issues.size();
+        int done = (int) issues.stream().filter(issue -> "DONE".equals(issue.status())).count();
+        int inProgress = (int) issues.stream().filter(issue -> "IN_PROGRESS".equals(issue.status())).count();
+        Integer progressRate = total == 0 ? null : done * 100 / total;
+        return new IssueProjectListResult.ProgressResult(total, done, inProgress, progressRate);
     }
 
     private void validateBlockFilter(Long stepId, Long blockId) {
