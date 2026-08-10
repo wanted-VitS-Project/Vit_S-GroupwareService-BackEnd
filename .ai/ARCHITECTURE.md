@@ -199,8 +199,52 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 ### 권한 처리
 
-`@PreAuthorize`·`@NotBlank`/`@Size` 같은 프레임워크 기본 경로는 쓰지 않는다 (`.ai/API.md` §3-5 참고 — `COMMON_FORBIDDEN`/`COMMON_INVALID_REQUEST` 로 새어나가 명세 에러코드가 안 나간다).
-인가는 `application/policy`, 입력 검증은 `service` 내부 수동 검증으로 처리하고 도메인 전용 `ErrorCode` 를 던진다.
+`@PreAuthorize` 는 쓰지 않는다 ([`.ai/docs/domain/관리자/BCT-V1-API.md`](docs/domain/관리자/BCT-V1-API.md) §3-5 참고 — `COMMON_FORBIDDEN` 으로 새어나가 명세 에러코드가 안 나간다).
+인가는 `application/policy` 에서 판정하고 도메인 전용 `ErrorCode` 를 던진다.
+
+### 검증 책임 분리 (2026-08-09) ⭐
+
+검증은 **세 층으로 나눈다.** 한 층에 몰면 서비스가 검증 창고가 되고, 형식 오류가 DB 까지 내려간다.
+
+| 검증 종류 | 예 | 위치 | 수단 |
+|---|---|---|---|
+| **형식·구문** | 필수값 · 길이 · 타입 · 범위 · 포맷 | `presentation/api/request` | Bean Validation 애노테이션 + `@Valid` |
+| **도메인 불변식** | 두 필드의 관계, 상태 전이 가능 여부 | `domain/model` · `application/service` | 수동 검증 → `ValidationException` |
+| **비즈니스 규칙** | 중복 · 삭제 조건 · 권한 · 타 엔티티 존재 | `application/service` | DB 조회가 필요한 판정 |
+
+#### 애노테이션으로 명세 에러코드를 내리는 방법
+
+Bean Validation 을 그냥 쓰면 위반이 전부 `COMMON_INVALID_REQUEST` 로 나가 **명세가 정한 코드를 못 내린다.**
+그래서 이전 컨벤션은 애노테이션을 금지하고 서비스 수동 검증을 시켰는데, **2026-08-09 에 원인을 제거했다.**
+`GlobalExceptionHandler` 가 `"ERROR_CODE|사용자 문구"` 형태의 메시지를 만나면 그 코드를 응답 `code` 로 승격한다.
+
+```java
+@NotBlank(message = "PROJECT_NAME_REQUIRED|과업명을 입력해 주세요.")
+@Size(max = 300, message = "PROJECT_NAME_TOO_LONG|과업명은 300자를 넘을 수 없습니다.")
+String name
+// → { "httpStatus":400, "code":"PROJECT_NAME_TOO_LONG", "message":"과업명은 300자를 넘을 수 없습니다." }
+```
+
+⚠️ **컨트롤러 파라미터에 `@Valid` 를 빼먹으면 애노테이션이 통째로 무시된다.** 400 이 아니라 **DB 제약 위반 500** 이 나거나, 길이 초과 값이 그대로 저장된다. 컴파일도 테스트도 이걸 못 잡는다.
+
+- 구분자(`|`)가 없는 메시지는 지금까지처럼 `COMMON_INVALID_REQUEST` 다 — **옵트인이라 기존 도메인은 영향 없다.**
+- `global` 은 어느 도메인의 `ErrorCode` enum 도 알지 않는다. 레지스트리를 두면 새 enum 등록을 빠뜨린다.
+
+#### 애노테이션으로 옮기지 않는 것
+
+| 남기는 검증 | 이유 |
+|---|---|
+| 두 필드의 **관계** (`startedOn` ≤ `endedOn`) | 필드 단위 애노테이션으로 표현할 수 없다 |
+| **API 별 금지 값** (`PATCH /status` 의 `CLOSED`) | 값 자체는 유효한 enum 이고 "이 API 에서만" 금지라 형식이 아니다 |
+| **누락과 오타를 다른 코드로** 구분해야 하는 enum 파싱 | `@NotBlank` 하나로 두 코드를 못 낸다 (예: `CLOSE_REASON_REQUIRED` ↔ `_INVALID`) |
+| `JsonNode` 로 받는 PATCH 의 필드 검증 | `@Valid` 가 동작하지 않는다 (위 PATCH 파싱 규칙 참고) |
+
+> 📌 **길이 제약 필드는 에러코드가 빠져 있다고 보고 먼저 확인하라.** `PROJECT_NAME_TOO_LONG` · `STAGE_NAME_TOO_LONG` · `STEP_NAME_TOO_LONG` · `BLOCK_TITLE_TOO_LONG` · `CLOSE_REASON_NOTE_TOO_LONG` — **5연속으로 명세에 누락**돼 있었고, 없으면 DB 1406 이 500 으로 샌다.
+
+### PATCH 요청 파싱 (2026-08-09)
+
+- **PATCH 요청 파싱은 `XxxRequest` 클래스가 소유한다.** 컨트롤러는 `request.toCommand(...)` 한 줄이다 — 파싱 분기를 컨트롤러에 풀어놓지 않는다.
+- **`JsonNode` 는 명세가 "생략 vs `null` 명시" 를 구분한다고 밝힌 API 에만 쓴다.** 그 구분이 명세에 없으면 일반 record DTO 로 받는다 — `JsonNode` 를 기본값으로 쓰면 계약에 없는 의미가 코드에서 생긴다.
 
 ---
 
@@ -224,7 +268,8 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 | 날짜 | 변경 내용 | 담당 |
 |---|---|---|
-| 2026-08-08 | §4 갱신 — `XxxCleanupConfig` 네이밍 추가. `global`에 하드 딜리트 스케줄러 SPI(`HardDeleteTarget`/`HardDeleteOperation`/`HardDeleteExecutor`/`HardDeleteScheduler`) 신설 — 스케줄러는 `global`에 하나, 도메인은 포트만 구현해 등록. 상세는 `.ai/docs/global/CLEANUP.md` (⚠️ develop 병합 중 한 번 유실돼 재반영, 2026-08-09) | 김동현 |
 | 2026-08-04 | 신설 — `businesscategory` 구현을 기준으로 헥사고날 계층·네이밍 컨벤션 확정, `auth`/`account` 레거시 명시 | 김동현 |
 | 2026-08-04 | §2-1 신설 — 애그리게이트별 서브패키지 규칙(`project` 계층). 애그리게이트 간 참조도 `port`+`adapter`, URL↔패키지 불일치 허용 | 동훈 |
+| 2026-08-09 | §4 권한 처리에 **PATCH 요청 파싱 컨벤션 2건** 추가 — 파싱은 `XxxRequest` 소유(컨트롤러 한 줄), `JsonNode` 는 "생략 vs `null` 명시" 를 명세가 구분한 API 한정 | 동훈 |
+| 2026-08-09 | §4 **검증 책임 분리** 신설 — 형식(Request 애노테이션) / 도메인 불변식·API 규칙(service) 3층 분리. `GlobalExceptionHandler` 에 `"ERROR_CODE\|문구"` 코드 승격을 추가해 **기존 "애노테이션 금지, 서비스 수동 검증" 규칙을 폐기**. 구분자 없는 메시지는 종전대로 `COMMON_INVALID_REQUEST` (옵트인). `project`·`stage`·`step` 요청 DTO 4개 적용 완료 | 동훈 |
 | 2026-08-05 | §2-2 신설 — 쓰기 방향 포트(경계 넘는 쓰기는 한 트랜잭션, 이벤트 아님) · 타입별 확장 SPI(`List<Port>` + `supportedType()`, 공용 파일 동시 편집 금지, `sealed` 금지). 근거: `project/block` 타입 10종을 5명이 나눠 갖는다 | 동훈 |

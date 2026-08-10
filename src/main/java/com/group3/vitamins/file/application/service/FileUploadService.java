@@ -1,8 +1,12 @@
 package com.group3.vitamins.file.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.file.application.command.CompleteFileUploadCommand;
 import com.group3.vitamins.file.application.command.StartFileUploadCommand;
 import com.group3.vitamins.file.application.port.*;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.file.application.result.FileUploadStartResult;
 import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.usecase.FileUploadUseCase;
@@ -23,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -56,6 +61,7 @@ public class FileUploadService implements FileUploadUseCase {
     private final FileVersionFailureRecorder failureRecorder;
     private final FileIndexTriggerPort fileIndexTriggerPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
@@ -153,6 +159,17 @@ public class FileUploadService implements FileUploadUseCase {
 
         File file = fileRepository.findById(saved.getFileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+
+        // 활동 로그(업로드 완료 = CREATE) — 새 문서 첫 버전이든 기존 문서 새 버전이든 완료 시점에 발행한다
+        // (§파일 upload). blockId 는 위에서 resolveAttachableBlockStepId 판정에 쓴 그 링크로 non-null 이 보장된다.
+        domainEventPublisher.publish(ActivityOccurredEvent.of(
+                ActivityLogAction.CREATE,
+                blockId,
+                file.getFileId(),
+                file.getName(),
+                command.requesterUserId(),
+                List.of(new ActivityFieldChange(null, null, null))
+        ));
 
         return toDetail(file, saved);
     }
