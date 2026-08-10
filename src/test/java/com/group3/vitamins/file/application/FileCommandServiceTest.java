@@ -44,6 +44,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -98,6 +99,10 @@ class FileCommandServiceTest {
 
     private File trashedFile() {
         return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now(), VERSION);
+    }
+
+    private File fileWithVersion(int version) {
+        return File.restore(FILE_ID, PROJECT_ID, "강제", USER, null, version);
     }
 
     private FileVersion version(long versionId, String storageKey) {
@@ -234,26 +239,35 @@ class FileCommandServiceTest {
         }
 
         @Test
-        @DisplayName("덮어쓰기는 DB 현재 버전을 기대값으로 써서 통과시킨다")
-        void overwriteForcesCurrentVersion() {
-            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile())); // DB version = 3
+        @DisplayName("덮어쓰기는 버전 조건 없이 무조건 저장하고, 갱신된 실제 버전을 돌려준다")
+        void overwriteForcesUnconditional() {
+            // 최초 조회(version 3) → forceRename 후 재조회. 그새 남이 여러 번 올려 version 7 이 됐다고 가정.
+            when(fileRepository.findById(FILE_ID))
+                    .thenReturn(Optional.of(activeFile()))
+                    .thenReturn(Optional.of(fileWithVersion(7)));
             stubEditable();
-            // 클라가 낡은 버전 1 을 보냈지만 overwrite=true 라 DB 현재값(3)을 조건으로 쓴다
-            when(fileRepository.renameIfVersionMatches(FILE_ID, "강제", VERSION)).thenReturn(1);
+            when(fileRepository.forceRename(FILE_ID, "강제")).thenReturn(1);
 
+            // 클라가 낡은 버전 1 을 보냈어도 overwrite=true 면 충돌 없이 저장된다
             FileRenameResult result = service.rename(cmd("강제", 1, true));
 
-            assertThat(result.version()).isEqualTo(VERSION + 1);
+            assertThat(result.version()).isEqualTo(7); // 스냅샷(1)이 아니라 갱신된 실제 버전
+            verify(fileRepository).forceRename(FILE_ID, "강제");
+            verify(fileRepository, never()).renameIfVersionMatches(any(), any(), anyInt());
         }
 
         @Test
-        @DisplayName("version 이 1 미만이면(누락 포함) FILE_INVALID_REQUEST")
+        @DisplayName("version 이 1 미만이면(누락 포함) overwrite 여부와 무관하게 FILE_INVALID_REQUEST")
         void invalidVersion() {
             when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             stubEditable();
 
             assertThatThrownBy(() -> service.rename(cmd("새이름", 0, false)))
                     .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
+            assertThatThrownBy(() -> service.rename(cmd("새이름", 0, true)))
+                    .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
+            verify(fileRepository, never()).forceRename(any(), any());
+            verify(fileRepository, never()).renameIfVersionMatches(any(), any(), anyInt());
         }
     }
 

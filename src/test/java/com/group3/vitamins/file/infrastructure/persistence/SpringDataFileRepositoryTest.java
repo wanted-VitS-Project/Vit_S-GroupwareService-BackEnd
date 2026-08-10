@@ -74,6 +74,28 @@ class SpringDataFileRepositoryTest {
         assertThat(repository.renameIfVersionMatches(file.getFileId(), "새이름", 1)).isZero();
     }
 
+    @Test
+    @DisplayName("forceRename 은 버전과 무관하게 무조건 이름을 바꾸고 버전을 +1 한다(덮어쓰기)")
+    void forceRename() {
+        FileJpaEntity file = saveFile(null); // version 1
+
+        // 기대 버전을 안 걸므로 DB 버전이 뭐든 항상 성공한다
+        assertThat(repository.forceRename(file.getFileId(), "강제")).isEqualTo(1);
+
+        entityManager.clear();
+        FileJpaEntity updated = repository.findById(file.getFileId()).orElseThrow();
+        assertThat(updated.getVersion()).isEqualTo(2);
+        assertThat(updated.getName()).isEqualTo("강제");
+    }
+
+    @Test
+    @DisplayName("forceRename 도 삭제된 문서는 건드리지 않는다(0행)")
+    void forceRenameSkipsDeleted() {
+        FileJpaEntity file = saveFile(LocalDateTime.now());
+
+        assertThat(repository.forceRename(file.getFileId(), "강제")).isZero();
+    }
+
     private FileJpaEntity saveFile(LocalDateTime deletedAt) {
         // (fileId, projectId, name, createdBy, deletedAt, version)
         return repository.saveAndFlush(new FileJpaEntity(

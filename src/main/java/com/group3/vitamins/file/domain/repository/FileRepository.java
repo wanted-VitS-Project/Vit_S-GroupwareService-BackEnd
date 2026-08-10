@@ -21,6 +21,12 @@ public interface FileRepository {
      */
     int renameIfVersionMatches(Long fileId, String name, int expectedVersion);
 
+    /**
+     * 덮어쓰기(§5) — 버전 조건 없이 무조건 표시명을 바꾸고 version 을 +1 한다. 바뀐 행 수를 돌려준다
+     * (0 = 그새 삭제됨). 갱신된 실제 version 은 호출자가 재조회해서 확인한다.
+     */
+    int forceRename(Long fileId, String name);
+
     /** 삭제 여부와 무관하게 문서를 찾는다(복구·상태 판정은 서비스가 deletedAt 으로 한다). */
     Optional<File> findById(Long fileId);
 

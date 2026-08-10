@@ -276,6 +276,7 @@ class FileQueryServiceTest {
             assertThat(result.canEdit()).isTrue();
             assertThat(result.content()).hasSize(1);
             assertThat(result.content().get(0).previewable()).isTrue();
+            assertThat(result.content().get(0).version()).isEqualTo(3); // 낙관락 version 이 projection→result 로 실려간다
         }
 
         @Test

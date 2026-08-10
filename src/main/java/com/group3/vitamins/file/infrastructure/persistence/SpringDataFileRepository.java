@@ -28,4 +28,22 @@ public interface SpringDataFileRepository extends JpaRepository<FileJpaEntity, L
             @Param("name") String name,
             @Param("expectedVersion") int expectedVersion
     );
+
+    /**
+     * 버전 조건 없이 무조건 표시명을 바꾸고 version 을 올린다(덮어쓰기 · §5).
+     * 조회~저장 사이에 남이 먼저 저장해도 충돌로 막지 않는다 — "덮어쓰기 = 무조건 저장" 계약을 지키려면
+     * 기대 버전을 조건에 걸면 안 된다. 삭제된 문서는 제외하므로 0 이면 그새 삭제된 것이다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE FileJpaEntity f
+               SET f.name = :name,
+                   f.version = f.version + 1
+             WHERE f.fileId = :fileId
+               AND f.deletedAt IS NULL
+            """)
+    int forceRename(
+            @Param("fileId") Long fileId,
+            @Param("name") String name
+    );
 }

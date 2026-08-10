@@ -77,19 +77,30 @@ public class FileCommandService implements FileCommandUseCase {
         String before = file.getName();
         String name = validateName(command.name());
 
-        // version 누락·비정상은 400 으로 막는다 — 안 막으면 WHERE version=0 이라 모든 저장이 409 로 샌다(§6-3).
-        // 덮어쓰기는 version 을 안 보므로 검사 대상이 아니다.
-        if (!command.overwrite() && command.version() < 1) {
+        // version 은 overwrite 여부와 무관하게 필수다 — 안 막으면 WHERE version=0 이라 저장이 전부 409 로 샌다(§6-3).
+        if (command.version() < 1) {
             throw new ValidationException(FileErrorCode.FILE_INVALID_REQUEST);
         }
 
-        // 낙관락: 기대 버전과 DB 버전이 같을 때만 저장된다(§4). 덮어쓰기 선택 시엔 DB 현재 버전을
-        // 기대값으로 써서 충돌을 무시하고 통과시킨다(§5). save() 가 아니라 조건부 UPDATE 라야 검사와 저장이
-        // 한 문장에서 원자적으로 일어난다(§1-2).
-        int expected = command.overwrite() ? file.getVersion() : command.version();
-        int updated = fileRepository.renameIfVersionMatches(command.fileId(), name, expected);
-        if (updated == 0) {
-            throw new ConflictException(FileErrorCode.FILE_VERSION_CONFLICT);
+        // 낙관락. 조건부 UPDATE 라야 검사와 저장이 한 문장에서 원자적으로 일어난다(§1-2). save() 아님.
+        int newVersion;
+        if (command.overwrite()) {
+            // 덮어쓰기(§5)는 충돌을 무시하고 무조건 저장한다 — 조회 시점 스냅샷 version 을 조건에 걸면
+            // 조회~저장 사이에 남이 끼어들 때 409 로 새어 "덮어쓰기=무조건 저장" 계약이 깨진다.
+            // 그래서 버전 조건 없는 별도 UPDATE 를 쓰고, 낡았을 수 있는 스냅샷 대신 갱신된 실제 version 을 다시 읽는다.
+            if (fileRepository.forceRename(command.fileId(), name) == 0) {
+                throw new NotFoundException(FileErrorCode.FILE_NOT_FOUND); // 그새 삭제됨 — 덮어쓸 대상 없음
+            }
+            newVersion = fileRepository.findById(command.fileId())
+                    .filter(f -> !f.isDeleted())
+                    .map(File::getVersion)
+                    .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+        } else {
+            // 기대 버전과 DB 버전이 같을 때만 저장(0행이면 그새 남이 먼저 저장 → 409).
+            if (fileRepository.renameIfVersionMatches(command.fileId(), name, command.version()) == 0) {
+                throw new ConflictException(FileErrorCode.FILE_VERSION_CONFLICT);
+            }
+            newVersion = command.version() + 1;
         }
 
         // 활동 로그(문서명 수정 = MODIFY) — 실제로 이름이 바뀐 경우에만 발행한다 (§파일 rename).
@@ -100,7 +111,7 @@ public class FileCommandService implements FileCommandUseCase {
                     List.of(new ActivityFieldChange("fileName", before, name)));
         }
 
-        return new FileRenameResult(command.fileId(), name, expected + 1);
+        return new FileRenameResult(command.fileId(), name, newVersion);
     }
 
     @Override
