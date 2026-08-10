@@ -258,7 +258,8 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         log.info("결재 문서 추가 완료 - documentId={}", saved.getDocumentId());
         return new ApprovalDocumentView(
-                saved.getDocumentId(), file.fileVersionId(), file.fileName(), file.fileSize(), file.uploadedAt());
+                saved.getDocumentId(), file.fileVersionId(), file.fileName(), file.fileSize(),
+                file.uploadedAt(), file.fileDeleted());
     }
 
     @Override

@@ -66,10 +66,9 @@ public enum ApprovalErrorCode implements ErrorCode {
     /** MGT-005 — 차례 안 온 결재자(WAITING)이거나 관련 없는 사용자의 조회 시 403 */
     APPROVAL_LINE_NOT_VIEWABLE("APPROVAL_LINE_NOT_VIEWABLE", "조회 권한이 없습니다."),
 
-    // --- 블록 삭제 잠금 (APR-001-2 · INV-09) — ApprovalBlockDetailAdapter.deleteDetail() 전용 ---
-
-    /** 진행 중(IN_PROGRESS)인 결재가 붙은 블록은 삭제할 수 없다 — 블록팀의 삭제 트랜잭션을 여기서 막는다 */
-    APPROVAL_IN_PROGRESS("APPROVAL_IN_PROGRESS", "진행 중인 결재가 있어 블록을 삭제할 수 없습니다."),
+    // ⛔ APPROVAL_IN_PROGRESS 제거(2026-08-10) — BLK-008 삭제 잠금 폐기로 사용처가 0이 됐다.
+    //    진행 중 결재도 블록과 함께 삭제되며, 종결은 CANCELED 전이로 표현한다(DEL-002).
+    //    회수(WITHDRAWN)가 생겨 409가 다시 필요해지면 그 요구사항 이름으로 새로 만든다.
 
     // --- 9. 결재관리 목록조회 (API 명세 요구사항: MGT-001~004) ---
 

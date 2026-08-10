@@ -57,7 +57,7 @@ class ApprovalCommandServiceActivityLogTest {
     @Test
     void documentCreateUsesFileVersionAndNameWithNullChange() {
         Approval approval = approval(10L);
-        FileVersionSummary file = new FileVersionSummary(300L, "COMPLETED", "품의서.pdf", 10L, null);
+        FileVersionSummary file = new FileVersionSummary(300L, "COMPLETED", "품의서.pdf", 10L, null, false);
         ApprovalDocument document = ApprovalDocument.reconstruct(400L, 200L, 300L, null, null);
 
         when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);

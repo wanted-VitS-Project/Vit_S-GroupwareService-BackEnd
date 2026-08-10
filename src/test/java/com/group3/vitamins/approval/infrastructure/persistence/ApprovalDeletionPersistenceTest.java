@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @DataJpaTest(properties = {
         "spring.flyway.enabled=false",
@@ -86,6 +87,52 @@ class ApprovalDeletionPersistenceTest {
                 revision.getApprovalRevisionId())).isEmpty();
         assertThat(documentRepository.findByApprovalRevisionIdAndDeletedAtIsNull(
                 revision.getApprovalRevisionId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("결재선 치환은 이전 결재선을 남기고 같은 순번을 다시 등록할 수 있다")
+    void softDeletesReplacedLinesAndAllowsSameSequence() {
+        ApprovalJpaEntity approval = approvalRepository.saveAndFlush(
+                ApprovalJpaEntity.createDraft(30L, "EMP001"));
+        ApprovalRevisionJpaEntity revision = revisionRepository.saveAndFlush(
+                ApprovalRevisionJpaEntity.createDraft(approval.getApprovalId(), 1, "치환 품의", null));
+        ApprovalLineJpaEntity before = lineRepository.saveAndFlush(
+                ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP002", 1));
+
+        lineRepository.softDeleteAllByApprovalRevisionId(revision.getApprovalRevisionId());
+        // 같은 sequence_no 로 다시 넣는다 — UNIQUE 를 낮췄으니 통과해야 한다(V20260810220000)
+        ApprovalLineJpaEntity after = lineRepository.saveAndFlush(
+                ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP003", 1));
+        entityManager.clear();
+
+        assertThat(lineRepository.findById(before.getApprovalLineId()).orElseThrow().getDeletedAt())
+                .isNotNull();
+        assertThat(lineRepository.findByApprovalRevisionIdAndDeletedAtIsNullOrderBySequenceNo(
+                revision.getApprovalRevisionId()))
+                .extracting(ApprovalLineJpaEntity::getApprovalLineId, ApprovalLineJpaEntity::getApproverId)
+                .containsExactly(tuple(after.getApprovalLineId(), "EMP003"));
+    }
+
+    @Test
+    @DisplayName("문서 개별 제거는 연결 행을 남기고 같은 파일 버전을 다시 연결할 수 있다")
+    void softDeletesRemovedDocumentAndAllowsRelink() {
+        ApprovalJpaEntity approval = approvalRepository.saveAndFlush(
+                ApprovalJpaEntity.createDraft(40L, "EMP001"));
+        ApprovalRevisionJpaEntity revision = revisionRepository.saveAndFlush(
+                ApprovalRevisionJpaEntity.createDraft(approval.getApprovalId(), 1, "문서 품의", null));
+        ApprovalDocumentJpaEntity document = documentRepository.saveAndFlush(
+                ApprovalDocumentJpaEntity.create(revision.getApprovalRevisionId(), 910L));
+
+        documentRepository.softDeleteById(document.getApprovalDocumentId());
+        entityManager.clear();
+
+        assertThat(documentRepository.findById(document.getApprovalDocumentId()).orElseThrow().getDeletedAt())
+                .isNotNull();
+        assertThat(documentRepository.findByApprovalRevisionIdAndDeletedAtIsNull(
+                revision.getApprovalRevisionId())).isEmpty();
+        // 중복 검사가 활성 행만 보므로 같은 파일을 다시 붙일 수 있다
+        assertThat(documentRepository.existsByApprovalRevisionIdAndFileVersionIdAndDeletedAtIsNull(
+                revision.getApprovalRevisionId(), 910L)).isFalse();
     }
 
     @Test

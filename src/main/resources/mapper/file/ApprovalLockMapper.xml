@@ -32,8 +32,14 @@
 
     <!--
       문서의 버전을 참조하는 결재가 하나라도 있으면 true (§7 영구삭제).
-      findInProgressApproval 과 같은 조인이되 status/deleted_at 필터가 없다 — 완료·삭제 결재까지
-      포함해 보존 중인 approval_document 참조가 있으면 파일 원본 영구삭제를 막는다(DEL-009).
+      findInProgressApproval 과 같은 조인이되 status 필터가 없다 — 완료·삭제 결재까지 포함해
+      보존 중인 approval_document 참조가 있으면 파일 원본 영구삭제를 막는다(DEL-009).
+
+      approval_document 의 논리 삭제는 두 가지가 섞여 있어 갈라서 본다(DEL-005 · APR-007).
+        · 상위 블록·스텝 삭제 → 회차도 함께 삭제된다(ar.deleted_at NOT NULL) → 증빙이므로 잠금 유지
+        · 기안자가 DRAFT 에서 연결 해제 → 회차는 살아 있다(ar.deleted_at NULL) → 잠금 해제
+      회차 생존이 판별 기준인 근거: 연결 해제는 DRAFT 에서만 가능하고 DRAFT 회차는 삭제 상태가 아니다.
+      ⚠️ 이 조건은 WHERE 에 둔다 — ad 의 ON 절에서는 뒤에 조인되는 ar 을 참조할 수 없다.
     -->
     <select id="existsAnyApprovalReference" resultType="boolean">
         SELECT EXISTS(
@@ -46,6 +52,7 @@
               JOIN approval a
                 ON a.approval_id = ar.approval_id
              WHERE fv.file_id = #{fileId}
+               AND (ad.deleted_at IS NULL OR ar.deleted_at IS NOT NULL)
         )
     </select>
 

@@ -203,7 +203,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public void deleteDocument(Long documentId) {
-        springDataApprovalDocumentRepository.deleteById(documentId);
+        springDataApprovalDocumentRepository.softDeleteById(documentId);
     }
 
     @Override
@@ -223,7 +223,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public List<ApprovalLine> replaceLines(Long revisionId, List<NewApprovalLine> lines) {
-        springDataApprovalLineRepository.deleteAllByApprovalRevisionId(revisionId);
+        springDataApprovalLineRepository.softDeleteAllByApprovalRevisionId(revisionId);
 
         List<ApprovalLineJpaEntity> saved = lines.stream()
                 .map(line -> ApprovalLineJpaEntity.createDraft(revisionId, line.approverId(), line.sequenceNo()))

@@ -33,4 +33,12 @@ class ApprovalLockMapperDeletionReferenceTest {
         assertThat(mapper.existsAnyApprovalReference(1L)).isTrue();
         assertThat(mapper.findInProgressApproval(1L)).isNull();
     }
+
+    @Test
+    @DisplayName("기안자가 DRAFT 에서 연결 해제한 문서는 영구삭제를 막지 않는다")
+    void manuallyDetachedDocumentDoesNotBlockPermanentFileDeletion() {
+        // 회차가 살아 있으면(ar.deleted_at IS NULL) 상위 삭제가 아니라 사용자의 연결 해제다
+        assertThat(mapper.existsAnyApprovalReference(2L)).isFalse();
+        assertThat(mapper.findInProgressApproval(2L)).isNull();
+    }
 }

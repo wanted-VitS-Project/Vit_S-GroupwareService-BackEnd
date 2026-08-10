@@ -55,13 +55,20 @@ public interface SpringDataApprovalLineRepository extends JpaRepository<Approval
             + "AND l.deletedAt IS NULL")
     List<ApprovalLineJpaEntity> findByApprovalId(@Param("approvalId") Long approvalId);
 
-    /** APR-009 전체 치환의 삭제 단계 — 하드 삭제(DRAFT 편집은 이력 보존 대상 아님, APR-007과 같은 논리) */
+    /**
+     * APR-009 전체 치환의 삭제 단계 — 논리 삭제다(`DELETE.md` D-1·D-2).
+     *
+     * <p>하드 삭제였다가 전환했다. {@code approval_line}은 하드 대상인 「연결 행 7종」이 아니고
+     * 의견·처리시각이 담긴 실물이라 D-1이 적용된다. 치환된 이전 결재선은 행으로 남고, 활성 조회는
+     * {@code deletedAt IS NULL}로 새 결재선만 본다. 같은 순번을 다시 넣을 수 있게 UNIQUE 를 낮춘
+     * 마이그레이션(`V20260810220000`)이 선행 조건이다.
+     */
     @Modifying(clearAutomatically = true)
-    @Query("DELETE FROM ApprovalLineJpaEntity l WHERE l.approvalRevisionId = :approvalRevisionId "
-            + "AND l.deletedAt IS NULL")
-    void deleteAllByApprovalRevisionId(@Param("approvalRevisionId") Long approvalRevisionId);
+    @Query("UPDATE ApprovalLineJpaEntity l SET l.deletedAt = CURRENT_TIMESTAMP "
+            + "WHERE l.approvalRevisionId = :approvalRevisionId AND l.deletedAt IS NULL")
+    void softDeleteAllByApprovalRevisionId(@Param("approvalRevisionId") Long approvalRevisionId);
 
-    /** SUB-002 — 1번 순번은 ACTIVE, 나머지는 WAITING (회차 잠금이 이미 걸려 있어 조건 없이 전환) */
+    /** SUB-002— 1번 순번은 ACTIVE, 나머지는 WAITING (회차 잠금이 이미 걸려 있어 조건 없이 전환) */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ApprovalLineJpaEntity l SET l.status = CASE WHEN l.sequenceNo = 1 THEN :activeStatus ELSE :waitingStatus END "
             + "WHERE l.approvalRevisionId = :revisionId AND l.deletedAt IS NULL")
