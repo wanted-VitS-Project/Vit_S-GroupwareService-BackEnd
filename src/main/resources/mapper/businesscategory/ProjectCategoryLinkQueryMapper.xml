@@ -5,12 +5,23 @@
 
 <mapper namespace="com.group3.vitamins.businesscategory.infrastructure.adapter.ProjectCategoryLinkQueryMapper">
 
+    <!--
+      ⚠️ 논리 삭제된 프로젝트의 연결 행은 세지 않는다 (2026-08-09).
+         조인을 빼면 삭제된 프로젝트 때문에 카테고리가 「사용 중」으로 잡혀 영구히 못 지운다.
+    -->
     <select id="findLinkedCategoryIds" resultType="java.lang.Long">
-        SELECT DISTINCT business_category_id FROM project_business_category
+        SELECT DISTINCT pbc.business_category_id
+          FROM project_business_category pbc
+          JOIN project p ON p.project_id = pbc.project_id
+         WHERE p.deleted_at IS NULL
     </select>
 
     <select id="countLinkedProjects" resultType="long">
-        SELECT COUNT(*) FROM project_business_category WHERE business_category_id = #{categoryId}
+        SELECT COUNT(*)
+          FROM project_business_category pbc
+          JOIN project p ON p.project_id = pbc.project_id
+         WHERE pbc.business_category_id = #{categoryId}
+           AND p.deleted_at IS NULL
     </select>
 
 </mapper>

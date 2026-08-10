@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.block.infrastructure.adapter.IssueBlockUnlinkMapper">
+
+    <!-- 하드 삭제다. issue_block 에는 deleted_at 이 없다 — soft 로 두면 uk_ib 를 시체가 점유한다. -->
+    <delete id="deleteByBlockId">
+        DELETE FROM issue_block
+         WHERE block_id = #{blockId}
+    </delete>
+
+</mapper>

@@ -4,14 +4,17 @@ import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.presentation.api.ProjectResponseMessage;
 import com.group3.vitamins.project.step.application.query.StepListQuery;
+import com.group3.vitamins.project.step.application.result.StepOrderResult;
 import com.group3.vitamins.project.step.application.result.StepResult;
 import com.group3.vitamins.project.step.application.result.StepSummary;
 import com.group3.vitamins.project.step.application.usecase.StepCommandUseCase;
 import com.group3.vitamins.project.step.application.usecase.StepQueryUseCase;
 import com.group3.vitamins.project.step.domain.model.StepStatus;
 import com.group3.vitamins.project.step.presentation.api.request.StepCreateRequest;
+import com.group3.vitamins.project.step.presentation.api.request.StepOrderRequest;
 import com.group3.vitamins.project.step.presentation.api.response.StepCreateResponse;
 import com.group3.vitamins.project.step.presentation.api.response.StepListResponse;
+import com.group3.vitamins.project.step.presentation.api.response.StepOrderResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -21,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -101,5 +105,39 @@ public class ProjectStepController {
         return ResponseEntity.ok(
                 ApiResponse.success(ProjectResponseMessage.SUCCESS,
                         StepListResponse.from(steps)));
+    }
+
+    @Operation(summary = "스텝 순서 변경",
+            description = "스텝의 소속 스테이지와 정렬 순서를 일괄 재정렬한다. "
+                    + "위치를 바꾸는 유일한 경로이며, 스텝 수정 API 는 위치를 건드리지 않는다. "
+                    + "stageId 가 0 이거나 생략되면 미소속으로 이동한다. "
+                    + "보드 전체의 최종 배치를 보내야 한다 — 일부만 보내면 나머지 스텝과 순서가 겹친다. "
+                    + "선행 스텝의 완료 여부는 검사하지 않는다(STP-002).")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "재정렬 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "STEP_ORDER_INVALID — 목록이 비었거나 스텝·순서 값이 중복"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND / STEP_NOT_FOUND / STAGE_NOT_FOUND")
+    })
+    @PatchMapping("/order")
+    public ResponseEntity<ApiResponse<StepOrderResponse>> reorderSteps(
+            @Parameter(description = "재정렬할 프로젝트 ID")
+            @PathVariable Long projectId,
+            @Valid @RequestBody StepOrderRequest request,
+            Authentication authentication
+    ) {
+        List<StepOrderResult> results = stepCommandUseCase.reorderSteps(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(ProjectResponseMessage.SUCCESS,
+                        StepOrderResponse.from(results)));
     }
 }

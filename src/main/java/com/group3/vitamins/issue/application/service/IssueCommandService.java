@@ -14,6 +14,7 @@ import com.group3.vitamins.issue.application.port.IssueQueryPort;
 import com.group3.vitamins.issue.application.port.IssueStepAccessPort;
 import com.group3.vitamins.issue.application.result.IssueResult;
 import com.group3.vitamins.issue.application.result.IssueStatusResult;
+import com.group3.vitamins.issue.application.usecase.IssueCascadeUseCase;
 import com.group3.vitamins.issue.application.usecase.IssueCommandUseCase;
 import com.group3.vitamins.issue.domain.IssuePriority;
 import com.group3.vitamins.issue.domain.IssueStatus;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,7 +36,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class IssueCommandService implements IssueCommandUseCase {
+public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUseCase {
 
     private static final int TITLE_MAX_LENGTH = 200;
     private static final String NOTIFICATION_TARGET_TYPE = "ISSUE";
@@ -152,6 +154,21 @@ public class IssueCommandService implements IssueCommandUseCase {
         issueStepAccessPort.requireEditable(
                 issue.getStepId(), command.requesterUserId(), command.role());
 
+        deleteIssue(issue);
+    }
+
+    /**
+     * 스텝 삭제가 부르는 이슈 정리 (STP-013). 권한은 호출자가 프로젝트 EDITOR 로 이미 판정했다 —
+     * 여기서 스텝 EDITOR 를 다시 보면 오버라이드 하나로 삭제 전체가 403 롤백된다.
+     */
+    @Override
+    public void deleteIssues(Collection<Long> issueIds) {
+        issueIds.forEach(issueId -> issueRepository.findActiveById(issueId)
+                .ifPresent(this::deleteIssue));
+    }
+
+    /** 삭제 본체. 권한 판정이 끝난 뒤의 처리라 cascade 경로와 공유한다. */
+    private void deleteIssue(Issue issue) {
         issueRepository.deleteAssignees(issue.getIssueId());
         issueRepository.deleteBlockLinks(issue.getIssueId());
 
