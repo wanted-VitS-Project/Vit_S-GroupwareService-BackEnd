@@ -72,9 +72,9 @@ public class SettlementQueryService implements SettlementQueryUseCase {
         if (isEmpty) {
             SettlementSiblingLookupPort.SiblingRecommendation recommendation =
                     settlementSiblingLookupPort.findSiblingRecommendation(query.settleId(), type);
-            long siblingCount = recommendation == null || recommendation.blockCount() == null
-                    ? 0 : recommendation.blockCount();
-            recommendedRoundNo = (int) siblingCount + 1;
+            // 삭제된 회차도 포함한 이력상 최댓값+1 — 회차 번호는 삭제돼도 재사용하지 않는다(2026-08-10).
+            Long maxRoundNo = recommendation == null ? null : recommendation.maxRoundNo();
+            recommendedRoundNo = (maxRoundNo == null ? 0 : maxRoundNo.intValue()) + 1;
             recommendedTotalAmount = recommendation == null ? null : recommendation.recommendedTotalAmount();
         }
 
