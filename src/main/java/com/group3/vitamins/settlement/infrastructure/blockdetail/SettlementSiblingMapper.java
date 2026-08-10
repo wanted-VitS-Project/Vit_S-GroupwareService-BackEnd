@@ -36,6 +36,7 @@ public interface SettlementSiblingMapper {
     /**
      * 정산 항목 수정 화면 진입 시(GET .../items?type=...) 추천 회차 번호·추천 총 금액을 계산하기 위한 조회.
      * "타입 변경 탭"에서 호출하는 것으로 확정되어 타입을 항상 알고 있으므로, 같은 프로젝트·같은 타입으로 좁힌다.
+     * 추천 회차 번호는 삭제된 회차도 포함한 이력상 최댓값+1(호출부에서 계산) — 회차 번호는 재사용하지 않는다.
      */
     SettlementRecommendationRow findRecommendation(@Param("settleId") Long settleId, @Param("type") String type);
 }
