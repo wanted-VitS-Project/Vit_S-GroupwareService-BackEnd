@@ -5,7 +5,8 @@ import java.time.LocalDateTime;
 /**
  * 결재 문서 도메인 모델. INV-04: {@code file_version_id} 만 참조 — file_version 과 JPA 연관관계 없음.
  *
- * <p>APR-007: 제거는 항상 하드 삭제(이력 보존 대상 아님) — {@code deletedAt} 을 두지 않는다.
+ * <p>APR-007의 DRAFT 수동 연결 해제는 하드 삭제한다. 상위 블록 삭제 전파는 DEL-005에 따라
+ * 연결 이력을 보존하기 위해 {@code deletedAt}을 기록한다.
  */
 public class ApprovalDocument {
 
@@ -13,17 +14,20 @@ public class ApprovalDocument {
     private final Long revisionId;
     private final Long fileVersionId;
     private final LocalDateTime createdAt;
+    private final LocalDateTime deletedAt;
 
-    private ApprovalDocument(Long documentId, Long revisionId, Long fileVersionId, LocalDateTime createdAt) {
+    private ApprovalDocument(Long documentId, Long revisionId, Long fileVersionId,
+                             LocalDateTime createdAt, LocalDateTime deletedAt) {
         this.documentId = documentId;
         this.revisionId = revisionId;
         this.fileVersionId = fileVersionId;
         this.createdAt = createdAt;
+        this.deletedAt = deletedAt;
     }
 
     public static ApprovalDocument reconstruct(Long documentId, Long revisionId, Long fileVersionId,
-                                                LocalDateTime createdAt) {
-        return new ApprovalDocument(documentId, revisionId, fileVersionId, createdAt);
+                                                LocalDateTime createdAt, LocalDateTime deletedAt) {
+        return new ApprovalDocument(documentId, revisionId, fileVersionId, createdAt, deletedAt);
     }
 
     public Long getDocumentId() {
@@ -40,5 +44,9 @@ public class ApprovalDocument {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
     }
 }

@@ -10,7 +10,9 @@
     <sql id="baseFrom">
         FROM approval a
         JOIN approval_revision cr
-            ON cr.approval_id = a.approval_id AND cr.revision_no = a.current_revision_no
+            ON cr.approval_id = a.approval_id
+           AND cr.revision_no = a.current_revision_no
+           AND cr.deleted_at IS NULL
         JOIN employee drafter
             ON drafter.user_id = a.user_id
         JOIN block b
@@ -82,7 +84,9 @@
             a.completed_at          AS completedAt
         <include refid="baseFrom"/>
         LEFT JOIN approval_line ca
-            ON ca.approval_revision_id = cr.approval_revision_id AND ca.status = 'ACTIVE'
+            ON ca.approval_revision_id = cr.approval_revision_id
+           AND ca.status = 'ACTIVE'
+           AND ca.deleted_at IS NULL
         LEFT JOIN employee capp
             ON capp.user_id = ca.user_id
         <include refid="whereClause"/>

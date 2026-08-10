@@ -58,9 +58,9 @@ class ApprovalCommandServiceActivityLogTest {
     void documentCreateUsesFileVersionAndNameWithNullChange() {
         Approval approval = approval(10L);
         FileVersionSummary file = new FileVersionSummary(300L, "COMPLETED", "품의서.pdf", 10L, null);
-        ApprovalDocument document = ApprovalDocument.reconstruct(400L, 200L, 300L, null);
+        ApprovalDocument document = ApprovalDocument.reconstruct(400L, 200L, 300L, null, null);
 
-        when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
         when(documentEligibilityPolicy.getReadyFileVersionOrThrow(300L)).thenReturn(file);
         when(approvalRepository.addDocument(200L, 300L)).thenReturn(document);
 
@@ -93,7 +93,7 @@ class ApprovalCommandServiceActivityLogTest {
                         new UpdateApprovalLinesCommand.LineInput("EMP001", 2),
                         new UpdateApprovalLinesCommand.LineInput("EMP002", 1)));
 
-        when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
         when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001", "EMP002")))
                 .thenReturn(List.of(employee("EMP001", "김철수"), employee("EMP002", "이영희")));
@@ -130,7 +130,7 @@ class ApprovalCommandServiceActivityLogTest {
                 100L, 200L, "EMP000",
                 List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
 
-        when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
         when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
                 .thenReturn(List.of(employee("EMP001", "김철수")));
@@ -166,7 +166,7 @@ class ApprovalCommandServiceActivityLogTest {
                 100L, 200L, "EMP000",
                 List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
 
-        when(revisionEligibilityPolicy.getApprovalOrThrow(100L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
         when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
                 .thenReturn(List.of(employee("EMP001", "김철수")));

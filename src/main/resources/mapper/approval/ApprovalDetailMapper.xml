@@ -16,10 +16,12 @@
         FROM approval_revision r
         WHERE r.approval_id IN
         <foreach item="id" collection="approvalIds" open="(" separator="," close=")">#{id}</foreach>
+        AND r.deleted_at IS NULL
         AND r.revision_no = (
             SELECT MAX(r2.revision_no)
             FROM approval_revision r2
             WHERE r2.approval_id = r.approval_id
+              AND r2.deleted_at IS NULL
         )
     </select>
 

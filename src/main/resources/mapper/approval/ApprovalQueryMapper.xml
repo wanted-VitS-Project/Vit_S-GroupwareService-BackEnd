@@ -29,6 +29,7 @@
         LEFT JOIN job_position jp
             ON jp.job_position_id = e.job_position_id
         WHERE al.approval_revision_id = #{revisionId}
+          AND al.deleted_at IS NULL
         ORDER BY al.sequence_no
     </select>
 
