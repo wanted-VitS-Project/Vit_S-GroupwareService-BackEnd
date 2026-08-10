@@ -26,7 +26,7 @@ public interface EmployeeAdminQueryPort {
      * 사번으로 사원 상세를 조회한다. 시스템 계정도 포함해 반환한다 — 403·404 를 구분하려면 존재 여부와
      * {@code isSystem} 을 서비스가 봐야 하기 때문이다.
      */
-    Optional<EmployeeDetailRow> findDetail(String userId);
+    Optional<EmployeeDetailRow> findDetail(String userId, Long companyId);
 
     /** 사원이 속한 그룹 목록 (그룹명 오름차순). */
     List<EmployeeGroupRow> findGroups(String userId);

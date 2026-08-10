@@ -45,16 +45,16 @@ class JobPositionRepositoryAdapterTest {
     @Test
     @DisplayName("이름이 중복되면 저장(saveAndFlush) 시점에 DataIntegrityViolationException 이 즉시 터진다")
     void duplicateNameThrowsSynchronouslyOnSave() {
-        adapter.save(JobPosition.create("사원", 1));
+        adapter.save(JobPosition.create("사원", 1, 1L));
 
-        assertThatThrownBy(() -> adapter.save(JobPosition.create("사원", 2)))
+        assertThatThrownBy(() -> adapter.save(JobPosition.create("사원", 2, 1L)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     @DisplayName("참조하는 사원이 있으면 삭제(delete+flush) 시점에 FK 위반이 즉시 터진다")
     void foreignKeyViolationThrowsSynchronouslyOnDelete() {
-        JobPosition saved = adapter.save(JobPosition.create("대리", 1));
+        JobPosition saved = adapter.save(JobPosition.create("대리", 1, 1L));
         Long id = saved.getJobPositionId();
 
         // employee 에는 이제 JPA 엔티티(EmployeeJpaEntity)가 있어 create-drop 이 FK 없는 테이블을 먼저 만든다.

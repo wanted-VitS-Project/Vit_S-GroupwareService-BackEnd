@@ -4,6 +4,7 @@ import com.group3.vitamins.department.application.port.DepartmentEmployeeQueryPo
 import com.group3.vitamins.department.application.result.DepartmentEmployeeCountRow;
 import com.group3.vitamins.department.application.result.DepartmentTreeResult;
 import com.group3.vitamins.department.application.usecase.DepartmentQueryUseCase;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import java.util.Map;
 public class DepartmentQueryService implements DepartmentQueryUseCase {
 
     private final DepartmentEmployeeQueryPort departmentEmployeeQueryPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     /**
      * 전체 부서를 최대 2단 트리로 조립해 반환한다.
@@ -35,7 +37,8 @@ public class DepartmentQueryService implements DepartmentQueryUseCase {
      */
     @Override
     public List<DepartmentTreeResult> getDepartmentTree() {
-        List<DepartmentEmployeeCountRow> rows = departmentEmployeeQueryPort.findAllWithDirectEmployeeCount();
+        List<DepartmentEmployeeCountRow> rows = departmentEmployeeQueryPort.findAllWithDirectEmployeeCount(
+                currentCompanyIdProvider.currentCompanyId());
 
         // parentId 별 자식 묶음. 원본이 department_id 오름차순이라 삽입 순서가 곧 정렬이다.
         Map<Long, List<DepartmentEmployeeCountRow>> childrenByParent = new LinkedHashMap<>();

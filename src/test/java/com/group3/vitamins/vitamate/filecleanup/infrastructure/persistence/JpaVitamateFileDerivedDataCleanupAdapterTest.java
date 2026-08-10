@@ -1,6 +1,7 @@
 package com.group3.vitamins.vitamate.filecleanup.infrastructure.persistence;
 
 import com.group3.vitamins.vitamate.filecleanup.application.result.CleanupVitamateFileDerivedDataResult;
+import com.group3.vitamins.vitamate.filecleanup.infrastructure.persistence.adapter.JpaVitamateFileDerivedDataCleanupAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

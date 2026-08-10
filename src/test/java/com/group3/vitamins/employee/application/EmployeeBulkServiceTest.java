@@ -16,12 +16,16 @@ import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
 import com.group3.vitamins.employee.application.service.EmployeeBulkService;
 import com.group3.vitamins.employee.application.service.EmployeeRegistrationWriter;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
+import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -33,6 +37,8 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -51,6 +57,8 @@ class EmployeeBulkServiceTest {
     private TempPasswordGenerator tempPasswordGenerator;
     private ThrottledPasswordEncoder passwordEncoder;
     private InitialPasswordMailPort mailPort;
+    private CompanyCodeQueryPort companyCodeQueryPort;
+    private CurrentCompanyIdProvider currentCompanyIdProvider;
     private EmployeeBulkService service;
 
     @BeforeEach
@@ -62,14 +70,19 @@ class EmployeeBulkServiceTest {
         tempPasswordGenerator = Mockito.mock(TempPasswordGenerator.class);
         passwordEncoder = Mockito.mock(ThrottledPasswordEncoder.class);
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
+        companyCodeQueryPort = Mockito.mock(CompanyCodeQueryPort.class);
+        currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
         service = new EmployeeBulkService(
                 new EmployeeAdminPolicy(), templatePort, parserPort, referencePort,
-                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort);
+                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
+                companyCodeQueryPort, currentCompanyIdProvider);
 
-        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 해싱·비번은 고정
-        when(referencePort.resolveDepartmentIdsByName(any())).thenReturn(Map.of("개발팀", 10L));
-        when(referencePort.resolveJobPositionIdsByName(any())).thenReturn(Map.of("대리", 5L));
+        // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 회사코드 vitas, 회사ID 1, 해싱·비번은 고정
+        when(referencePort.resolveDepartmentIdsByName(any(), eq(1L))).thenReturn(Map.of("개발팀", 10L));
+        when(referencePort.resolveJobPositionIdsByName(any(), eq(1L))).thenReturn(Map.of("대리", 5L));
         when(referencePort.findExistingUserIds(any())).thenReturn(Set.of());
+        when(companyCodeQueryPort.findCodeByCompanyId(eq(1L))).thenReturn("vitas");
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         when(tempPasswordGenerator.generate()).thenReturn("Temp1234!");
         when(passwordEncoder.encode(anyString())).thenReturn("HASHED");
     }
@@ -168,7 +181,8 @@ class EmployeeBulkServiceTest {
         @Test
         @DisplayName("유효 행은 통과하고 각 오류 유형을 정확히 분류한다")
         void classifiesErrors() {
-            when(referencePort.findExistingUserIds(any())).thenReturn(Set.of("EMP_DB"));
+            // DB 는 접두사 형태로 저장하므로 기존 사번 스텁도 접두사 형태로 준다 (row "EMP_DB" → "vitas-EMP_DB").
+            when(referencePort.findExistingUserIds(any())).thenReturn(Set.of("vitas-EMP_DB"));
             List<ParsedEmployeeRow> rows = List.of(
                     valid(2, "EMP100", "a@b.com"),                                   // 유효
                     row(3, null, "김", "개발팀", null, "2026-01-01", null, "MEMBER"),  // 사번 누락
@@ -186,6 +200,19 @@ class EmployeeBulkServiceTest {
                     BulkValidation.ADMIN_ROLE_NOT_ALLOWED,
                     BulkValidation.DEPARTMENT_NOT_FOUND,
                     BulkValidation.USER_ID_DUPLICATED);
+        }
+
+        @Test
+        @DisplayName("접두사 포함 20자 경계 — base 14자 유효, 15자는 REQUIRED_COLUMN")
+        void userIdPrefixLengthBoundary() {
+            List<ParsedEmployeeRow> rows = List.of(
+                    valid(2, "EMP01234567890", "a@b.com"),   // base 14 → "vitas-"+14=20 유효
+                    valid(3, "EMP012345678901", "b@c.com"));  // base 15 → 21 초과 → 거부
+            BulkValidateResult r = service.validate(validateCmd(rows));
+
+            assertThat(r.validCount()).isEqualTo(1);
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors()).extracting("validation").containsExactly(BulkValidation.REQUIRED_COLUMN);
         }
 
         @Test
@@ -273,8 +300,11 @@ class EmployeeBulkServiceTest {
             assertThat(r.registeredCount()).isEqualTo(2);
             assertThat(r.failedCount()).isEqualTo(1);          // 오류 1행
             assertThat(r.emailSentCount()).isEqualTo(1);
-            assertThat(r.emailNotRegistered()).extracting("userId").containsExactly("EMP101");
-            verify(registrationWriter, times(2)).register(any(), anyString(), anyString());
+            assertThat(r.emailNotRegistered()).extracting("userId").containsExactly("vitas-EMP101");
+
+            ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
+            verify(registrationWriter, times(2)).register(captor.capture(), anyString(), anyString());
+            assertThat(captor.getAllValues()).extracting(Employee::getCompanyId).containsOnly(1L); // 등록된 전원 회사 스탬핑
         }
 
         @Test

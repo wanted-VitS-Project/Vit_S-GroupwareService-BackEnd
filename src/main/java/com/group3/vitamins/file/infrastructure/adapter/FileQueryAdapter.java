@@ -5,6 +5,7 @@ import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
+import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -55,5 +56,10 @@ public class FileQueryAdapter implements FileQueryPort {
     @Override
     public List<ProjectFileProjection> findProjectFiles(Long projectId) {
         return fileQueryMapper.findProjectFiles(projectId);
+    }
+
+    @Override
+    public List<ProjectTrashFileProjection> findProjectTrashFiles(Long projectId) {
+        return fileQueryMapper.findProjectTrashFiles(projectId);
     }
 }

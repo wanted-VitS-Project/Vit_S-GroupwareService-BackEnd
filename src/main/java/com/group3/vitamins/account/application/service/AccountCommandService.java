@@ -9,6 +9,7 @@ import com.group3.vitamins.account.application.usecase.AccountCommandUseCase;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -47,6 +48,7 @@ public class AccountCommandService implements AccountCommandUseCase {
     private final AccountQueryPort accountQueryPort;
     private final SessionTerminator sessionTerminator;
     private final AccountAdminPolicy accountAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     /**
      * 전역 권한 변경 (`.ai/api/account.md` §1).
@@ -122,7 +124,8 @@ public class AccountCommandService implements AccountCommandUseCase {
      * <p>존재·{@code is_system} 은 조인이 필요해 MyBatis 로 먼저 보고, 실제 변경은 JPA 엔티티로 한다.
      */
     private AccountEntity loadModifiableTarget(String targetUserId) {
-        AccountTargetRow target = accountQueryPort.findTarget(targetUserId)
+        AccountTargetRow target = accountQueryPort
+                .findTarget(targetUserId, currentCompanyIdProvider.currentCompanyId())
                 .orElseThrow(() -> new NotFoundException(AccountErrorCode.ACC_NOT_FOUND));
         if (target.isSystem()) {
             throw new ForbiddenException(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED);

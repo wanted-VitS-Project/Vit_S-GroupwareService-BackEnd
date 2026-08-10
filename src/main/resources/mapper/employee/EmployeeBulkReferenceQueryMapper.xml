@@ -16,7 +16,8 @@
             resultType="com.group3.vitamins.employee.application.result.NameIdRow">
         SELECT name AS name, MIN(department_id) AS id
           FROM department
-         WHERE name IN
+         WHERE company_id = #{companyId}
+           AND name IN
         <foreach collection="names" item="n" open="(" separator="," close=")">
             #{n}
         </foreach>
@@ -24,12 +25,13 @@
         HAVING COUNT(*) = 1
     </select>
 
-    <!-- 직급명은 전역 유니크라 그대로 조회한다. -->
+    <!-- 직급명은 회사 범위 유니크라 그대로 조회한다. -->
     <select id="findJobPositionIdsByName"
             resultType="com.group3.vitamins.employee.application.result.NameIdRow">
         SELECT name AS name, job_position_id AS id
           FROM job_position
-         WHERE name IN
+         WHERE company_id = #{companyId}
+           AND name IN
         <foreach collection="names" item="n" open="(" separator="," close=")">
             #{n}
         </foreach>

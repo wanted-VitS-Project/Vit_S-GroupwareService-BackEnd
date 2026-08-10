@@ -26,7 +26,7 @@ public interface AccountQueryMapper {
      * <p>계정 존재({@code ACC_NOT_FOUND})와 시스템 계정 여부({@code ACC_SYSTEM_ACCOUNT_NOT_ALLOWED})를
      * 한 번에 판정하기 위한 조회다. 실제 변경은 JPA 로 로드해 수행한다.
      */
-    Optional<AccountTargetRow> findTarget(@Param("userId") String userId);
+    Optional<AccountTargetRow> findTarget(@Param("userId") String userId, @Param("companyId") Long companyId);
 
     /**
      * 비밀번호 재설정 대상들의 스냅샷을 한 번에 조회한다.
@@ -34,5 +34,5 @@ public interface AccountQueryMapper {
      * <p>반환 개수가 요청 개수보다 적으면 존재하지 않는 사번이 섞인 것이다 →
      * 명세상 <b>전체 거부</b>({@code ACC_NOT_FOUND})다. ADMIN 포함 여부도 {@code role} 로 판정한다.
      */
-    List<AccountTargetRow> findTargets(@Param("userIds") Collection<String> userIds);
+    List<AccountTargetRow> findTargets(@Param("userIds") Collection<String> userIds, @Param("companyId") Long companyId);
 }

@@ -24,13 +24,14 @@ import org.hibernate.annotations.GeneratedColumn;
  */
 @Entity
 @Table(name = "department",
-        // (parent_key, name) 복합 유니크 = DB 의 uk_department_parent_name 을 엔티티에도 명시한다(2026-08-06).
-        // validate 는 UNIQUE 를 검사하지 않아 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨
-        // 같은 상위 부서 안 동명이 실제로 막힌다. parent_key(=COALESCE(parent_id,0)) 를 쓰는 이유 —
-        // MySQL/H2 는 parent_id 가 NULL 인 행끼리 UNIQUE 로 안 막아 최상위 동명이 새므로, NULL 을 0 으로
-        // 정규화해 최상위(0 공유)까지 DB 가 막게 한다.
+        // (company_id, parent_key, name) 복합 유니크 = DB 의 uk_department_company_parent_name 을 엔티티에도
+        // 명시한다(마이그레이션 V20260809101000 에서 회사 범위로 확장). validate 는 UNIQUE 를 검사하지 않아
+        // 운영엔 영향이 없고, 테스트(create-drop)에서 제약이 생겨 "같은 회사·같은 상위 부서 안" 동명만 막힌다
+        // — 회사가 다르면 같은 최상위 부서명도 허용돼야 하므로 company_id 를 키에 포함해야 한다.
+        // parent_key(=COALESCE(parent_id,0)) 를 쓰는 이유 — MySQL/H2 는 parent_id 가 NULL 인 행끼리 UNIQUE 로
+        // 안 막아 최상위 동명이 새므로, NULL 을 0 으로 정규화해 최상위(0 공유)까지 DB 가 막게 한다.
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_department_parent_name", columnNames = {"parent_key", "name"}))
+                name = "uk_department_company_parent_name", columnNames = {"company_id", "parent_key", "name"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DepartmentJpaEntity {
@@ -39,6 +40,9 @@ public class DepartmentJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "department_id")
     private Long departmentId;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @Column(name = "name", nullable = false, length = 50)
     private String name;
@@ -56,8 +60,9 @@ public class DepartmentJpaEntity {
     @Column(name = "parent_key", insertable = false, updatable = false)
     private Long parentKey;
 
-    public DepartmentJpaEntity(Long departmentId, String name, Long parentId) {
+    public DepartmentJpaEntity(Long departmentId, Long companyId, String name, Long parentId) {
         this.departmentId = departmentId;
+        this.companyId = companyId;
         this.name = name;
         this.parentId = parentId;
     }

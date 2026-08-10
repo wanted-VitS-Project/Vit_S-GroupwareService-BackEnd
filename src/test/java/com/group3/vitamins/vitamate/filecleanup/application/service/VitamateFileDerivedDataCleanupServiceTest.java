@@ -3,33 +3,36 @@ package com.group3.vitamins.vitamate.filecleanup.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.filecleanup.application.command.CleanupVitamateFileDerivedDataCommand;
+import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateCleanupJobStorePort;
 import com.group3.vitamins.vitamate.filecleanup.application.port.VitamateFileDerivedDataCleanupPort;
 import com.group3.vitamins.vitamate.filecleanup.application.result.CleanupVitamateFileDerivedDataResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @DisplayName("VitamateFileDerivedDataCleanupService")
 class VitamateFileDerivedDataCleanupServiceTest {
 
     private static final Long FILE_ID = 900001L;
-
+    private VitamateCleanupJobStorePort cleanupJobStorePort;
     private VitamateFileDerivedDataCleanupPort cleanupPort;
     private VitamateFileDerivedDataCleanupService cleanupService;
 
     @BeforeEach
     void setUp() {
         cleanupPort = mock(VitamateFileDerivedDataCleanupPort.class);
-        cleanupService = new VitamateFileDerivedDataCleanupService(cleanupPort);
+        cleanupJobStorePort = mock(VitamateCleanupJobStorePort.class);
+
+        cleanupService = new VitamateFileDerivedDataCleanupService(
+                cleanupPort,
+                cleanupJobStorePort
+        );
     }
 
     @Nested
@@ -51,9 +54,24 @@ class VitamateFileDerivedDataCleanupServiceTest {
             CleanupVitamateFileDerivedDataResult result = cleanupService.handle(
                     new CleanupVitamateFileDerivedDataCommand(FILE_ID)
             );
-
+            InOrder inOrder = inOrder(cleanupJobStorePort, cleanupPort);
+            inOrder.verify(cleanupJobStorePort).createCleanupJob(FILE_ID);
+            inOrder.verify(cleanupPort).cleanupByFileId(FILE_ID);
             assertThat(result).isEqualTo(expected);
-            verify(cleanupPort).cleanupByFileId(FILE_ID);
+        }
+
+        @Test
+        @DisplayName("cleanup job 생성이 실패하면 파생 데이터 삭제를 시작하지 않는다")
+        void stopsCleanupWhenJobCreationFails() {
+            doThrow(new IllegalStateException("cleanup job creation failed"))
+                    .when(cleanupJobStorePort)
+                    .createCleanupJob(FILE_ID);
+
+            assertThatThrownBy(() -> cleanupService.handle(
+                    new CleanupVitamateFileDerivedDataCommand(FILE_ID)
+            )).isInstanceOf(IllegalStateException.class);
+
+            verify(cleanupPort, never()).cleanupByFileId(FILE_ID);
         }
     }
 
@@ -91,10 +109,7 @@ class VitamateFileDerivedDataCleanupServiceTest {
                     .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
 
-            if (command == null || command.fileId() == null || command.fileId() <= 0) {
-                verify(cleanupPort, never()).cleanupByFileId(null);
-                verifyNoInteractions(cleanupPort);
-            }
+            verifyNoInteractions(cleanupJobStorePort, cleanupPort);
         }
     }
 }

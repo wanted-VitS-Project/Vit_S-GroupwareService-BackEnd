@@ -6,9 +6,9 @@ package com.group3.vitamins.employee.application.port;
  */
 public interface EmployeeReferenceQueryPort {
 
-    /** 부서가 존재하는가 (없으면 {@code EMP_DEPARTMENT_NOT_FOUND}). */
-    boolean departmentExists(Long departmentId);
+    /** 부서가 <b>이 회사에</b> 존재하는가 (없으면 {@code EMP_DEPARTMENT_NOT_FOUND}). 타사 부서 참조 차단. */
+    boolean departmentExists(Long departmentId, Long companyId);
 
-    /** 직급이 존재하는가 (없으면 {@code EMP_JOB_POSITION_NOT_FOUND}). */
-    boolean jobPositionExists(Long jobPositionId);
+    /** 직급이 <b>이 회사에</b> 존재하는가 (없으면 {@code EMP_JOB_POSITION_NOT_FOUND}). 타사 직급 참조 차단. */
+    boolean jobPositionExists(Long jobPositionId, Long companyId);
 }
