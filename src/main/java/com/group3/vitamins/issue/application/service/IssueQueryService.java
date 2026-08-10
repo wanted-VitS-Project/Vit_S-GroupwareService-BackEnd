@@ -81,6 +81,7 @@ public class IssueQueryService implements IssueQueryUseCase {
         return new IssueCalendarResult(rows.stream()
                 .map(row -> new IssueCalendarResult.CalendarIssueResult(
                         row.issueId(),
+                        row.version(),
                         row.title(),
                         row.status(),
                         row.priority(),
@@ -185,6 +186,7 @@ public class IssueQueryService implements IssueQueryUseCase {
 
         return new IssueResult(
                 issue.issueId(),
+                issue.version(),
                 issue.stepId(),
                 issue.title(),
                 issue.content(),

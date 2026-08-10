@@ -2,9 +2,9 @@
 
 **상태**: `✅ 확정`
 **담당**: 김용준
-**최종 업데이트**: 2026-08-10 (`ISSUE_ASSIGNED`의 `targetContext`를 `null`에서 `{projectId, stepId}`로 변경 — FE 상세 라우팅에 두 값이 필요하다고 확인됨. **프론트 공유 필요**)
+**최종 업데이트**: 2026-08-11 (상태 변경 요청의 `status`·`version` HTTP 경계 검증 보강 — version 누락·0·음수는 `400 ISS_INVALID_REQUEST`)
+**최종 업데이트**: 2026-08-11 (이슈 수정·상태 변경에 `version` 기반 낙관적 락 적용 — 조회 응답의 `version`을 수정 요청에 필수 전달, 불일치 시 `409 ISSUE_VERSION_CONFLICT`. 프론트 draft 보존·필드 단위 병합 UX는 별도 명세)
 **최종 업데이트**: 2026-08-10 (조회/수정 권한 게이트 분리 — 목록·상세 조회는 project 권한만 확인, 생성·수정·상태변경·삭제만 step EDITOR 확인. 신규 에러코드 없음, `ISS_ACCESS_PERMISSION_REQUIRED` 의미만 변경)
-**최종 업데이트**: 2026-08-10 (프로젝트 단위 이슈 목록 조회 신규 추가 — `GET /api/v1/projects/{projectId}/issues`. Step별로 묶어 반환, 이슈 없는 Step도 포함, 삭제된 Step은 제외, Step별·전체 이슈 진척도(`totalIssueCount`·`doneIssueCount`·`inProgressIssueCount`·`progressRate`) 포함)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -34,6 +34,14 @@
 ```
 
 실패 응답은 `{ httpStatus, message, code }` 형식을 사용한다.
+
+### 동시 수정 방지
+
+- 이슈 조회 응답에는 현재 `version`을 포함한다.
+- `PATCH /api/v1/issues/{issueId}`와 `PATCH /api/v1/issues/{issueId}/status`는 조회에서 받은 `version`을 필수로 받는다.
+- 서버는 `issue_id`와 `version`이 모두 일치할 때만 수정한다. 불일치하면 `409 ISSUE_VERSION_CONFLICT`를 반환하며 데이터는 변경하지 않는다.
+- 수정 성공 응답에는 증가한 `version`을 반환한다.
+- 같은 상태 요청은 기존 멱등 계약대로 200을 반환하고, 현재 `version`을 함께 반환한다.
 
 ## 🔑 공통 원칙
 
@@ -140,6 +148,7 @@ GET /api/v1/steps/10/issues?blockId=15
 |---|---|---|
 | `data.issues` | List | 조회된 이슈 목록 |
 | `data.issues[].issueId` | Long | 이슈 ID |
+| `data.issues[].version` | int | 동시 수정 검사용 현재 버전 |
 | `data.issues[].title` | String | 이슈 제목 |
 | `data.issues[].status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
 | `data.issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
@@ -162,6 +171,7 @@ GET /api/v1/steps/10/issues?blockId=15
     "issues": [
       {
         "issueId": 101,
+        "version": 1,
         "title": "경쟁사 제안서 벤치마킹",
         "status": "TODO",
         "priority": "HIGH",
@@ -324,6 +334,7 @@ Step 존재 및 접근 권한 확인
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `data.issueId` | Long | 이슈 번호 |
+| `data.version` | int | 동시 수정 검사용 현재 버전 |
 | `data.stepId` | Long | 소속 Step 번호 |
 | `data.title` | String | 제목 |
 | `data.content` | String | 내용. `null` 허용 |
@@ -364,6 +375,7 @@ Step 존재 및 접근 권한 확인
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
+| `version` | int | Y | 조회 응답에서 받은 현재 버전. 1 이상 정수 |
 | `title` | String | N | 제목. 전달 시 빈 값 불가, 최대 200자 |
 | `content` | String | N | 내용. 명시적 `null`이면 내용 삭제 |
 | `dueDate` | LocalDate | N | 마감일. 명시적 `null`이면 마감일 해제 |
@@ -395,6 +407,7 @@ null   → 400
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 논리 삭제됨 |
 | 404 | `ISS_ASSIGNEE_NOT_FOUND` | 존재하지 않는 사번 포함. 전체 요청 거부 |
 | 404 | `ISS_BLOCK_NOT_FOUND` | 존재하지 않거나 삭제된 Block 포함. 전체 요청 거부 |
+| 409 | `ISSUE_VERSION_CONFLICT` | 다른 사용자가 먼저 수정함 |
 
 ---
 
@@ -411,6 +424,7 @@ null   → 400
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
 | `status` | String | Y | `TODO` · `IN_PROGRESS` · `DONE` |
+| `version` | int | Y | 조회 응답에서 받은 현재 버전. 1 이상 정수 |
 
 ### 완료 시각 규칙
 
@@ -426,6 +440,7 @@ null   → 400
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `data.issueId` | Long | 이슈 번호 |
+| `data.version` | int | 동시 수정 검사용 변경 후 현재 버전 |
 | `data.status` | String | 변경 후 상태 |
 | `data.completedAt` | LocalDateTime | 변경 후 완료 시각. `null` 허용 |
 | `data.updatedAt` | LocalDateTime | 최종 수정 일시 |
@@ -438,6 +453,7 @@ null   → 400
   "message": "이슈 상태 변경 성공",
   "data": {
     "issueId": 101,
+    "version": 2,
     "status": "DONE",
     "completedAt": "2026-08-02T22:46:00",
     "updatedAt": "2026-08-02T22:46:00"
@@ -452,9 +468,11 @@ null   → 400
 | 200 | – | 변경 성공 또는 동일 상태 멱등 처리 |
 | 400 | `ISS_STATUS_REQUIRED` | 상태가 전달되지 않음 |
 | 400 | `ISS_INVALID_STATUS` | 허용하지 않는 상태값 |
+| 400 | `ISS_INVALID_REQUEST` | version 누락 또는 1 미만 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 논리 삭제됨 |
+| 409 | `ISSUE_VERSION_CONFLICT` | 다른 사용자가 먼저 수정함 |
 
 ---
 
@@ -570,6 +588,7 @@ GET /api/v1/issues/calendar
 |---|---|---|
 | `data.issues` | List | 조회된 이슈 목록 |
 | `data.issues[].issueId` | Long | 이슈 번호 |
+| `data.issues[].version` | int | 동시 수정 검사용 현재 버전 |
 | `data.issues[].title` | String | 이슈 제목 |
 | `data.issues[].status` | String | `TODO` · `IN_PROGRESS` (`DONE`은 반환하지 않음) |
 | `data.issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
@@ -589,6 +608,7 @@ GET /api/v1/issues/calendar
     "issues": [
       {
         "issueId": 101,
+        "version": 1,
         "title": "제안서 1차 초안 작성",
         "status": "IN_PROGRESS",
         "priority": "HIGH",
@@ -686,6 +706,7 @@ GET /api/v1/projects/3/issues
 | `data.steps[].progressRate` | Integer | 해당 Step의 완료율(%). 이슈가 0개면 `null` |
 | `data.steps[].issues` | List | 해당 Step의 이슈 목록. 없으면 빈 배열 |
 | `data.steps[].issues[].issueId` | Long | 이슈 ID |
+| `data.steps[].issues[].version` | int | 동시 수정 검사용 현재 버전 |
 | `data.steps[].issues[].title` | String | 이슈 제목 |
 | `data.steps[].issues[].status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
 | `data.steps[].issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
@@ -722,6 +743,7 @@ GET /api/v1/projects/3/issues
         "issues": [
           {
             "issueId": 101,
+            "version": 1,
             "title": "경쟁사 제안서 벤치마킹",
             "status": "TODO",
             "priority": "HIGH",

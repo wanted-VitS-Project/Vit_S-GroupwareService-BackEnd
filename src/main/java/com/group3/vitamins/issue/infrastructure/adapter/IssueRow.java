@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record IssueRow(
         Long issueId,
+        int version,
         Long stepId,
         String title,
         String content,
