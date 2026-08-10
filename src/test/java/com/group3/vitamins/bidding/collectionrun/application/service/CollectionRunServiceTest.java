@@ -2,12 +2,18 @@ package com.group3.vitamins.bidding.collectionrun.application.service;
 
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionConditionFilter;
 import com.group3.vitamins.bidding.collectionrun.application.command.StartCollectionRunCommand;
+import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunOutbox;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunConditionPort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
 import com.group3.vitamins.bidding.collectionrun.application.result.CollectionRunResult;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRun;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
+import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunConditionSnapshot;
+import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
 import com.group3.vitamins.bidding.collectionrun.domain.repository.CollectionRunRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.DomainException;
@@ -15,8 +21,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,14 +46,21 @@ class CollectionRunServiceTest {
 
     private CollectionRunConditionPort conditionPort;
     private CollectionRunRepository runRepository;
+    private CollectionRunOutboxStorePort outboxStorePort;
     private CurrentCompanyIdProvider companyIdProvider;
+    private Clock clock;
     private CollectionRunService service;
 
     @BeforeEach
     void setUp() {
         conditionPort = mock(CollectionRunConditionPort.class);
         runRepository = mock(CollectionRunRepository.class);
+        outboxStorePort = mock(CollectionRunOutboxStorePort.class);
         companyIdProvider = mock(CurrentCompanyIdProvider.class);
+        clock = Clock.fixed(
+                Instant.parse("2026-08-10T06:00:00Z"),
+                ZoneOffset.UTC
+        );
 
         when(companyIdProvider.currentCompanyId())
                 .thenReturn(COMPANY_ID);
@@ -52,7 +68,9 @@ class CollectionRunServiceTest {
         service = new CollectionRunService(
                 conditionPort,
                 runRepository,
-                companyIdProvider
+                outboxStorePort,
+                companyIdProvider,
+                clock
         );
     }
 
@@ -93,6 +111,23 @@ class CollectionRunServiceTest {
         assertThat(saved.requestedBy()).isEqualTo(USER_ID);
         assertThat(saved.runStatus())
                 .isEqualTo(CollectionRunStatus.PENDING);
+
+        ArgumentCaptor<CollectionRunOutbox.Pending> outboxCaptor =
+                ArgumentCaptor.forClass(CollectionRunOutbox.Pending.class);
+
+        verify(outboxStorePort).savePending(outboxCaptor.capture());
+
+        CollectionRunOutbox.Pending outbox = outboxCaptor.getValue();
+        assertThat(outbox.runId()).isEqualTo(RUN_ID);
+        assertThat(outbox.conditionId()).isEqualTo(CONDITION_ID);
+        assertThat(outbox.companyId()).isEqualTo(COMPANY_ID);
+        assertThat(outbox.eventType())
+                .isEqualTo("COLLECTION_RUN_REQUESTED");
+        assertThat(outbox.retryCount()).isZero();
+        assertThat(outbox.eventId()).isNotBlank();
+        assertThat(outbox.attemptId()).isNotBlank();
+        assertThat(outbox.createdAt())
+                .isEqualTo(LocalDateTime.of(2026, 8, 10, 6, 0));
     }
 
     @Test
@@ -239,6 +274,10 @@ class CollectionRunServiceTest {
         CollectionCondition condition = mock(CollectionCondition.class);
 
         when(condition.getConditionId()).thenReturn(CONDITION_ID);
+        when(condition.getSourceCode()).thenReturn("NARA");
+        when(condition.getConditionName()).thenReturn("테스트 수집 조건");
+        when(condition.getNoticeTypes()).thenReturn(List.of(BidNoticeType.SERVICE));
+        when(condition.getFilters()).thenReturn(testFilter());
         when(condition.isActive()).thenReturn(true);
 
         return condition;
@@ -249,17 +288,24 @@ class CollectionRunServiceTest {
         return new CollectionRun(
                 RUN_ID,
                 run.conditionId(),
+                run.conditionSnapshot(),
                 run.triggerType(),
                 run.runStatus(),
+                run.processingAttemptId(),
+                run.retryCount(),
+                run.processingStartedAt(),
+                run.leaseExpiresAt(),
                 run.startedAt(),
                 run.finishedAt(),
                 run.collectedCount(),
                 run.insertedCount(),
                 run.updatedCount(),
                 run.skippedCount(),
+                run.errorCode(),
                 run.errorMessage(),
                 run.requestedBy(),
-                run.createdAt()
+                run.createdAt(),
+                run.updatedAt()
         );
     }
 
@@ -270,9 +316,13 @@ class CollectionRunServiceTest {
         return new CollectionRun(
                 RUN_ID,
                 CONDITION_ID,
-                com.group3.vitamins.bidding.collectionrun.domain.model
-                        .CollectionRunTriggerType.MANUAL,
+                testSnapshot(),
+                CollectionRunTriggerType.MANUAL,
                 CollectionRunStatus.COMPLETED,
+                null,
+                0,
+                null,
+                null,
                 now.minusMinutes(1),
                 now,
                 10,
@@ -280,8 +330,33 @@ class CollectionRunServiceTest {
                 2,
                 1,
                 null,
+                null,
                 USER_ID,
-                now.minusMinutes(1)
+                now.minusMinutes(1),
+                now
+        );
+    }
+
+    // 테스트에서 사용하는 실행 시점 수집 조건 스냅샷을 만듭니다.
+    private CollectionRunConditionSnapshot testSnapshot() {
+        return new CollectionRunConditionSnapshot(
+                "NARA",
+                "테스트 수집 조건",
+                List.of(BidNoticeType.SERVICE),
+                testFilter()
+        );
+    }
+
+    // 테스트에서 사용하는 최소 수집 필터를 만듭니다.
+    private CollectionConditionFilter testFilter() {
+        return new CollectionConditionFilter(
+                List.of("스마트시티"),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                true,
+                null
         );
     }
 

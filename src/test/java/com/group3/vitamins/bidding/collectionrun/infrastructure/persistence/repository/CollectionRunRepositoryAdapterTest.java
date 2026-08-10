@@ -9,7 +9,9 @@ import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistenc
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.repository.CollectionConditionPersistenceMapper;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.repository.CollectionConditionRepositoryAdapter;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRun;
+import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunConditionSnapshot;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
+import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.mapper.CollectionRunConditionSnapshotJsonMapper;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.mapper.CollectionRunPersistenceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({
         CollectionRunRepositoryAdapter.class,
         CollectionRunPersistenceMapper.class,
+        CollectionRunConditionSnapshotJsonMapper.class,
         CollectionConditionRepositoryAdapter.class,
         CollectionConditionPersistenceMapper.class,
         CollectionConditionParamsJsonMapper.class,
@@ -92,6 +95,7 @@ class CollectionRunRepositoryAdapterTest {
         CollectionRun saved = runAdapter.save(
                 CollectionRun.createPending(
                         condition.getConditionId(),
+                        snapshot(condition),
                         USER_ID,
                         LocalDateTime.now()
                 )
@@ -109,6 +113,7 @@ class CollectionRunRepositoryAdapterTest {
                 .isEqualTo(condition.getConditionId());
         assertThat(found.runStatus())
                 .isEqualTo(CollectionRunStatus.PENDING);
+        assertThat(found.conditionSnapshot()).isEqualTo(snapshot(condition));
         assertThat(found.requestedBy()).isEqualTo(USER_ID);
         assertThat(found.collectedCount()).isZero();
     }
@@ -122,6 +127,7 @@ class CollectionRunRepositoryAdapterTest {
         runAdapter.save(
                 CollectionRun.createPending(
                         condition.getConditionId(),
+                        snapshot(condition),
                         USER_ID,
                         LocalDateTime.now()
                 )
@@ -141,6 +147,7 @@ class CollectionRunRepositoryAdapterTest {
         CollectionRun saved = runAdapter.save(
                 CollectionRun.createPending(
                         condition.getConditionId(),
+                        snapshot(condition),
                         USER_ID,
                         LocalDateTime.now()
                 )
@@ -179,6 +186,16 @@ class CollectionRunRepositoryAdapterTest {
                 true,
                 USER_ID,
                 LocalDateTime.now()
+        );
+    }
+
+    // 실행 시점의 수집 조건을 독립적인 스냅샷으로 만듭니다.
+    private CollectionRunConditionSnapshot snapshot(CollectionCondition condition) {
+        return new CollectionRunConditionSnapshot(
+                condition.getSourceCode(),
+                condition.getConditionName(),
+                condition.getNoticeTypes(),
+                condition.getFilters()
         );
     }
 
