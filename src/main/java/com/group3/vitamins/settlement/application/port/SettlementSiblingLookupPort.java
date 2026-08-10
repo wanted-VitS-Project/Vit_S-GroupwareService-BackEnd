@@ -30,6 +30,6 @@ public interface SettlementSiblingLookupPort {
     /** 추천 회차 번호·추천 총 금액 계산용 조회. 대상이 없으면 null. */
     SiblingRecommendation findSiblingRecommendation(Long settleId, SettlementType type);
 
-    record SiblingRecommendation(Long blockCount, Long recommendedTotalAmount) {
+    record SiblingRecommendation(Long maxRoundNo, Long recommendedTotalAmount) {
     }
 }

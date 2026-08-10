@@ -89,22 +89,28 @@
     <!--
         정산 항목 수정 화면 진입 시 추천값 — type(INCOME/OUTCOME) 필수 파라미터로 스코프를 좁힌다
         (2026-08-09 변경 — "타입 변경 탭"에서 호출하는 것으로 트리거 지점이 확정되어 항상 타입을 안다).
-        target 파생 테이블로 이 settleId의 project_id를 한 번만 구하고, blockCount(이 블록 제외 같은
-        프로젝트·같은 타입 활성 정산 블록 수)와 recommendedTotalAmount(같은 조건에서 total_amount가
-        채워진 값 — 연결된(status != PENDING) 블록 우선, findEstablishedTotalAmount와 동일한 우선순위
-        규칙)를 상관 서브쿼리 2개로 함께 계산한다.
+        target 파생 테이블로 이 settleId의 project_id를 한 번만 구하고, maxRoundNo와
+        recommendedTotalAmount(같은 조건에서 total_amount가 채워진 값 — 연결된(status != PENDING)
+        블록 우선, findEstablishedTotalAmount와 동일한 우선순위 규칙)를 상관 서브쿼리 2개로 함께 계산한다.
+
+        ⚠️ maxRoundNo는 **삭제된 블록도 포함**해서 계산한다(2026-08-10, 회차 삭제 시나리오 대응) —
+        "같은 프로젝트·같은 타입 활성 블록 개수+1"로 추천하면 중간 회차(예: 2차)가 삭제된 뒤엔 이미
+        존재하는 번호(예: 3)를 다시 추천해버리는 문제가 있었다. 회차 번호는 삭제돼도 재사용하지 않는
+        정책(세금계산서/전표 번호처럼 취소돼도 결번으로 남기는 회계 관행과 동일)으로 확정해, "이
+        프로젝트·타입에 지금까지 존재했던 회차 번호(삭제 포함) 중 최댓값 + 1"로 바꿨다 — 삭제 패턴과
+        무관하게 계산이 항상 단순하고 충돌이 없다. 회차 번호 중복 자체는 막지 않는다(사용자 결정 —
+        paidAmountRatio·SETL-008·다음 정산 예정일 계산 전부 round_no 유일성에 의존하지 않음을 확인함).
     -->
     <select id="findRecommendation"
             resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementRecommendationRow">
         SELECT
-        (SELECT COUNT(*) FROM settlement_block sbc
+        (SELECT MAX(sbc.round_no) FROM settlement_block sbc
         JOIN block bc ON bc.block_id = sbc.block_id
         JOIN step stc ON stc.step_id = bc.step_id
         WHERE stc.project_id = target.project_id
         AND sbc.type = #{type}
         AND sbc.settle_id != #{settleId}
-        AND sbc.deleted_at IS NULL
-        ) AS blockCount,
+        ) AS maxRoundNo,
         (SELECT sbt.total_amount FROM settlement_block sbt
         JOIN block bt ON bt.block_id = sbt.block_id
         JOIN step stt ON stt.step_id = bt.step_id
