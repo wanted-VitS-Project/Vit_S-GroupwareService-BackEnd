@@ -22,6 +22,25 @@ public class IssueQueryAdapter implements IssueQueryPort {
     }
 
     @Override
+    public Optional<Long> findProjectId(Long stepId) {
+        return issueQueryMapper.findProjectId(stepId);
+    }
+
+    @Override
+    public List<StepSummaryResult> findStepsByProject(Long projectId) {
+        return issueQueryMapper.findStepsByProject(projectId).stream()
+                .map(row -> new StepSummaryResult(row.stepId(), row.stepName()))
+                .toList();
+    }
+
+    @Override
+    public List<IssueResult> findIssuesByProject(Long projectId) {
+        return issueQueryMapper.findIssuesByProject(projectId).stream()
+                .map(this::toResultWithoutRelations)
+                .toList();
+    }
+
+    @Override
     public Optional<IssueResult> findIssue(Long issueId) {
         return issueQueryMapper.findIssue(issueId)
                 .map(this::toResultWithoutRelations);
