@@ -57,7 +57,8 @@ public record IssueListResponse(
                     result.assignees().stream()
                             .map(assignee -> new AssigneeResponse(
                                     assignee.userId(),
-                                    assignee.name()
+                                    assignee.name(),
+                                    assignee.resignedAt()
                             ))
                             .toList(),
                     result.relatedBlocks().stream()
@@ -76,7 +77,10 @@ public record IssueListResponse(
             String userId,
 
             @Schema(description = "담당자 이름", example = "김용준")
-            String name
+            String name,
+
+            @Schema(description = "퇴사일. 재직 중이면 null", example = "2026-08-01", nullable = true)
+            LocalDate resignedAt
     ) {
     }
 

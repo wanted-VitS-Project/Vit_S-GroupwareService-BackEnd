@@ -13,12 +13,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class IssueAssigneeAdapter implements IssueAssigneePort {
 
+    private final IssueQueryMapper issueQueryMapper;
     private final EmployeeLookupPort employeeLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
 
@@ -28,16 +30,15 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
             return List.of();
         }
 
-        // 포트 반환형 변경(2026-08-11, DELETE.md D-6)에 맞춘 호출만 바꿨다 — 판정 동작은 그대로다.
-        //
-        // ⚠️ 이슈 도메인 확인 필요: findRefsByUserIds 는 삭제된 사원(deleted_at IS NOT NULL)도 반환하므로
-        //    이 존재 검증을 그대로 통과한다 = 삭제된 사원을 이슈 담당자로 배정할 수 있다.
-        //    막으려면 아래 refs 값의 deleted() 를 보고 거부하거나, 검증 전용인
-        //    EmployeeLookupPort.findNameByUserId(deleted_at IS NULL 을 본다)로 바꿔야 한다.
-        //    남의 도메인 판단이라 동작을 바꾸지 않고 남겨둔다.
         Map<String, EmployeeLookupPort.EmployeeRef> refs =
                 employeeLookupPort.findRefsByUserIds(userIds);
         if (refs.size() != userIds.size()) {
+            throw new NotFoundException(IssueErrorCode.ISS_ASSIGNEE_NOT_FOUND);
+        }
+
+        Map<String, IssueAssigneeCandidateRow> candidates = issueQueryMapper.findAssigneeCandidates(userIds).stream()
+                .collect(Collectors.toMap(IssueAssigneeCandidateRow::userId, candidate -> candidate));
+        if (candidates.size() != userIds.size()) {
             throw new NotFoundException(IssueErrorCode.ISS_ASSIGNEE_NOT_FOUND);
         }
 
@@ -46,7 +47,10 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
         }
 
         return userIds.stream()
-                .map(userId -> new AssigneeView(userId, refs.get(userId).name()))
+                .map(userId -> {
+                    IssueAssigneeCandidateRow candidate = candidates.get(userId);
+                    return new AssigneeView(userId, refs.get(userId).name(), candidate.resignedAt());
+                })
                 .toList();
     }
 

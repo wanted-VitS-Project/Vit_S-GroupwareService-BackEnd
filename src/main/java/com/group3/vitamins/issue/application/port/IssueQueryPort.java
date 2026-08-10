@@ -2,6 +2,7 @@ package com.group3.vitamins.issue.application.port;
 
 import com.group3.vitamins.issue.application.result.IssueResult;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -35,7 +36,7 @@ public interface IssueQueryPort {
     record StepSummaryResult(Long stepId, String stepName) {
     }
 
-    record AssigneeResult(Long issueId, String userId, String name) {
+    record AssigneeResult(Long issueId, String userId, String name, LocalDate resignedAt) {
     }
 
     record RelatedBlockResult(Long issueId, Long blockId, String title, String type) {
