@@ -5,6 +5,7 @@ import com.group3.vitamins.project.step.domain.model.StepStatus;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 public interface StepRepository {
 
@@ -26,4 +27,13 @@ public interface StepRepository {
      * @param status  null 이면 전체
      */
     List<Step> search(Long projectId, Long stageId, StepStatus status);
+
+    /**
+     * 요청한 스텝 중 이 프로젝트 소속인 미삭제 스텝만 돌려준다.
+     * 남의 프로젝트 스텝이나 없는 ID 는 결과에서 빠지므로, 개수 비교로 404 를 판정한다.
+     */
+    List<Step> findAllByIdsInProject(Collection<Long> stepIds, Long projectId);
+
+    /** 스테이지 하나에 속한 미삭제 스텝 전부. 스테이지 삭제·권한 일괄 적용에서 쓴다. */
+    List<Step> findAllByStageId(Long stageId);
 }

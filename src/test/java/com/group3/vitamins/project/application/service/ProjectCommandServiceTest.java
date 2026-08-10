@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.command.ChangeProjectStatusCommand;
 import com.group3.vitamins.project.application.command.CloseProjectCommand;
@@ -12,6 +13,7 @@ import com.group3.vitamins.project.application.result.ProjectUpdateResult;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.domain.model.CloseReasonCode;
 import com.group3.vitamins.project.domain.model.Project;
+import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.domain.model.ProjectStatus;
 import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
 import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
@@ -141,6 +143,34 @@ class ProjectCommandServiceTest {
     }
 
     @Test
+    @DisplayName("COMPLETED 를 IN_PROGRESS 로 되돌릴 수 있다 — 역방향을 막지 않는다 (PRJ-003)")
+    void 역방향_전이() {
+        givenProject(ProjectStatus.COMPLETED, null, null, null);
+
+        ProjectStatusResult result = projectCommandService.changeStatus(
+                new ChangeProjectStatusCommand(12L, "IN_PROGRESS", "E2024001", "USER"));
+
+        assertThat(result.status()).isEqualTo("IN_PROGRESS");
+        assertThat(captureSaved().getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+    }
+
+    @Test
+    @DisplayName("CLOSED 에서 벗어나면 종결 정보도 함께 지워진다 — 진행 중인데 종결 사유가 남으면 안 된다")
+    void 종결_해제() {
+        LocalDateTime closedAt = LocalDateTime.of(2026, 8, 5, 12, 0);
+        givenProject(ProjectStatus.CLOSED, CloseReasonCode.NOT_SELECTED, "기술평가 2순위로 탈락", closedAt);
+
+        projectCommandService.changeStatus(
+                new ChangeProjectStatusCommand(12L, "IN_PROGRESS", "E2024001", "USER"));
+
+        Project saved = captureSaved();
+        assertThat(saved.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+        assertThat(saved.getCloseReasonCode()).isNull();
+        assertThat(saved.getCloseReasonNote()).isNull();
+        assertThat(saved.getClosedAt()).isNull();
+    }
+
+    @Test
     @DisplayName("사유를 붙여 종결한다 — deletedAt 은 건드리지 않는다")
     void 종결() {
         givenProject();
@@ -171,6 +201,27 @@ class ProjectCommandServiceTest {
                 .hasMessageContaining("허용되지 않은");
     }
 
+    @Test
+    @DisplayName("편집 권한이 없으면 세 API 모두 저장까지 가지 않는다")
+    void 권한_거부() {
+        Mockito.doThrow(new ForbiddenException(ProjectErrorCode.PROJECT_EDIT_DENIED))
+                .when(projectAccessUseCase).requireEditable(12L, "E2024001", "USER");
+
+        assertThatThrownBy(() -> projectCommandService.updateProject(
+                updateCommand("새 과업", null, null, STARTED, ENDED, null)))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThatThrownBy(() -> projectCommandService.changeStatus(
+                new ChangeProjectStatusCommand(12L, "IN_PROGRESS", "E2024001", "USER")))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThatThrownBy(() -> projectCommandService.closeProject(new CloseProjectCommand(
+                12L, "NOT_SELECTED", null, "E2024001", "USER")))
+                .isInstanceOf(ForbiddenException.class);
+
+        Mockito.verifyNoInteractions(projectRepository);
+    }
+
     private UpdateProjectCommand updateCommand(String name, String description, String clientName,
                                                LocalDate startedOn, LocalDate endedOn,
                                                BigDecimal contractAmount) {
@@ -180,10 +231,16 @@ class ProjectCommandServiceTest {
 
     /** 기존 프로젝트 한 건. 검증이 먼저 터지는 케이스는 save 까지 가지 않는다. */
     private void givenProject() {
+        givenProject(ProjectStatus.NOT_STARTED, null, null, null);
+    }
+
+    /** 상태·종결 정보를 지정한 기존 프로젝트 한 건. */
+    private void givenProject(ProjectStatus status, CloseReasonCode closeReasonCode,
+                              String closeReasonNote, LocalDateTime closedAt) {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         Project existing = Project.restore(12L, null, "기존 과업", "기존 설명",
-                ProjectStatus.NOT_STARTED, "OO시청", new BigDecimal("100000000"), STARTED, ENDED,
-                null, null, null, "E2024001", createdAt, createdAt, null);
+                status, "OO시청", new BigDecimal("100000000"), STARTED, ENDED,
+                closeReasonCode, closeReasonNote, closedAt, "E2024001", createdAt, createdAt, null);
 
         given(projectRepository.findById(12L)).willReturn(Optional.of(existing));
         Mockito.lenient().when(projectRepository.save(any(Project.class)))
