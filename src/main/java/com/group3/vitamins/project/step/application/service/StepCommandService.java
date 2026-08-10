@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.step.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
