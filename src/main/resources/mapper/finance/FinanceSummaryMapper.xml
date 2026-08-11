@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.status.FinanceSummaryMapper">
+
+    <!--
+        재무 관리 요약 — 스칼라 서브쿼리 6개를 한 쿼리로 묶어 왕복 1번으로 계산한다.
+
+        cashFlow/taxInvoice unlinkedCount: is_excluded = FALSE(제외 대상 아님) AND settle_block_id IS NULL
+        (정산 블록에 매칭된 적 없음)인 행만 센다. totalCount는 is_excluded 무관, 소프트 삭제만 제외한 전체 건수다.
+
+        settlementUnlinkedCount: settlement_block.status = 'PENDING' = "미연결"(컬럼 코멘트 그대로).
+        삭제 판정은 settlement_block.deleted_at·block.deleted_at 둘 다 확인한다(block.deleted_at 우선 규칙).
+
+        settlementInProgressCount: 정산 블록 유무와 무관하게 project.status가 COMPLETED·CLOSED가 아닌
+        전체 활성 프로젝트 개수(재무 관리 요약은 회사 전체 진행 상황을 보여주는 화면이라는 요구사항 반영).
+
+        ⚠️ 회사 범위(companyId) — 2026-08-11 추가(CodeRabbit Critical 지적, 실제 크로스테넌트 유출).
+        cash_flow/tax_invoice는 자체 company_id 컬럼으로 직접 필터한다. settlement_block은 자기 컬럼이
+        없어 block→step→project를 타고 project.company_id로 좁힌다(project가 이제 company_id를 가짐,
+        2026-08-11 develop 병합 이후). settlementInProgressCount도 project.company_id로 좁힌다.
+    -->
+    <select id="findSummary" resultType="com.group3.vitamins.finance.infrastructure.status.FinanceSummaryRow">
+        SELECT
+        (SELECT COUNT(*) FROM cash_flow
+        WHERE company_id = #{companyId}
+        AND deleted_at IS NULL AND is_excluded = FALSE AND settle_block_id IS NULL) AS cashFlowUnlinkedCount,
+        (SELECT COUNT(*) FROM cash_flow
+        WHERE company_id = #{companyId}
+        AND deleted_at IS NULL) AS cashFlowTotalCount,
+        (SELECT COUNT(*) FROM tax_invoice
+        WHERE company_id = #{companyId}
+        AND deleted_at IS NULL AND is_excluded = FALSE AND settle_block_id IS NULL) AS taxInvoiceUnlinkedCount,
+        (SELECT COUNT(*) FROM tax_invoice
+        WHERE company_id = #{companyId}
+        AND deleted_at IS NULL) AS taxInvoiceTotalCount,
+        (SELECT COUNT(*) FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id
+        WHERE sb.deleted_at IS NULL AND b.deleted_at IS NULL AND sb.status = 'PENDING'
+        AND p.company_id = #{companyId}) AS settlementUnlinkedCount,
+        (SELECT COUNT(*) FROM project
+        WHERE deleted_at IS NULL AND status NOT IN ('COMPLETED', 'CLOSED')
+        AND company_id = #{companyId}) AS settlementInProgressCount
+    </select>
+
+</mapper>

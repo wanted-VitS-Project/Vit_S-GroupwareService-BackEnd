@@ -39,4 +39,18 @@ public interface EmployeeRepository {
      * 동시 정보 수정과 충돌하지 않는다.
      */
     void resign(String userId, java.time.LocalDate resignedAt);
+
+    /**
+     * 프로필 사진 조회 (`employee.md` §10 서빙). 저장된 S3 키를 돌려준다.
+     *
+     * <p>사원이 없거나 사진이 없으면(둘 다) {@link Optional#empty()} 다 — 둘의 구분이 필요하면 호출자가
+     * {@link #existsById} 로 먼저 판정한다(서빙 서비스가 그렇게 한다).
+     */
+    Optional<String> findProfileImageKey(String userId);
+
+    /**
+     * 프로필 사진 키 갱신 (`employee.md` §10 · `auth.md` §5-1·§5-2). {@code profileImageKey} 만 UPDATE 하며,
+     * {@code null} 이면 삭제(키를 비운다)다. 정보 수정·퇴사 컬럼은 건드리지 않아 충돌하지 않는다.
+     */
+    void updateProfileImageKey(String userId, String profileImageKey);
 }

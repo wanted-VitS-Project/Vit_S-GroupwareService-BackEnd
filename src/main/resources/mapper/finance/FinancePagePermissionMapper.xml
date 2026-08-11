@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.adapter.FinancePagePermissionMapper">
+
+    <select id="existsGrant" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM page_permission
+        WHERE page_code = #{pageCode}
+        AND user_id = #{userId}
+        )
+    </select>
+
+    <select id="existsEditGrant" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM page_permission
+        WHERE page_code = #{pageCode}
+        AND user_id = #{userId}
+        AND permission = 'EDITOR'
+        )
+    </select>
+
+</mapper>

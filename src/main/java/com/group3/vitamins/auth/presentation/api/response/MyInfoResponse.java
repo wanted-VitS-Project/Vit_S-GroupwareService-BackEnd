@@ -43,7 +43,11 @@ public record MyInfoResponse(
         String hiredAt,
 
         @Schema(description = "마지막 로그인 yyyy-MM-dd HH:mm:ss", example = "2026-08-03 09:12:44")
-        String lastLoginAt
+        String lastLoginAt,
+
+        @Schema(description = "프로필 사진 URL. 값은 /api/v1/employees/{userId}/profile-image, 사진이 없으면 null",
+                example = "/api/v1/employees/vitas-EMP001/profile-image", nullable = true)
+        String profileImageUrl
 ) {
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -62,7 +66,8 @@ public record MyInfoResponse(
                 row.departmentPath(),
                 row.jobPositionName(),
                 row.hiredAt() == null ? null : row.hiredAt().format(DATE),
-                row.lastLoginAt() == null ? null : row.lastLoginAt().format(DATE_TIME)
+                row.lastLoginAt() == null ? null : row.lastLoginAt().format(DATE_TIME),
+                row.profileImageUrl()
         );
     }
 }
