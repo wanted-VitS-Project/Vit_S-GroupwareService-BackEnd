@@ -18,26 +18,34 @@ public class File {
     private String name;
     private final String createdBy;
     private LocalDateTime deletedAt;
+    private final int version;
 
-    private File(Long fileId, Long projectId, String name, String createdBy, LocalDateTime deletedAt) {
+    private File(Long fileId, Long projectId, String name, String createdBy,
+                 LocalDateTime deletedAt, int version) {
         this.fileId = fileId;
         this.projectId = projectId;
         this.name = name;
         this.createdBy = createdBy;
         this.deletedAt = deletedAt;
+        this.version = version;
     }
 
-    /** 새 문서를 만든다(버전 1 업로드 시작 시). 아직 저장 전이라 ID 가 없다. */
+    /** 새 문서를 만든다(버전 1 업로드 시작 시). 아직 저장 전이라 ID 가 없다. 낙관락 버전은 1 로 시작한다. */
     public static File create(Long projectId, String name, String createdBy) {
-        return new File(null, projectId, name, createdBy, null);
+        return new File(null, projectId, name, createdBy, null, 1);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
-    public static File restore(Long fileId, Long projectId, String name, String createdBy, LocalDateTime deletedAt) {
-        return new File(fileId, projectId, name, createdBy, deletedAt);
+    public static File restore(Long fileId, Long projectId, String name, String createdBy,
+                               LocalDateTime deletedAt, int version) {
+        return new File(fileId, projectId, name, createdBy, deletedAt, version);
     }
 
-    /** 표시명을 바꾼다(§4). 원본 파일명은 버전에 있으므로 건드리지 않는다. */
+    /**
+     * 표시명을 바꾼다(§4). 원본 파일명은 버전에 있으므로 건드리지 않는다.
+     * ⚠️ 낙관락 version 은 여기서 올리지 않는다 — 검사와 증가가 한 문장에서 원자적으로 일어나야 하므로
+     * {@code SpringDataFileRepository.renameIfVersionMatches} 의 조건부 UPDATE 가 {@code version + 1} 을 한다.
+     */
     public void rename(String name) {
         this.name = name;
     }
@@ -74,5 +82,10 @@ public class File {
 
     public LocalDateTime getDeletedAt() {
         return deletedAt;
+    }
+
+    /** 현재 낙관락 버전. 문서명 수정 시 이 값을 저장 조건으로 건다. */
+    public int getVersion() {
+        return version;
     }
 }

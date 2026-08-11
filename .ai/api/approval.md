@@ -1,6 +1,7 @@
 # 📝 Approval API — 결재 블록
 
 **상태**: `✅ 확정` — 노션 반영 완료. 이탈 금지 규칙 전면 적용 (`../API.md` §0)
+**최종 업데이트**: 2026-08-10 (상세조회 `documents[].fileDeleted` 신설 · `APPROVAL_IN_PROGRESS` 에러코드 폐기 — 노션·프론트 공유 필요)
 **최종 업데이트**: 2026-08-06 (§8 신설 — 결재관리 목록조회, `drafterId`/`approverId` 계열 원 명세 `long`→String 정정)
 **최종 업데이트**: 2026-08-04 · **담당**: 이강욱
 **노션**: 확인 필요 — 노션 링크 채워넣기
@@ -15,6 +16,13 @@
 > 확장점(Java 인터페이스, REST 아님)을 통해 타입별 상세 행을 같은 트랜잭션에 만든다. 결재는 이 인터페이스의
 > `ApprovalBlockDetailAdapter` 구현체로 참여할 뿐, 프론트가 별도로 호출하는 API가 아니다. Text·Checklist도
 > 동일한 구조(자체 생성 API 없음)라 이 패턴이 맞다. 노션에서도 이 엔드포인트는 제거해야 한다.
+
+> ⚠️ **2026-08-10 — 계약 변경 2건 (노션·프론트 공유 필요).**
+>
+> | 변경 | 내용 |
+> |---|---|
+> | 추가 | 회차 상세조회·결재 상세조회의 `data.documents[].fileDeleted`(boolean) — 원본 문서가 **휴지통에 있으면 `true`**. 이름·크기는 그대로 내려간다(증빙 이력이라 감추지 않는다). 팀 삭제 정책 `DELETE.md` D-6·DEL-010 근거. 문서 추가 응답에는 넣지 않았다(방금 올린 파일이라 항상 `false`) |
+> | 폐기 | `APPROVAL_IN_PROGRESS`(409) — `BLK-008` 삭제 잠금 폐기로 사용처가 0이 됐다. **진행 중 결재도 블록과 함께 삭제되고 `CANCELED`로 종결된다.** 프론트에 이 409 분기가 있으면 제거해야 한다 |
 
 ## 엔드포인트
 
@@ -65,7 +73,7 @@
 | `data.drafterName` / `drafterDepartment` / `drafterPosition` | String | 기안자 이름·부서·직책(라이브 조회) |
 | `data.status` | String | 회차 상태 |
 | `data.submittedAt` / `finishedAt` | String | 상신·종료 일시 |
-| `data.documents[]` | Array | `documentId`/`fileVersionId`/`fileName`/`fileSize`/`uploadedAt` |
+| `data.documents[]` | Array | `documentId`/`fileVersionId`/`fileName`/`fileSize`/`uploadedAt`/`fileDeleted`(boolean) |
 | `data.lines[]` | Array | `lineId`/`order`/`approverId`(**String**)/`approverName`/`approverPosition`/`approverDepartment`/`status`/`opinion`/`processedAt` |
 
 | 코드 | 상태 | code | 설명 |
@@ -158,7 +166,13 @@
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | |
 
-**비즈니스 규칙**: 하드 삭제(이력 보존 대상 아님, `APR-007`).
+**비즈니스 규칙**: 논리 삭제 — `approval_document.deleted_at` 을 기록한다(`APR-007`).
+같은 파일 버전을 다시 연결할 수 있다(중복 검사가 활성 행만 본다).
+2026-08-10 하드 삭제에서 전환했다 — 팀 삭제 정책 `DELETE.md` D-1(실물은 전부 soft delete)·
+D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 PK 가 없어 미해당).
+
+> 파일 영구삭제 잠금은 이 삭제를 상위 블록 삭제(`DEL-005`)와 **회차 생존으로 구분**한다 —
+> 여기서 뺀 문서는 회차가 살아 있어 파일 잠금을 풀고, 상위 삭제는 회차도 삭제돼 잠금을 유지한다.
 
 ---
 
@@ -332,7 +346,7 @@
 
 > ⚠️ **2026-08-06 정정** — `drafterId`는 원 명세(전달분) `long` → **String(사번)으로 정정**(8번과 동일 사유).
 > **문서·결재선 세부 필드(`documents[]`/`lines[]` 내부 항목)가 원 명세에 명시되지 않아**, 1번(회차 상세조회)과
-> 동일한 구조(`documentId`/`fileVersionId`/`fileName`/`fileSize`/`uploadedAt`, `lineId`/`approverId`/`approverName`/
+> 동일한 구조(`documentId`/`fileVersionId`/`fileName`/`fileSize`/`uploadedAt`/`fileDeleted`, `lineId`/`approverId`/`approverName`/
 > `approverPosition`/`approverDepartment`/`order`/`status`/`opinion`/`processedAt`)를 그대로 재사용하는 것으로 판단해
 > 반영했다(전달자 확인: "조회 권한은 1번과 동일" + "data = 1번 조회 응답 + drafter 정보 + blockOrigin"). **실제 프론트 요구와
 > 다르면 알려달라 — 세부 필드는 추정치다.**

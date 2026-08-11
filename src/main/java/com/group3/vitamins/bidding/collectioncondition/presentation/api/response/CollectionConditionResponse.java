@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.LocalTime;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
 
 public record CollectionConditionResponse(
 
@@ -31,6 +33,24 @@ public record CollectionConditionResponse(
         @JsonProperty("isActive")
         @Schema(description = "수집 조건 활성화 여부")
         boolean active,
+
+        @Schema(description = "자동 수집 사용 여부")
+        boolean autoCollectionEnabled,
+
+        @Schema(description = "자동 수집 주기")
+        CollectionScheduleType scheduleType,
+
+        @Schema(description = "자동 수집 실행 시각")
+        LocalTime scheduledTime,
+
+        @Schema(description = "자동 수집 기준 시간대")
+        String timezone,
+
+        @Schema(description = "다음 자동 수집 예정 시각")
+        LocalDateTime nextRunAt,
+
+        @Schema(description = "마지막 자동 수집 요청 생성 시각")
+        LocalDateTime lastScheduledAt,
 
         @Schema(description = "마지막 수집 성공 시각")
         LocalDateTime lastSuccessAt,
@@ -57,6 +77,12 @@ public record CollectionConditionResponse(
                 result.noticeTypes(),
                 CollectionConditionFilterResponse.from(result.filters()),
                 result.active(),
+                result.autoCollectionEnabled(),
+                result.scheduleType(),
+                result.scheduledTime(),
+                result.timezone(),
+                result.nextRunAt(),
+                result.lastScheduledAt(),
                 result.lastSuccessAt(),
                 result.lastCollectedCount(),
                 result.createdAt(),

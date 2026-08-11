@@ -2,7 +2,13 @@
 
 **상태**: `✅ 확정` — 이 문서가 **단일 계약**이다. 이탈 금지 규칙 전면 적용(`../API.md` §0)
 **최종 업데이트**: 2026-08-07 (화면이 개별 처리 방식으로 바뀜 — **개별 삭제 부활 · 개별 읽음 신설 · 전체 읽음 제거**) · 2026-08-07 (이동 대상 판정 방식 변경 — block 경유 → 발행 도메인이 직접 지정, 목록에서 `blockId` 제거) · **담당**: 이강욱
+**최종 업데이트**: 2026-08-10 (알림 유형 `APPROVAL_CANCELED` 신설 — 상위 삭제로 진행 중 결재가 종결될 때 발행 · `DEL-011`)
 **프론트 공유**: 필요 — 아래 변경은 기존 계약을 바꾸므로 프론트에 알려야 한다
+
+> ⚠️ **2026-08-10 신설 — `APPROVAL_CANCELED`**. 블록·스텝 삭제로 진행 중 결재가 종결되면 기안자와
+> 그 시점 결재 차례였던 사람에게 발행된다. **이동 대상이 없다**(`GET /{id}/target` 이 `type=NONE`) —
+> 결재가 삭제돼 상세 조회가 404 이므로 이동시키면 에러 화면으로 보내게 된다. 프론트는 이 유형을
+> 클릭 시 이동 없이 안내만 하면 된다.
 **범위**: 알림 REST API 4개(목록조회·개별삭제·이동대상조회·개별읽음). 생성 이벤트 인프라(`#27`)는 REST 엔드포인트가 없어 여기 없음(맨 아래 "참고" 절)
 
 > ✅ **경로·필드명·타입·상태코드·에러코드를 한 글자도 바꾸지 않는다** (`../API.md` §0).
@@ -53,7 +59,7 @@
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `data.content[].notificationId` | long | 알림 구분 번호 |
-| `data.content[].notificationType` | String | 알림 유형(예: `APPROVAL_REQUESTED`/`APPROVAL_REJECTED`/`APPROVAL_COMPLETED`) |
+| `data.content[].notificationType` | String | 알림 유형(예: `APPROVAL_REQUESTED`/`APPROVAL_REJECTED`/`APPROVAL_COMPLETED`/`APPROVAL_CANCELED`) |
 | `data.content[].title` | String | 알림 제목 |
 | `data.content[].message` | String | 알림 내용 |
 | `data.content[].readAt` | String, nullable | 읽은 시각(`null`이면 안 읽음) |

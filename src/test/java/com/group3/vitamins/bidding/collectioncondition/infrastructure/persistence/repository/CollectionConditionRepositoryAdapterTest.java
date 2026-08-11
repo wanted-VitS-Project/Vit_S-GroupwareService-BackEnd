@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +78,30 @@ class CollectionConditionRepositoryAdapterTest {
                 .isEqualTo(1_000_000_000L);
         assertThat(found.getFilters().internationalBidType())
                 .isEqualTo(InternationalBidType.DOMESTIC);
+    }
+
+    @Test
+    @DisplayName("자동 수집 일정 필드를 저장하고 복원한다")
+    void savesAndRestoresCollectionSchedule() {
+        LocalDateTime nextRunAt = LocalDateTime.of(2026, 8, 12, 9, 0);
+        CollectionCondition source = CollectionCondition.create(
+                COMPANY_ID, "NARA", "평일 자동 수집",
+                List.of(BidNoticeType.SERVICE), condition(COMPANY_ID).getFilters(),
+                true, true, CollectionScheduleType.WEEKDAYS,
+                LocalTime.of(9, 0), "Asia/Seoul", nextRunAt,
+                "EMP001", LocalDateTime.of(2026, 8, 11, 10, 0)
+        );
+
+        CollectionCondition saved = adapter.save(source);
+        CollectionCondition found = adapter.findNotDeletedById(
+                saved.getConditionId(), COMPANY_ID
+        ).orElseThrow();
+
+        assertThat(found.isAutoCollectionEnabled()).isTrue();
+        assertThat(found.getScheduleType()).isEqualTo(CollectionScheduleType.WEEKDAYS);
+        assertThat(found.getScheduledTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(found.getTimezone()).isEqualTo("Asia/Seoul");
+        assertThat(found.getNextRunAt()).isEqualTo(nextRunAt);
     }
 
     @Test

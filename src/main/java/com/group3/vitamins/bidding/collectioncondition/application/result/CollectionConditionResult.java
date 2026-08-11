@@ -6,6 +6,8 @@ import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCo
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.LocalTime;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
 
 // 수집 조건의 Application 계층 출력값입니다.
 public record CollectionConditionResult(
@@ -16,6 +18,12 @@ public record CollectionConditionResult(
         List<BidNoticeType> noticeTypes,
         CollectionConditionFilter filters,
         boolean active,
+        boolean autoCollectionEnabled,
+        CollectionScheduleType scheduleType,
+        LocalTime scheduledTime,
+        String timezone,
+        LocalDateTime nextRunAt,
+        LocalDateTime lastScheduledAt,
         LocalDateTime lastSuccessAt,
         Integer lastCollectedCount,
         String createdBy,
@@ -36,6 +44,12 @@ public record CollectionConditionResult(
                 condition.getNoticeTypes(),
                 condition.getFilters(),
                 condition.isActive(),
+                condition.isAutoCollectionEnabled(),
+                condition.getScheduleType(),
+                condition.getScheduledTime(),
+                condition.getTimezone(),
+                condition.getNextRunAt(),
+                condition.getLastScheduledAt(),
                 condition.getLastSuccessAt(),
                 condition.getLastCollectedCount(),
                 condition.getCreatedBy(),

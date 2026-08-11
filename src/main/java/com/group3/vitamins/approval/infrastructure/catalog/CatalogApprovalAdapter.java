@@ -62,12 +62,30 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
 
     @Override
     public Optional<Approval> findApproval(Long approvalId) {
-        return springDataApprovalRepository.findById(approvalId).map(this::toApproval);
+        return springDataApprovalRepository.findByApprovalIdAndDeletedAtIsNull(approvalId).map(this::toApproval);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Approval> findApprovalForUpdate(Long approvalId) {
+        return springDataApprovalRepository.findActiveByIdForUpdate(approvalId).map(this::toApproval);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Approval> findApprovalIncludingDeletedForUpdate(Long approvalId) {
+        return springDataApprovalRepository.findIncludingDeletedByIdForUpdate(approvalId).map(this::toApproval);
+    }
+
+    @Override
+    public Optional<Long> findApprovalIdByLineId(Long lineId) {
+        return springDataApprovalLineRepository.findActiveApprovalIdByLineId(lineId);
     }
 
     @Override
     public Optional<ApprovalRevision> findRevisionById(Long revisionId) {
-        return springDataApprovalRevisionRepository.findById(revisionId).map(this::toRevision);
+        return springDataApprovalRevisionRepository.findByApprovalRevisionIdAndDeletedAtIsNull(revisionId)
+                .map(this::toRevision);
     }
 
     @Override
@@ -79,19 +97,19 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public Optional<ApprovalRevision> findLatestRevision(Long approvalId) {
-        return springDataApprovalRevisionRepository.findTopByApprovalIdOrderByRevisionNoDesc(approvalId)
+        return springDataApprovalRevisionRepository.findTopByApprovalIdAndDeletedAtIsNullOrderByRevisionNoDesc(approvalId)
                 .map(this::toRevision);
     }
 
     @Override
     public Optional<ApprovalRevision> findLatestRevisionReadOnly(Long approvalId) {
-        return springDataApprovalRevisionRepository.findFirstByApprovalIdOrderByRevisionNoDesc(approvalId)
+        return springDataApprovalRevisionRepository.findFirstByApprovalIdAndDeletedAtIsNullOrderByRevisionNoDesc(approvalId)
                 .map(this::toRevision);
     }
 
     @Override
     public List<ApprovalLine> findLinesByRevisionId(Long revisionId) {
-        return springDataApprovalLineRepository.findByApprovalRevisionIdOrderBySequenceNo(revisionId).stream()
+        return springDataApprovalLineRepository.findByApprovalRevisionIdAndDeletedAtIsNullOrderBySequenceNo(revisionId).stream()
                 .map(this::toLine)
                 .toList();
     }
@@ -105,7 +123,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
 
     @Override
     public List<ApprovalRevision> findRevisionsByApprovalId(Long approvalId) {
-        return springDataApprovalRevisionRepository.findByApprovalIdOrderByRevisionNoAsc(approvalId).stream()
+        return springDataApprovalRevisionRepository.findByApprovalIdAndDeletedAtIsNullOrderByRevisionNoAsc(approvalId).stream()
                 .map(this::toRevision)
                 .toList();
     }
@@ -120,7 +138,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Transactional
     public ApprovalLine markLineProcessed(Long lineId, ApprovalLineStatus status, String opinion) {
         springDataApprovalLineRepository.markProcessed(lineId, status, opinion);
-        return springDataApprovalLineRepository.findById(lineId)
+        return springDataApprovalLineRepository.findByApprovalLineIdAndDeletedAtIsNull(lineId)
                 .map(this::toLine)
                 .orElseThrow(() -> new IllegalStateException("line not found after process: " + lineId));
     }
@@ -128,7 +146,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     public Optional<ApprovalLine> findLineBySequenceNo(Long revisionId, int sequenceNo) {
         return springDataApprovalLineRepository
-                .findByApprovalRevisionIdAndSequenceNo(revisionId, sequenceNo)
+                .findByApprovalRevisionIdAndSequenceNoAndDeletedAtIsNull(revisionId, sequenceNo)
                 .map(this::toLine);
     }
 
@@ -136,7 +154,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Transactional
     public ApprovalLine activateLine(Long lineId) {
         springDataApprovalLineRepository.activate(lineId, ApprovalLineStatus.ACTIVE);
-        return springDataApprovalLineRepository.findById(lineId)
+        return springDataApprovalLineRepository.findByApprovalLineIdAndDeletedAtIsNull(lineId)
                 .map(this::toLine)
                 .orElseThrow(() -> new IllegalStateException("line not found after activate: " + lineId));
     }
@@ -157,20 +175,21 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
 
     @Override
     public List<ApprovalDocument> findDocumentsByRevisionId(Long revisionId) {
-        return springDataApprovalDocumentRepository.findByApprovalRevisionId(revisionId).stream()
+        return springDataApprovalDocumentRepository.findByApprovalRevisionIdAndDeletedAtIsNull(revisionId).stream()
                 .map(this::toDocument)
                 .toList();
     }
 
     @Override
     public Optional<ApprovalDocument> findDocumentById(Long documentId) {
-        return springDataApprovalDocumentRepository.findById(documentId).map(this::toDocument);
+        return springDataApprovalDocumentRepository.findByApprovalDocumentIdAndDeletedAtIsNull(documentId)
+                .map(this::toDocument);
     }
 
     @Override
     public boolean existsDocument(Long revisionId, Long fileVersionId) {
         return springDataApprovalDocumentRepository
-                .existsByApprovalRevisionIdAndFileVersionId(revisionId, fileVersionId);
+                .existsByApprovalRevisionIdAndFileVersionIdAndDeletedAtIsNull(revisionId, fileVersionId);
     }
 
     @Override
@@ -184,7 +203,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public void deleteDocument(Long documentId) {
-        springDataApprovalDocumentRepository.deleteById(documentId);
+        springDataApprovalDocumentRepository.softDeleteById(documentId);
     }
 
     @Override
@@ -196,7 +215,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
             throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
         }
 
-        return springDataApprovalRevisionRepository.findById(revisionId)
+        return springDataApprovalRevisionRepository.findByApprovalRevisionIdAndDeletedAtIsNull(revisionId)
                 .map(this::toRevision)
                 .orElseThrow(() -> new IllegalStateException("revision not found after update: " + revisionId));
     }
@@ -204,7 +223,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public List<ApprovalLine> replaceLines(Long revisionId, List<NewApprovalLine> lines) {
-        springDataApprovalLineRepository.deleteAllByApprovalRevisionId(revisionId);
+        springDataApprovalLineRepository.softDeleteAllByApprovalRevisionId(revisionId);
 
         List<ApprovalLineJpaEntity> saved = lines.stream()
                 .map(line -> ApprovalLineJpaEntity.createDraft(revisionId, line.approverId(), line.sequenceNo()))
@@ -236,7 +255,7 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Transactional
     public ApprovalRevision markRevisionSubmitted(Long revisionId) {
         springDataApprovalRevisionRepository.markSubmitted(revisionId, ApprovalStatus.IN_PROGRESS);
-        return springDataApprovalRevisionRepository.findById(revisionId)
+        return springDataApprovalRevisionRepository.findByApprovalRevisionIdAndDeletedAtIsNull(revisionId)
                 .map(this::toRevision)
                 .orElseThrow(() -> new IllegalStateException("revision not found after submit: " + revisionId));
     }
@@ -258,10 +277,17 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public void softDeleteCascade(Long approvalId, LocalDateTime deletedAt) {
-        springDataApprovalDocumentRepository.deleteAllByApprovalId(approvalId);
-        springDataApprovalLineRepository.softDeleteByApprovalId(approvalId, deletedAt);
-        springDataApprovalRevisionRepository.softDeleteByApprovalId(approvalId, deletedAt);
-        springDataApprovalRepository.softDelete(approvalId, deletedAt);
+        springDataApprovalDocumentRepository.softDeleteAllByApprovalId(approvalId, deletedAt);
+        springDataApprovalLineRepository.softDeleteByApprovalId(
+                approvalId, deletedAt,
+                List.of(ApprovalLineStatus.DRAFT, ApprovalLineStatus.WAITING, ApprovalLineStatus.ACTIVE),
+                ApprovalLineStatus.CANCELED);
+        springDataApprovalRevisionRepository.softDeleteByApprovalId(
+                approvalId, deletedAt,
+                List.of(ApprovalStatus.DRAFT, ApprovalStatus.IN_PROGRESS), ApprovalStatus.CANCELED);
+        springDataApprovalRepository.softDelete(
+                approvalId, deletedAt,
+                List.of(ApprovalStatus.DRAFT, ApprovalStatus.IN_PROGRESS), ApprovalStatus.CANCELED);
     }
 
     @Override
@@ -302,6 +328,6 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     private ApprovalDocument toDocument(ApprovalDocumentJpaEntity entity) {
         return ApprovalDocument.reconstruct(
                 entity.getApprovalDocumentId(), entity.getApprovalRevisionId(), entity.getFileVersionId(),
-                entity.getCreatedAt());
+                entity.getCreatedAt(), entity.getDeletedAt());
     }
 }

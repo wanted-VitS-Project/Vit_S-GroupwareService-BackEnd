@@ -1,6 +1,8 @@
 package com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.entity;
 
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectedBidNotice;
+import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNotice;
+import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeData;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -34,11 +36,23 @@ public class BidNoticeJpaEntity {
     @Column(name = "crawl_source_id", nullable = false)
     private Long crawlSourceId;
 
+    // 직접 등록 공고의 소유 회사이며 외부 수집 공고는 공용이므로 null입니다.
+    @Column(name = "owner_company_id")
+    private Long ownerCompanyId;
+
     @Column(name = "external_id", nullable = false, length = 100)
     private String externalId;
 
     @Column(name = "notice_ord", nullable = false, length = 20)
     private String noticeOrder;
+
+    // 같은 회사의 직접 등록 공고가 동시에 중복 저장되지 않도록 사용하는 키입니다.
+    @Column(
+            name = "manual_dedup_key",
+            length = 64,
+            columnDefinition = "CHAR(64)"
+    )
+    private String manualDedupKey;
 
     @Column(name = "notice_type", length = 20)
     private String noticeType;
@@ -85,11 +99,20 @@ public class BidNoticeJpaEntity {
     @Column(name = "participation_qualification_text", length = 1000)
     private String participationQualificationText;
 
+    @Column(name = "region_limit_text", length = 500)
+    private String regionLimitText;
+
+    @Column(name = "business_limit_text", length = 500)
+    private String businessLimitText;
+
     @Column(name = "joint_contract_allowed")
     private Boolean jointContractAllowed;
 
     @Column(name = "joint_contract_text", length = 500)
     private String jointContractText;
+
+    @Column(name = "evaluation_method", length = 100)
+    private String evaluationMethod;
 
     @Column(name = "source_url", length = 1000)
     private String sourceUrl;
@@ -102,6 +125,9 @@ public class BidNoticeJpaEntity {
 
     @Column(name = "crawled_at")
     private LocalDateTime crawledAt;
+
+    @Column(name = "created_by", length = 20, updatable = false)
+    private String createdBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -126,6 +152,29 @@ public class BidNoticeJpaEntity {
         entity.createdAt = crawledAt;
         entity.applyCollectedNotice(notice, crawledAt);
         return entity;
+    }
+
+    // 회사가 직접 입력한 공고를 신규 영속성 객체로 생성합니다.
+    public static BidNoticeJpaEntity createManual(ManualBidNotice notice) {
+        BidNoticeJpaEntity entity = new BidNoticeJpaEntity();
+        entity.crawlSourceId = notice.getCrawlSourceId();
+        entity.ownerCompanyId = notice.getOwnerCompanyId();
+        entity.externalId = notice.getExternalId();
+        entity.noticeOrder = notice.getNoticeOrder();
+        entity.manualDedupKey = notice.getManualDedupKey();
+        entity.noticeStatus = notice.getNoticeStatus();
+        entity.createdBy = notice.getCreatedBy();
+        entity.createdAt = notice.getCreatedAt();
+        entity.applyManualData(notice.getData());
+        return entity;
+    }
+
+    // 검증과 PATCH 병합이 끝난 직접 등록 공고 내용을 갱신합니다.
+    public void updateManual(ManualBidNotice notice) {
+        this.manualDedupKey = notice.getManualDedupKey();
+        this.updatedAt = notice.getUpdatedAt();
+        this.deletedAt = null;
+        applyManualData(notice.getData());
     }
 
     // 동일 공고가 다시 수집되면 외부 원천에서 갱신 가능한 값을 반영합니다.
@@ -170,5 +219,35 @@ public class BidNoticeJpaEntity {
         this.sourceUrl = notice.sourceUrl();
         this.hasAttachment = notice.hasAttachments();
         this.crawledAt = crawledAt;
+    }
+
+    // 직접 등록 도메인의 사용자 입력 필드를 공용 공고 컬럼에 반영합니다.
+    private void applyManualData(ManualBidNoticeData data) {
+        this.noticeType = data.noticeType().name();
+        this.noticeName = data.noticeName();
+        this.externalNoticeStatus = null;
+        this.internationalBidType = data.internationalBidType() == null
+                ? null
+                : data.internationalBidType().name();
+        this.noticeAgency = data.noticeAgency();
+        this.demandAgency = data.demandAgency();
+        this.announcedAt = data.announcedAt();
+        this.bidStartAt = data.bidStartAt();
+        this.bidDeadlineAt = data.bidDeadlineAt();
+        this.openingAt = data.openingAt();
+        this.baseAmount = data.baseAmount();
+        this.estimatedAmount = data.estimatedAmount();
+        this.bidMethod = data.bidMethod();
+        this.contractMethod = data.contractMethod();
+        this.participationQualificationText =
+                data.participationQualificationText();
+        this.regionLimitText = data.regionLimitText();
+        this.businessLimitText = data.businessLimitText();
+        this.jointContractAllowed = data.jointContractAllowed();
+        this.jointContractText = data.jointContractText();
+        this.evaluationMethod = data.evaluationMethod();
+        this.sourceUrl = data.sourceUrl();
+        this.hasAttachment = !data.attachments().isEmpty();
+        this.crawledAt = null;
     }
 }

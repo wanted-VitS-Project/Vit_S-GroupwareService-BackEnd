@@ -247,6 +247,7 @@
 | `data.content[].uploaderDepartment` · `uploaderPosition` | String | 스냅샷 (`null` 허용) |
 | `data.content[].updatedAt` | String | 최신 버전 업로드 시각 |
 | `data.content[].deletedAt` | String | 휴지통 진입 시각. `deleted=false` 면 항상 `null` |
+| `data.content[].version` | int | **낙관락 버전.** 문서명 수정(§4) 시 이 값을 그대로 보낸다 (`CONCURRENCY.md`). `file_version.versionNo`(버전 이력)와 다른 값이다 |
 
 | 코드 | code | 설명 |
 |---|---|---|
@@ -267,15 +268,25 @@
 
 ⛔ **원본 파일명은 바뀌지 않는다.** 표시명만 바꾸며 버전마다 저장된 원본 파일명은 그대로다.
 
-**Request Body** — `name` String Y (최대 255자)
-**Response** — `data.fileId` · `data.name`
+⭐ **낙관적 락 (`CONCURRENCY.md`).** 동시 수정을 저장 시점에 검사한다. §3 조회에서 받은 `version` 을 그대로 보내면, 그 사이 남이 먼저 저장했을 때 `409 FILE_VERSION_CONFLICT` 로 막고 프론트는 *재조회 / 덮어쓰기* 를 묻는다.
+
+**Request Body**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `name` | String | Y | 새 표시명 (최대 255자) |
+| `version` | int | Y | §3 조회에서 받은 낙관락 버전. 저장 조건으로 건다 |
+| `overwrite` | boolean | N | `true` 면 충돌을 무시하고 덮어쓴다. 생략 시 `false` (프론트는 처음엔 재조회만 제공) |
+
+**Response** — `data.fileId` · `data.name` · `data.version`(저장 뒤 **+1** 된 새 버전 — 다음 저장에 쓴다)
 
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 수정 성공 |
-| 400 | `FILE_INVALID_REQUEST` | 이름이 비었거나 255자 초과 |
+| 400 | `FILE_INVALID_REQUEST` | 이름이 비었거나 255자 초과 · **`version` 누락/1 미만** |
 | 401 · 403 | `AUTH_UNAUTHENTICATED` / `FILE_EDIT_PERMISSION_REQUIRED` | |
 | 404 | `FILE_NOT_FOUND` | 문서 없음 또는 이미 휴지통 |
+| 409 | `FILE_VERSION_CONFLICT` | 다른 사용자가 먼저 수정함 (재조회/덮어쓰기) |
 
 ---
 

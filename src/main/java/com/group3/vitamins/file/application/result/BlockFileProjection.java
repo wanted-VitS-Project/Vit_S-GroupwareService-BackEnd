@@ -19,6 +19,8 @@ public record BlockFileProjection(
         String uploaderDepartment,
         String uploaderPosition,
         LocalDateTime updatedAt,
-        LocalDateTime deletedAt
+        LocalDateTime deletedAt,
+        // ⚠️ 맨 끝 고정. FileQueryMapper.findBlockFiles 의 SELECT 컬럼 순서와 1:1 이어야 값이 안 밀린다(§6 trap 7).
+        int version
 ) {
 }

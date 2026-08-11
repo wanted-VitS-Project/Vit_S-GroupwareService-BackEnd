@@ -31,6 +31,15 @@ public class ApprovalRevisionEligibilityPolicy {
                 });
     }
 
+    /** DEL-006 — 모든 쓰기 경로가 회차·결재선보다 먼저 잠그는 활성 부모 결재 조회 */
+    public Approval getApprovalForUpdateOrThrow(Long approvalId) {
+        return approvalRepository.findApprovalForUpdate(approvalId)
+                .orElseThrow(() -> {
+                    log.warn("활성 결재 없음 - approvalId={}", approvalId);
+                    return new NotFoundException(ApprovalErrorCode.APPROVAL_NOT_FOUND);
+                });
+    }
+
     public void assertDrafter(Approval approval, String requesterId) {
         if (!approval.getDrafterId().equals(requesterId)) {
             log.warn("기안자 아님 - approvalId={}, requesterId={}", approval.getApprovalId(), requesterId);
