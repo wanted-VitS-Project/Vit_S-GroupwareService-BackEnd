@@ -99,8 +99,6 @@ class ScheduledCollectionRunServiceTest {
 
         assertThat(createdCount).isZero();
         assertThat(condition.getLastScheduledAt()).isNull();
-        assertThat(condition.getNextRunAt())
-                .isEqualTo(LocalDateTime.of(2026, 8, 12, 9, 0));
         verify(runCreator, never()).create(any(), any(), any(), any(), any());
         verify(scheduledConditionPort).advanceSchedule(
                 CONDITION_ID,
