@@ -140,13 +140,15 @@ class BidNoticeCommandServiceTest {
     @DisplayName("PATCH에서 첨부를 생략하면 기존 첨부를 유지한다")
     void keepsAttachmentsWhenOmitted() {
         ManualBidNotice existing = existingNoticeWithAttachments();
+        List<ManualBidNoticeAttachment> expectedAttachments =
+                List.copyOf(existing.getData().attachments());
         when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existing));
 
         service.update(updateDemandAgencyToNull());
 
         assertThat(captureSavedNotice().getData().attachments())
-                .containsExactlyElementsOf(existing.getData().attachments());
+                .containsExactlyElementsOf(expectedAttachments);
     }
 
     @Test
