@@ -60,6 +60,21 @@ public enum BiddingErrorCode implements ErrorCode {
     BIDDING_NOTICE_NOT_FOUND(
             "BIDDING_NOTICE_NOT_FOUND",
             "입찰 공고를 찾을 수 없습니다."
+    ),
+
+    BIDDING_INVALID_MANUAL_NOTICE(
+            "BIDDING_INVALID_MANUAL_NOTICE",
+            "직접 등록 입찰 공고의 입력값이 올바르지 않습니다."
+    ),
+
+    BIDDING_MANUAL_NOTICE_DUPLICATED(
+            "BIDDING_MANUAL_NOTICE_DUPLICATED",
+            "현재 회사에 같은 직접 등록 입찰 공고가 존재합니다."
+    ),
+
+    BIDDING_NOTICE_EDIT_NOT_ALLOWED(
+            "BIDDING_NOTICE_EDIT_NOT_ALLOWED",
+            "수정할 수 없는 입찰 공고입니다."
     );
 
     private final String code;

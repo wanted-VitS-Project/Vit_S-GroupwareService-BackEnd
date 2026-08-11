@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-10 (회사별 공고 상태 및 목록·상세 조회 계약 확정)
+**최종 동기화**: 2026-08-11 (수집 조건별 자동 수집 주기·시각 계약 확정)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -20,7 +20,8 @@
 | ✅ 확정 | 수집 실행 결과 조회 | GET | `/api/v1/bidding/collection-runs/{runId}` | `BIDDING` |
 | ✅ 확정 | 입찰 공고 목록 조회 | GET | `/api/v1/bidding/notices` | `BIDDING` |
 | ✅ 확정 | 입찰 공고 상세 조회 | GET | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
-| 📝 초안 | 입찰 공고 직접 등록 | POST | `/api/v1/bidding/notices` | `BIDDING` |
+| ✅ 확정 | 입찰 공고 직접 등록 | POST | `/api/v1/bidding/notices` | `BIDDING` |
+| ✅ 확정 | 직접 등록 공고 수정 | PATCH | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
 | 📝 초안 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
 | 📝 초안 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
 | 📝 초안 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
@@ -85,7 +86,13 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 | MVP 수집처 | `NARA` |
 | 직접 등록 출처 | `MANUAL`. 수집 조건에는 사용할 수 없다 |
 | 공고 종류 | `CONSTRUCTION`, `SERVICE` |
-| 자동 스케줄링 | MVP 범위 밖. 활성 조건의 수동 실행만 제공한다 |
+| 자동 스케줄링 | 사용자가 조건별 자동 수집 여부, 실행 주기와 실행 시각을 설정한다 |
+| 자동 실행 주기 | `DAILY`, `WEEKDAYS`. `WEEKDAYS`는 월~금이며 공휴일은 별도로 제외하지 않는다 |
+| 자동 실행 시각 | `09:00`, `13:00`, `18:00` 중 하나를 선택한다 |
+| 시간대 | MVP에서는 `Asia/Seoul`만 허용한다 |
+| 실행 시각 의미 | 설정 시각은 수집 Run을 생성하는 기준이다. Worker 대기열에 따라 실제 외부 API 호출은 늦어질 수 있다 |
+| 비활성 조건 | `isActive=false`이면 수동 실행과 자동 실행을 모두 허용하지 않고 `nextRunAt=null`로 저장한다 |
+| 수동 실행 | 자동 수집 설정과 관계없이 활성 조건은 기존 수동 실행 API를 사용할 수 있다 |
 | 공통 필드 | API의 명시적 필드로 전달한다 |
 | 수집처별 검색조건 | `filters` 객체로 전달하고 DB의 `crawl_condition.params` JSON에 저장한다 |
 | 수집처 변경 | 등록 후 변경할 수 없다 |
@@ -115,7 +122,11 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
     "excludeClosed": true,
     "internationalBidType": "DOMESTIC"
   },
-  "isActive": true
+  "isActive": true,
+  "autoCollectionEnabled": true,
+  "scheduleType": "WEEKDAYS",
+  "scheduledTime": "09:00",
+  "timezone": "Asia/Seoul"
 }
 ```
 
@@ -133,6 +144,13 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 | `filters.excludeClosed` | Boolean | Y | `true`이면 입찰 마감 공고를 외부 검색에서 제외 |
 | `filters.internationalBidType` | String | N | `DOMESTIC`, `INTERNATIONAL`. `null`이면 전체 |
 | `isActive` | Boolean | Y | 수동 실행 가능한 활성 조건인지 여부 |
+| `autoCollectionEnabled` | Boolean | Y | 정기 자동 수집 사용 여부. `true`이면 `isActive`도 `true`여야 함 |
+| `scheduleType` | String | 조건부 Y | 자동 수집 사용 시 필수. `DAILY`, `WEEKDAYS` |
+| `scheduledTime` | String | 조건부 Y | 자동 수집 사용 시 필수. `HH:mm` 형식이며 `09:00`, `13:00`, `18:00` 중 하나 |
+| `timezone` | String | 조건부 Y | 자동 수집 사용 시 필수. MVP에서는 `Asia/Seoul`만 허용 |
+
+`autoCollectionEnabled=false`이면 `scheduleType`, `scheduledTime`, `timezone`은 `null`로 전달한다.
+서버는 등록 시점 이후 첫 실행 시각을 `nextRunAt`으로 계산한다. 같은 조건의 수집 Run이 이미 처리 중이면 해당 회차의 자동 실행을 중복 생성하지 않는다.
 
 외부 API는 공고명, 참가 제한 지역 및 업종을 요청당 각각 하나만 받는다.
 복수 값을 입력하면 Worker가 조합별 요청으로 분리하므로 등록·수정 시 예상 호출 조합이 20개를 초과할 수 없다.
@@ -221,6 +239,12 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
       "internationalBidType": "DOMESTIC"
     },
     "isActive": true,
+    "autoCollectionEnabled": true,
+    "scheduleType": "WEEKDAYS",
+    "scheduledTime": "09:00",
+    "timezone": "Asia/Seoul",
+    "nextRunAt": "2026-08-10T09:00:00",
+    "lastScheduledAt": null,
     "createdAt": "2026-08-09T10:00:00"
   }
 }
@@ -255,6 +279,12 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
           "internationalBidType": "DOMESTIC"
         },
         "isActive": true,
+        "autoCollectionEnabled": true,
+        "scheduleType": "WEEKDAYS",
+        "scheduledTime": "09:00",
+        "timezone": "Asia/Seoul",
+        "nextRunAt": "2026-08-10T09:00:00",
+        "lastScheduledAt": null,
         "lastSuccessAt": null,
         "lastCollectedCount": null,
         "createdAt": "2026-08-09T10:00:00",
@@ -269,7 +299,8 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 
 **상태**: ✅ 확정
 
-`sourceCode`는 수정할 수 없다. `noticeTypes`와 `filters`는 부분 병합하지 않고 요청값으로 전체 교체한다.
+`sourceCode`는 수정할 수 없다. `noticeTypes`, `filters`와 자동 수집 설정은 부분 병합하지 않고 요청값으로 전체 교체한다.
+자동 수집 설정이 변경되면 서버는 변경 시점 이후를 기준으로 `nextRunAt`을 다시 계산한다.
 
 ```json
 {
@@ -284,7 +315,11 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
     "excludeClosed": true,
     "internationalBidType": "DOMESTIC"
   },
-  "isActive": true
+  "isActive": true,
+  "autoCollectionEnabled": true,
+  "scheduleType": "DAILY",
+  "scheduledTime": "13:00",
+  "timezone": "Asia/Seoul"
 }
 ```
 
@@ -298,6 +333,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 | 201 | - | 등록 | 등록 성공 |
 | 400 | `BIDDING_INVALID_COLLECTION_CONDITION` | 등록, 수정 | 검색조건 또는 금액 범위가 유효하지 않음 |
 | 400 | `BIDDING_COLLECTION_QUERY_LIMIT_EXCEEDED` | 등록, 수정 | 외부 API 예상 호출 조합이 20개를 초과함 |
+| 400 | `BIDDING_INVALID_COLLECTION_SCHEDULE` | 등록, 수정 | 자동 수집 활성 여부, 주기, 시각 또는 시간대 조합이 유효하지 않음 |
 | 400 | `BIDDING_UNSUPPORTED_SOURCE` | 등록 | 지원하지 않는 수집처이거나 `MANUAL`을 수집 조건에 사용함 |
 | 401 | `AUTH_UNAUTHENTICATED` | 전체 | 세션이 없거나 만료됨 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 전체 | 입찰 관리 권한 없음 |
@@ -657,6 +693,162 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `businessLimitText` | 업종 제한 원문 |
 | `jointContractAllowed` | 공동수급 가능 여부. 판별 불가면 `null` |
 | `jointContractText` | 공동수급 관련 원문 |
+
+---
+
+## 입찰 공고 직접 등록 및 수정
+
+### 공통 정책
+
+**상태**: ✅ 확정
+
+| 항목 | 규칙 |
+|------|------|
+| 등록 출처 | 직접 등록 공고는 `crawl_source.source_code = MANUAL`을 사용한다 |
+| 회사 소유권 | `bid_notice.owner_company_id`에 현재 회사 ID를 저장하며 등록 회사에서만 조회·수정할 수 있다 |
+| 공용 공고 | `NARA`, `KCAA` 등 외부 수집 공고의 `owner_company_id`는 `NULL`이다 |
+| 최초 회사 상태 | 등록과 같은 트랜잭션에서 현재 회사의 `company_bid_notice_state`를 `COLLECTED`로 생성한다 |
+| 외부 식별자 | 서버가 직접 등록 공고용 고유 `externalId`를 생성한다. 클라이언트는 전달하지 않는다 |
+| 공고 차수 | 직접 등록 공고는 `noticeOrder = 00`으로 저장한다 |
+| 중복 기준 | 현재 회사에서 공고명, 공고기관, 공고일시, 입찰마감일시가 모두 같은 활성 공고를 중복으로 본다 |
+| 동시 요청 방지 | 정규화한 중복 기준으로 `manualDedupKey`를 생성하고 DB UNIQUE 제약으로 최종 차단한다 |
+| 수정 대상 | `MANUAL` 출처이며 `owner_company_id`가 현재 회사인 공고만 수정할 수 있다 |
+| 외부 공고 보호 | 나라장터·KCAA 등 외부 수집 공고는 수정 API로 변경할 수 없다 |
+| 수정 방식 | 전달한 필드만 수정하고 생략한 필드는 기존 값을 유지한다 |
+| 선택값 해제 | 수정 요청에서 선택 필드를 명시적으로 `null`로 보내면 기존 값을 해제한다 |
+| 삭제 | 영구 삭제 API를 제공하지 않는다. 추후 공고 제외·복구 API로 회사별 노출 상태만 변경한다 |
+| 프로젝트 보호 | 프로젝트 전환 여부와 관계없이 공고 원본과 첨부 링크는 물리 삭제하지 않는다 |
+
+첨부는 파일 도메인의 업로드 파일이 아니라 공개된 원문 링크다. 파일 도메인의 파일은 프로젝트 소속이므로,
+프로젝트 전환 전 공고에 연결하지 않는다. 인증키·토큰·서명이 포함된 임시 URL은 저장하지 않는다.
+
+### 직접 등록 `POST /api/v1/bidding/notices`
+
+#### Request Body
+
+```json
+{
+  "noticeName": "스마트시티 통합관제 플랫폼 구축 용역",
+  "noticeType": "SERVICE",
+  "noticeAgency": "서울특별시",
+  "demandAgency": "서울특별시 정보화담당관",
+  "internationalBidType": "DOMESTIC",
+  "announcedAt": "2026-08-11T09:00:00",
+  "bidStartAt": "2026-08-12T09:00:00",
+  "bidDeadlineAt": "2026-08-20T18:00:00",
+  "openingAt": "2026-08-21T10:00:00",
+  "baseAmount": 300000000,
+  "estimatedAmount": 330000000,
+  "bidMethod": "전자입찰",
+  "contractMethod": "협상에 의한 계약",
+  "participationQualificationText": "소프트웨어사업자 및 관련 실적 보유 업체",
+  "regionLimitText": "서울특별시",
+  "businessLimitText": "소프트웨어사업자",
+  "jointContractAllowed": false,
+  "jointContractText": null,
+  "evaluationMethod": "기술·가격 종합평가",
+  "sourceUrl": "https://example.org/notices/2026-001",
+  "attachments": [
+    {
+      "fileName": "제안요청서.pdf",
+      "sourceUrl": "https://example.org/notices/2026-001/rfp.pdf"
+    }
+  ]
+}
+```
+
+| 필드 | 타입 | 필수 | 규칙 |
+|------|------|------|------|
+| `noticeName` | String | Y | 1~1,000자 |
+| `noticeType` | String | Y | `CONSTRUCTION`, `SERVICE` |
+| `noticeAgency` | String | Y | 1~400자 |
+| `demandAgency` | String | N | 최대 400자 |
+| `internationalBidType` | String | N | `DOMESTIC`, `INTERNATIONAL` |
+| `announcedAt` | LocalDateTime | Y | 공고일시 |
+| `bidStartAt` | LocalDateTime | N | 입찰개시일시 |
+| `bidDeadlineAt` | LocalDateTime | Y | 공고일시보다 이후여야 한다 |
+| `openingAt` | LocalDateTime | N | 개찰 가능 시작일시 |
+| `baseAmount` | BigDecimal | N | 0 이상 |
+| `estimatedAmount` | BigDecimal | N | 0 이상 |
+| `bidMethod` | String | N | 최대 100자 |
+| `contractMethod` | String | N | 최대 100자 |
+| `participationQualificationText` | String | N | 최대 1,000자 |
+| `regionLimitText` | String | N | 최대 500자 |
+| `businessLimitText` | String | N | 최대 500자 |
+| `jointContractAllowed` | Boolean | N | 공동수급 가능 여부 |
+| `jointContractText` | String | N | 최대 500자 |
+| `evaluationMethod` | String | N | 최대 100자 |
+| `sourceUrl` | String | N | 최대 1,000자, 공개된 `http` 또는 `https` URL |
+| `attachments` | List<Object> | N | 최대 10개. 생략하거나 빈 배열이면 첨부 없이 등록 |
+| `attachments[].fileName` | String | Y | 1~255자 |
+| `attachments[].sourceUrl` | String | Y | 최대 1,000자, 공개된 `http` 또는 `https` URL, 요청 내 중복 불가 |
+
+#### Success Response
+
+```text
+201 Created
+```
+
+```json
+{
+  "httpStatus": 201,
+  "message": "입찰 공고 직접 등록 성공",
+  "data": {
+    "noticeId": 101,
+    "externalId": "서버가 생성한 직접 등록 식별자",
+    "noticeOrder": "00",
+    "sourceCode": "MANUAL",
+    "sourceName": "직접 등록",
+    "noticeStatus": "COLLECTED",
+    "noticeName": "스마트시티 통합관제 플랫폼 구축 용역",
+    "noticeType": "SERVICE",
+    "noticeAgency": "서울특별시",
+    "announcedAt": "2026-08-11T09:00:00",
+    "bidDeadlineAt": "2026-08-20T18:00:00",
+    "attachments": [
+      {
+        "attachmentOrder": 1,
+        "fileName": "제안요청서.pdf",
+        "sourceUrl": "https://example.org/notices/2026-001/rfp.pdf"
+      }
+    ],
+    "createdAt": "2026-08-11T10:00:00",
+    "updatedAt": null
+  }
+}
+```
+
+### 직접 등록 공고 수정 `PATCH /api/v1/bidding/notices/{noticeId}`
+
+요청 필드는 직접 등록 요청과 같으며 모두 선택이다. 단, 변경할 필드를 한 개 이상 전달해야 한다.
+`sourceCode`, `externalId`, `noticeOrder`, `ownerCompanyId`, `noticeStatus`는 수정 요청으로 변경할 수 없다.
+
+첨부 필드는 다음 세 가지를 구분한다.
+
+| 요청 | 처리 |
+|------|------|
+| `attachments` 생략 | 기존 첨부 유지 |
+| `"attachments": []` | 기존 첨부 전체 논리 삭제 |
+| 비어 있지 않은 배열 | 요청 배열 순서대로 기존 첨부 전체 교체 |
+
+선택 가능한 일반 필드는 명시적 `null`로 기존 값을 해제할 수 있다. 필수 필드인 `noticeName`, `noticeType`,
+`noticeAgency`, `announcedAt`, `bidDeadlineAt`에는 `null`을 전달할 수 없다. 수정 후에도 등록 요청과 같은 필드 검증과
+`bidDeadlineAt > announcedAt` 불변식을 만족해야 하며, 중복 기준 필드가 바뀌면 `manualDedupKey`를 다시 계산한다.
+
+성공 시 `200 OK`, 메시지는 `입찰 공고 수정 성공`이며 `data`는 직접 등록 성공 응답과 같은 구조로 반환한다.
+
+### Status Code
+
+| HTTP | code | 적용 API | 설명 |
+|------|------|----------|------|
+| 201 | - | 직접 등록 | 등록 성공 |
+| 200 | - | 수정 | 수정 성공 |
+| 400 | `BIDDING_INVALID_MANUAL_NOTICE` | 전체 | 필수값, 길이, 날짜 관계, 금액 또는 URL 형식이 올바르지 않음 |
+| 401 | `AUTH_UNAUTHENTICATED` | 전체 | 세션 없음 또는 만료 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 전체 | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 수정 | 현재 회사에서 수정할 수 있는 공고가 없음 |
+| 409 | `BIDDING_MANUAL_NOTICE_DUPLICATED` | 전체 | 현재 회사에 같은 중복 기준의 활성 직접 등록 공고가 존재함 |
+| 409 | `BIDDING_NOTICE_EDIT_NOT_ALLOWED` | 수정 | 외부 수집 공고처럼 직접 등록 수정 대상이 아님 |
 
 ---
 

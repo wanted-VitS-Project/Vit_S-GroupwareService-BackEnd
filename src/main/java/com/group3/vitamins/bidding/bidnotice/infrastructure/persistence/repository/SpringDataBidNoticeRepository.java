@@ -24,4 +24,30 @@ public interface SpringDataBidNoticeRepository
             Long crawlSourceId,
             Collection<String> externalIds
     );
+
+    // 현재 회사가 소유한 활성 직접 등록 공고를 조회합니다.
+    Optional<BidNoticeJpaEntity>
+    findByBidNoticeIdAndOwnerCompanyIdAndCrawlSourceIdAndDeletedAtIsNull(
+            Long bidNoticeId,
+            Long ownerCompanyId,
+            Long crawlSourceId
+    );
+
+    // 공용 외부 수집 공고인지 확인합니다.
+    boolean existsByBidNoticeIdAndOwnerCompanyIdIsNullAndDeletedAtIsNull(
+            Long bidNoticeId
+    );
+
+    // 등록 시 현재 회사에 같은 중복 키의 활성 공고가 있는지 확인합니다.
+    boolean existsByOwnerCompanyIdAndManualDedupKeyAndDeletedAtIsNull(
+            Long ownerCompanyId,
+            String manualDedupKey
+    );
+
+    // 수정 대상을 제외하고 같은 중복 키의 활성 공고가 있는지 확인합니다.
+    boolean existsByOwnerCompanyIdAndManualDedupKeyAndBidNoticeIdNotAndDeletedAtIsNull(
+            Long ownerCompanyId,
+            String manualDedupKey,
+            Long excludedBidNoticeId
+    );
 }
