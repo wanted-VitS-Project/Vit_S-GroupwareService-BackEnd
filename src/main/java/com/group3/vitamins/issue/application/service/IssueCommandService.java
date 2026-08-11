@@ -1,6 +1,7 @@
 package com.group3.vitamins.issue.application.service;
 
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.command.ChangeIssueStatusCommand;
@@ -88,6 +89,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
         if (!hasUpdateField(command)) {
             throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
         }
+        validateVersion(command.version());
 
         Issue issue = issueRepository.findActiveById(command.issueId())
                 .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
@@ -102,10 +104,27 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
 
         List<String> assigneeIds = normalizePatchList(command.assigneeIds());
         List<Long> blockIds = normalizePatchList(command.blockIds());
+        List<String> previousAssigneeIds = command.assigneeIds().present()
+                ? currentAssigneeIds(issue.getIssueId())
+                : List.of();
 
         if (command.assigneeIds().present()) {
-            List<String> previousAssigneeIds = currentAssigneeIds(issue.getIssueId());
             issueAssigneePort.validateAssignable(step.projectId(), assigneeIds);
+        }
+        if (command.blockIds().present()) {
+            issueBlockPort.validateLinkable(step.stepId(), blockIds);
+        }
+
+        if (hasGeneralField(command)) {
+            issue.updateFields(title, content, dueDate, priority);
+        }
+
+        int updated = hasGeneralField(command)
+                ? issueRepository.updateFieldsIfVersionMatches(issue, command.version())
+                : issueRepository.touchIfVersionMatches(issue.getIssueId(), command.version());
+        requireVersionMatch(updated);
+
+        if (command.assigneeIds().present()) {
             issueRepository.deleteAssignees(issue.getIssueId());
             issueRepository.saveAssignees(issue.getIssueId(), assigneeIds);
             publishIssueAssignedNotifications(
@@ -113,14 +132,8 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
                     newlyAddedAssigneeIds(previousAssigneeIds, assigneeIds));
         }
         if (command.blockIds().present()) {
-            issueBlockPort.validateLinkable(step.stepId(), blockIds);
             issueRepository.deleteBlockLinks(issue.getIssueId());
             issueRepository.saveBlockLinks(issue.getIssueId(), blockIds);
-        }
-
-        if (hasGeneralField(command)) {
-            issue.updateFields(title, content, dueDate, priority);
-            issueRepository.save(issue);
         }
 
         return findLatestResult(issue.getIssueId());
@@ -135,13 +148,18 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
                 issue.getStepId(), command.requesterUserId(), command.role());
 
         IssueStatus nextStatus = parseRequiredStatus(command.status());
+        if (!command.internal()) {
+            validateVersion(command.version());
+        }
+        int expectedVersion = command.internal() ? issue.getVersion() : command.version();
+        validateVersion(expectedVersion);
 
         if (issue.getStatus() == nextStatus) {
             return toStatusResult(issue);
         }
 
         issue.changeStatus(nextStatus, LocalDateTime.now());
-        issueRepository.save(issue);
+        requireVersionMatch(issueRepository.changeStatusIfVersionMatches(issue, expectedVersion));
 
         Issue refreshed = issueRepository.findActiveById(issue.getIssueId())
                 .orElse(issue);
@@ -203,6 +221,18 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
             return IssueStatus.fromApiValue(value);
         } catch (IllegalArgumentException e) {
             throw new ValidationException(IssueErrorCode.ISS_INVALID_STATUS);
+        }
+    }
+
+    private void validateVersion(Integer version) {
+        if (version == null || version < 1) {
+            throw new ValidationException(IssueErrorCode.ISS_INVALID_REQUEST);
+        }
+    }
+
+    private void requireVersionMatch(int updated) {
+        if (updated == 0) {
+            throw new ConflictException(IssueErrorCode.ISSUE_VERSION_CONFLICT);
         }
     }
 
@@ -322,6 +352,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
     ) {
         return new IssueResult(
                 issue.issueId(),
+                issue.version(),
                 issue.stepId(),
                 issue.title(),
                 issue.content(),
@@ -345,6 +376,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
                                  List<IssueBlockPort.BlockView> blocks) {
         return new IssueResult(
                 issue.getIssueId(),
+                issue.getVersion(),
                 issue.getStepId(),
                 issue.getTitle(),
                 issue.getContent(),
@@ -365,6 +397,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
     private IssueStatusResult toStatusResult(Issue issue) {
         return new IssueStatusResult(
                 issue.getIssueId(),
+                issue.getVersion(),
                 issue.getStatus().toApiValue(),
                 issue.getCompletedAt(),
                 issue.getUpdatedAt());
