@@ -755,6 +755,13 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
   응답의 각 항목에도 갱신된 `version` 포함.
 - `@Version`(JPA) 대신 수동 `WHERE version = ?` 조건부 UPDATE로 검사한다(§6-1).
 
+✅ **배열에 남아있지만 값이 안 바뀐 항목도 version은 검사한다(2026-08-11, CodeRabbit 지적으로 수정).**
+처음엔 "캡션·순서가 실제로 바뀐 항목만 DB에 쓴다"는 최적화 때문에, 값이 안 바뀐 항목은 version 검사
+자체를 건너뛰고 있었다 — 그러면 그 항목의 version이 stale인데도 요청이 그냥 통과해서 "하나라도
+충돌하면 전체 실패" 계약이 깨졌다. `touchVersionIfMatches`(caption·orderIndex·updated_at은 안 건드리고
+version만 검사 후 증가)를 추가해서, 값이 안 바뀐 항목도 실제로 DB에서 원자적으로 version을
+재검증하게 했다 — updated_at·활동 로그가 불필요하게 갱신되는 건 여전히 안 생긴다.
+
 ⚠️ **알려진 제약 — 배열에서 빠진(삭제되는) 이미지는 버전 검사가 없다(2026-08-11, CodeRabbit round 지적).**
 `images[]`에 명시적으로 남긴 항목은 각자 `version`이 검사되지만, **배열에서 빠져서 삭제로 처리되는
 항목은 무조건 삭제된다(LWW)** — 그 사이 다른 사용자가 캡션을 수정했거나, 심지어 새 이미지를

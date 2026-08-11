@@ -266,11 +266,16 @@ public class ImageCommandService implements ImageCommandUseCase {
                         String.valueOf(before.getOrderIndex()), String.valueOf(newOrderIndex)));
             }
             int resultVersion = before.getVersion();
+            // 목록 통째 전송 API(CONCURRENCY.md §4) — 값이 바뀐 항목뿐 아니라 "요청에 실린 모든 항목"의
+            // version을 검사해야 한다(2026-08-11, CodeRabbit 지적) — 안 그러면 stale-version 항목이 값이
+            // 마침 안 바뀌었다는 이유로 검사를 통째로 건너뛰어 "하나라도 충돌하면 전체 실패" 계약이
+            // 깨진다. 값이 안 바뀐 항목은 caption·orderIndex·updatedAt은 그대로 두고 version만
+            // touchVersionIfMatches로 검사+증가시켜, §4의 "실제로 바뀐 게 있는 이미지만 DB에 쓴다"
+            // 원칙(불필요한 updated_at·활동 로그 갱신 방지)은 그대로 지킨다.
             if (!changes.isEmpty()) {
-                // 목록 통째 전송 API(CONCURRENCY.md §4) — 항목마다 자기 version을 검사하고, 하나라도
-                // 0행이면 이 예외가 트랜잭션 전체를 롤백한다(§4-3). 조회~저장 사이에 삭제된 경우도
-                // 여기서 걸리는데, 어느 쪽이든 클라이언트는 "최신 목록을 다시 받아야 한다"는 결론이
-                // 같아서 별도로 구분하지 않는다(Stage 참조 구현과 동일한 판단, §3-7).
+                // 하나라도 0행이면 이 예외가 트랜잭션 전체를 롤백한다(§4-3). 조회~저장 사이에 삭제된
+                // 경우도 여기서 걸리는데, 어느 쪽이든 클라이언트는 "최신 목록을 다시 받아야 한다"는
+                // 결론이 같아서 별도로 구분하지 않는다(Stage 참조 구현과 동일한 판단, §3-7).
                 int updated = imageRepository.updateCaptionAndOrderIfVersionMatches(
                         entry.imgId(), command.imgBlockId(), newCaption, newOrderIndex, entry.version());
                 if (updated == 0) {
@@ -281,6 +286,14 @@ public class ImageCommandService implements ImageCommandUseCase {
                 domainEventPublisher.publish(ActivityOccurredEvent.of(
                         ActivityLogAction.MODIFY, blockId, entry.imgId(), before.getOriginalName(),
                         command.userId(), changes));
+            } else {
+                int touched = imageRepository.touchVersionIfMatches(entry.imgId(), command.imgBlockId(), entry.version());
+                if (touched == 0) {
+                    log.warn("이미지 항목 수정 충돌 발생(값 변경 없음) - imgId={}, expectedVersion={}",
+                            entry.imgId(), entry.version());
+                    throw new ConflictException(ImageErrorCode.IMAGE_VERSION_CONFLICT);
+                }
+                resultVersion = entry.version() + 1;
             }
 
             resultViews.add(new UpdatedImageOrderView(entry.imgId(), newOrderIndex, newCaption, resultVersion));

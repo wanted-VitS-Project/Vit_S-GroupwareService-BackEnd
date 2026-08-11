@@ -57,8 +57,10 @@ public class ImageJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    // ⚠️ @Version(JPA)을 붙이지 않는다 — CatalogImageAdapter가 매번 new로 detached 객체를 만들어
-    // merge되므로 JPA 낙관락은 DB 최신값을 다시 읽어 항상 통과해버린다(CONCURRENCY.md §6-1).
+    // ⚠️ @Version(JPA)을 붙이지 않는다 — 캡션·순서 수정은 엔티티를 save/merge하지 않고
+    // SpringDataImageRepository.updateCaptionAndOrderIfVersionMatches의 JPQL 벌크 UPDATE로만
+    // 반영된다(WHERE i.version = :expectedVersion 검사 후 i.version = i.version + 1). 벌크 UPDATE는
+    // JPA 엔티티 생명주기(dirty checking)를 안 타서 @Version 증가 로직 자체가 안 걸린다(CONCURRENCY.md §6-1).
     @Column(name = "version", nullable = false)
     private int version;
 

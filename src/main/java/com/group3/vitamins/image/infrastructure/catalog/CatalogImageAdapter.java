@@ -63,6 +63,12 @@ public class CatalogImageAdapter implements ImageRepository {
 
     @Override
     @Transactional
+    public int touchVersionIfMatches(Long imgId, Long imgBlockId, int expectedVersion) {
+        return springDataImageRepository.touchVersionIfMatches(imgId, imgBlockId, expectedVersion);
+    }
+
+    @Override
+    @Transactional
     public int markDeleted(Long imgId, Long imgBlockId, LocalDateTime deletedAt) {
         return springDataImageRepository.markDeleted(imgId, imgBlockId, deletedAt);
     }
