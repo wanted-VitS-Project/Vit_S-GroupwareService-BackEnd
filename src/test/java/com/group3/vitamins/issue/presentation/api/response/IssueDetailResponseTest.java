@@ -18,6 +18,7 @@ class IssueDetailResponseTest {
     void from_includesAssigneeResignedAt() {
         IssueResult result = new IssueResult(
                 101L,
+                1,
                 10L,
                 "제안서 1차 초안 작성",
                 null,
