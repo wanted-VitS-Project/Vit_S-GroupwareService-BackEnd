@@ -1,6 +1,7 @@
 package com.group3.vitamins.bidding.collectioncondition.domain.model;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 public class CollectionCondition {
@@ -12,6 +13,12 @@ public class CollectionCondition {
     private List<BidNoticeType> noticeTypes;
     private CollectionConditionFilter filters;
     private boolean active;
+    private boolean autoCollectionEnabled;
+    private CollectionScheduleType scheduleType;
+    private LocalTime scheduledTime;
+    private String timezone;
+    private LocalDateTime nextRunAt;
+    private LocalDateTime lastScheduledAt;
     private LocalDateTime lastSuccessAt;
     private Integer lastCollectedCount;
     private final String createdBy;
@@ -27,6 +34,12 @@ public class CollectionCondition {
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
             boolean active,
+            boolean autoCollectionEnabled,
+            CollectionScheduleType scheduleType,
+            LocalTime scheduledTime,
+            String timezone,
+            LocalDateTime nextRunAt,
+            LocalDateTime lastScheduledAt,
             LocalDateTime lastSuccessAt,
             Integer lastCollectedCount,
             String createdBy,
@@ -41,6 +54,12 @@ public class CollectionCondition {
         this.noticeTypes = List.copyOf(noticeTypes);
         this.filters = filters;
         this.active = active;
+        this.autoCollectionEnabled = autoCollectionEnabled;
+        this.scheduleType = scheduleType;
+        this.scheduledTime = scheduledTime;
+        this.timezone = timezone;
+        this.nextRunAt = nextRunAt;
+        this.lastScheduledAt = lastScheduledAt;
         this.lastSuccessAt = lastSuccessAt;
         this.lastCollectedCount = lastCollectedCount;
         this.createdBy = createdBy;
@@ -57,6 +76,11 @@ public class CollectionCondition {
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
             boolean active,
+            boolean autoCollectionEnabled,
+            CollectionScheduleType scheduleType,
+            LocalTime scheduledTime,
+            String timezone,
+            LocalDateTime nextRunAt,
             String createdBy,
             LocalDateTime now
     ) {
@@ -68,6 +92,12 @@ public class CollectionCondition {
                 noticeTypes,
                 filters,
                 active,
+                autoCollectionEnabled,
+                scheduleType,
+                scheduledTime,
+                timezone,
+                nextRunAt,
+                null,
                 null,
                 null,
                 createdBy,
@@ -75,6 +105,15 @@ public class CollectionCondition {
                 null,
                 null
         );
+    }
+
+    public static CollectionCondition create(
+            Long companyId, String sourceCode, String conditionName,
+            List<BidNoticeType> noticeTypes, CollectionConditionFilter filters,
+            boolean active, String createdBy, LocalDateTime now
+    ) {
+        return create(companyId, sourceCode, conditionName, noticeTypes, filters,
+                active, false, null, null, null, null, createdBy, now);
     }
 
     // DB에서 조회한 회사별 수집 조건을 도메인 객체로 복원합니다.
@@ -86,6 +125,12 @@ public class CollectionCondition {
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
             boolean active,
+            boolean autoCollectionEnabled,
+            CollectionScheduleType scheduleType,
+            LocalTime scheduledTime,
+            String timezone,
+            LocalDateTime nextRunAt,
+            LocalDateTime lastScheduledAt,
             LocalDateTime lastSuccessAt,
             Integer lastCollectedCount,
             String createdBy,
@@ -101,6 +146,12 @@ public class CollectionCondition {
                 noticeTypes,
                 filters,
                 active,
+                autoCollectionEnabled,
+                scheduleType,
+                scheduledTime,
+                timezone,
+                nextRunAt,
+                lastScheduledAt,
                 lastSuccessAt,
                 lastCollectedCount,
                 createdBy,
@@ -110,19 +161,52 @@ public class CollectionCondition {
         );
     }
 
+    public static CollectionCondition restore(
+            Long conditionId, Long companyId, String sourceCode,
+            String conditionName, List<BidNoticeType> noticeTypes,
+            CollectionConditionFilter filters, boolean active,
+            LocalDateTime lastSuccessAt, Integer lastCollectedCount,
+            String createdBy, LocalDateTime createdAt,
+            LocalDateTime updatedAt, LocalDateTime deletedAt
+    ) {
+        return restore(conditionId, companyId, sourceCode, conditionName,
+                noticeTypes, filters, active, false, null, null, null,
+                null, null, lastSuccessAt, lastCollectedCount, createdBy,
+                createdAt, updatedAt, deletedAt);
+    }
+
     // 수정 요청으로 전달된 수집 조건 내용을 전체 교체합니다.
     public void update(
             String conditionName,
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
             boolean active,
+            boolean autoCollectionEnabled,
+            CollectionScheduleType scheduleType,
+            LocalTime scheduledTime,
+            String timezone,
+            LocalDateTime nextRunAt,
             LocalDateTime updatedAt
     ) {
         this.conditionName = conditionName;
         this.noticeTypes = List.copyOf(noticeTypes);
         this.filters = filters;
         this.active = active;
+        this.autoCollectionEnabled = autoCollectionEnabled;
+        this.scheduleType = scheduleType;
+        this.scheduledTime = scheduledTime;
+        this.timezone = timezone;
+        this.nextRunAt = nextRunAt;
         this.updatedAt = updatedAt;
+    }
+
+    public void update(
+            String conditionName, List<BidNoticeType> noticeTypes,
+            CollectionConditionFilter filters, boolean active,
+            LocalDateTime updatedAt
+    ) {
+        update(conditionName, noticeTypes, filters, active,
+                false, null, null, null, null, updatedAt);
     }
 
     // 성공한 수집 실행의 시각과 수집 건수를 기록합니다.
@@ -175,6 +259,13 @@ public class CollectionCondition {
     public boolean isActive() {
         return active;
     }
+
+    public boolean isAutoCollectionEnabled() { return autoCollectionEnabled; }
+    public CollectionScheduleType getScheduleType() { return scheduleType; }
+    public LocalTime getScheduledTime() { return scheduledTime; }
+    public String getTimezone() { return timezone; }
+    public LocalDateTime getNextRunAt() { return nextRunAt; }
+    public LocalDateTime getLastScheduledAt() { return lastScheduledAt; }
 
     public LocalDateTime getLastSuccessAt() {
         return lastSuccessAt;
