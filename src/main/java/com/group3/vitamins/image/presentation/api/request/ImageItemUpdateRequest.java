@@ -13,6 +13,7 @@ public record ImageItemUpdateRequest(
         List<Entry> images
 ) {
     public record Entry(
+            @NotNull(message = "IMG-005|요청한 이미지 목록이 유효하지 않습니다.")
             @Schema(description = "이미지 ID", example = "13")
             Long imgId,
 
@@ -21,7 +22,7 @@ public record ImageItemUpdateRequest(
 
             @NotNull(message = "IMAGE_VERSION_REQUIRED|버전 정보가 없습니다. 화면을 새로고침해 주세요.")
             @Schema(description = "이미지 항목 전체 조회에서 받은 version 을 그대로 실어 보낸다. "
-                    + "이 배열 중 하나라도 그 사이 남이 먼저 저장했으면 요청 전체가 409 다", example = "1")
+                    + "다른 사용자가 먼저 저장한 경우 이 배열 중 하나라도 걸려 요청 전체가 409로 처리된다", example = "1")
             Integer version
     ) {
     }

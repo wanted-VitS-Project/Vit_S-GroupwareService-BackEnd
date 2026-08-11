@@ -137,6 +137,7 @@
 | `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
 | `data.images[].caption` | String | 이미지 캡션 |
 | `data.images[].orderIndex` | Int | 이미지 정렬 번호 |
+| `data.images[].version` | Int | 버전(2026-08-11 추가) — 이 목록을 그대로 수정(PATCH) 요청에 실어 보낸다 |
 
 **Success Example**
 
@@ -147,8 +148,8 @@
   "data": {
     "totalCount": 2,
     "images": [
-      { "imgId": 10, "originalName": "image1.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "orderIndex": 1 },
-      { "imgId": 11, "originalName": "image2.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "orderIndex": 2 }
+      { "imgId": 10, "originalName": "image1.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "orderIndex": 1, "version": 1 },
+      { "imgId": 11, "originalName": "image2.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "orderIndex": 2, "version": 1 }
     ]
   }
 }
@@ -325,6 +326,7 @@
 | `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
 | `data.images[].caption` | String | 이미지 캡션 |
 | `data.images[].deletedAt` | LocalDateTime | 삭제 일시 |
+| `data.images[].blockDeleted` | Boolean | 상위 블록까지 삭제됐는지(2026-08-11 추가) — true면 복구 시도해도 `IMG-009`로 거부됨 |
 
 **Success Example**
 
@@ -339,7 +341,8 @@
         "originalName": "회의사진.jpg",
         "imageUrl": "https://s3.../abc.jpg",
         "caption": "회의실 전경",
-        "deletedAt": "2026-08-03T10:00:00"
+        "deletedAt": "2026-08-03T10:00:00",
+        "blockDeleted": false
       }
     ]
   }
@@ -484,11 +487,24 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 | `images` | List<Object> | Y | 정렬된 순서대로 나열된 이미지 목록(캡션 포함) |
 | `images[].imgId` | Long | Y | 이미지 ID |
 | `images[].caption` | String | N | 이미지 캡션(없으면 빈 문자열로 저장) |
+| `images[].version` | Int | Y | 이미지 항목 전체 조회에서 받은 version(2026-08-11 추가) — 배열 중 하나라도 그 사이 남이 먼저 저장했으면 요청 전체가 409로 처리된다 |
 
 > 🔄 **삭제 버튼 반영 (2026-08-04 팀 확인)**: 이 화면에 이미지 삭제 버튼이 같이 있어서, **요청 `images`에서 빠진 이미지 = 삭제로 간주한다.** 그 블록의 활성 이미지 중 요청에 없는 것은 이 호출로 소프트 삭제된다. 빈 배열(`images: []`)을 보내면 그 블록의 이미지 전체가 삭제된다.
 > ⚠️ **검증**: `images`에 있는 imgId는 전부 그 블록 소속의 활성 이미지여야 한다(부분집합 OK). 중복 imgId·다른 블록 소속·존재하지 않는 imgId가 섞이면 배열 위치 기준 `orderIndex` 계산이 깨지므로 `400 IMG-005`로 거부한다 (명세에 이 기준이 없어 임의로 정함).
 > ⚠️ **S3는 지우지 않는다** (2026-08-04 팀 확인) — 이미지는 복구(휴지통) 기능이 없어서 File 도메인처럼 소프트 삭제 후 남겨두는 게 지금은 의미가 없어 보이지만, DB는 팀 전체 방침대로 소프트 삭제만 하고 **S3 실제 삭제는 나중에 하드 삭제 정책이 정해지면 그때 처리한다** (별도 정리 배치로 예정, 아래 "미확정" 참고). 그 전까지 이 사이에 지워진 이미지의 S3 객체는 버킷에 계속 남아 있다 — 필요하면 `aws s3 rm`으로 수동 정리.
 > 🔄 **캡션 기본값 — 원 명세("없으면 null")에서 변경 (2026-08-04 담당자 확인)**: 생성 API와 동일하게 **없으면 `""`(빈 문자열)로 저장**한다. `null`/`""` 두 상태가 공존하면 "캡션 지우기"(있던 캡션을 빈 값으로 보냄)와 "원래 없음"을 구분해야 할 이유가 없는데도 프론트·활동 로그 양쪽이 두 값을 다 처리해야 해서 통일했다.
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.images` | List<Object> | 순서가 반영된 이미지 목록 |
+| `data.images[].imgId` | Long | 이미지 ID |
+| `data.images[].orderIndex` | Int | 수정 후 순서 |
+| `data.images[].caption` | String | 수정된 캡션 |
+| `data.images[].version` | Int | 수정 후 버전(2026-08-11 추가) — 다음 수정 요청에 그대로 실어 보낸다 |
 
 **Success Example**
 
@@ -498,9 +514,9 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
   "message": "이미지 수정 성공",
   "data": {
     "images": [
-      { "imgId": 13, "orderIndex": 1, "caption": "회의실 전경" },
-      { "imgId": 10, "orderIndex": 2, "caption": "화이트보드" },
-      { "imgId": 15, "orderIndex": 3, "caption": "" }
+      { "imgId": 13, "orderIndex": 1, "caption": "회의실 전경", "version": 2 },
+      { "imgId": 10, "orderIndex": 2, "caption": "화이트보드", "version": 2 },
+      { "imgId": 15, "orderIndex": 3, "caption": "", "version": 1 }
     ]
   }
 }
@@ -512,9 +528,11 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 | --- | --- | --- | --- |
 | 200 | OK | — | "이미지 수정 성공" |
 | 400 | Bad Request | `IMG-005` | "요청한 이미지 목록이 유효하지 않습니다." |
+| 400 | Bad Request | `IMAGE_VERSION_REQUIRED` | "버전 정보가 없습니다. 화면을 새로고침해 주세요." (2026-08-11 추가) |
 | 403 | Forbidden | `IMG-002` | "편집 권한이 없습니다." |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `IMG-003` | "존재하지 않는 블록입니다." |
+| 409 | Conflict | `IMAGE_VERSION_CONFLICT` | "다른 사용자가 먼저 수정했습니다." (2026-08-11 추가 — 배열 중 하나라도 충돌하면 요청 전체가 실패) |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
 | 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
