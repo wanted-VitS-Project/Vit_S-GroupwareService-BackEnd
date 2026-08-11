@@ -3,6 +3,7 @@ package com.group3.vitamins.approval.application.policy;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
+import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
@@ -17,6 +18,21 @@ import org.springframework.stereotype.Component;
 public class ApprovalLineProcessingPolicy {
 
     private final ApprovalRepository approvalRepository;
+
+    /** DEL-006 — line 잠금보다 먼저 활성 부모 approval을 찾아 잠근다. */
+    public Approval getApprovalForLineForUpdateOrThrow(Long lineId) {
+        Long approvalId = approvalRepository.findApprovalIdByLineId(lineId)
+                .orElseThrow(() -> {
+                    log.warn("활성 결재선 관계 없음 - lineId={}", lineId);
+                    return new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN);
+                });
+
+        return approvalRepository.findApprovalForUpdate(approvalId)
+                .orElseThrow(() -> {
+                    log.warn("결재선의 활성 부모 없음 - lineId={}, approvalId={}", lineId, approvalId);
+                    return new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN);
+                });
+    }
 
     /**
      * 잠금 조회 + 소유자·상태 검증까지 한 번에 끝낸다. {@code lineId} 자체가 없는 경우도

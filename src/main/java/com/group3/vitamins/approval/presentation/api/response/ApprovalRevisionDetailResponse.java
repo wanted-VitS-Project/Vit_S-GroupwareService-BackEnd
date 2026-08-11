@@ -61,7 +61,11 @@ public record ApprovalRevisionDetailResponse(
             Long fileSize,
 
             @Schema(description = "업로드 완료 일시(라이브 조회)", example = "2026-08-04T12:00:00")
-            LocalDateTime uploadedAt
+            LocalDateTime uploadedAt,
+
+            @Schema(description = "원본 문서가 휴지통에 있으면 true. 이름·크기는 이력으로 계속 내려간다",
+                    example = "false")
+            boolean fileDeleted
     ) {
     }
 
@@ -97,7 +101,8 @@ public record ApprovalRevisionDetailResponse(
 
     public static ApprovalRevisionDetailResponse from(ApprovalRevisionDetail detail) {
         List<DocumentItem> documents = detail.documents().stream()
-                .map(d -> new DocumentItem(d.documentId(), d.fileVersionId(), d.fileName(), d.fileSize(), d.uploadedAt()))
+                .map(d -> new DocumentItem(d.documentId(), d.fileVersionId(), d.fileName(), d.fileSize(),
+                        d.uploadedAt(), d.fileDeleted()))
                 .toList();
         List<LineItem> lines = detail.lines().stream()
                 .map(l -> new LineItem(l.lineId(), l.approverId(), l.approverName(), l.approverPosition(),

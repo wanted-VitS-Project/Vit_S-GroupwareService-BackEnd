@@ -58,7 +58,8 @@ public record ApprovalDetailResponse(
     public static ApprovalDetailResponse from(ApprovalDetailResult detail) {
         List<ApprovalRevisionDetailResponse.DocumentItem> documents = detail.documents().stream()
                 .map(d -> new ApprovalRevisionDetailResponse.DocumentItem(
-                        d.documentId(), d.fileVersionId(), d.fileName(), d.fileSize(), d.uploadedAt()))
+                        d.documentId(), d.fileVersionId(), d.fileName(), d.fileSize(),
+                        d.uploadedAt(), d.fileDeleted()))
                 .toList();
         List<ApprovalRevisionDetailResponse.LineItem> lines = detail.lines().stream()
                 .map(l -> new ApprovalRevisionDetailResponse.LineItem(l.lineId(), l.approverId(), l.approverName(),
