@@ -59,7 +59,8 @@ CREATE TABLE approval_revision (
     approval_id          BIGINT       NOT NULL,
     revision_no          INT          NOT NULL,
     title                VARCHAR(200) NOT NULL,
-    submitted_at         TIMESTAMP
+    submitted_at         TIMESTAMP,
+    deleted_at           TIMESTAMP
 );
 
 CREATE TABLE approval_line (

@@ -1,13 +1,9 @@
 # 🧩 블록 정보 — 카탈로그 (**enum 10값 / 실사용 8종**)
 
 **최종 업데이트**
-- 2026-08-10 — ⭐ **정산 재설계 반영 + 등록표 전수 재확인.** `SETTLEMENT` 등재(`settlement_block`) · `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **상세 테이블 DROP** 으로 빈 껍데기가 됐다(정리는 Block 도메인 소관) · §2-8 표의 `IMAGE`·`APPROVAL` **미등록 표기 오류 정정**(둘 다 실재) · `APPROVAL.deleteDetail` 의 409 잔재 명시 · **블록에 복구·휴지통이 없다는 경계**를 [`../domain/프로젝트/PRJ-V1.md`](../domain/프로젝트/PRJ-V1.md) §3-1 에 신설
-- 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · §4 번호 당김(4-8~4-10 → 4-7~4-9) · DB 는 `V20260805170000` 로 ALTER
-- 2026-08-05 — 🩹 **`BID_NOTICE` 이중 정의 해소** — 상세 테이블 없는 구 §4-9 를 제거하고 `bid_notice_block` 모델 하나로 통일(§5 요약표 기준), **§4-10 번호 중복 정리**(AI → 4-9), AI 설명문 오배치 복구, 깨진 링크(`입찰관리/BID-V1.md`) 제거 · 엔드포인트 경로는 `api/bid.md` 단일 기준으로 위임 · `bid_notice_block` 테이블 부재 명시
-- 2026-08-05 — `AI` 블록 상세 어댑터 등록 완료 (`vitamate/infrastructure/blockdetail/`) · `detail` shape = `VitamateDetail(vitamateBlockId, welcomeMessage)`
-- 2026-08-05 — ⭐ **§2 타입별 상세 확장 가이드 신설** (담당자용 계약 10건 · 파일 위치 · 스켈레톤) · **쓰기는 JPA 위임 · 조회만 MyBatis** 확정 · 어댑터·매퍼·XML 을 **타입 담당자 패키지로 이관** · 규약 5줄의 `<discriminator>`·"이벤트 회수" 문구 정정
-- 2026-08-05 — ⭐ `type_id` NULL **2종→3종** (`TAX_INVOICE_VIEW` 추가) · 상세 생성/삭제 **트랜잭션** 규약 확정(⛔ 이벤트 아님) · 상세 행은 **빈 행**으로 생성
-- 2026-08-04 — 입찰 공고 블록 `BID_NOTICE` 추가
+- 2026-08-10 — 결재 삭제 경계 정합화·1차 구현: 상태 무관 동기 전파 후 미종결 상태 `CANCELED`, 결재 4테이블 soft delete, 삭제분 명령/조회 차단
+- 2026-08-10 — ⭐ **정산 재설계 반영 + 등록표 전수 재확인.** `SETTLEMENT` 등재(`settlement_block`) · `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **상세 테이블 DROP** 으로 빈 껍데기가 됐다 · `IMAGE`·`APPROVAL` 어댑터 실재 확인
+- 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · DB 는 `V20260805170000` 로 ALTER
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
 
@@ -214,8 +210,6 @@ public Long create(Long blockId) {
 
 ### 2-8. 현재 등록 상태
 
-| 타입 | 어댑터 | `type_id` | 비고 |
-|------|:-----:|:---------:|------|
 > 🔄 **2026-08-10 전수 재확인** — 아래는 실제 파일 존재를 대조한 결과다 (이전 판은 `IMAGE`·`APPROVAL` 을 미등록으로 적고 있었으나 **둘 다 실재한다**).
 
 | 타입 | 어댑터 | `type_id` | 비고 |
@@ -224,7 +218,7 @@ public Long create(Long blockId) {
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
 | `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail` 조회 |
 | `IMAGE` | ✅ `image/infrastructure/blockdetail/` | 값 | 1:N (`image_block` → `image`) |
-| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | `deleteDetail` 이 문서(하드)·결재선·회차·결재를 **상태 불문 연쇄 삭제**한다. ✅ 2026-08-10 `IN_PROGRESS` 차단 제거(BLK-008) — 결재는 블록 종속이라 블록이 사라지면 함께 사라진다 |
+| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | `IN_PROGRESS`를 포함해 상태와 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다 |
 | ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block` |
 | `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환. 🚨 **조회 `detail` 도 안 채워진다** (명세는 `{fileCount}`) |
 | ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | ❌ | **NULL** | ⛔ **상세 테이블이 DROP 됐다** (`V20260809130000`) — `SETTLEMENT` 로 통합. enum 값만 남은 빈 껍데기이며 **정리는 Block 도메인 소관** |
@@ -309,7 +303,7 @@ public Long create(Long blockId) {
 | **역할** | **파일은 하나, 버전이 붙는다.** `보고서_최종2.xlsx` 를 죽이는 블록 |
 | 소유 구조 ⚠️ | **파일은 프로젝트 소속**(`file.project_id`)이고 블록은 그걸 **참조**한다. 블록을 지워도 파일은 산다 |
 | 권한 | 스텝 권한 그대로 |
-| **삭제 잠금** | **결재 대상으로 지목되면 결재 진행 중 삭제 불가** |
+| **삭제 잠금** | **없음.** 결재가 참조해도 파일 **블록** 삭제는 허용한다. 단 파일 자체의 휴지통 이동·영구삭제 정책은 블록 삭제와 별개이며 `.ai/api/file.md`를 따른다 |
 | 템플릿 | 담김: 블록 껍데기만 / 안 담김: **업로드된 파일** |
 | 담당 | 김동현 |
 
@@ -329,7 +323,7 @@ public Long create(Long blockId) {
 | **⚠️ 스텝당 1개** | 한 스텝에 이 블록은 **하나만.** 둘이면 같은 스텝의 세금계산서 블록이 어느 회차 것인지 알 수 없다 |
 | 회차 속성 | `round_no`(프로젝트 단위 유일) · **입금 예정일** · **예정금액**(둘 다 선택 입력) |
 | **권한** ⚠️ | **프로젝트 쪽은 전원 읽기 전용.** 확인 표시 확정·연결은 **`page_code='FINANCE'` + `EDITOR`** 만 |
-| **삭제 잠금** | **입금이 연결되면 블록과 그 블록이 든 스텝 둘 다 삭제 불가.** 연결 해제는 재무만 |
+| **삭제 잠금** | **없음(폐기).** `PAYMENT_CONFIRM` 상세 모델은 `SETTLEMENT`로 통합됐다 |
 | 템플릿 | 담김: 블록 + **제목**(`2차 정산`) / 안 담김: **연결된 입금** |
 | 담당 | **동훈** (2026-08-01 정현 → 동훈) |
 | 상세 문서 | [`PAY-V1.md`](PAY-V1.md) |
@@ -344,7 +338,7 @@ public Long create(Long blockId) {
 | 상세 테이블 | `tax_invoice_confirm` — PK `tax_invoice_block_id` · `block_id` UNIQUE(FK없음) · `tax_invoice_id` · `linked_by` |
 | **역할** | 홈택스에서 발행돼 수집된 세금계산서를 **프로젝트 회차에서 조회**한다 |
 | **권한** ⚠️ | 연결·해제는 **`page_code='FINANCE'` + `EDITOR`.** 프로젝트 쪽은 읽기 전용 |
-| **삭제 잠금** | **계산서가 연결되면 블록과 그 블록이 든 스텝 둘 다 삭제 불가.** 연결 해제는 재무만 |
+| **삭제 잠금** | **없음(폐기).** `TAX_INVOICE_VIEW` 상세 모델은 `SETTLEMENT`로 통합됐다 |
 | 템플릿 | 담김: 블록 껍데기만 |
 | 담당 | 동훈 |
 | 상세 문서 | [`TAX-V1.md`](TAX-V1.md) |
@@ -358,10 +352,10 @@ public Long create(Long blockId) {
 | 계열 | 프로세스 |
 | 상세 테이블 | `approval` — PK `approval_id` · `block_id` **NULL 허용** UNIQUE(FK없음) → `approval_revision` → `approval_line` · `approval_document` (**3층**) |
 | **역할** | **상신만 한다.** 승인·반려는 결재관리 탭(P-31)에서 (`DOMAIN §12-1-1`) |
-| 대상 지정 ⚠️ | **같은 스텝의 파일 블록을 지목**한다. 결재 블록에 직접 업로드 금지 |
+| 대상 지정 ⚠️ | 결재 블록에서 공용 파일 업로드 API로 업로드한 `file_version_id`를 직접 연결한다. 파일 블록 경유 방식은 폐기됐다 |
 | 버전 고정 | 상신 시점 `file_version_id` 를 박는다. 새 버전 업로드는 허용하되 `대상보다 새 버전 있음` 경고 배지 |
 | 권한 | 상신은 스텝 편집 권한자. 승인·반려는 **결재선에 있는 사람만** (role 무관) |
-| **삭제 잠금** | **진행 중이면 삭제 불가.** 회수하거나 완료해야 |
+| **삭제 잠금** | **없음.** 진행 중이어도 블록 삭제를 허용하고 `deleteDetail()`로 결재 상세 정리를 같은 트랜잭션에 전파한다 |
 | 템플릿 | 담김: **결재선** / 안 담김: 진행 상태 · 대상 지목 |
 | 담당 | 이강욱 |
 
@@ -422,10 +416,10 @@ public Long create(Long blockId) {
 | `TEXT` | 텍스트 | 콘텐츠 | `text` (`txt_id`) | — | — | 정림 | — |
 | `IMAGE` | 이미지 | 콘텐츠 | `image_block` (`img_block_id`) | `image` | — | 정림 | — |
 | `CHECKLIST` | 체크리스트 | 콘텐츠 | `checklist_block` (`chk_block_id`) | `checklist` | — | 정림 | — |
-| `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | ⚠️ 결재 대상일 때 | 김동현 | — |
-| `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | ⚠️ **입금 연결 시 (스텝까지)** | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
-| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | ⚠️ **계산서 연결 시 (스텝까지)** | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
-| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ 진행 중일 때 | 이강욱 | — |
+| `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | — | 김동현 | — |
+| `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | — (폐기) | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
+| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | — (폐기) | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
+| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | — | 이강욱 | [`APR-V1.md`](../domain/결재·알림/APR-V1.md) |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
 | **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
@@ -495,7 +489,7 @@ public Long create(Long blockId) {
 |------|------|
 | 입금이 연결된 입금확인 블록 | `detachFinanceLinks=true` 를 요구한다. 없으면 400 `FINANCE_LINK_DETACH_REQUIRED` + 연결 건수. 확인하면 `payment.block_id = NULL` 로 끊고 삭제. **입금 행은 남는다** |
 | 계산서가 연결된 조회 블록 | 같은 확인 요구. 확인하면 `tax_invoice_confirm` 행을 **하드 삭제**하고 블록 삭제. 계산서는 재연결 가능해진다 |
-| 진행 중인 결재 블록 | 그냥 삭제한다. (⚠️ 결재가 고아로 남는다 — 블록에서 만든 결재를 연쇄 삭제하는 건 **별건**, 결재 도메인 소관) |
+| 진행 중인 결재 블록 | 블록 삭제와 같은 트랜잭션에서 `ApprovalBlockDetailAdapter.deleteDetail()`을 호출한다. 미종결 결재는 `CANCELED`로 종결하고 문서 연결을 포함한 하위 행을 논리 삭제한다 |
 | 결재 대상 파일 블록 | 그냥 삭제한다 |
 
 **스텝을 지울 때 살리고 싶은 블록은 다른 스텝으로 옮긴다** (STP-013 · BLK-014) — 그게 잠금을 대신하는 탈출구다.
@@ -515,6 +509,10 @@ public Long create(Long blockId) {
 **hard 3개의 공통점** — 담긴 정보가 없는 **순수 연결 행**이다. `deleted_at` 을 달면 UNIQUE·복합 PK 를 시체가 점유해
 **재연결이 `1062` 로 죽는다.** `tax_invoice_confirm` 은 원래 *"행이 없으면 `WAITING`"* (TXL-008) 이라 이 의미였다.
 삭제 사실은 `activity_log` 가 갖는다 → [`../domain/ERD.md`](../domain/ERD.md) §0-5.
+
+`approval` 계열은 단순 블록 상세와 다르다. 회차·결재선·첨부 이력이 감사 근거이고,
+`approval_document.file_version_id` 참조는 파일 영구삭제 차단의 근거이므로 즉시 DB `CASCADE` 대상으로 단정하지 않는다.
+현재 구현과 후속 보완 기준은 [`APR-DELETE-DRAFT.md`](../domain/결재·알림/APR-DELETE-DRAFT.md)를 따른다.
 
 ---
 

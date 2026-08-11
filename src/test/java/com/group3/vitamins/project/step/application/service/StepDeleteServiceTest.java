@@ -73,6 +73,7 @@ class StepDeleteServiceTest {
         assertThat(result.deletedBlockCount()).isEqualTo(3);
         assertThat(result.deletedIssueCount()).isEqualTo(2);
         assertThat(captureSaved().getDeletedAt()).isNotNull();
+        Mockito.verify(stepBlockCascadePort).deleteBlocks(List.of(5L, 7L, 9L), REQUESTER);
         Mockito.verify(stepBlockCascadePort, Mockito.never())
                 .moveBlocks(anyCollection(), any());
     }

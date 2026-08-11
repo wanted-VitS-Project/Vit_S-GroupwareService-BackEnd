@@ -81,7 +81,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         log.info("결재 제목·내용 수정 요청 - approvalId={}, revisionId={}, requesterId={}",
                 command.approvalId(), command.revisionId(), command.requesterId());
 
-        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
         ApprovalRevision current =
                 revisionEligibilityPolicy.getDraftRevisionOrThrow(command.approvalId(), command.revisionId());
@@ -110,7 +110,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         log.info("결재선 등록·수정 요청 - approvalId={}, revisionId={}, requesterId={}, 결재자 수={}",
                 command.approvalId(), command.revisionId(), command.requesterId(), command.lines().size());
 
-        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
         // 잠금 조회 — 상신(#7)이 이 트랜잭션 커밋 전까지 같은 회차의 상태를 못 바꾸게 막는다(CodeRabbit 지적 반영)
         ApprovalRevision revision =
@@ -161,7 +161,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     public ApprovalResubmissionResult resubmit(ResubmitApprovalCommand command) {
         log.info("재상신 회차 생성 요청 - approvalId={}, requesterId={}", command.approvalId(), command.requesterId());
 
-        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
 
         if (approval.getStatus() != ApprovalStatus.REJECTED) {
@@ -241,7 +241,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         log.info("결재 문서 추가 요청 - approvalId={}, revisionId={}, fileVersionId={}",
                 command.approvalId(), command.revisionId(), command.fileVersionId());
 
-        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
         // 잠금 조회 — 상신과의 레이스 방지(#91과 동일한 이유)
         revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
@@ -258,7 +258,8 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         log.info("결재 문서 추가 완료 - documentId={}", saved.getDocumentId());
         return new ApprovalDocumentView(
-                saved.getDocumentId(), file.fileVersionId(), file.fileName(), file.fileSize(), file.uploadedAt());
+                saved.getDocumentId(), file.fileVersionId(), file.fileName(), file.fileSize(),
+                file.uploadedAt(), file.fileDeleted());
     }
 
     @Override
@@ -266,7 +267,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         log.info("결재 문서 제거 요청 - approvalId={}, revisionId={}, documentId={}",
                 command.approvalId(), command.revisionId(), command.documentId());
 
-        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
         revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
 
@@ -289,7 +290,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         log.info("결재 상신 요청 - approvalId={}, revisionId={}, requesterId={}",
                 command.approvalId(), command.revisionId(), command.requesterId());
 
-        Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(command.approvalId());
+        Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
         revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
         // 잠금 조회 — 이 락이 트랜잭션 커밋까지 유지되므로 아래 전이 쿼리들은 별도 조건 없이 안전하다(INV-07)
         ApprovalRevision revision =
@@ -338,11 +339,13 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     public ApprovalLineProcessResult approve(ApproveApprovalLineCommand command) {
         log.info("결재 승인 요청 - lineId={}, requesterId={}", command.lineId(), command.requesterId());
 
+        Approval approval = lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(command.lineId());
         ApprovalLine line = lineProcessingPolicy.getActiveOwnedLineOrThrow(command.lineId(), command.requesterId());
         ApprovalRevision revision = approvalRepository.findRevisionById(line.getRevisionId())
                 .orElseThrow(() -> new IllegalStateException("revision not found for line " + command.lineId()));
-        Approval approval = approvalRepository.findApproval(revision.getApprovalId())
-                .orElseThrow(() -> new IllegalStateException("approval not found for revision " + revision.getRevisionId()));
+        if (!approval.getApprovalId().equals(revision.getApprovalId())) {
+            throw new IllegalStateException("approval mismatch for line " + command.lineId());
+        }
 
         ApprovalLine approvedLine = approvalRepository.markLineProcessed(
                 command.lineId(), ApprovalLineStatus.APPROVED, command.opinion());
@@ -384,11 +387,13 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     public ApprovalLineProcessResult reject(RejectApprovalLineCommand command) {
         log.info("결재 반려 요청 - lineId={}, requesterId={}", command.lineId(), command.requesterId());
 
+        Approval approval = lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(command.lineId());
         ApprovalLine line = lineProcessingPolicy.getActiveOwnedLineOrThrow(command.lineId(), command.requesterId());
         ApprovalRevision revision = approvalRepository.findRevisionById(line.getRevisionId())
                 .orElseThrow(() -> new IllegalStateException("revision not found for line " + command.lineId()));
-        Approval approval = approvalRepository.findApproval(revision.getApprovalId())
-                .orElseThrow(() -> new IllegalStateException("approval not found for revision " + revision.getRevisionId()));
+        if (!approval.getApprovalId().equals(revision.getApprovalId())) {
+            throw new IllegalStateException("approval mismatch for line " + command.lineId());
+        }
 
         ApprovalLine rejectedLine = approvalRepository.markLineProcessed(
                 command.lineId(), ApprovalLineStatus.REJECTED, command.opinion());

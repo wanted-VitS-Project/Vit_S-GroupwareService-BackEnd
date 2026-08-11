@@ -80,9 +80,11 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
                 .stream()
                 .map(doc -> {
                     FileVersionSummary file = fileCatalogPort.findFileVersion(doc.getFileVersionId())
-                            .orElse(new FileVersionSummary(doc.getFileVersionId(), null, null, null, null));
+                            // 버전 행을 못 찾으면 휴지통 여부를 판단할 근거가 없으니 false 로 둔다
+                            .orElse(new FileVersionSummary(doc.getFileVersionId(), null, null, null, null, false));
                     return new ApprovalDocumentView(
-                            doc.getDocumentId(), doc.getFileVersionId(), file.fileName(), file.fileSize(), file.uploadedAt());
+                            doc.getDocumentId(), doc.getFileVersionId(), file.fileName(), file.fileSize(),
+                            file.uploadedAt(), file.fileDeleted());
                 })
                 .toList();
 
@@ -167,9 +169,11 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
                 .stream()
                 .map(doc -> {
                     FileVersionSummary file = fileCatalogPort.findFileVersion(doc.getFileVersionId())
-                            .orElse(new FileVersionSummary(doc.getFileVersionId(), null, null, null, null));
+                            // 버전 행을 못 찾으면 휴지통 여부를 판단할 근거가 없으니 false 로 둔다
+                            .orElse(new FileVersionSummary(doc.getFileVersionId(), null, null, null, null, false));
                     return new ApprovalDocumentView(
-                            doc.getDocumentId(), doc.getFileVersionId(), file.fileName(), file.fileSize(), file.uploadedAt());
+                            doc.getDocumentId(), doc.getFileVersionId(), file.fileName(), file.fileSize(),
+                            file.uploadedAt(), file.fileDeleted());
                 })
                 .toList();
 
