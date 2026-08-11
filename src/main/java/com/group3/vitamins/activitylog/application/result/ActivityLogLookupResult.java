@@ -1,5 +1,6 @@
 package com.group3.vitamins.activitylog.application.result;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public record ActivityLogLookupResult(
@@ -12,6 +13,7 @@ public record ActivityLogLookupResult(
         String afterValue,
         String actorUserId,
         String actorName,
+        LocalDate actorResignedAt,
         Long blockId,
         String blockTitle,
         String blockType,

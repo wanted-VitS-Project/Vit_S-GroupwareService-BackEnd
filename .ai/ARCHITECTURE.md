@@ -195,7 +195,6 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 | `XxxRepositoryAdapter` (구현체) | `XxxRepository` 구현 | `infrastructure/persistence` |
 | `XxxErrorCode` (enum) | `ErrorCode` 구현체 | `domain/exception` |
 | `XxxRequest` / `XxxResponse` (record) | Web DTO | `presentation/api/request`, `presentation/api/response` |
-| `XxxCleanupConfig` (`@Configuration`) | `global`의 하드 딜리트 SPI(`HardDeleteTarget`)에 자기 도메인 몫을 등록하는 팩토리 | `infrastructure/cleanup` — 상세 규칙은 `.ai/docs/global/CLEANUP.md` |
 
 ### 권한 처리
 

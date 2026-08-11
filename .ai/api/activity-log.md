@@ -1,9 +1,8 @@
 # ActivityLog API
 
 **상태**: md 명세 기준 계약 (`../API.md` §0·§1)
-**최종 업데이트**: 2026-08-10 (멀티테넌시 1차 — `activity_log.company_id` 직접 격리·기록 스탬핑·목록 필터 적용) · **담당**: 김용준
+**최종 업데이트**: 2026-08-11 (활동 수행자 응답에 `resignedAt` 추가 및 FE 사용 API 명시 — 사원은 삭제하지 않고 퇴사일을 기록하므로, 과거 활동의 수행자 이름을 보존하면서 FE가 퇴사 상태를 표시함) · **담당**: 김용준
 **최종 업데이트**: 2026-08-07 (결재선 `lines` 값을 사번→이름으로 변경, "필드별 표시 규칙" FE 가이드 섹션 신설) · **담당**: 김용준
-**최종 업데이트**: 2026-08-06 (파일 휴지통 복원·영구삭제 액션 `RESTORE`·`PURGE` 추가 — 별도 휴지통 로그 화면 없이 기존 Step/Block 활동 기록에 함께 노출) · **담당**: 김용준
 **Domain**: `프로젝트` · SUB-Domain `ActivityLog`
 
 > `.ai/api/*.md` 가 단일 계약이다. 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
@@ -94,6 +93,18 @@ Activity Object 1개는 `activity_log` 1행에 대응한다. 한 수정 이벤�
 | --- | --- | --- |
 | `userId` | String | 사용자 사번 |
 | `name` | String | 사용자 이름 |
+| `resignedAt` | LocalDate | 퇴사일. 재직 중이면 `null` |
+
+### 퇴사 수행자 표시 — FE 연동 명세
+
+`GET /api/v1/steps/{stepId}/activity-logs`의 `data.activities[].actor.resignedAt`은 JSON에서 `"yyyy-MM-dd"` 문자열 또는 `null`이다.
+
+| 값 | FE 표시 규칙 |
+|---|---|
+| `null` | 기존처럼 `actor.name`만 표시 |
+| 날짜 문자열 | `actor.name`은 그대로 표시하고, 옆에 `퇴사함` 상태를 표시. 과거 활동 기록을 목록에서 제거하지 않음 |
+
+적용 화면은 Step 활동 기록 화면과 Block 활동 로그 팝업이다. Activity Log 조회 API는 이 엔드포인트 하나뿐이다.
 
 ### Block Object
 
@@ -145,7 +156,8 @@ resource.name == null
         },
         "actor": {
           "userId": "EMP003",
-          "name": "이영희"
+          "name": "이영희",
+          "resignedAt": null
         },
         "block": {
           "blockId": 15,
@@ -168,7 +180,8 @@ resource.name == null
         },
         "actor": {
           "userId": "EMP005",
-          "name": "최수아"
+          "name": "최수아",
+          "resignedAt": null
         },
         "block": {
           "blockId": 18,
@@ -239,6 +252,8 @@ Block 활동 로그 버튼 선택
 상단: actor.name + block.title + block.type
 하단: displayName + actionLabel
 ```
+
+`actor.resignedAt`이 `null`이 아니면 `actor.name` 옆에 퇴사 상태를 표시한다.
 
 `오늘`, `어제`, 날짜별 그룹과 `14:32`, `2시간 전` 등의 시간 표현은 `createdAt`을 기준으로 FE에서 처리한다.
 

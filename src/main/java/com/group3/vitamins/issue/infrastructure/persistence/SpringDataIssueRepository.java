@@ -65,8 +65,4 @@ public interface SpringDataIssueRepository extends JpaRepository<IssueEntity, Lo
             @Param("expectedVersion") int expectedVersion
     );
 
-    /** issue_assign·issue_block은 issue_id에 ON DELETE CASCADE가 걸려 있어 이 삭제 하나로 같이 정리된다. */
-    @Modifying(clearAutomatically = true)
-    @Query("DELETE FROM IssueEntity i WHERE i.deletedAt < :threshold")
-    int hardDeleteByDeletedAtBefore(@Param("threshold") LocalDateTime threshold);
 }
