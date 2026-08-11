@@ -14,6 +14,7 @@ import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.repo
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.repository.SpringDataCollectionRunRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -105,7 +106,7 @@ public class JpaCollectionRunOutboxStoreAdapter
 
     // 발행 가능한 Outbox를 잠금 조회하고 현재 서버가 점유합니다.
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<ClaimedCollectionRunOutbox> claimPublishable(
             String lockOwner,
             int batchSize,
