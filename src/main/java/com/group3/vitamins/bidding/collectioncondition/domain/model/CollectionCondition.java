@@ -220,6 +220,26 @@ public class CollectionCondition {
         this.updatedAt = updatedAt;
     }
 
+    // 자동 실행이 생성된 예약 시각과 다음 실행 시각을 기록합니다.
+    public void recordScheduledRun(
+            LocalDateTime scheduledAt,
+            LocalDateTime nextRunAt,
+            LocalDateTime updatedAt
+    ) {
+        this.lastScheduledAt = scheduledAt;
+        this.nextRunAt = nextRunAt;
+        this.updatedAt = updatedAt;
+    }
+
+    // 진행 중인 실행이 있어 건너뛴 예약의 다음 실행 시각만 갱신합니다.
+    public void advanceSchedule(
+            LocalDateTime nextRunAt,
+            LocalDateTime updatedAt
+    ) {
+        this.nextRunAt = nextRunAt;
+        this.updatedAt = updatedAt;
+    }
+
     // 수집 조건을 논리 삭제합니다.
     public void delete(LocalDateTime deletedAt) {
         this.active = false;

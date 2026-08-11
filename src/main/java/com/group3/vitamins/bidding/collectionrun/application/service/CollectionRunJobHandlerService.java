@@ -214,7 +214,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
                 ? CollectionRunStatus.PARTIAL_SUCCESS
                 : CollectionRunStatus.COMPLETED;
         runStatePort.complete(
-                job.runId(), job.attemptId(), finalStatus,
+                job.runId(), job.conditionId(), job.attemptId(), finalStatus,
                 summary.collectedCount(), summary.insertedCount(),
                 summary.updatedCount(), summary.skippedCount(), now
         );

@@ -105,6 +105,54 @@ class CollectionConditionRepositoryAdapterTest {
     }
 
     @Test
+    @DisplayName("실행 시각이 된 활성 자동 수집 조건만 점유한다")
+    void claimsOnlyDueAutoCollectionConditions() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 11, 10, 0);
+        CollectionCondition due = scheduledCondition(
+                "실행 대상",
+                now.minusMinutes(1),
+                true,
+                true
+        );
+        CollectionCondition dueExactlyNow = scheduledCondition(
+                "현재 시각 실행 대상",
+                now,
+                true,
+                true
+        );
+        CollectionCondition future = scheduledCondition(
+                "미래 실행",
+                now.plusMinutes(1),
+                true,
+                true
+        );
+        CollectionCondition disabled = scheduledCondition(
+                "자동 수집 꺼짐",
+                now.minusMinutes(1),
+                true,
+                false
+        );
+        CollectionCondition inactive = scheduledCondition(
+                "비활성 조건",
+                now.minusMinutes(1),
+                false,
+                true
+        );
+        adapter.save(due);
+        adapter.save(dueExactlyNow);
+        adapter.save(future);
+        adapter.save(disabled);
+        adapter.save(inactive);
+
+        List<CollectionCondition> claimed =
+                adapter.claimDueConditions(now, 50);
+
+        assertThat(claimed)
+                .extracting(CollectionCondition::getConditionName)
+                .containsExactly("실행 대상", "현재 시각 실행 대상");
+    }
+
+    @Test
     @DisplayName("다른 회사에서는 같은 수집 조건 ID를 조회할 수 없다")
     void preventsCrossCompanyLookup() {
         CollectionCondition saved = adapter.save(condition(COMPANY_ID));
@@ -191,6 +239,29 @@ class CollectionConditionRepositoryAdapterTest {
                 true,
                 "EMP001",
                 createdAt
+        );
+    }
+
+    private CollectionCondition scheduledCondition(
+            String name,
+            LocalDateTime nextRunAt,
+            boolean active,
+            boolean autoCollectionEnabled
+    ) {
+        return CollectionCondition.create(
+                COMPANY_ID,
+                "NARA",
+                name,
+                List.of(BidNoticeType.SERVICE),
+                condition(COMPANY_ID).getFilters(),
+                active,
+                autoCollectionEnabled,
+                autoCollectionEnabled ? CollectionScheduleType.DAILY : null,
+                autoCollectionEnabled ? LocalTime.of(9, 0) : null,
+                autoCollectionEnabled ? "Asia/Seoul" : null,
+                autoCollectionEnabled ? nextRunAt : null,
+                "EMP001",
+                LocalDateTime.of(2026, 8, 10, 10, 0)
         );
     }
 

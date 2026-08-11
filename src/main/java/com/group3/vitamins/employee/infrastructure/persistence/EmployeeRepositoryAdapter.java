@@ -58,6 +58,20 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
         springDataRepository.saveAndFlush(entity);
     }
 
+    /** 프로필 사진 키 조회 — 사원 없음/사진 없음 모두 empty (호출자가 existsById 로 구분). */
+    @Override
+    public Optional<String> findProfileImageKey(String userId) {
+        return springDataRepository.findById(userId).map(EmployeeJpaEntity::getProfileImageKey);
+    }
+
+    /** 프로필 사진 키 갱신 — profile_image_key 만 갱신한다(null 이면 삭제). @DynamicUpdate 로 다른 작업과 충돌 없음. */
+    @Override
+    public void updateProfileImageKey(String userId, String profileImageKey) {
+        EmployeeJpaEntity entity = load(userId);
+        entity.changeProfileImageKey(profileImageKey);
+        springDataRepository.saveAndFlush(entity);
+    }
+
     private EmployeeJpaEntity load(String userId) {
         return springDataRepository.findById(userId)
                 .orElseThrow(() -> new IllegalStateException(

@@ -5,6 +5,7 @@ import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunS
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.mapper.CollectionRunConditionSnapshotJsonMapper;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.repository.SpringDataCollectionRunRepository;
+import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.repository.SpringDataCollectionConditionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -18,6 +19,7 @@ import java.util.Optional;
 public class JpaCollectionRunStateAdapter implements CollectionRunStatePort {
 
     private final SpringDataCollectionRunRepository repository;
+    private final SpringDataCollectionConditionRepository conditionRepository;
     private final CollectionRunConditionSnapshotJsonMapper snapshotMapper;
 
     // 대기 중인 실행을 현재 Worker의 처리 시도로 점유합니다.
@@ -81,6 +83,7 @@ public class JpaCollectionRunStateAdapter implements CollectionRunStatePort {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean complete(
             Long runId,
+            Long conditionId,
             String attemptId,
             CollectionRunStatus finalStatus,
             int collectedCount,
@@ -90,7 +93,7 @@ public class JpaCollectionRunStateAdapter implements CollectionRunStatePort {
             LocalDateTime finishedAt
     ) {
         validateCompletionStatus(finalStatus);
-        return repository.completeRun(
+        int completed = repository.completeRun(
                 runId,
                 attemptId,
                 finalStatus,
@@ -100,7 +103,19 @@ public class JpaCollectionRunStateAdapter implements CollectionRunStatePort {
                 skippedCount,
                 finishedAt,
                 CollectionRunStatus.PROCESSING
-        ) == 1;
+        );
+        if (completed == 0) {
+            return false;
+        }
+        int conditionUpdated = conditionRepository.recordCollectionSuccess(
+                conditionId, finishedAt, collectedCount
+        );
+        if (conditionUpdated != 1) {
+            throw new IllegalStateException(
+                    "완료된 수집 조건을 갱신할 수 없습니다. conditionId=" + conditionId
+            );
+        }
+        return true;
     }
 
     // 현재 처리 시도와 일치할 때만 실행을 최종 실패 상태로 변경합니다.

@@ -141,13 +141,17 @@ class CollectionRunJobHandlerServiceTest {
                 eq(TASK_ID), eq(ATTEMPT_ID), eq(1), eq(1), eq(0), eq(0), any()
         )).thenReturn(true);
         when(taskPort.summarize(RUN_ID)).thenReturn(completedSummary());
+        when(runStatePort.complete(
+                eq(RUN_ID), eq(CONDITION_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
+                eq(1), eq(1), eq(0), eq(0), any()
+        )).thenReturn(true);
 
         CollectionRunJobResult result = service.handle(job);
 
         assertThat(result.outcome()).isEqualTo(CollectionRunJobResult.Outcome.SUCCESS);
         verify(noticeStorePort).saveAll(eq(COMPANY_ID), eq("NARA"), eq(RUN_ID), anyList(), any());
         verify(runStatePort).complete(
-                eq(RUN_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
+                eq(RUN_ID), eq(CONDITION_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
                 eq(1), eq(1), eq(0), eq(0), any()
         );
     }
