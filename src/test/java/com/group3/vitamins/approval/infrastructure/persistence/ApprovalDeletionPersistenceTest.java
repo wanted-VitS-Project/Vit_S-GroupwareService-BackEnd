@@ -87,6 +87,11 @@ class ApprovalDeletionPersistenceTest {
                 revision.getApprovalRevisionId())).isEmpty();
         assertThat(documentRepository.findByApprovalRevisionIdAndDeletedAtIsNull(
                 revision.getApprovalRevisionId())).isEmpty();
+
+        // DEL-006 — 승인·반려 경로의 진입 조회가 비어야 403 으로 막힌다. 이게 삭제된 결재에
+        // 대한 명령 차단의 실제 관문이라, 위 조회 필터와 따로 확인한다.
+        assertThat(approvalRepository.findActiveByIdForUpdate(approval.getApprovalId())).isEmpty();
+        assertThat(lineRepository.findActiveApprovalIdByLineId(lines.get(0).getApprovalLineId())).isEmpty();
     }
 
     @Test
