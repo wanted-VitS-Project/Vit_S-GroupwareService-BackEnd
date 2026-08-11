@@ -10,6 +10,8 @@ import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.employee.contract.EmployeeParticipationUnavailableEvent;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.infrastructure.session.SessionTerminator;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +42,7 @@ class AccountCommandServiceTest {
     private AccountQueryPort accountQueryPort;
     private SessionTerminator sessionTerminator;
     private CurrentCompanyIdProvider currentCompanyIdProvider;
+    private DomainEventPublisher domainEventPublisher;
     private AccountCommandService accountCommandService;
 
     @BeforeEach
@@ -48,11 +51,12 @@ class AccountCommandServiceTest {
         accountQueryPort = Mockito.mock(AccountQueryPort.class);
         sessionTerminator = Mockito.mock(SessionTerminator.class);
         currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        domainEventPublisher = Mockito.mock(DomainEventPublisher.class);
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         // ADMIN 판정은 순수 컴포넌트라 실제 인스턴스를 그대로 쓴다.
         accountCommandService = new AccountCommandService(
                 accountRepository, accountQueryPort, sessionTerminator, new AccountAdminPolicy(),
-                currentCompanyIdProvider);
+                currentCompanyIdProvider, domainEventPublisher);
     }
 
     /** 존재하고 시스템 계정이 아닌 정상 대상(MEMBER · ACTIVE)을 세팅한다. */
@@ -146,6 +150,8 @@ class AccountCommandServiceTest {
             accountCommandService.changeStatus(new ChangeStatusCommand("ADMIN", TARGET_ID, "INACTIVE"));
 
             assertThat(target.getStatus()).isEqualTo("INACTIVE");
+            verify(domainEventPublisher).publish(
+                    new EmployeeParticipationUnavailableEvent(TARGET_ID, 1L));
             verify(sessionTerminator, times(1)).terminateAll(TARGET_ID);
         }
 

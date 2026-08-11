@@ -2,10 +2,12 @@ package com.group3.vitamins.approval.application.policy;
 
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
+import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
+import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +33,14 @@ public class ApprovalViewPolicy {
 
     private final EmployeeCatalogPort employeeCatalogPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final BlockCatalogPort blockCatalogPort;
 
     /** 기안자·대행 기안자·ACTIVE 이상 결재자(과거 이력 포함)·MASTER만 조회 가능. 아니면 403 */
     public void assertViewable(Approval approval, List<ApprovalLine> lines, String requesterId) {
         assertSameCompany(approval, requesterId);
 
-        String role = employeeCatalogPort.findEmployee(requesterId).map(EmployeeSummary::role).orElse(null);
+        EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId).orElse(null);
+        String role = requester == null ? null : requester.role();
         if ("ADMIN".equals(role)) {
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
         }
@@ -51,6 +55,14 @@ public class ApprovalViewPolicy {
             return;
         }
 
+        // 기안자 또는 대행자가 참여 불가일 때만 스텝 EDITOR에게 상세 열람을 연다.
+        // 알림을 클릭한 EDITOR가 대행 선점·결재선 교체 화면에 진입할 수 있어야 한다.
+        if (requester != null && !requester.participationUnavailable()
+                && requiresDrafterAction(approval)
+                && blockCatalogPort.isStepEditor(approval.getBlockId(), requesterId, role)) {
+            return;
+        }
+
         boolean isViewableParticipant = lines.stream()
                 .anyMatch(line -> line.getApproverId().equals(requesterId)
                         && VIEWABLE_LINE_STATUSES.contains(line.getStatus()));
@@ -60,6 +72,18 @@ public class ApprovalViewPolicy {
 
         log.warn("결재 상세조회 - 조회 권한 없음 approvalId={}, requesterId={}", approval.getApprovalId(), requesterId);
         throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    private boolean requiresDrafterAction(Approval approval) {
+        if (approval.getStatus() != ApprovalStatus.IN_PROGRESS
+                && approval.getStatus() != ApprovalStatus.REJECTED) {
+            return false;
+        }
+        String currentDrafterId = approval.getActingDrafterId() == null
+                ? approval.getDrafterId() : approval.getActingDrafterId();
+        return employeeCatalogPort.findEmployee(currentDrafterId)
+                .map(EmployeeSummary::participationUnavailable)
+                .orElse(true);
     }
 
     /**

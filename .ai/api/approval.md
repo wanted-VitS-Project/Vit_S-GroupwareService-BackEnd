@@ -1,9 +1,9 @@
 # 📝 Approval API — 결재 블록
 
 **상태**: `✅ 확정` — 로컬 정본 확정. 2026-08-11 추가분은 노션·프론트 재동기화 필요 (`../API.md` §0)
+**최종 업데이트**: 2026-08-11 (참여 불가 전환 실제 알림 2종·대행 전 EDITOR 상세조회 추가)
 **최종 업데이트**: 2026-08-11 (결재 참여 불가 사원 교체·제외 · 대행 기안자 · ADMIN 결재 권한 제외 정책 추가)
 **최종 업데이트**: 2026-08-10 (상세조회 `documents[].fileDeleted` 신설 · `APPROVAL_IN_PROGRESS` 에러코드 폐기 — 노션·프론트 공유 필요)
-**최종 업데이트**: 2026-08-06 (§8 신설 — 결재관리 목록조회, `drafterId`/`approverId` 계열 원 명세 `long`→String 정정)
 **담당**: 이강욱
 **노션**: 확인 필요 — 노션 링크 채워넣기
 **범위**: 결재 블록 관련 API 7개 + 결재관리·처리 API(목록조회 착수, 나머지 4개는 순서대로 추가 예정). 알림 API는 `notification.md` 참고.
@@ -35,7 +35,7 @@
 
 | # | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|---|
-| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자·ACTIVE 이상 결재자·MASTER |
+| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자·ACTIVE 이상 결재자·MASTER·대행 필요 시 스텝 EDITOR |
 | 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자/대행 기안자 |
 | 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자/대행 기안자 |
 | 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자/대행 기안자 |
@@ -43,7 +43,7 @@
 | 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자/대행 기안자 |
 | 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
 | 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(scope=all은 MASTER) |
-| 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 기안자·ACTIVE 이상 결재자·MASTER |
+| 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 기안자·ACTIVE 이상 결재자·MASTER·대행 필요 시 스텝 EDITOR |
 | 10 | 결재 이력조회 | GET | `/api/v1/approvals/{approvalId}/revisions` | 기안자·이력 참여 결재자(ACTIVE 이상)·MASTER |
 | 11 | 결재 승인 | POST | `/api/v1/approval-lines/{lineId}/approve` | 해당 결재선의 결재자 본인 |
 | 12 | 결재 반려 | POST | `/api/v1/approval-lines/{lineId}/reject` | 해당 결재선의 결재자 본인 |
@@ -59,7 +59,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals/{approvalId}/revisions/{revisionId}` |
-| 인증 필요 | Y · 기안자·해당 회차 ACTIVE 이상 결재자(과거 이력 포함)·MASTER |
+| 인증 필요 | Y · 기안자·해당 회차 ACTIVE 이상 결재자(과거 이력 포함)·MASTER·대행 필요 시 스텝 EDITOR |
 | 요구사항 | MGT-005 |
 
 **Request**
@@ -93,7 +93,9 @@
 | 404 | Not Found | `APPROVAL_REVISION_NOT_FOUND` | 회차 없음 |
 | 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 차례 안 온 결재자(`WAITING`)의 조회 |
 
-**비즈니스 규칙**: `WAITING` 결재자는 조회 불가 · `CANCELED`(반려로 절차 종결돼 건너뛴 결재선)는 조회 가능 · `MASTER`는 차례와 무관하게 전부 조회 가능(`MGT-005`).
+**비즈니스 규칙**: `WAITING` 결재자는 조회 불가 · `CANCELED`(반려로 절차 종결돼 건너뛴 결재선)는 조회 가능 · `MASTER`는 차례와 무관하게 전부 조회 가능(`MGT-005`). 현재 기안자가 참여 불가인 `IN_PROGRESS`·`REJECTED` 결재는 대행 선점 전에도 유효 스텝 EDITOR가 알림을 통해 상세에 진입할 수 있다. 정상 기안자 결재와 `COMPLETED`·`CANCELED` 이력은 이 예외로 열지 않는다.
+
+**참여 불가 실제 알림**: 미처리(`ACTIVE`·`WAITING`) 결재자가 참여 불가로 전환되면 현재 유효한 기안자에게 `APPROVAL_APPROVER_UNAVAILABLE`, 현재 기안자 또는 대행 기안자가 참여 불가로 전환되면 유효 스텝 EDITOR 전원에게 `APPROVAL_DRAFTER_UNAVAILABLE`을 발행한다. 둘 다 `targetType=APPROVAL`, `targetId=approvalId`, `targetContext.revisionId=현재 회차`다. 알림 REST API는 변경하지 않는다.
 
 ---
 

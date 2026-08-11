@@ -2,6 +2,7 @@ package com.group3.vitamins.approval.application.policy;
 
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
+import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,6 +47,8 @@ class ApprovalViewPolicyTest {
     private EmployeeCatalogPort employeeCatalogPort;
     @Mock
     private CurrentCompanyIdProvider currentCompanyIdProvider;
+    @Mock
+    private BlockCatalogPort blockCatalogPort;
 
     @InjectMocks
     private ApprovalViewPolicy policy;
@@ -140,6 +144,72 @@ class ApprovalViewPolicyTest {
         givenEmployee(DRAFTER, "MEMBER", OTHER_COMPANY);
 
         assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), DRAFTER))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    @Test
+    @DisplayName("기안자 참여 불가 시 같은 스텝 EDITOR는 알림 대상 결재를 조회할 수 있다")
+    void stepEditorPassesWhenDrafterUnavailable() {
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(DRAFTER))
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        DRAFTER, "퇴사자", null, null, "MEMBER", MY_COMPANY,
+                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
+        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+        when(blockCatalogPort.isStepEditor(10L, APPROVER, "MEMBER")).thenReturn(true);
+
+        assertThatCode(() -> policy.assertViewable(approval(), List.of(), APPROVER))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("기안자가 유효하면 스텝 EDITOR여도 기존 조회 범위를 넓히지 않는다")
+    void stepEditorRejectedWhenDrafterAvailable() {
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(DRAFTER, "MEMBER", MY_COMPANY);
+        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+
+        assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    @Test
+    @DisplayName("기안자가 이탈해도 완료 결재는 스텝 EDITOR에게 새로 공개하지 않는다")
+    void completedApprovalRemainsHiddenFromStepEditor() {
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(DRAFTER))
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        DRAFTER, "퇴사자", null, null, "MEMBER", MY_COMPANY,
+                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
+        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+        Approval completed = Approval.reconstruct(
+                APPROVAL_ID, 10L, DRAFTER, null, ApprovalStatus.COMPLETED,
+                1, null, null, null, null);
+
+        assertThatThrownBy(() -> policy.assertViewable(completed, List.of(), APPROVER))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    @Test
+    @DisplayName("기안자와 EDITOR가 모두 참여 불가면 EDITOR 예외 조회를 허용하지 않는다")
+    void unavailableStepEditorIsRejected() {
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(DRAFTER))
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        DRAFTER, "퇴사 기안자", null, null, "MEMBER", MY_COMPANY,
+                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
+        when(employeeCatalogPort.findEmployee(APPROVER))
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        APPROVER, "퇴사 편집자", null, null, "MEMBER", MY_COMPANY,
+                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
+
+        assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("errorCode")
                 .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);

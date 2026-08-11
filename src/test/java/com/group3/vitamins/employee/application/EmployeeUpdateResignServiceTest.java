@@ -15,6 +15,8 @@ import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.employee.contract.EmployeeParticipationUnavailableEvent;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +46,7 @@ class EmployeeUpdateResignServiceTest {
     private EmployeeReferenceQueryPort referenceQueryPort;
     private AccountDeactivationPort accountDeactivationPort;
     private com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider currentCompanyIdProvider;
+    private DomainEventPublisher domainEventPublisher;
     private EmployeeCommandService service;
 
     @BeforeEach
@@ -54,6 +57,7 @@ class EmployeeUpdateResignServiceTest {
         currentCompanyIdProvider =
                 Mockito.mock(com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider.class);
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
+        domainEventPublisher = Mockito.mock(DomainEventPublisher.class);
         // 등록 경로 협력자는 이 테스트에서 안 쓰므로 목만 채운다.
         service = new EmployeeCommandService(
                 new EmployeeAdminPolicy(), employeeRepository, referenceQueryPort,
@@ -61,7 +65,8 @@ class EmployeeUpdateResignServiceTest {
                 Mockito.mock(ThrottledPasswordEncoder.class), Mockito.mock(InitialPasswordMailPort.class),
                 accountDeactivationPort,
                 Mockito.mock(com.group3.vitamins.employee.application.port.CompanyCodeQueryPort.class),
-                currentCompanyIdProvider);
+                currentCompanyIdProvider,
+                domainEventPublisher);
     }
 
     private Employee active() {
@@ -271,6 +276,8 @@ class EmployeeUpdateResignServiceTest {
 
             verify(employeeRepository).resign("EMP021", LocalDate.of(2026, 8, 31));
             verify(accountDeactivationPort).deactivate("EMP021");
+            verify(domainEventPublisher).publish(
+                    new EmployeeParticipationUnavailableEvent("EMP021", 1L));
             assertThat(result.resignedAt()).isEqualTo("2026-08-31");
             assertThat(result.accountStatus()).isEqualTo("INACTIVE");
         }
