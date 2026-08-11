@@ -14,12 +14,12 @@ public class ProjectCategoryLinkAdapter implements ProjectCategoryLinkPort {
     private final ProjectCategoryLinkQueryMapper projectCategoryLinkQueryMapper;
 
     @Override
-    public Set<Long> findLinkedCategoryIds() {
-        return new HashSet<>(projectCategoryLinkQueryMapper.findLinkedCategoryIds());
+    public Set<Long> findLinkedCategoryIds(Long companyId) {
+        return new HashSet<>(projectCategoryLinkQueryMapper.findLinkedCategoryIds(companyId));
     }
 
     @Override
-    public long countLinkedProjects(Long categoryId) {
-        return projectCategoryLinkQueryMapper.countLinkedProjects(categoryId);
+    public long countLinkedProjects(Long categoryId, Long companyId) {
+        return projectCategoryLinkQueryMapper.countLinkedProjects(categoryId, companyId);
     }
 }

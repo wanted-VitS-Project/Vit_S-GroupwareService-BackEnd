@@ -62,13 +62,16 @@ public record ProjectDetailResponse(
         String myPermission,
 
         @Schema(description = "생성 일시")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+
+        @Schema(description = "낙관적 락 버전. 수정·상태변경 요청에 그대로 실어 보낸다", example = "7")
+        int version
 ) {
 
     /** 조회 결과를 응답으로 옮긴다. */
     public static ProjectDetailResponse from(ProjectDetailResult result) {
         List<BusinessCategorySummaryResponse> categories = result.businessCategories().stream()
-                .map(c -> new BusinessCategorySummaryResponse(c.categoryId(), c.name(), c.code()))
+                .map(c -> new BusinessCategorySummaryResponse(c.categoryId(), c.name(), c.code(), c.deleted()))
                 .toList();
 
         return new ProjectDetailResponse(
@@ -76,6 +79,6 @@ public record ProjectDetailResponse(
                 result.status(), result.startedOn(), result.endedOn(), result.contractAmount(),
                 result.progressRate(), result.stepCount(), result.doneStepCount(), categories,
                 result.bidNoticeId(), result.closeReasonCode(), result.closeReasonNote(),
-                result.myPermission(), result.createdAt());
+                result.myPermission(), result.createdAt(), result.version());
     }
 }

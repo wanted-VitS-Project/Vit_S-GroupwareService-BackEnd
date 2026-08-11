@@ -44,7 +44,8 @@ public record StepCreateResponse(
     public static StepCreateResponse from(StepResult result) {
         StepPersonResponse owner = result.owner() == null
                 ? null
-                : new StepPersonResponse(result.owner().userId(), result.owner().name());
+                // 쓰기 응답이라 deleted 는 항상 false — 생성 시점에 살아있는 사원만 책임자가 될 수 있다.
+                : new StepPersonResponse(result.owner().userId(), result.owner().name(), false);
 
         return new StepCreateResponse(
                 result.stepId(), result.projectId(), result.stageId(), result.name(),

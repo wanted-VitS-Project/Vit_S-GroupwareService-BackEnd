@@ -2,6 +2,11 @@ package com.group3.vitamins.project.block.infrastructure.persistence;
 
 import com.group3.vitamins.project.block.domain.model.Block;
 
+/**
+ * ⚠️ {@link BlockJpaEntity} 는 {@code @AllArgsConstructor} 라 <b>필드 선언 순서 = 아래 인자 순서</b>다.
+ * 엔티티에 필드를 끼워 넣고 여기를 안 고치면 값이 밀린다 — {@code sortOrder} ↔ {@code version} 은
+ * 둘 다 {@code int} 라 <b>컴파일이 통과한다</b>.
+ */
 public class BlockMapper {
 
     private BlockMapper() {
@@ -19,6 +24,7 @@ public class BlockMapper {
                 entity.getRowIndex(),
                 entity.getColSpan(),
                 entity.getSortOrder(),
+                entity.getVersion(),
                 entity.getCreatedBy(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
@@ -38,6 +44,7 @@ public class BlockMapper {
                 domain.getRowIndex(),
                 domain.getColSpan(),
                 domain.getSortOrder(),
+                domain.getVersion(),
                 domain.getCreatedBy(),
                 domain.getCreatedAt(),
                 domain.getUpdatedAt(),

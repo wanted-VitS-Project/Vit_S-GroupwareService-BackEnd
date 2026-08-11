@@ -39,13 +39,20 @@ public record MemberListResponse(
             String permission,
 
             @Schema(description = "퇴사자 여부 (배지 표시용)", example = "false")
-            boolean resigned
+            boolean resigned,
+
+            @Schema(description = "사원 데이터가 삭제됐는지 (배지 표시용). "
+                    + "퇴사(resigned)와 다른 상태다 — true 여도 name 은 그대로 내려간다. "
+                    + "참여자에서 정리하라는 표시로 쓴다",
+                    example = "false")
+            boolean deleted
     ) {
 
         static MemberItemResponse from(MemberSummary summary) {
             return new MemberItemResponse(
                     summary.memberId(), summary.userId(), summary.name(),
-                    summary.department(), summary.permission(), summary.resigned());
+                    summary.department(), summary.permission(),
+                    summary.resigned(), summary.deleted());
         }
     }
 }

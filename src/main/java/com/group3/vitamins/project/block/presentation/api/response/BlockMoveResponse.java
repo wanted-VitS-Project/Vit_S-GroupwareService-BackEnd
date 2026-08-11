@@ -13,11 +13,14 @@ public record BlockMoveResponse(
         Long stepId,
 
         @Schema(description = "이동 때문에 끊긴 이슈-블록 연결 수", example = "2")
-        int unlinkedIssueCount
+        int unlinkedIssueCount,
+
+        @Schema(description = "저장 후의 새 version", example = "8")
+        int version
 ) {
 
     public static BlockMoveResponse from(BlockMoveResult result) {
         return new BlockMoveResponse(
-                result.blockId(), result.stepId(), result.unlinkedIssueCount());
+                result.blockId(), result.stepId(), result.unlinkedIssueCount(), result.version());
     }
 }

@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.application.service;
 
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
@@ -19,6 +20,7 @@ public class ProjectAccessService implements ProjectAccessUseCase {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectAccessPolicy projectAccessPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public MemberPermission requireAccess(Long projectId, String requesterUserId, String role) {
@@ -34,7 +36,7 @@ public class ProjectAccessService implements ProjectAccessUseCase {
 
     /** 존재 확인을 권한 판정보다 먼저 한다 — 404 가 403 보다 앞선다 (상세 조회와 동일 순서). */
     private void requireProjectExists(Long projectId) {
-        if (projectRepository.findById(projectId).isEmpty()) {
+        if (!existsInCurrentCompany(projectId)) {
             throw new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND);
         }
     }
@@ -46,7 +48,17 @@ public class ProjectAccessService implements ProjectAccessUseCase {
 
     @Override
     public MemberPermission resolvePermission(Long projectId, String requesterUserId, String role) {
+        if (!existsInCurrentCompany(projectId)) {
+            return MemberPermission.NONE;
+        }
         return projectAccessPolicy.resolvePermissionOrNone(
                 role, findPermission(projectId, requesterUserId));
+    }
+
+    /** 현재 로그인 회사가 소유한, 논리 삭제되지 않은 프로젝트인지 확인한다. */
+    private boolean existsInCurrentCompany(Long projectId) {
+        return projectRepository
+                .findById(projectId, currentCompanyIdProvider.currentCompanyId())
+                .isPresent();
     }
 }

@@ -29,11 +29,16 @@ public record ProjectUpdateResponse(
         BigDecimal contractAmount,
 
         @Schema(description = "수정 일시", example = "2026-08-01T11:20:00")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "저장 후의 새 version. 화면 상태를 이 값으로 교체해야 "
+                + "다음 저장이 409 가 되지 않는다", example = "8")
+        int version
 ) {
 
     public static ProjectUpdateResponse from(ProjectUpdateResult result) {
         return new ProjectUpdateResponse(result.projectId(), result.name(), result.clientName(),
-                result.startedOn(), result.endedOn(), result.contractAmount(), result.updatedAt());
+                result.startedOn(), result.endedOn(), result.contractAmount(), result.updatedAt(),
+                result.version());
     }
 }

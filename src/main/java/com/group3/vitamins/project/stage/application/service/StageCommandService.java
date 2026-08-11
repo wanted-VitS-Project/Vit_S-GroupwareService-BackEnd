@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.stage.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,24 +54,41 @@ public class StageCommandService implements StageCommandUseCase {
                 command.projectId(), command.name(), sortOrder, LocalDateTime.now()));
 
         return new StageResult(saved.getStageId(), saved.getProjectId(),
-                saved.getName(), saved.getSortOrder());
+                saved.getName(), saved.getSortOrder(), saved.getVersion());
     }
 
-    /** 이름만 바꾼다 (STG-001). 순서는 순서 변경 API 소관이다. */
+    /**
+     * 이름만 바꾼다 (STG-001). 순서는 순서 변경 API 소관이다.
+     * <b>내가 조회한 버전이 아직 최신일 때만</b> 저장된다 (`.ai/docs/global/CONCURRENCY.md`).
+     *
+     * <p>⚠️ {@code save()} 로 되돌리지 마라. 검사와 저장이 한 문장이 아니면 그 틈에 남의 저장이
+     * 끼어들어 <b>예외도 로그도 없이</b> 갱신이 유실된다 (§6-4).
+     */
     @Override
     public StageResult updateStage(UpdateStageCommand command) {
         Stage stage = requireEditableStage(
                 command.stageId(), command.requesterUserId(), command.role());
 
-        Stage updated = stageRepository.save(stage.rename(command.name()));
+        int expected = command.overwrite() ? stage.getVersion() : command.version();
 
-        return new StageResult(updated.getStageId(), updated.getProjectId(),
-                updated.getName(), updated.getSortOrder());
+        int updated = stageRepository.renameIfVersionMatches(
+                command.stageId(), command.name(), expected);
+
+        if (updated == 0) {
+            throw new ConflictException(StageErrorCode.STAGE_VERSION_CONFLICT);
+        }
+
+        return new StageResult(stage.getStageId(), stage.getProjectId(),
+                command.name(), stage.getSortOrder(), expected + 1);
     }
 
     /**
      * 사이드바 순서를 통째로 확정한다 (STG-002).
      * ⛔ 하위 스텝의 sort_order 는 건드리지 않는다 — 스테이지 순서와 스텝 순서는 별개 축이다.
+     *
+     * <p>항목마다 개별 version 을 검사하고 <b>하나라도 어긋나면 요청 전체를 롤백한다</b>
+     * (`.ai/docs/global/CONCURRENCY.md` §4-2). 순서 변경은 요청에 목록 전체가 실려 오므로
+     * A·B 가 서로 <b>다른</b> 스테이지를 옮겨도 나중 요청이 앞 요청을 되돌린다 — 그래서 가장 위험하다.
      */
     @Override
     public List<StageOrderResult> reorderStages(ReorderStagesCommand command) {
@@ -80,11 +99,25 @@ public class StageCommandService implements StageCommandUseCase {
         Map<Long, Stage> stages = loadStages(command.projectId(), command.items());
         validateNoConflictWithUnlisted(command.projectId(), command.items());
 
-        return command.items().stream()
-                .map(item -> stageRepository.save(
-                        stages.get(item.stageId()).moveTo(item.sortOrder())))
-                .map(saved -> new StageOrderResult(saved.getStageId(), saved.getSortOrder()))
-                .toList();
+        List<StageOrderResult> results = new ArrayList<>(command.items().size());
+
+        for (ReorderStagesCommand.Item item : command.items()) {
+            Stage moved = stages.get(item.stageId()).moveTo(item.sortOrder());
+
+            int updated = stageRepository.moveIfVersionMatches(
+                    moved.getStageId(), moved.getSortOrder(), item.version());
+
+            // ⚠️ 이 예외를 잡아서 넘기면 앞서 갱신한 항목만 커밋되어 순서가 반쯤 바뀐 채 남는다.
+            //    ConflictException 은 런타임 예외라 여기서 던져야 트랜잭션 전체가 롤백된다 (§4-3).
+            if (updated == 0) {
+                throw new ConflictException(StageErrorCode.STAGE_VERSION_CONFLICT);
+            }
+
+            results.add(new StageOrderResult(
+                    moved.getStageId(), moved.getSortOrder(), item.version() + 1));
+        }
+
+        return results;
     }
 
     /**

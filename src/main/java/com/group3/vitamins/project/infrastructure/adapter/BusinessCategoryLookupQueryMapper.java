@@ -15,5 +15,9 @@ import java.util.List;
 @Mapper
 public interface BusinessCategoryLookupQueryMapper {
 
-    List<BusinessCategoryRow> findByIds(@Param("categoryIds") List<Long> categoryIds);
+    List<BusinessCategoryRow> findByIds(@Param("categoryIds") List<Long> categoryIds,
+                                        @Param("companyId") Long companyId);
+
+    List<BusinessCategoryRefRow> findRefsByIds(@Param("categoryIds") List<Long> categoryIds,
+                                               @Param("companyId") Long companyId);
 }

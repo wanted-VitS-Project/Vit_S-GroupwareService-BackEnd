@@ -101,18 +101,22 @@ public class ProjectStageController {
     @Operation(summary = "스테이지 순서 변경",
             description = "사이드바 스테이지 순서를 일괄 재정렬한다. sort_order 만 갱신하며 "
                     + "하위 스텝은 건드리지 않는다(STG-002). "
-                    + "사이드바 전체의 최종 순서를 보내야 한다 — 일부만 보내면 나머지와 순서가 겹친다.")
+                    + "사이드바 전체의 최종 순서를 보내야 한다 — 일부만 보내면 나머지와 순서가 겹친다. "
+                    + "항목마다 조회 시점의 version 을 함께 보내며, 하나라도 어긋나면 "
+                    + "요청 전체가 409 로 롤백된다(부분 적용 없음).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "재정렬 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "STAGE_ORDER_INVALID — 목록이 비었거나 스테이지·순서 값이 중복"),
+                    description = "STAGE_ORDER_INVALID / STAGE_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "PROJECT_NOT_FOUND / STAGE_NOT_FOUND")
+                    description = "PROJECT_NOT_FOUND / STAGE_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "STAGE_VERSION_CONFLICT — 목록 중 하나라도 먼저 수정됨")
     })
     @PatchMapping("/order")
     public ResponseEntity<ApiResponse<StageOrderResponse>> reorderStages(

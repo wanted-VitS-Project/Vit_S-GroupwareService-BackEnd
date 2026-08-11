@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.stage.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
@@ -32,6 +33,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 
@@ -49,19 +53,45 @@ class StageCommandServiceTest {
     private static final Long STAGE_ID = 7L;
     private static final Long PROJECT_ID = 3L;
     private static final String REQUESTER = "E2024001";
+    private static final int VERSION = 1;
 
     // ────────────────────────────── 수정 ──────────────────────────────
 
     @Test
-    @DisplayName("이름만 바뀌고 정렬 순서는 그대로다")
+    @DisplayName("이름만 바뀌고 정렬 순서는 그대로다 — 응답 version 은 +1 된다")
     void 수정() {
         givenStage();
+        given(stageRepository.renameIfVersionMatches(STAGE_ID, "제안·계약", VERSION)).willReturn(1);
 
-        StageResult result = stageCommandService.updateStage(
-                new UpdateStageCommand(STAGE_ID, "제안·계약", REQUESTER, "USER"));
+        StageResult result = stageCommandService.updateStage(update("제안·계약", VERSION, false));
 
         assertThat(result.name()).isEqualTo("제안·계약");
         assertThat(result.sortOrder()).isEqualTo(1);
+        assertThat(result.version()).isEqualTo(VERSION + 1);
+    }
+
+    @Test
+    @DisplayName("내가 본 뒤 남이 먼저 저장했으면 409 다 — 조건부 UPDATE 가 0행을 돌려준다")
+    void 수정_버전_충돌() {
+        givenStage();
+        given(stageRepository.renameIfVersionMatches(STAGE_ID, "제안·계약", VERSION)).willReturn(0);
+
+        assertThatThrownBy(() -> stageCommandService.updateStage(update("제안·계약", VERSION, false)))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    @DisplayName("덮어쓰기는 DB 현재 버전을 조건으로 써서 통과한다 — 요청이 든 낡은 버전은 무시한다")
+    void 수정_덮어쓰기() {
+        // DB 는 이미 v5 인데 요청은 v1 을 들고 왔다 (= 그냥 저장하면 409 나는 상황)
+        given(stageRepository.findById(STAGE_ID)).willReturn(Optional.of(stage(STAGE_ID, 1, 5)));
+        given(stageRepository.renameIfVersionMatches(STAGE_ID, "제안·계약", 5)).willReturn(1);
+
+        StageResult result = stageCommandService.updateStage(update("제안·계약", VERSION, true));
+
+        assertThat(result.version()).isEqualTo(6);
+        Mockito.verify(stageRepository, Mockito.never())
+                .renameIfVersionMatches(anyLong(), anyString(), eq(VERSION));
     }
 
     @Test
@@ -69,8 +99,7 @@ class StageCommandServiceTest {
     void 수정_스테이지_없음() {
         given(stageRepository.findById(STAGE_ID)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> stageCommandService.updateStage(
-                new UpdateStageCommand(STAGE_ID, "제안", REQUESTER, "USER")))
+        assertThatThrownBy(() -> stageCommandService.updateStage(update("제안", VERSION, false)))
                 .isInstanceOf(NotFoundException.class);
 
         Mockito.verifyNoInteractions(projectAccessUseCase);
@@ -79,27 +108,46 @@ class StageCommandServiceTest {
     // ────────────────────────────── 순서 ──────────────────────────────
 
     @Test
-    @DisplayName("보낸 순서 그대로 정렬 순서를 확정한다")
+    @DisplayName("보낸 순서 그대로 정렬 순서를 확정한다 — 항목마다 version 이 +1 된다")
     void 순서_변경() {
         given(stageRepository.findAllByIdsInProject(anyCollection(), eq(PROJECT_ID)))
                 .willReturn(List.of(stage(7L, 1), stage(8L, 2)));
-        given(stageRepository.save(any(Stage.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        given(stageRepository.moveIfVersionMatches(anyLong(), anyInt(), anyInt())).willReturn(1);
 
         List<StageOrderResult> results = stageCommandService.reorderStages(reorder(
-                new ReorderStagesCommand.Item(8L, 1),
-                new ReorderStagesCommand.Item(7L, 2)));
+                item(8L, 1, VERSION),
+                item(7L, 2, VERSION)));
 
         assertThat(results).extracting(StageOrderResult::stageId).containsExactly(8L, 7L);
         assertThat(results).extracting(StageOrderResult::sortOrder).containsExactly(1, 2);
+        assertThat(results).extracting(StageOrderResult::version)
+                .containsExactly(VERSION + 1, VERSION + 1);
+    }
+
+    /**
+     * ⚠️ 여기서 예외가 안 새어 나오면 <b>순서가 반쯤 바뀐 채 커밋된다.</b>
+     * 서비스가 충돌을 삼키거나 try-catch 로 감싸면 이 테스트가 깨진다 (`CONCURRENCY.md` §4-3).
+     */
+    @Test
+    @DisplayName("항목 하나만 충돌해도 요청 전체가 409 다 — 앞 항목만 저장되면 안 된다")
+    void 순서_부분_충돌() {
+        given(stageRepository.findAllByIdsInProject(anyCollection(), eq(PROJECT_ID)))
+                .willReturn(List.of(stage(7L, 1), stage(8L, 2)));
+        given(stageRepository.moveIfVersionMatches(8L, 1, VERSION)).willReturn(1);
+        given(stageRepository.moveIfVersionMatches(7L, 2, VERSION)).willReturn(0);
+
+        assertThatThrownBy(() -> stageCommandService.reorderStages(reorder(
+                item(8L, 1, VERSION),
+                item(7L, 2, VERSION))))
+                .isInstanceOf(ConflictException.class);
     }
 
     @Test
     @DisplayName("순서 값이 중복되면 400 이다")
     void 순서_중복() {
         assertThatThrownBy(() -> stageCommandService.reorderStages(reorder(
-                new ReorderStagesCommand.Item(7L, 1),
-                new ReorderStagesCommand.Item(8L, 1))))
+                item(7L, 1, VERSION),
+                item(8L, 1, VERSION))))
                 .isInstanceOf(ValidationException.class);
 
         Mockito.verifyNoInteractions(stageRepository);
@@ -113,11 +161,11 @@ class StageCommandServiceTest {
         given(stageRepository.findAllByProjectId(PROJECT_ID))
                 .willReturn(List.of(stage(7L, 1), stage(8L, 2)));
 
-        assertThatThrownBy(() -> stageCommandService.reorderStages(
-                reorder(new ReorderStagesCommand.Item(7L, 2))))
+        assertThatThrownBy(() -> stageCommandService.reorderStages(reorder(item(7L, 2, VERSION))))
                 .isInstanceOf(ValidationException.class);
 
-        Mockito.verify(stageRepository, Mockito.never()).save(any(Stage.class));
+        Mockito.verify(stageRepository, Mockito.never())
+                .moveIfVersionMatches(anyLong(), anyInt(), anyInt());
     }
 
     @Test
@@ -127,12 +175,10 @@ class StageCommandServiceTest {
         Mockito.doThrow(new ForbiddenException(ProjectErrorCode.PROJECT_EDIT_DENIED))
                 .when(projectAccessUseCase).requireEditable(PROJECT_ID, REQUESTER, "USER");
 
-        assertThatThrownBy(() -> stageCommandService.updateStage(
-                new UpdateStageCommand(STAGE_ID, "제안·계약", REQUESTER, "USER")))
+        assertThatThrownBy(() -> stageCommandService.updateStage(update("제안·계약", VERSION, false)))
                 .isInstanceOf(ForbiddenException.class);
 
-        assertThatThrownBy(() -> stageCommandService.reorderStages(
-                reorder(new ReorderStagesCommand.Item(7L, 1))))
+        assertThatThrownBy(() -> stageCommandService.reorderStages(reorder(item(7L, 1, VERSION))))
                 .isInstanceOf(ForbiddenException.class);
 
         assertThatThrownBy(() -> stageCommandService.deleteStage(
@@ -140,6 +186,10 @@ class StageCommandServiceTest {
                 .isInstanceOf(ForbiddenException.class);
 
         Mockito.verify(stageRepository, Mockito.never()).save(any(Stage.class));
+        Mockito.verify(stageRepository, Mockito.never())
+                .renameIfVersionMatches(anyLong(), anyString(), anyInt());
+        Mockito.verify(stageRepository, Mockito.never())
+                .moveIfVersionMatches(anyLong(), anyInt(), anyInt());
         Mockito.verifyNoInteractions(stepRelocationPort, stagePermissionDefaultRepository);
     }
 
@@ -150,8 +200,8 @@ class StageCommandServiceTest {
                 .willReturn(List.of(stage(7L, 1)));
 
         assertThatThrownBy(() -> stageCommandService.reorderStages(reorder(
-                new ReorderStagesCommand.Item(7L, 1),
-                new ReorderStagesCommand.Item(99L, 2))))
+                item(7L, 1, VERSION),
+                item(99L, 2, VERSION))))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -222,15 +272,28 @@ class StageCommandServiceTest {
 
     // ────────────────────────────── 헬퍼 ──────────────────────────────
 
+    private UpdateStageCommand update(String name, int version, boolean overwrite) {
+        return new UpdateStageCommand(STAGE_ID, name, version, overwrite, REQUESTER, "USER");
+    }
+
     private ReorderStagesCommand reorder(ReorderStagesCommand.Item... items) {
         return new ReorderStagesCommand(PROJECT_ID, List.of(items), REQUESTER, "USER");
     }
 
+    private ReorderStagesCommand.Item item(Long stageId, int sortOrder, int version) {
+        return new ReorderStagesCommand.Item(stageId, sortOrder, version);
+    }
+
     private Stage stage(Long stageId, int sortOrder) {
-        return Stage.restore(stageId, PROJECT_ID, "스테이지 " + stageId, sortOrder,
+        return stage(stageId, sortOrder, VERSION);
+    }
+
+    private Stage stage(Long stageId, int sortOrder, int version) {
+        return Stage.restore(stageId, PROJECT_ID, "스테이지 " + stageId, sortOrder, version,
                 LocalDateTime.of(2026, 8, 1, 9, 0), null);
     }
 
+    /** 삭제 경로는 여전히 {@code save()} 를 쓴다 — 낙관락은 수정·순서에만 건다. */
     private void givenStage() {
         given(stageRepository.findById(STAGE_ID)).willReturn(Optional.of(stage(STAGE_ID, 1)));
         Mockito.lenient().when(stageRepository.save(any(Stage.class)))

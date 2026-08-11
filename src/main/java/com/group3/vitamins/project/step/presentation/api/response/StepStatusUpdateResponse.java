@@ -15,10 +15,14 @@ public record StepStatusUpdateResponse(
         String status,
 
         @Schema(description = "변경 일시", example = "2026-08-01T13:10:00")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "저장 후의 새 version", example = "8")
+        int version
 ) {
 
     public static StepStatusUpdateResponse from(StepStatusResult result) {
-        return new StepStatusUpdateResponse(result.stepId(), result.status(), result.updatedAt());
+        return new StepStatusUpdateResponse(
+                result.stepId(), result.status(), result.updatedAt(), result.version());
     }
 }

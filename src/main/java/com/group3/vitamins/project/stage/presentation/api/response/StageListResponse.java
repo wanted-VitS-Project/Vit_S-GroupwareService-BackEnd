@@ -16,7 +16,7 @@ public record StageListResponse(
     public static StageListResponse from(List<StageSummary> summaries) {
         return new StageListResponse(summaries.stream()
                 .map(s -> new StageItemResponse(
-                        s.stageId(), s.name(), s.sortOrder(), s.stepCount()))
+                        s.stageId(), s.name(), s.sortOrder(), s.stepCount(), s.version()))
                 .toList());
     }
 
@@ -26,7 +26,9 @@ public record StageListResponse(
             @Schema(description = "스테이지명", example = "제안") String name,
             @Schema(description = "정렬 순서", example = "1") int sortOrder,
             @Schema(description = "소속 스텝 수. 요청자가 볼 수 없는 스텝은 세지 않는다", example = "3")
-            int stepCount
+            int stepCount,
+            @Schema(description = "낙관적 락 버전. 수정·순서 변경 요청에 그대로 실어 보낸다", example = "7")
+            int version
     ) {
     }
 }
