@@ -73,6 +73,19 @@ class ApprovalViewPolicyTest {
     }
 
     @Test
+    @DisplayName("같은 회사 ADMIN도 결재 상세를 조회할 수 없다")
+    void adminIsRejected() {
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(DRAFTER, "MEMBER", MY_COMPANY);
+        givenEmployee(APPROVER, "ADMIN", MY_COMPANY);
+
+        assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    @Test
     @DisplayName("기안자 본인은 통과한다")
     void drafterPasses() {
         givenCurrentCompany(MY_COMPANY);
@@ -138,11 +151,12 @@ class ApprovalViewPolicyTest {
 
     private void givenEmployee(String userId, String role, Long companyId) {
         when(employeeCatalogPort.findEmployee(userId))
-                .thenReturn(Optional.of(new EmployeeSummary(userId, "홍길동", null, null, role, companyId)));
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        userId, "홍길동", null, null, role, companyId, "ACTIVE", null, null)));
     }
 
     private Approval approval() {
-        return Approval.reconstruct(APPROVAL_ID, 10L, DRAFTER, ApprovalStatus.IN_PROGRESS,
+        return Approval.reconstruct(APPROVAL_ID, 10L, DRAFTER, null, ApprovalStatus.IN_PROGRESS,
                 1, null, null, null, null);
     }
 

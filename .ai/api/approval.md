@@ -1,14 +1,15 @@
 # 📝 Approval API — 결재 블록
 
-**상태**: `✅ 확정` — 노션 반영 완료. 이탈 금지 규칙 전면 적용 (`../API.md` §0)
+**상태**: `✅ 확정` — 로컬 정본 확정. 2026-08-11 추가분은 노션·프론트 재동기화 필요 (`../API.md` §0)
+**최종 업데이트**: 2026-08-11 (결재 참여 불가 사원 교체·제외 · 대행 기안자 · ADMIN 결재 권한 제외 정책 추가)
 **최종 업데이트**: 2026-08-10 (상세조회 `documents[].fileDeleted` 신설 · `APPROVAL_IN_PROGRESS` 에러코드 폐기 — 노션·프론트 공유 필요)
 **최종 업데이트**: 2026-08-06 (§8 신설 — 결재관리 목록조회, `drafterId`/`approverId` 계열 원 명세 `long`→String 정정)
-**최종 업데이트**: 2026-08-04 · **담당**: 이강욱
+**담당**: 이강욱
 **노션**: 확인 필요 — 노션 링크 채워넣기
 **범위**: 결재 블록 관련 API 7개 + 결재관리·처리 API(목록조회 착수, 나머지 4개는 순서대로 추가 예정). 알림 API는 `notification.md` 참고.
 
-> ✅ **노션 반영 완료 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
-> 변경이 필요하면 코드를 고치지 말고 **노션을 먼저 고친 뒤** 이 사본을 맞춘다.
+> ✅ **로컬 명세 확정 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
+> 2026-08-11 추가분은 이 로컬 정본을 기준으로 노션·프론트에 동기화한다.
 > 요구사항 근거: [`../docs/domain/결재·알림/APR-V1.md`](../docs/domain/결재·알림/APR-V1.md)
 
 > ⚠️ **2026-08-04 — "결재 블록 생성" API 삭제됨.** 예전엔 `POST /api/v1/blocks/{blockId}/approval`이 있었는데,
@@ -24,18 +25,24 @@
 > | 추가 | 회차 상세조회·결재 상세조회의 `data.documents[].fileDeleted`(boolean) — 원본 문서가 **휴지통에 있으면 `true`**. 이름·크기는 그대로 내려간다(증빙 이력이라 감추지 않는다). 팀 삭제 정책 `DELETE.md` D-6·DEL-010 근거. 문서 추가 응답에는 넣지 않았다(방금 올린 파일이라 항상 `false`) |
 > | 폐기 | `APPROVAL_IN_PROGRESS`(409) — `BLK-008` 삭제 잠금 폐기로 사용처가 0이 됐다. **진행 중 결재도 블록과 함께 삭제되고 `CANCELED`로 종결된다.** 프론트에 이 409 분기가 있으면 제거해야 한다 |
 
+> ✅ **2026-08-11 — 사원 참여 불가 보완 정책.** `employee.resigned_at != null`,
+> `employee.deleted_at != null`, `account.status=INACTIVE` 중 하나라도 해당하면 결재 참여 불가다.
+> 기존 URL·메서드·요청 바디는 유지하고 조회 응답 필드와 `approval.acting_drafter_id`만 추가한다.
+> `ADMIN`은 인사 전용이므로 결재자 지정·결재 조회·`scope=all` 권한이 없다.
+> 블록 카드의 결재 상세에는 `requiresApproverReplacement`(boolean)를 additive로 추가한다.
+
 ## 엔드포인트
 
 | # | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|---|
 | 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자·ACTIVE 이상 결재자·MASTER |
-| 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자 본인 |
-| 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자 본인 |
-| 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자 본인 |
-| 5 | 결재선 등록·수정 | PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | 기안자 본인 |
-| 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자 본인 |
-| 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 본인 |
-| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(scope=all은 MASTER·ADMIN) |
+| 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자/대행 기안자 |
+| 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자/대행 기안자 |
+| 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자/대행 기안자 |
+| 5 | 결재선 등록·수정 | PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | 기안자/대행 기안자 |
+| 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자/대행 기안자 |
+| 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
+| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(scope=all은 MASTER) |
 | 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 기안자·ACTIVE 이상 결재자·MASTER |
 | 10 | 결재 이력조회 | GET | `/api/v1/approvals/{approvalId}/revisions` | 기안자·이력 참여 결재자(ACTIVE 이상)·MASTER |
 | 11 | 결재 승인 | POST | `/api/v1/approval-lines/{lineId}/approve` | 해당 결재선의 결재자 본인 |
@@ -71,10 +78,12 @@
 | `data.title` / `data.content` | String | 결재 제목·내용 |
 | `data.drafterId` | **String** | 기안자 구분 번호(사번) |
 | `data.drafterName` / `drafterDepartment` / `drafterPosition` | String | 기안자 이름·부서·직책(라이브 조회) |
+| `data.drafterUnavailable` | boolean | 원 기안자가 퇴사·삭제·계정 비활성으로 참여 불가하면 `true` |
+| `data.actingDrafterId` / `actingDrafterName` | String | 대행 기안자 사번·이름. 지정 전이면 `null` |
 | `data.status` | String | 회차 상태 |
 | `data.submittedAt` / `finishedAt` | String | 상신·종료 일시 |
 | `data.documents[]` | Array | `documentId`/`fileVersionId`/`fileName`/`fileSize`/`uploadedAt`/`fileDeleted`(boolean) |
-| `data.lines[]` | Array | `lineId`/`order`/`approverId`(**String**)/`approverName`/`approverPosition`/`approverDepartment`/`status`/`opinion`/`processedAt` |
+| `data.lines[]` | Array | `lineId`/`order`/`approverId`(**String**)/`approverName`/`approverPosition`/`approverDepartment`/`status`/`opinion`/`processedAt`/`approverUnavailable`(boolean) |
 
 | 코드 | 상태 | code | 설명 |
 |---|---|---|---|
@@ -93,7 +102,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `PATCH /api/v1/approvals/{approvalId}/revisions/{revisionId}` |
-| 인증 필요 | Y · 기안자 본인 |
+| 인증 필요 | Y · 기안자/대행 기안자 |
 | 요구사항 | APR-002 |
 
 **Request**
@@ -120,7 +129,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `POST /api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` |
-| 인증 필요 | Y · 기안자 본인 |
+| 인증 필요 | Y · 기안자/대행 기안자 |
 | 요구사항 | APR-005 · APR-006 |
 
 ⛔ **실제 파일 업로드는 공용 파일 API 소관.** 이 API는 업로드 완료된 `fileVersionId`를 연결만 한다.
@@ -152,7 +161,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `DELETE /api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` |
-| 인증 필요 | Y · 기안자 본인 |
+| 인증 필요 | Y · 기안자/대행 기안자 |
 | 요구사항 | APR-007 |
 
 **Response** — `204 No Content` (응답 본문 없음)
@@ -181,7 +190,7 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `PUT /api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` |
-| 인증 필요 | Y · 기안자 본인 |
+| 인증 필요 | Y · 기안자/대행 기안자 |
 | 요구사항 | APR-009~014 |
 
 ⛔ **요청 바디는 `approverId`(사번)만 받는다.** 이름·직책·부서는 클라이언트가 보내지 않는다 — 이름 검색으로 선택.
@@ -210,12 +219,20 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` / `APPROVAL_REVISION_NOT_FOUND` | |
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
-| 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | |
+| 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | DRAFT 전체 치환이 아니거나 IN_PROGRESS에서 참여 불가한 미처리 결재자 교체·제외 외의 변경 |
 | 400 | Bad Request | `APPROVAL_LINE_EMPTY` | 결재자 0명 |
 | 400 | Bad Request | `APPROVAL_LINE_ORDER_INVALID` | 순서 중복/누락 |
-| 400 | Bad Request | `APPROVAL_LINE_APPROVER_NOT_MEMBER` | 일반 결재자가 project member 아님(`MASTER`·`ADMIN`은 제외) |
+| 400 | Bad Request | `APPROVAL_LINE_APPROVER_NOT_MEMBER` | 신규 결재자가 참여 불가·ADMIN·project member 아님(`MASTER`만 소속 검증 제외) |
 
-**비즈니스 규칙**: 전체 치환(기존 삭제 후 재삽입) · `MASTER`·`ADMIN`은 project member 검증 제외.
+**비즈니스 규칙**: DRAFT에서는 기존처럼 전체 치환한다. IN_PROGRESS에서는 `ACTIVE`/`WAITING` 상태이면서 참여 불가인
+결재자만 교체하거나 요청 배열에서 제외할 수 있다. 정상 결재자와 처리 완료 결재자는 수정·제외할 수 없다. 제외할 때는
+남은 결재선의 `order`를 1부터 다시 연속 지정하고 뒤 순번을 당긴다. 기존 행은 `CANCELED`+논리 삭제로 이력을 보존한다.
+ACTIVE 결재자를 교체하면 새 결재자가 같은 순번·ACTIVE 상태를 이어받는다. ACTIVE 결재자를 제외하면 다음 WAITING을
+ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING도 참여 불가라면 함께 제외한 뒤 요청해야 한다.
+다음 결재자가 없고 앞선 결재선이 모두 승인됐다면 회차·결재를
+`COMPLETED`로 종결하고 기안자에게 완료 알림을 발행한다. 한 요청에서 교체와 제외를 동시에 처리하지 않는다.
+`MASTER`만 project member 검증을 면제하고 `ADMIN`은 결재자로 지정할 수 없다. 원 기안자가 참여 불가이고 아직 대행자가
+없으면, 같은 회사의 활성 스텝 EDITOR 중 이 교체·제외 요청을 먼저 성공시킨 1인을 대행 기안자로 선점한다.
 
 ---
 
@@ -224,7 +241,7 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `POST /api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` |
-| 인증 필요 | Y · 기안자 본인 |
+| 인증 필요 | Y · 기안자/대행 기안자 |
 | 요구사항 | SUB-001~004 |
 
 **Request** — `approvalId` / `revisionId` (Path, long, Y)
@@ -249,7 +266,7 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `POST /api/v1/approvals/{approvalId}/revisions` |
-| 인증 필요 | Y · 기안자 본인 |
+| 인증 필요 | Y · 기안자 또는 원 기안자 참여 불가 시 스텝 EDITOR |
 | 요구사항 | SUB-005~009 |
 
 **Request** — `approvalId` (Path, long, Y)
@@ -274,7 +291,7 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_NOT_REJECTED` | `approval.status != REJECTED` |
 
-**비즈니스 규칙**: `approval.status == REJECTED`일 때만 생성 · 이전 회차 원본은 수정 안 함(이력 보존) · 반려자부터의 단계만 order 재부여 · 실제 상신은 별도로 6번 API 호출.
+**비즈니스 규칙**: `approval.status == REJECTED`일 때만 생성 · 이전 회차 원본은 수정 안 함(이력 보존) · 반려자부터의 단계만 order 재부여 · 실제 상신은 별도로 6번 API 호출. 원 기안자가 참여 불가이고 대행 기안자가 없으면, 같은 스텝의 유효 EDITOR 중 이 API를 먼저 성공시킨 1인을 `acting_drafter_id`로 원자적으로 지정한다. 이후 편집·상신은 그 대행자만 가능하다. 대행자도 참여 불가가 되면 다른 유효 EDITOR가 같은 방식으로 재선점한다. 원 기안자 `user_id`는 감사 이력을 위해 바꾸지 않는다.
 
 ---
 
@@ -283,7 +300,7 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals` |
-| 인증 필요 | Y · `scope=all`은 `MASTER`·`ADMIN`만(`ApprovalViewPolicy.FULL_ACCESS_ROLES`와 동일 기준) |
+| 인증 필요 | Y · `scope=all`은 `MASTER`만(`ADMIN`은 결재 권한 없음) |
 | 요구사항 | MGT-001~004 |
 
 > ⚠️ **2026-08-06 — 원 명세(노션/이강욱 전달분) 대비 정정.** `drafterId`/`approverId`/`currentApproverId`/`lines[].approverId`가
@@ -330,9 +347,9 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 |---|---|---|---|
 | 200 | OK | – | 조회 성공 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
-| 403 | Forbidden | `APPROVAL_SCOPE_ALL_FORBIDDEN` | `MASTER`·`ADMIN`이 아닌 사용자의 `scope=all` 요청 |
+| 403 | Forbidden | `APPROVAL_SCOPE_ALL_FORBIDDEN` | `MASTER`가 아닌 사용자의 `scope=all` 요청 |
 
-**비즈니스 규칙**: `scope=drafted`(기본) — `drafterId`를 요청자 본인으로 강제 · `scope=pending` — 요청자가 현재 회차에서 `ACTIVE`인 결재만 조회 · `scope=all` — `MASTER`·`ADMIN`만 허용, 나머지 필터 자유 조합.
+**비즈니스 규칙**: `scope=drafted`(기본) — 원 기안자 또는 대행 기안자가 요청자인 결재 · `scope=pending` — 요청자가 현재 회차에서 `ACTIVE`인 결재만 조회 · `scope=all` — `MASTER`만 허용, 나머지 필터 자유 조합. `ADMIN`은 모든 범위에서 결재 권한이 없다.
 
 ---
 
@@ -369,9 +386,11 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | `data.title` / `content` | String | 결재 제목·내용 |
 | `data.drafterId` | **String** | 기안자 구분 번호(사번) |
 | `data.drafterName` / `drafterDepartment` / `drafterPosition` | String | 기안자 이름·부서·직책(라이브 조회) |
+| `data.drafterUnavailable` | boolean | 원 기안자 참여 불가 여부 |
+| `data.actingDrafterId` / `actingDrafterName` | String | 대행 기안자 사번·이름. 없으면 `null` |
 | `data.status` | String | 회차 상태 |
 | `data.documents[]` | Array | 1번과 동일 구조(추정, 위 참고) |
-| `data.lines[]` | Array | 1번과 동일 구조(추정, 위 참고) |
+| `data.lines[]` | Array | 1번과 동일 구조. 각 항목에 `approverUnavailable` 포함 |
 | `data.blockOrigin.blockId` / `stepId` / `projectId` | long | 원본 블록·스텝·프로젝트 구분 번호 |
 
 | 코드 | 상태 | code | 설명 |

@@ -17,4 +17,7 @@ public interface BlockCatalogPort {
      * 실제 `project_member` 조회로 구현됨(2026-08-05) — `ApprovalBlockCatalogAdapter` 참고.
      */
     boolean isProjectMember(Long projectId, String userId);
+
+    /** 원 기안자 참여 불가 시 대행 기안자를 선점할 수 있는 유효 스텝 EDITOR인지 확인한다. */
+    boolean isStepEditor(Long blockId, String userId, String role);
 }

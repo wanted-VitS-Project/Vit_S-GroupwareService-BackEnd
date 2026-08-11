@@ -78,6 +78,15 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     }
 
     @Override
+    @Transactional
+    public Approval assignActingDrafter(Long approvalId, String actingDrafterId) {
+        springDataApprovalRepository.assignActingDrafter(approvalId, actingDrafterId);
+        return springDataApprovalRepository.findByApprovalIdAndDeletedAtIsNull(approvalId)
+                .map(this::toApproval)
+                .orElseThrow(() -> new IllegalStateException("approval not found after acting drafter assignment: " + approvalId));
+    }
+
+    @Override
     public Optional<Long> findApprovalIdByLineId(Long lineId) {
         return springDataApprovalLineRepository.findActiveApprovalIdByLineId(lineId);
     }
@@ -235,6 +244,35 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
 
     @Override
     @Transactional
+    public ApprovalLine replaceUnavailableLine(ApprovalLine previousLine, String newApproverId) {
+        springDataApprovalLineRepository.cancelAndSoftDelete(
+                previousLine.getLineId(), ApprovalLineStatus.CANCELED);
+        ApprovalLineJpaEntity saved = springDataApprovalLineRepository.save(
+                ApprovalLineJpaEntity.createReplacement(
+                        previousLine.getRevisionId(), newApproverId,
+                        previousLine.getSequenceNo(), previousLine.getStatus()));
+        return toLine(saved);
+    }
+
+    @Override
+    @Transactional
+    public List<ApprovalLine> excludeUnavailableLines(Long revisionId, List<Long> excludedLineIds) {
+        excludedLineIds.forEach(lineId -> springDataApprovalLineRepository.cancelAndSoftDelete(
+                lineId, ApprovalLineStatus.CANCELED));
+
+        List<ApprovalLineJpaEntity> remaining =
+                springDataApprovalLineRepository
+                        .findByApprovalRevisionIdAndDeletedAtIsNullOrderBySequenceNo(revisionId);
+        for (int index = 0; index < remaining.size(); index++) {
+            remaining.get(index).resequence(index + 1);
+        }
+        return springDataApprovalLineRepository.saveAll(remaining).stream()
+                .map(this::toLine)
+                .toList();
+    }
+
+    @Override
+    @Transactional
     public ApprovalRevision createRevisionDraft(Long approvalId, int revisionNo, String title, String content) {
         ApprovalRevisionJpaEntity saved = springDataApprovalRevisionRepository.save(
                 ApprovalRevisionJpaEntity.createDraft(approvalId, revisionNo, title, content));
@@ -300,12 +338,13 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     private ApprovalLineDetailView toLineDetailView(ApprovalLineDetailRow row) {
         return new ApprovalLineDetailView(row.lineId(), row.approverId(), row.approverName(),
                 row.jobPositionName(), row.approverDepartment(), row.sequenceNo(),
-                row.status(), row.opinion(), row.processedAt());
+                row.status(), row.opinion(), row.processedAt(), row.approverUnavailable());
     }
 
     private Approval toApproval(ApprovalJpaEntity entity) {
         return Approval.reconstruct(
-                entity.getApprovalId(), entity.getBlockId(), entity.getDrafterId(), entity.getStatus(),
+                entity.getApprovalId(), entity.getBlockId(), entity.getDrafterId(), entity.getActingDrafterId(),
+                entity.getStatus(),
                 entity.getCurrentRevisionNo(), entity.getCompletedAt(),
                 entity.getCreatedAt(), entity.getUpdatedAt(), entity.getDeletedAt());
     }

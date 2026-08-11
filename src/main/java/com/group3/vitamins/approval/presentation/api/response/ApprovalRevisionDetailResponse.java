@@ -31,6 +31,15 @@ public record ApprovalRevisionDetailResponse(
         @Schema(description = "기안자 직책(라이브 조회)", example = "과장")
         String drafterPosition,
 
+        @Schema(description = "원 기안자가 퇴사·삭제·계정 비활성으로 참여 불가한지 여부", example = "false")
+        boolean drafterUnavailable,
+
+        @Schema(description = "대행 기안자 구분 번호(사번, 없으면 null)", example = "EMP2024003")
+        String actingDrafterId,
+
+        @Schema(description = "대행 기안자 이름(없으면 null)", example = "박민준")
+        String actingDrafterName,
+
         @Schema(description = "회차 상태", example = "IN_PROGRESS")
         String status,
 
@@ -95,7 +104,10 @@ public record ApprovalRevisionDetailResponse(
             String opinion,
 
             @Schema(description = "결재 처리 일시", example = "null")
-            LocalDateTime processedAt
+            LocalDateTime processedAt,
+
+            @Schema(description = "결재자가 퇴사·삭제·계정 비활성으로 참여 불가한지 여부", example = "false")
+            boolean approverUnavailable
     ) {
     }
 
@@ -106,12 +118,14 @@ public record ApprovalRevisionDetailResponse(
                 .toList();
         List<LineItem> lines = detail.lines().stream()
                 .map(l -> new LineItem(l.lineId(), l.approverId(), l.approverName(), l.approverPosition(),
-                        l.approverDepartment(), l.order(), l.status(), l.opinion(), l.processedAt()))
+                        l.approverDepartment(), l.order(), l.status(), l.opinion(), l.processedAt(),
+                        l.approverUnavailable()))
                 .toList();
 
         return new ApprovalRevisionDetailResponse(
                 detail.revisionId(), detail.revisionNo(), detail.title(), detail.content(),
                 detail.drafterId(), detail.drafterName(), detail.drafterDepartment(), detail.drafterPosition(),
+                detail.drafterUnavailable(), detail.actingDrafterId(), detail.actingDrafterName(),
                 detail.status(), detail.submittedAt(), detail.finishedAt(), documents, lines);
     }
 }

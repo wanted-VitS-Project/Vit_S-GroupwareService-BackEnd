@@ -2,6 +2,8 @@ package com.group3.vitamins.approval.infrastructure.persistence;
 
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
+import com.group3.vitamins.approval.infrastructure.catalog.CatalogApprovalAdapter;
+import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.Mockito.mock;
 
 @DataJpaTest(properties = {
         "spring.flyway.enabled=false",
@@ -116,6 +119,36 @@ class ApprovalDeletionPersistenceTest {
                 revision.getApprovalRevisionId()))
                 .extracting(ApprovalLineJpaEntity::getApprovalLineId, ApprovalLineJpaEntity::getApproverId)
                 .containsExactly(tuple(after.getApprovalLineId(), "EMP003"));
+    }
+
+    @Test
+    @DisplayName("참여 불가 결재선 제외는 기존 행을 보존하고 뒤 순번을 당긴다")
+    void excludesUnavailableLineAndResequencesRemainingLines() {
+        ApprovalJpaEntity approval = approvalRepository.saveAndFlush(
+                ApprovalJpaEntity.createDraft(35L, "EMP001"));
+        ApprovalRevisionJpaEntity revision = revisionRepository.saveAndFlush(
+                ApprovalRevisionJpaEntity.createDraft(approval.getApprovalId(), 1, "제외 품의", null));
+        List<ApprovalLineJpaEntity> lines = lineRepository.saveAllAndFlush(List.of(
+                ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP002", 1),
+                ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP003", 2),
+                ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP004", 3)));
+
+        CatalogApprovalAdapter adapter = new CatalogApprovalAdapter(
+                approvalRepository, revisionRepository, lineRepository, documentRepository,
+                mock(ApprovalQueryMapper.class));
+        adapter.excludeUnavailableLines(
+                revision.getApprovalRevisionId(), List.of(lines.get(1).getApprovalLineId()));
+        entityManager.flush();
+        entityManager.clear();
+
+        ApprovalLineJpaEntity excluded = lineRepository
+                .findById(lines.get(1).getApprovalLineId()).orElseThrow();
+        assertThat(excluded.getStatus()).isEqualTo(ApprovalLineStatus.CANCELED);
+        assertThat(excluded.getDeletedAt()).isNotNull();
+        assertThat(lineRepository.findByApprovalRevisionIdAndDeletedAtIsNullOrderBySequenceNo(
+                revision.getApprovalRevisionId()))
+                .extracting(ApprovalLineJpaEntity::getApproverId, ApprovalLineJpaEntity::getSequenceNo)
+                .containsExactly(tuple("EMP002", 1), tuple("EMP004", 2));
     }
 
     @Test

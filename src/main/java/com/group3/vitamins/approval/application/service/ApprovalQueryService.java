@@ -74,7 +74,10 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         viewPolicy.assertViewable(approval, lines, query.requesterId());
 
         EmployeeSummary drafter = employeeCatalogPort.findEmployee(approval.getDrafterId())
-                .orElse(new EmployeeSummary(approval.getDrafterId(), null, null, null, null, null));
+                .orElse(unavailableEmployee(approval.getDrafterId()));
+        EmployeeSummary actingDrafter = approval.getActingDrafterId() == null ? null
+                : employeeCatalogPort.findEmployee(approval.getActingDrafterId())
+                        .orElse(unavailableEmployee(approval.getActingDrafterId()));
 
         List<ApprovalDocumentView> documents = approvalRepository.findDocumentsByRevisionId(query.revisionId())
                 .stream()
@@ -95,6 +98,8 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         return new ApprovalRevisionDetail(revision.getRevisionId(), revision.getRevisionNo(),
                 revision.getTitle(), revision.getContent(),
                 approval.getDrafterId(), drafter.name(), drafter.department(), drafter.position(),
+                drafter.participationUnavailable(), approval.getActingDrafterId(),
+                actingDrafter == null ? null : actingDrafter.name(),
                 revision.getStatus().name(), revision.getSubmittedAt(), revision.getFinishedAt(),
                 documents, lineViews);
     }
@@ -103,6 +108,8 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
     public ApprovalListPageResult listApprovals(ListApprovalsQuery query) {
         log.info("결재관리 목록조회 요청 - scope={}, requesterId={}, page={}, size={}",
                 query.scope(), query.requesterId(), query.page(), query.size());
+
+        listScopePolicy.assertApprovalAccessAllowed(query.requesterId());
 
         String drafterId = null;
         String approverId = null;
@@ -163,7 +170,10 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         viewPolicy.assertViewable(approval, lines, query.requesterId());
 
         EmployeeSummary drafter = employeeCatalogPort.findEmployee(approval.getDrafterId())
-                .orElse(new EmployeeSummary(approval.getDrafterId(), null, null, null, null, null));
+                .orElse(unavailableEmployee(approval.getDrafterId()));
+        EmployeeSummary actingDrafter = approval.getActingDrafterId() == null ? null
+                : employeeCatalogPort.findEmployee(approval.getActingDrafterId())
+                        .orElse(unavailableEmployee(approval.getActingDrafterId()));
 
         List<ApprovalDocumentView> documents = approvalRepository.findDocumentsByRevisionId(revision.getRevisionId())
                 .stream()
@@ -186,6 +196,8 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         return new ApprovalDetailResult(revision.getRevisionId(), revision.getRevisionNo(),
                 revision.getTitle(), revision.getContent(), approval.getDrafterId(), drafter.name(),
                 drafter.department(), drafter.position(),
+                drafter.participationUnavailable(), approval.getActingDrafterId(),
+                actingDrafter == null ? null : actingDrafter.name(),
                 revision.getStatus().name(), documents, lineViews, blockOrigin);
     }
 
@@ -205,5 +217,10 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
                 .toList();
 
         return new ApprovalHistoryResult(content);
+    }
+
+    private EmployeeSummary unavailableEmployee(String userId) {
+        return new EmployeeSummary(userId, null, null, null, null, null,
+                null, null, null);
     }
 }

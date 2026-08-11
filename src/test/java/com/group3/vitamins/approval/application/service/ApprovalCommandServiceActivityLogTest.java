@@ -94,7 +94,7 @@ class ApprovalCommandServiceActivityLogTest {
                         new UpdateApprovalLinesCommand.LineInput("EMP002", 1)));
 
         when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
-        when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
+        when(revisionEligibilityPolicy.getRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001", "EMP002")))
                 .thenReturn(List.of(employee("EMP001", "김철수"), employee("EMP002", "이영희")));
         when(employeeCatalogPort.findEmployee("EMP001"))
@@ -131,7 +131,7 @@ class ApprovalCommandServiceActivityLogTest {
                 List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
 
         when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
-        when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
+        when(revisionEligibilityPolicy.getRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
                 .thenReturn(List.of(employee("EMP001", "김철수")));
         // "EMP009"(퇴사·탈퇴 등으로 조회 불가)는 스텁하지 않아 findEmployee가 기본값 Optional.empty()를 반환한다.
@@ -167,7 +167,7 @@ class ApprovalCommandServiceActivityLogTest {
                 List.of(new UpdateApprovalLinesCommand.LineInput("EMP001", 1)));
 
         when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(100L)).thenReturn(approval);
-        when(revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
+        when(revisionEligibilityPolicy.getRevisionForUpdateOrThrow(100L, 200L)).thenReturn(revision);
         when(lineEligibilityPolicy.assertApproversEligible(10L, List.of("EMP001")))
                 .thenReturn(List.of(employee("EMP001", "김철수")));
         when(employeeCatalogPort.findEmployee("EMP001"))
@@ -188,7 +188,7 @@ class ApprovalCommandServiceActivityLogTest {
     }
 
     private Approval approval(Long blockId) {
-        return Approval.reconstruct(100L, blockId, "EMP001", ApprovalStatus.DRAFT,
+        return Approval.reconstruct(100L, blockId, "EMP001", null, ApprovalStatus.DRAFT,
                 1, null, null, null, null);
     }
 
@@ -198,6 +198,6 @@ class ApprovalCommandServiceActivityLogTest {
     }
 
     private EmployeeSummary employee(String userId, String name) {
-        return new EmployeeSummary(userId, name, null, null, null, null);
+        return new EmployeeSummary(userId, name, null, null, null, null, "ACTIVE", null, null);
     }
 }

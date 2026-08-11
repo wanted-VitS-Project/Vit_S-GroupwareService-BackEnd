@@ -1,10 +1,12 @@
 package com.group3.vitamins.approval.infrastructure.persistence.mapper;
 
 import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLineDetailRow;
+import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalEmployeeRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 회차 상세조회(MGT-005) 전용 조회. {@code approval_line}이 {@code employee}·{@code department}·
@@ -14,6 +16,8 @@ import java.util.List;
  */
 @Mapper
 public interface ApprovalQueryMapper {
+
+    Optional<ApprovalEmployeeRow> findEmployee(@Param("userId") String userId);
 
     List<ApprovalLineDetailRow> findLineDetailsByRevisionId(@Param("revisionId") Long revisionId);
 }

@@ -2,7 +2,7 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
-import com.group3.vitamins.auth.infrastructure.adapter.AuthQueryMapper;
+import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -16,13 +16,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ApprovalEmployeeCatalogAdapter implements EmployeeCatalogPort {
 
-    private final AuthQueryMapper authQueryMapper;
+    private final ApprovalQueryMapper approvalQueryMapper;
 
     @Override
     public Optional<EmployeeSummary> findEmployee(String userId) {
-        return authQueryMapper.findProfile(userId)
-                .map(profile -> new EmployeeSummary(
-                        profile.userId(), profile.name(), profile.jobPositionName(),
-                        profile.departmentPath(), profile.role(), profile.companyId()));
+        return approvalQueryMapper.findEmployee(userId)
+                .map(employee -> new EmployeeSummary(
+                        employee.userId(), employee.name(), employee.jobPositionName(), employee.departmentPath(),
+                        employee.role(), employee.companyId(), employee.accountStatus(),
+                        employee.resignedAt(), employee.deletedAt()));
     }
 }

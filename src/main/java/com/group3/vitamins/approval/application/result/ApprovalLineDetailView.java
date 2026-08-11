@@ -12,6 +12,7 @@ public record ApprovalLineDetailView(
         int order,
         String status,
         String opinion,
-        LocalDateTime processedAt
+        LocalDateTime processedAt,
+        boolean approverUnavailable
 ) {
 }

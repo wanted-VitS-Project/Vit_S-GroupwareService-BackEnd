@@ -75,7 +75,7 @@ class ApprovalCommandServiceNotificationTest {
     private ApprovalCommandService service;
 
     private Approval approval(ApprovalStatus status) {
-        return Approval.reconstruct(APPROVAL_ID, BLOCK_ID, DRAFTER, status, 1, null, null, null, null);
+        return Approval.reconstruct(APPROVAL_ID, BLOCK_ID, DRAFTER, null, status, 1, null, null, null, null);
     }
 
     private ApprovalRevision revision() {

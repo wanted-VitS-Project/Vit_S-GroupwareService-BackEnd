@@ -69,4 +69,20 @@ public class ApprovalLineJpaEntity {
         entity.status = ApprovalLineStatus.DRAFT;
         return entity;
     }
+
+    /** 진행 중 결재자 교체 — 기존 순번과 ACTIVE/WAITING 상태를 그대로 이어받는다. */
+    public static ApprovalLineJpaEntity createReplacement(Long approvalRevisionId, String approverId,
+                                                           int sequenceNo, ApprovalLineStatus status) {
+        ApprovalLineJpaEntity entity = new ApprovalLineJpaEntity();
+        entity.approvalRevisionId = approvalRevisionId;
+        entity.approverId = approverId;
+        entity.sequenceNo = sequenceNo;
+        entity.status = status;
+        return entity;
+    }
+
+    /** 참여 불가 결재선 제외 후 뒤 결재선의 순번을 당긴다. */
+    public void resequence(int sequenceNo) {
+        this.sequenceNo = sequenceNo;
+    }
 }
