@@ -46,6 +46,19 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
+      # 스키마 스모크(앱 기동)를 위한 Redis.
+      # 세션 저장소가 indexed 라 기동 시 RedisMessageListenerContainer 가 실제로 연결한다.
+      # 없으면 EntityManagerFactory validate 에 도달하기 전에 컨텍스트가 실패해 오탐이 난다.
+      redis:
+        image: redis:7@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
       - name: 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -231,6 +244,34 @@ jobs:
           echo "MySQL 기동 실패"
           exit 1
 
+      # 운영 RDS(MySQL 8.0)의 기본 콜레이션과 맞춘다.
+      # migration SQL 은 DEFAULT CHARSET=utf8mb4 만 지정하고 콜레이션은 DB 기본값을 상속하므로,
+      # Flyway 적용 전에 DB 콜레이션을 명시적으로 고정한다. 서버 기본값에 의존하면 이미지 버전이
+      # 바뀔 때 문자열 비교·정렬·FK 콜레이션이 CI 와 운영에서 다르게 동작할 수 있다.
+      - name: DB 콜레이션 고정 (utf8mb4_0900_ai_ci)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mysql \
+            -h 127.0.0.1 \
+            -P 3306 \
+            -uroot \
+            -pci-root-password \
+            -e "ALTER DATABASE vitamins_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+
+          echo "DB 콜레이션 확인"
+          mysql \
+            -h 127.0.0.1 \
+            -P 3306 \
+            -uroot \
+            -pci-root-password \
+            -e "
+              SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME
+              FROM information_schema.SCHEMATA
+              WHERE SCHEMA_NAME = 'vitamins_ci';
+            "
+
       # build.gradle에는 Flyway Gradle 플러그인이 없으므로
       # Flyway CLI를 사용해 전체 migration을 검증한다.
       - name: 마이그레이션 적용
@@ -278,3 +319,96 @@ jobs:
               FROM flyway_schema_history
               ORDER BY installed_rank;
             "
+
+      # ── 스키마 스모크: 엔티티 ↔ 실제 스키마 드리프트 검증 ──────────────────
+      # Flyway 적용만으로는 SQL 문법·순서·중복만 잡힌다. 엔티티 매핑이 실제 컬럼과 어긋나도
+      # (예: bid_notice_status_history.company_id 누락) 드러나지 않고 배포 시점에 크래시한다.
+      # 그래서 마이그레이션이 끝난 이 DB 를 상대로 앱을 ddl-auto: validate 로 실제 기동한다.
+      # EntityManagerFactory 초기화 단계에서 Hibernate 가 엔티티↔스키마를 대조하므로,
+      # 드리프트가 있으면 컨텍스트 기동이 실패해 이 잡이 빨간불이 된다.
+      - name: JDK 17 설정
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Gradle 설정 (캐시 포함)
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      # 실행 가능한 부트 jar 만 만든다(plain jar 는 생성하지 않는다). devtools 는 developmentOnly 라
+      # 이 jar 에 실리지 않아 재시작 없이 한 번만 기동한다.
+      - name: 애플리케이션 빌드 (bootJar)
+        run: ./gradlew bootJar --no-daemon
+
+      - name: 스키마 검증 스모크 (ddl-auto validate 기동)
+        shell: bash
+        env:
+          # DataSource — Flyway 가 방금 적용한 CI MySQL 을 그대로 본다.
+          DB_URL: jdbc:mysql://127.0.0.1:3306/vitamins_ci?useSSL=false&allowPublicKeyRetrieval=true
+          DB_USERNAME: root
+          DB_PASSWORD: ci-root-password
+          # Redis — 세션 저장소(indexed). 서비스 컨테이너에 연결한다.
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '6379'
+          REDIS_PASSWORD: ''
+          # 아래는 기동만 시키기 위한 더미값. 메일·S3 클라이언트는 기동 시 연결하지 않고
+          # 실제 호출 시점에만 네트워크를 타므로, validate 단계 도달에는 더미로 충분하다.
+          MAIL_USERNAME: ci@example.com
+          MAIL_PASSWORD: ci-dummy-password
+          S3_BUCKET_NAME: vitamins-ci-dummy
+          # 운영에서는 Swagger 를 닫지만, 여기서는 기본(local) 프로필로 기동해도 검증 목적에는 무방하다.
+        run: |
+          set -uo pipefail
+
+          # SETTLEMENT_ACCOUNT_ENC_KEY 는 AccountNumberCipher 생성자가 Base64 디코드 후
+          # 32바이트(AES-256)인지 검증한다. 무효하면 validate 이전에 크래시하므로 유효 키를 만든다.
+          export SETTLEMENT_ACCOUNT_ENC_KEY="$(openssl rand -base64 32)"
+
+          JAR=$(find build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar' | head -n 1)
+
+          if [ -z "$JAR" ]; then
+            echo "부트 jar 를 찾지 못했습니다."
+            exit 1
+          fi
+
+          echo "실행 JAR: $JAR"
+
+          # ⚠️ lazy-init 을 켜지 않는다. 켜면 JPA 초기화가 지연돼 validate 가 아예 돌지 않는다.
+          java -jar "$JAR" > smoke.log 2>&1 &
+          APP_PID=$!
+
+          success=0
+
+          for i in $(seq 1 150); do
+            if grep -q "Started VitaminSApplication" smoke.log; then
+              echo "앱 기동 성공 — validate 통과 (${i}s)"
+              success=1
+              break
+            fi
+
+            if grep -qE "APPLICATION FAILED TO START|Schema-validation|SchemaManagementException" smoke.log; then
+              echo "스키마 검증 실패 감지 (${i}s)"
+              break
+            fi
+
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "앱 프로세스가 조기 종료됨 (${i}s)"
+              break
+            fi
+
+            sleep 1
+          done
+
+          # 검증이 끝났으므로 앱을 내린다.
+          kill "$APP_PID" 2>/dev/null || true
+          wait "$APP_PID" 2>/dev/null || true
+
+          echo "----- 앱 로그 (마지막 120줄) -----"
+          tail -n 120 smoke.log
+
+          if [ "$success" -ne 1 ]; then
+            echo "::error::엔티티 ↔ 스키마 드리프트 또는 기동 실패. 위 로그의 validate 오류를 확인하세요."
+            exit 1
+          fi
+
+          echo "스키마 스모크 통과: 엔티티 매핑이 실제 스키마와 일치합니다."
