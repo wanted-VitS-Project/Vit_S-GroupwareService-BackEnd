@@ -1,5 +1,6 @@
 # ⚙️ CI/CD 파이프라인
 
+**최종 업데이트**: 2026-08-11 (Merge Queue 필수 체크용 `merge_group` 트리거 추가)
 **최종 업데이트**: 2026-07-28 (CI · Gitleaks · CodeRabbit 도입)
 **관리**: 김동현 (DevOps)
 
@@ -14,6 +15,7 @@
 
 ```
 PR → develop/main       :  CI(빌드+테스트) · Gitleaks · CodeRabbit 리뷰
+Merge Queue             :  CI(빌드+테스트) · Gitleaks · Flyway 검증 재실행
 push → develop/main     :  CI(빌드+테스트) · Gitleaks
 매주 월 09:00 KST        :  Gitleaks 전체 히스토리 스캔
 배포                     :  ⬜ 미구축
@@ -25,9 +27,9 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 
 | 파일 | 트리거 | 하는 일 | 상태 |
 |------|--------|---------|------|
-| `ci.yml` | PR·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 + 테스트 결과 발행 | ✅ |
-| `gitleaks.yml` | PR·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
-| `migration.yml` | `db/migration/**` 변경 시 | 실제 MySQL 에 Flyway 적용 검증 | ✅ |
+| `ci.yml` | PR·Merge Queue·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 + 테스트 결과 발행 | ✅ |
+| `gitleaks.yml` | PR·Merge Queue·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
+| `migration.yml` | PR·Merge Queue·push → `develop`/`main` | 실제 MySQL 에 Flyway 적용 검증 | ✅ |
 | `dependabot.yml` | **매월** 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
 | CodeQL | GitHub 관리 (Default setup) | 코드 취약점 정적 분석 | ✅ |
 | 배포 | — | — | ⬜ 미구축 |
