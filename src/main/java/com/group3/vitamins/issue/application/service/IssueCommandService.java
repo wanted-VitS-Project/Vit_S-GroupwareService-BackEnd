@@ -91,8 +91,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
         }
         validateVersion(command.version());
 
-        Issue issue = issueRepository.findActiveById(command.issueId())
-                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+        Issue issue = findActiveIssueInCurrentCompany(command.issueId());
 
         IssueStepAccessPort.StepAccessView step = issueStepAccessPort.requireEditable(
                 issue.getStepId(), command.requesterUserId(), command.role());
@@ -141,8 +140,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
 
     @Override
     public IssueStatusResult changeIssueStatus(ChangeIssueStatusCommand command) {
-        Issue issue = issueRepository.findActiveById(command.issueId())
-                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+        Issue issue = findActiveIssueInCurrentCompany(command.issueId());
 
         issueStepAccessPort.requireEditable(
                 issue.getStepId(), command.requesterUserId(), command.role());
@@ -168,8 +166,7 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
 
     @Override
     public void deleteIssue(DeleteIssueCommand command) {
-        Issue issue = issueRepository.findActiveById(command.issueId())
-                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+        Issue issue = findActiveIssueInCurrentCompany(command.issueId());
 
         issueStepAccessPort.requireEditable(
                 issue.getStepId(), command.requesterUserId(), command.role());
@@ -194,6 +191,14 @@ public class IssueCommandService implements IssueCommandUseCase, IssueCascadeUse
 
         issue.delete(LocalDateTime.now());
         issueRepository.save(issue);
+    }
+
+    /** MyBatis 부모 경로 조회로 현재 회사 소유를 먼저 확인한 뒤 JPA 쓰기 대상을 연다. */
+    private Issue findActiveIssueInCurrentCompany(Long issueId) {
+        issueQueryPort.findIssue(issueId)
+                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
+        return issueRepository.findActiveById(issueId)
+                .orElseThrow(() -> new NotFoundException(IssueErrorCode.ISS_NOT_FOUND));
     }
 
     private void validateTitle(String title) {

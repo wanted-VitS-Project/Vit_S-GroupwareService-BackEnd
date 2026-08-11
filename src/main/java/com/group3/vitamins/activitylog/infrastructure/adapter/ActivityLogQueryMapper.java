@@ -11,10 +11,14 @@ public interface ActivityLogQueryMapper {
 
     Optional<StepAccessRow> findStepAccess(
             @Param("stepId") Long stepId,
-            @Param("userId") String userId
+            @Param("userId") String userId,
+            @Param("companyId") Long companyId
     );
 
-    Optional<BlockStepRow> findBlockStep(@Param("blockId") Long blockId);
+    Optional<BlockStepRow> findBlockStep(
+            @Param("blockId") Long blockId,
+            @Param("companyId") Long companyId
+    );
 
     List<ActivityLogRow> findActivityLogs(
             @Param("stepId") Long stepId,

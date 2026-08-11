@@ -2,9 +2,9 @@
 
 **상태**: `✅ 확정`
 **담당**: 김용준
+**최종 업데이트**: 2026-08-11 (Project 상속 멀티테넌시 적용 — Issue·담당자·관련 Block·캘린더 조회와 수정 경로를 현재 회사의 `project.company_id`로 제한, API 계약 변경 없음)
 **최종 업데이트**: 2026-08-11 (담당자 응답에 `resignedAt` 추가 및 FE 사용 API 명시 — 사원은 삭제하지 않고 퇴사일을 기록하므로, 과거 이슈의 담당자 이름을 보존하면서 FE가 퇴사 상태를 표시함)
 **최종 업데이트**: 2026-08-11 (상태 변경 요청의 `status`·`version` HTTP 경계 검증 보강 — version 누락·0·음수는 `400 ISS_INVALID_REQUEST`)
-**최종 업데이트**: 2026-08-11 (이슈 수정·상태 변경에 `version` 기반 낙관적 락 적용 — 조회 응답의 `version`을 수정 요청에 필수 전달, 불일치 시 `409 ISSUE_VERSION_CONFLICT`. 프론트 draft 보존·필드 단위 병합 UX는 별도 명세)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -54,6 +54,7 @@
 | 부분 수정 | 일반 필드와 관계 목록 모두 전달된 값만 수정한다 |
 | 완료 시각 | `completedAt`은 상태에 따라 BE가 관리하며 사용자가 직접 수정하지 않는다 |
 | 삭제 | Issue는 논리 삭제하고 담당자·Block 연결 행은 같은 트랜잭션에서 제거한다 |
+| 회사 격리 | Issue 테이블에 `company_id`를 중복 저장하지 않고 `Issue → Step → Project.company_id` 경로로 현재 회사 범위를 판정한다 |
 | Activity Log | Issue 생성·수정·상태 변경·삭제는 Activity Log에 기록하지 않는다 |
 | Notification | 이슈 생성·수정으로 신규 담당자가 추가되면 해당 담당자별로 `ISSUE_ASSIGNED` 알림을 발행한다 |
 
@@ -77,6 +78,12 @@
 ```
 
 > project 권한이 있으면 step 조회는 항상 허용된다(step 권한은 조회/수정 단계로만 갈리고, project 참여자를 완전히 차단하는 값은 없다는 전제). 이 전제가 아직 `step_permission` 쪽에 반영되지 않았더라도 조회 판정은 project 권한만 보므로 영향받지 않는다.
+
+### 회사 범위 판정
+
+모든 Issue 조회·관계 조회·캘린더 조회와 수정 대상 조회는 현재 회사의 `project.company_id`를 만족하는
+`Issue → Step → Project` 부모 경로만 사용한다. 다른 회사의 Step·Block·Issue ID는 기존 엔드포인트의
+응답·에러코드를 바꾸지 않고 조회·수정 대상에서 제외한다.
 
 ### 관계 목록 수정 규칙
 
