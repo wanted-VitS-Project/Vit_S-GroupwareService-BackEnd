@@ -92,6 +92,10 @@
   발주처이기 때문. **(2026-08-09 확인 완료)** 아래 "정산 현황 프로젝트 조회"는 대상 범위가 다르다 — 그
   API는 재무팀이 "전체 프로젝트"를 봐야 해서 활성 정산 블록 유무와 무관하게 전 프로젝트를 대상으로
   한다(정산 블록이 없으면 관련 필드가 0/null로 나올 뿐 목록에서 빠지지 않는다). 의도된 차이다.
+- **✅ 회사 범위(company_id) 반영 (2026-08-11 추가)** — 최초 구현 시점엔 `project`에 `company_id`가
+  없어 전체 회사 대상으로 조회했다. `develop`에 `project.company_id` 마이그레이션이 들어온 뒤
+  `p.company_id = #{companyId}` 조건을 추가했다 — 안 그러면 재무팀이 다른 회사 발주처명까지 보게 된다
+  (finance 도메인 CodeRabbit 리뷰로 같은 종류의 문제가 지적돼 settlement도 같이 정정, 아래 두 API도 동일).
 
 ### 정산 현황 프로젝트 조회 `GET /api/v1/projects/settlements`
 
@@ -170,6 +174,8 @@
   필요하면 알려달라.
 - **`client` 필터는 정확히 일치** — 필터 옵션 조회가 내려주는 드롭다운 값을 그대로 선택하는 구조라 부분
   검색이 아니라 완전 일치로 구현했다.
+- **✅ 회사 범위(company_id) 반영 (2026-08-11 추가)** — 위 필터 옵션 조회와 동일한 사유로
+  `p.company_id = #{companyId}` 조건 추가.
 
 ### 정산 현황 블록 조회 `GET /api/v1/projects/{projectId}/settlements`
 
@@ -251,6 +257,9 @@
   프로젝트 내 회차 번호는 타입별로만 겹칠 수 있음)에서 `settleId` 오름차순으로 2차 정렬한다.
 - **한 블록에 세금계산서/입출금이 여러 건 연결되는 경우** — 지금은 최신 것 하나만 보여준다(위 참고).
   프론트가 전체 연결 이력을 봐야 하면 별도 API가 필요할 수 있다 — 필요해지면 알려달라.
+- **✅ 회사 범위(company_id) 반영 (2026-08-11 추가)** — `existsActiveProject`(404 판정)와
+  `findProjectSettlementBlocks` 둘 다 `project.company_id = #{companyId}` 조건을 추가했다 — 다른 회사의
+  `projectId`를 넣으면 존재하지 않는 것과 동일하게 404로 처리된다(크로스테넌트 조회 차단).
 
 ### 정산 항목 수정 시 조회 `GET /api/v1/blocks/settlements/{settleId}/items?type={INCOME|OUTCOME}`
 
