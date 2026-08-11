@@ -14,7 +14,8 @@ public interface TextCommandUseCase {
     record UpdateTextContentView(
             Long txtId,
             String content,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            int version
     ) {
     }
 }

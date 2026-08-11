@@ -20,20 +20,25 @@ public class Text {
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
     private final LocalDateTime deletedAt;
+    // 조회 시점 값. 도메인은 이 값을 절대 올리지 않는다 — +1은 저장 시 WHERE와 같은 문장 안에서
+    // DB가 한다(CONCURRENCY.md §3-3). 그대로 "덮어쓰기 기대값"으로 쓰인다.
+    private final int version;
 
     private Text(Long txtId, Long blockId, String content,
-                  LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
+                  LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt, int version) {
         this.txtId = txtId;
         this.blockId = blockId;
         this.content = content;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.deletedAt = deletedAt;
+        this.version = version;
     }
 
     public static Text reconstruct(Long txtId, Long blockId, String content,
-                                    LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
-        return new Text(txtId, blockId, content, createdAt, updatedAt, deletedAt);
+                                    LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt,
+                                    int version) {
+        return new Text(txtId, blockId, content, createdAt, updatedAt, deletedAt, version);
     }
 
     public Long getTxtId() {
@@ -58,5 +63,9 @@ public class Text {
 
     public LocalDateTime getDeletedAt() {
         return deletedAt;
+    }
+
+    public int getVersion() {
+        return version;
     }
 }
