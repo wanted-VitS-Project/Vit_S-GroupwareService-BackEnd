@@ -47,9 +47,10 @@ public class TextJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    // ⚠️ @Version(JPA)을 붙이지 않는다 — TextMapper.toEntity가 매번 new로 detached 객체를
-    // 만들어 merge되므로 JPA 낙관락은 DB 최신값을 다시 읽어 항상 통과해버린다(CONCURRENCY.md §6-1).
-    // 수동 WHERE version = ? 조건부 UPDATE로만 검사한다.
+    // ⚠️ @Version(JPA)을 붙이지 않는다 — 본문 수정은 엔티티를 save/merge하지 않고
+    // SpringDataTextRepository.updateContentIfVersionMatches의 JPQL 벌크 UPDATE로만 반영된다.
+    // 벌크 UPDATE는 JPA 엔티티 생명주기(dirty checking)를 안 타서 @Version 증가 로직 자체가 안 걸린다
+    // (CONCURRENCY.md §6-1) — 그래서 검사는 오직 그 UPDATE문의 WHERE version = ? 조건이 전담한다.
     @Column(name = "version", nullable = false)
     private int version;
 
