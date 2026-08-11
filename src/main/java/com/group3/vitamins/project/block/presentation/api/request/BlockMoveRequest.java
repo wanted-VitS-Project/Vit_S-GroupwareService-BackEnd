@@ -13,10 +13,19 @@ public record BlockMoveRequest(
 
         @NotNull(message = "BLOCK_MOVE_TARGET_REQUIRED|블록을 옮길 스텝을 지정해 주세요.")
         @Schema(description = "옮길 대상 스텝 ID (같은 프로젝트)", example = "11")
-        Long stepId
+        Long stepId,
+
+        @NotNull(message = "BLOCK_VERSION_REQUIRED|버전 정보가 없습니다. 화면을 새로고침해 주세요.")
+        @Schema(description = "조회에서 받은 version 을 그대로 실어 보낸다", example = "7")
+        Integer version,
+
+        @Schema(description = "true 면 충돌을 무시하고 덮어쓴다. 생략하면 false", example = "false")
+        Boolean overwrite
 ) {
 
+    /** ⚠️ overwrite 는 선택 필드라 null 이 온다. {@code Boolean.TRUE.equals} 로 받아야 NPE 가 안 난다. */
     public MoveBlockCommand toCommand(Long blockId, String requesterUserId, String role) {
-        return new MoveBlockCommand(blockId, stepId, requesterUserId, role);
+        return new MoveBlockCommand(blockId, stepId, version,
+                Boolean.TRUE.equals(overwrite), requesterUserId, role);
     }
 }

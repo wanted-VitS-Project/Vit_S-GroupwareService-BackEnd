@@ -5,11 +5,36 @@
 
 <mapper namespace="com.group3.vitamins.project.infrastructure.adapter.BusinessCategoryLookupQueryMapper">
 
+    <!--
+      ⚠️ 쓰기 검증 전용이라 deleted_at IS NULL 이 맞다 — 삭제된 카테고리를 프로젝트에 새로
+         연결하면 안 된다. 호출부가 개수로 404 를 낸다.
+         이미 연결된 카테고리를 보여주는 조회는 아래 findRefsByIds 를 쓴다.
+    -->
     <select id="findByIds"
             resultType="com.group3.vitamins.project.infrastructure.adapter.BusinessCategoryRow">
         SELECT business_category_id AS categoryId, name, code
         FROM business_category
         WHERE deleted_at IS NULL
+        AND company_id = #{companyId}
+        AND business_category_id IN
+        <foreach collection="categoryIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <!--
+      ⚠️ deleted_at 을 WHERE 로 거르지 않고 컬럼으로 내린다 (DELETE.md D-6).
+         거르면 이미 연결돼 있던 카테고리가 응답에서 조용히 사라진다.
+         회사 조건은 그대로 WHERE 다 — 타사 카테고리는 애초에 보여줄 대상이 아니다.
+    -->
+    <select id="findRefsByIds"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.BusinessCategoryRefRow">
+        SELECT business_category_id      AS categoryId,
+               name,
+               code,
+               (deleted_at IS NOT NULL)  AS deleted
+        FROM business_category
+        WHERE company_id = #{companyId}
         AND business_category_id IN
         <foreach collection="categoryIds" item="id" open="(" separator="," close=")">
             #{id}

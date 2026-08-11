@@ -43,7 +43,7 @@ public record BlockCreateResponse(
     public static BlockCreateResponse from(BlockResult result) {
         BlockOwnerResponse owner = result.owner() == null
                 ? null
-                : new BlockOwnerResponse(result.owner().userId(), result.owner().name());
+                : new BlockOwnerResponse(result.owner().userId(), result.owner().name(), result.owner().deleted());
 
         return new BlockCreateResponse(
                 result.blockId(), result.stepId(), result.projectId(), result.type(),

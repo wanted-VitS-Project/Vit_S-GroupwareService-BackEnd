@@ -175,7 +175,7 @@ class StepPermissionServiceTest {
     private void givenStep() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         given(stepRepository.findById(STEP_ID)).willReturn(Optional.of(
-                Step.restore(STEP_ID, PROJECT_ID, 7L, "제안서 작성", 1, null, null, null,
+                Step.restore(STEP_ID, PROJECT_ID, 7L, "제안서 작성", 1, 1, null, null, null,
                         StepStatus.NOT_STARTED, null, null, createdAt, createdAt, null)));
     }
 }

@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.application.service;
 
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
@@ -34,6 +35,7 @@ public class ProjectQueryService implements ProjectQueryUseCase {
     private final ProjectDetailQueryPort projectDetailQueryPort;
     private final ProjectAccessPolicy projectAccessPolicy;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public ProjectPageResult getProjects(ProjectListQuery query) {
@@ -41,6 +43,7 @@ public class ProjectQueryService implements ProjectQueryUseCase {
         int size = Math.min(Math.max(query.size(), 1), MAX_PAGE_SIZE);
 
         ProjectListCriteria criteria = new ProjectListCriteria(
+                currentCompanyIdProvider.currentCompanyId(),
                 query.requesterUserId(),
                 projectAccessPolicy.isGlobalAdmin(query.role()),
                 normalizeStatus(query.status()),
@@ -75,7 +78,8 @@ public class ProjectQueryService implements ProjectQueryUseCase {
     @Override
     public ProjectDetailResult getProjectDetail(ProjectDetailQuery query) {
         ProjectDetailQueryPort.ProjectDetailView view =
-                projectDetailQueryPort.findDetail(query.projectId(), query.requesterUserId())
+                projectDetailQueryPort.findDetail(query.projectId(), query.requesterUserId(),
+                                currentCompanyIdProvider.currentCompanyId())
                         .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
 
         MemberPermission myPermission =
@@ -98,7 +102,8 @@ public class ProjectQueryService implements ProjectQueryUseCase {
                 view.closeReasonCode(),
                 view.closeReasonNote(),
                 myPermission.name(),
-                view.createdAt());
+                view.createdAt(),
+                view.version());
     }
 
     /** 허용되지 않은 상태 값이면 400 을 던진다. 빈 값은 필터 미적용으로 본다. */
@@ -128,7 +133,8 @@ public class ProjectQueryService implements ProjectQueryUseCase {
                 view.startedOn(), view.endedOn(), view.contractAmount(),
                 progressRate(view.totalStepCount(), view.doneStepCount()),
                 view.businessCategories(), view.members(),
-                view.myIssueInProgressCount(), view.myApprovalInProgressCount());
+                view.myIssueInProgressCount(), view.myApprovalInProgressCount(),
+                view.version());
     }
 
     /** 완료 스텝 / 전체 스텝 비율. 스텝이 없으면 null 을 돌려 응답에서 빠지게 한다 (INV-04). */

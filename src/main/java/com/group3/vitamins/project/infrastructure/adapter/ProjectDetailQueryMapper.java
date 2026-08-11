@@ -15,5 +15,6 @@ import java.util.List;
 public interface ProjectDetailQueryMapper {
 
     List<ProjectDetailRow> findDetail(@Param("projectId") Long projectId,
-                                      @Param("requesterUserId") String requesterUserId);
+                                      @Param("requesterUserId") String requesterUserId,
+                                      @Param("companyId") Long companyId);
 }

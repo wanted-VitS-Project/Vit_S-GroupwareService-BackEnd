@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.step.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +99,10 @@ public class StepCommandService implements StepCommandUseCase {
      * 위치 변경은 순서 변경 API 로 일원화했다(폼에 박힌 옛 위치로 되돌아가는 사고를 막는다).
      *
      * <p>권한은 프로젝트가 아니라 <b>스텝</b> 기준이다 — 오버라이드로 이 스텝만 편집 가능한 사람이 있다.
+     *
+     * <p><b>내가 조회한 버전이 아직 최신일 때만</b> 저장된다 (`.ai/docs/global/CONCURRENCY.md`).
+     * ⚠️ {@code save()} 로 되돌리지 마라 — 검사와 저장이 한 문장이 아니면 그 틈에 남의 저장이 끼어들어
+     * <b>예외도 로그도 없이</b> 갱신이 유실된다 (§6-4).
      */
     @Override
     public StepUpdateResult updateStep(UpdateStepCommand command) {
@@ -110,12 +116,19 @@ public class StepCommandService implements StepCommandUseCase {
         String ownerUserId = normalizeOwnerUserId(command.ownerUserId());
         StepResult.Owner owner = resolveOwner(ownerUserId);
 
-        Step updated = stepRepository.save(step.update(
-                command.name(), command.startedOn(), command.endedOn(),
-                ownerUserId, LocalDateTime.now()));
+        int expected = command.overwrite() ? step.getVersion() : command.version();
+        LocalDateTime now = LocalDateTime.now();
 
-        return new StepUpdateResult(updated.getStepId(), updated.getStageId(), updated.getName(),
-                updated.getStartedOn(), updated.getEndedOn(), owner, updated.getUpdatedAt());
+        int updated = stepRepository.updateIfVersionMatches(
+                command.stepId(), command.name(), command.startedOn(), command.endedOn(),
+                ownerUserId, now, expected);
+
+        if (updated == 0) {
+            throw new ConflictException(StepErrorCode.STEP_VERSION_CONFLICT);
+        }
+
+        return new StepUpdateResult(step.getStepId(), step.getStageId(), command.name(),
+                command.startedOn(), command.endedOn(), owner, now, expected + 1);
     }
 
     /**
@@ -123,6 +136,10 @@ public class StepCommandService implements StepCommandUseCase {
      *
      * <p>권한은 <b>프로젝트</b> EDITOR 다 — 스텝 하나가 아니라 보드 전체를 재배치하는 조작이다.
      * 선행 스텝 완료 여부는 검사하지 않는다.
+     *
+     * <p>항목마다 개별 version 을 검사하고 <b>하나라도 어긋나면 요청 전체를 롤백한다</b>
+     * (`.ai/docs/global/CONCURRENCY.md` §4-2). 순서 변경은 요청에 보드 전체가 실려 오므로
+     * A·B 가 서로 <b>다른</b> 스텝을 옮겨도 나중 요청이 앞 요청을 되돌린다 — 그래서 가장 위험하다.
      */
     @Override
     public List<StepOrderResult> reorderSteps(ReorderStepsCommand command) {
@@ -135,17 +152,36 @@ public class StepCommandService implements StepCommandUseCase {
         checkStagesInProject(command.projectId(), command.items());
 
         LocalDateTime now = LocalDateTime.now();
-        return command.items().stream()
-                .map(item -> stepRepository.save(
-                        steps.get(item.stepId()).moveTo(item.stageId(), item.sortOrder(), now)))
-                .map(saved -> new StepOrderResult(
-                        saved.getStepId(), saved.getStageId(), saved.getSortOrder()))
-                .toList();
+        List<StepOrderResult> results = new ArrayList<>(command.items().size());
+
+        for (ReorderStepsCommand.Item item : command.items()) {
+            Step moved = steps.get(item.stepId())
+                    .moveTo(item.stageId(), item.sortOrder(), now);
+
+            int updated = stepRepository.moveIfVersionMatches(
+                    moved.getStepId(), moved.getStageId(), moved.getSortOrder(),
+                    now, item.version());
+
+            // ⚠️ 이 예외를 잡아서 넘기면 앞서 갱신한 항목만 커밋되어 보드가 반쯤 바뀐 채 남는다.
+            //    ConflictException 은 런타임 예외라 여기서 던져야 트랜잭션 전체가 롤백된다 (§4-3).
+            if (updated == 0) {
+                throw new ConflictException(StepErrorCode.STEP_VERSION_CONFLICT);
+            }
+
+            results.add(new StepOrderResult(moved.getStepId(), moved.getStageId(),
+                    moved.getSortOrder(), item.version() + 1));
+        }
+
+        return results;
     }
 
     /**
      * 상태를 바꾼다 (STP-004). 진척률과는 별개 값이라 이슈 집계를 보지 않는다.
      * DONE 은 여기서 못 넣는다 — 완료는 미완료 이슈 처리 선택이 필요해 별도 API 다.
+     *
+     * <p>⚠️ <b>완료 정보를 도메인에게 먼저 계산시키고 그 결과를 UPDATE 에 넘긴다.</b>
+     * DONE 에서 벗어나면 completedAt·completedBy 를 지우는 규칙이 {@code changeStatus} 안에 있는데,
+     * SQL 에 같은 조건을 다시 쓰면 규칙이 두 곳으로 갈라져 한쪽만 고치는 사고가 난다.
      */
     @Override
     public StepStatusResult changeStatus(ChangeStepStatusCommand command) {
@@ -155,11 +191,20 @@ public class StepCommandService implements StepCommandUseCase {
         Step step = stepRepository.findById(command.stepId())
                 .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
 
-        Step updated = stepRepository.save(
-                step.changeStatus(parseStatus(command.status()), LocalDateTime.now()));
+        int expected = command.overwrite() ? step.getVersion() : command.version();
+        LocalDateTime now = LocalDateTime.now();
+        Step changed = step.changeStatus(parseStatus(command.status()), now);
+
+        int updated = stepRepository.changeStatusIfVersionMatches(
+                command.stepId(), changed.getStatus(),
+                changed.getCompletedAt(), changed.getCompletedBy(), now, expected);
+
+        if (updated == 0) {
+            throw new ConflictException(StepErrorCode.STEP_VERSION_CONFLICT);
+        }
 
         return new StepStatusResult(
-                updated.getStepId(), updated.getStatus().name(), updated.getUpdatedAt());
+                changed.getStepId(), changed.getStatus().name(), now, expected + 1);
     }
 
     /**
@@ -167,6 +212,10 @@ public class StepCommandService implements StepCommandUseCase {
      *
      * <p>CLOSE 면 남은 이슈를 먼저 닫고 스텝을 완료한다. 같은 트랜잭션이라 하나라도 실패하면 전부 되돌아간다.
      * 이미 완료된 스텝은 완료자·완료시각을 덮어쓰지 않는다 — 두 번 눌렀다고 기록이 바뀌면 안 된다.
+     *
+     * <p>⛔ <b>여기엔 version 을 걸지 않는다</b> (`.ai/docs/global/CONCURRENCY.md`).
+     * 위의 "이미 DONE 이면 그대로 둔다" 규칙이 두 번째 요청을 이미 막고 있어서, 낙관락을 더 걸면
+     * 정상 동작(둘이 동시에 완료 버튼을 눌렀는데 결과는 같음)에 409 모달만 띄우게 된다.
      */
     @Override
     public StepCompleteResult completeStep(CompleteStepCommand command) {
@@ -297,12 +346,24 @@ public class StepCommandService implements StepCommandUseCase {
                         new ValidationException(StepErrorCode.OPEN_ISSUE_ACTION_INVALID));
     }
 
-    /** 완료자 사번에 이름을 붙인다. 완료자는 요청자 본인이라 존재 검증을 따로 하지 않는다. */
+    /**
+     * 완료자 사번에 이름·삭제여부를 붙인다.
+     *
+     * <p>⚠️ 요청자 본인만 오는 게 아니다 — 이미 DONE 인 스텝에 완료 요청이 다시 오면 <b>과거 완료자</b>가
+     * 온다. 그 사원이 그 사이 삭제됐으면 {@code findNameByUserId} 는 null 을 돌려주고, 화면에는
+     * 이름 없는 완료자가 「삭제 안 됨」으로 뜬다. 그래서 삭제된 사원도 돌려주는 배치 조회를 쓴다
+     * (D-6 · {@code BlockQueryService.toOwner} 와 같은 기준).
+     */
     private StepPerson toPerson(String userId) {
         if (userId == null) {
             return null;
         }
-        return new StepPerson(userId, employeeLookupPort.findNameByUserId(userId));
+        EmployeeLookupPort.EmployeeRef ref =
+                employeeLookupPort.findRefsByUserIds(List.of(userId)).get(userId);
+
+        return ref == null
+                ? new StepPerson(userId, null, false)
+                : new StepPerson(userId, ref.name(), ref.deleted());
     }
 
     /**

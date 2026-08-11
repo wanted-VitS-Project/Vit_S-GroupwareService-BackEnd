@@ -87,6 +87,7 @@ public class IssueQueryAdapter implements IssueQueryPort {
         return issueQueryMapper.findMyCalendarIssues(userId).stream()
                 .map(row -> new CalendarIssueResult(
                         row.issueId(),
+                        row.version(),
                         row.title(),
                         row.status(),
                         row.priority(),
@@ -102,6 +103,7 @@ public class IssueQueryAdapter implements IssueQueryPort {
     private IssueResult toResultWithoutRelations(IssueRow row) {
         return new IssueResult(
                 row.issueId(),
+                row.version(),
                 row.stepId(),
                 row.title(),
                 row.content(),

@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.block.application.service;
 
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -15,6 +16,7 @@ import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -26,6 +28,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 
@@ -46,48 +51,64 @@ class BlockMoveServiceTest {
     private static final Long TO_STEP = 11L;
     private static final Long PROJECT_ID = 3L;
     private static final String REQUESTER = "E2024001";
+    private static final int VERSION = 1;
 
     @Test
-    @DisplayName("도착 스텝의 맨 아래 새 행에 붙고 이슈 연결은 끊긴다")
+    @DisplayName("도착 스텝의 맨 아래 새 행에 붙고 이슈 연결은 끊긴다 — version 은 +1 된다")
     void 이동() {
-        givenBlock();
+        givenBlock(VERSION);
         givenStep(FROM_STEP, PROJECT_ID);
         givenStep(TO_STEP, PROJECT_ID);
         given(blockRepository.findMaxRowIndex(TO_STEP)).willReturn(Optional.of(4));
         given(issueBlockUnlinkPort.unlinkByBlockId(BLOCK_ID)).willReturn(2);
-        given(blockRepository.save(any(Block.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        givenMoved(1);
 
-        BlockMoveResult result = blockCommandService.moveBlock(command(TO_STEP));
+        BlockMoveResult result = blockCommandService.moveBlock(command(TO_STEP, VERSION, false));
 
         assertThat(result.stepId()).isEqualTo(TO_STEP);
         assertThat(result.unlinkedIssueCount()).isEqualTo(2);
+        assertThat(result.version()).isEqualTo(VERSION + 1);
 
         // 좌표를 그대로 들고 가면 도착 스텝의 기존 블록과 겹쳐 그리드가 깨진다.
-        Block saved = captureSaved();
-        assertThat(saved.getRowIndex()).isEqualTo(5);
-        assertThat(saved.getSortOrder()).isZero();
+        Moved moved = captureMoved();
+        assertThat(moved.rowIndex()).isEqualTo(5);
+        assertThat(moved.sortOrder()).isZero();
     }
 
     @Test
-    @DisplayName("도착 스텝에 블록이 없으면 첫 행에 붙는다")
-    void 이동_빈_스텝() {
-        givenBlock();
+    @DisplayName("내가 본 뒤 남이 먼저 저장했으면 409 다 — 조건부 UPDATE 가 0행을 돌려준다")
+    void 이동_버전_충돌() {
+        givenBlock(VERSION);
         givenStep(FROM_STEP, PROJECT_ID);
         givenStep(TO_STEP, PROJECT_ID);
-        given(blockRepository.findMaxRowIndex(TO_STEP)).willReturn(Optional.empty());
-        given(blockRepository.save(any(Block.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        given(blockRepository.findMaxRowIndex(TO_STEP)).willReturn(Optional.of(4));
+        givenMoved(0);
 
-        blockCommandService.moveBlock(command(TO_STEP));
+        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP, VERSION, false)))
+                .isInstanceOf(ConflictException.class);
+    }
 
-        assertThat(captureSaved().getRowIndex()).isZero();
+    @Test
+    @DisplayName("덮어쓰기는 DB 현재 버전을 조건으로 써서 통과한다 — 요청이 든 낡은 버전은 무시한다")
+    void 이동_덮어쓰기() {
+        // DB 는 이미 v5 인데 요청은 v1 을 들고 왔다 (= 그냥 저장하면 409 나는 상황)
+        givenBlock(5);
+        givenStep(FROM_STEP, PROJECT_ID);
+        givenStep(TO_STEP, PROJECT_ID);
+        given(blockRepository.findMaxRowIndex(TO_STEP)).willReturn(Optional.of(4));
+        given(blockRepository.moveToStepIfVersionMatches(
+                eq(BLOCK_ID), eq(TO_STEP), anyInt(), anyInt(), any(), eq(5)))
+                .willReturn(1);
+
+        BlockMoveResult result = blockCommandService.moveBlock(command(TO_STEP, VERSION, true));
+
+        assertThat(result.version()).isEqualTo(6);
     }
 
     @Test
     @DisplayName("대상 스텝이 없으면 400 이다 — 블록 조회까지 가지 않는다")
     void 대상_누락() {
-        assertThatThrownBy(() -> blockCommandService.moveBlock(command(null)))
+        assertThatThrownBy(() -> blockCommandService.moveBlock(command(null, VERSION, false)))
                 .isInstanceOf(ValidationException.class);
 
         Mockito.verifyNoInteractions(blockRepository, stepAccessUseCase);
@@ -96,10 +117,10 @@ class BlockMoveServiceTest {
     @Test
     @DisplayName("같은 스텝으로는 못 옮긴다 — 400")
     void 같은_스텝() {
-        givenBlock();
+        givenBlock(VERSION);
         givenStep(FROM_STEP, PROJECT_ID);
 
-        assertThatThrownBy(() -> blockCommandService.moveBlock(command(FROM_STEP)))
+        assertThatThrownBy(() -> blockCommandService.moveBlock(command(FROM_STEP, VERSION, false)))
                 .isInstanceOf(ValidationException.class);
 
         Mockito.verifyNoInteractions(issueBlockUnlinkPort);
@@ -108,11 +129,11 @@ class BlockMoveServiceTest {
     @Test
     @DisplayName("다른 프로젝트 스텝으로는 못 옮긴다 — 400")
     void 다른_프로젝트() {
-        givenBlock();
+        givenBlock(VERSION);
         givenStep(FROM_STEP, PROJECT_ID);
         givenStep(TO_STEP, 99L);
 
-        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP)))
+        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP, VERSION, false)))
                 .isInstanceOf(ValidationException.class);
 
         Mockito.verifyNoInteractions(issueBlockUnlinkPort);
@@ -121,13 +142,13 @@ class BlockMoveServiceTest {
     @Test
     @DisplayName("도착 스텝 편집 권한이 없으면 403 이다 — 출발만 보면 안 된다")
     void 도착_권한_없음() {
-        givenBlock();
+        givenBlock(VERSION);
         givenStep(FROM_STEP, PROJECT_ID);
         willThrow(new ForbiddenException(
                 com.group3.vitamins.project.step.domain.exception.StepErrorCode.STEP_EDIT_DENIED))
                 .given(stepAccessUseCase).requireEditable(TO_STEP, REQUESTER, "USER");
 
-        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP)))
+        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP, VERSION, false)))
                 .isInstanceOf(ForbiddenException.class);
 
         Mockito.verifyNoInteractions(issueBlockUnlinkPort);
@@ -138,31 +159,47 @@ class BlockMoveServiceTest {
     void 블록_없음() {
         given(blockRepository.findById(BLOCK_ID)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP)))
+        assertThatThrownBy(() -> blockCommandService.moveBlock(command(TO_STEP, VERSION, false)))
                 .isInstanceOf(NotFoundException.class);
     }
 
-    private MoveBlockCommand command(Long stepId) {
-        return new MoveBlockCommand(BLOCK_ID, stepId, REQUESTER, "USER");
+    // ────────────────────────────── 헬퍼 ──────────────────────────────
+
+    /** 조건부 UPDATE 에 실제로 실려 간 좌표. save() 를 안 쓰므로 엔티티를 캡처할 수 없다. */
+    private record Moved(int rowIndex, int sortOrder) {
     }
 
-    private void givenBlock() {
+    private Moved captureMoved() {
+        ArgumentCaptor<Integer> rowIndex = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<Integer> sortOrder = ArgumentCaptor.forClass(Integer.class);
+
+        Mockito.verify(blockRepository).moveToStepIfVersionMatches(
+                eq(BLOCK_ID), eq(TO_STEP), rowIndex.capture(), sortOrder.capture(),
+                any(), anyInt());
+
+        return new Moved(rowIndex.getValue(), sortOrder.getValue());
+    }
+
+    private void givenMoved(int affectedRows) {
+        given(blockRepository.moveToStepIfVersionMatches(
+                anyLong(), anyLong(), anyInt(), anyInt(), any(), anyInt()))
+                .willReturn(affectedRows);
+    }
+
+    private MoveBlockCommand command(Long stepId, int version, boolean overwrite) {
+        return new MoveBlockCommand(BLOCK_ID, stepId, version, overwrite, REQUESTER, "USER");
+    }
+
+    private void givenBlock(int version) {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         given(blockRepository.findById(BLOCK_ID)).willReturn(Optional.of(
                 Block.restore(BLOCK_ID, FROM_STEP, "제안서", BlockType.TEXT, 5L, null,
-                        2, 1, 0, REQUESTER, createdAt, createdAt, null)));
+                        2, 1, 0, version, REQUESTER, createdAt, createdAt, null)));
     }
 
     private void givenStep(Long stepId, Long projectId) {
         given(stepAccessUseCase.requireEditable(stepId, REQUESTER, "USER"))
                 .willReturn(new StepAccessUseCase.StepAccessView(
                         stepId, projectId, MemberPermission.EDITOR));
-    }
-
-    private Block captureSaved() {
-        org.mockito.ArgumentCaptor<Block> captor =
-                org.mockito.ArgumentCaptor.forClass(Block.class);
-        Mockito.verify(blockRepository).save(captor.capture());
-        return captor.getValue();
     }
 }

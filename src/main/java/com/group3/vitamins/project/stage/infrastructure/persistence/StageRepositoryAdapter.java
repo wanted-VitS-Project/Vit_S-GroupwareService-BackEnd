@@ -54,4 +54,14 @@ public class StageRepositoryAdapter implements StageRepository {
     public boolean existsInProject(Long stageId, Long projectId) {
         return springDataRepository.existsByStageIdAndProjectIdAndDeletedAtIsNull(stageId, projectId);
     }
+
+    @Override
+    public int renameIfVersionMatches(Long stageId, String name, int expectedVersion) {
+        return springDataRepository.renameIfVersionMatches(stageId, name, expectedVersion);
+    }
+
+    @Override
+    public int moveIfVersionMatches(Long stageId, int sortOrder, int expectedVersion) {
+        return springDataRepository.moveIfVersionMatches(stageId, sortOrder, expectedVersion);
+    }
 }

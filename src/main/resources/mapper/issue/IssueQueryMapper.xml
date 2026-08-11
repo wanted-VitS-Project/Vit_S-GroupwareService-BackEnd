@@ -25,6 +25,7 @@
     <select id="findIssuesByProject"
             resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueRow">
         SELECT i.issue_id AS issueId,
+               i.version AS version,
                i.step_id AS stepId,
                i.title AS title,
                i.content AS content,
@@ -56,6 +57,7 @@
     <select id="findIssues"
             resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueRow">
         SELECT i.issue_id AS issueId,
+               i.version AS version,
                i.step_id AS stepId,
                i.title AS title,
                i.content AS content,
@@ -83,6 +85,7 @@
     <select id="findIssue"
             resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueRow">
         SELECT i.issue_id AS issueId,
+               i.version AS version,
                i.step_id AS stepId,
                i.title AS title,
                i.content AS content,
@@ -133,6 +136,7 @@
     <select id="findMyCalendarIssues"
             resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueCalendarRow">
         SELECT i.issue_id AS issueId,
+               i.version AS version,
                i.title AS title,
                CASE i.status
                     WHEN 'TO_DO' THEN 'TODO'

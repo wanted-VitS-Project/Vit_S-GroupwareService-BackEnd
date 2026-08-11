@@ -14,5 +14,6 @@ import java.util.List;
 @Mapper
 public interface ProjectMemberQueryMapper {
 
-    List<ProjectMemberRow> findMembers(@Param("projectId") Long projectId);
+    List<ProjectMemberRow> findMembers(@Param("projectId") Long projectId,
+                                       @Param("companyId") Long companyId);
 }

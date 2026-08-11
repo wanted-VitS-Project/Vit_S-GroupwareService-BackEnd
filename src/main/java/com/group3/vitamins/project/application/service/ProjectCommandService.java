@@ -1,6 +1,7 @@
 package com.group3.vitamins.project.application.service;
 
 import com.group3.vitamins.businesscategory.domain.exception.BusinessCategoryErrorCode;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -53,12 +54,14 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final EmployeeLookupPort employeeLookupPort;
     private final StepStatLookupPort stepStatLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public ProjectResult createProject(CreateProjectCommand command) {
         validateDateRange(command.startedOn(), command.endedOn());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         if (command.bidNoticeId() != null) {
-            checkBidNoticeNotLinked(command.bidNoticeId());
+            checkBidNoticeNotLinked(command.bidNoticeId(), companyId);
         }
 
         List<Long> categoryIds = command.businessCategoryIds() == null
@@ -69,7 +72,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         Project saved = projectRepository.save(Project.create(
                 command.bidNoticeId(), command.name(), command.description(), command.clientName(),
                 command.startedOn(), command.endedOn(), command.contractAmount(),
-                command.requesterUserId(), now));
+                command.requesterUserId(), now, companyId));
 
         projectMemberRepository.save(
                 ProjectMember.createEditor(saved.getProjectId(), command.requesterUserId(), now));
@@ -88,51 +91,83 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 saved.getCreatedAt());
     }
 
-    /** 수정 화면이 폼 전체를 보내므로 받은 값으로 덮어쓴다. null 은 해당 값을 비운다. */
+    /**
+     * 수정 화면이 폼 전체를 보내므로 받은 값으로 덮어쓴다. null 은 해당 값을 비운다.
+     *
+     * <p><b>내가 조회한 버전이 아직 최신일 때만</b> 저장된다 (`.ai/docs/global/CONCURRENCY.md`).
+     * ⚠️ {@code save()} 로 되돌리지 마라 — 검사와 저장이 한 문장이 아니면 그 틈에 남의 저장이 끼어들어
+     * <b>예외도 로그도 없이</b> 갱신이 유실된다 (§6-4).
+     */
     @Override
     public ProjectUpdateResult updateProject(UpdateProjectCommand command) {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         validateDateRange(command.startedOn(), command.endedOn());
 
-        Project updated = projectRepository.save(project.update(
+        int expected = command.overwrite() ? project.getVersion() : command.version();
+        LocalDateTime now = LocalDateTime.now();
+
+        int updated = projectRepository.updateIfVersionMatches(
+                command.projectId(), project.getCompanyId(),
                 command.name(), command.description(), command.clientName(),
                 command.startedOn(), command.endedOn(), command.contractAmount(),
-                LocalDateTime.now()));
+                now, expected);
 
-        return new ProjectUpdateResult(updated.getProjectId(), updated.getName(),
-                updated.getClientName(), updated.getStartedOn(), updated.getEndedOn(),
-                updated.getContractAmount(), updated.getUpdatedAt());
+        if (updated == 0) {
+            throw new ConflictException(ProjectErrorCode.PROJECT_VERSION_CONFLICT);
+        }
+
+        return new ProjectUpdateResult(project.getProjectId(), command.name(),
+                command.clientName(), command.startedOn(), command.endedOn(),
+                command.contractAmount(), now, expected + 1);
     }
 
-    /** 상태를 바꾼다. 역방향도 허용하고 CLOSED 만 거부한다 (PRJ-003). */
+    /**
+     * 상태를 바꾼다. 역방향도 허용하고 CLOSED 만 거부한다 (PRJ-003).
+     *
+     * <p>⚠️ <b>종결 정보를 도메인에게 먼저 계산시키고 그 결과를 UPDATE 에 넘긴다.</b>
+     * CLOSED 에서 벗어나면 종결 사유·일시를 지우는 규칙이 {@code changeStatus} 안에 있는데,
+     * SQL 에 같은 조건을 다시 쓰면 규칙이 두 곳으로 갈라져 한쪽만 고치는 사고가 난다.
+     */
     @Override
     public ProjectStatusResult changeStatus(ChangeProjectStatusCommand command) {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
-        Project updated = projectRepository.save(
-                project.changeStatus(parseStatus(command.status()), LocalDateTime.now()));
+        int expected = command.overwrite() ? project.getVersion() : command.version();
+        LocalDateTime now = LocalDateTime.now();
+        Project changed = project.changeStatus(parseStatus(command.status()), now);
 
-        return new ProjectStatusResult(updated.getProjectId(),
-                updated.getStatus().name(), updated.getUpdatedAt());
+        int updated = projectRepository.changeStatusIfVersionMatches(
+                command.projectId(), project.getCompanyId(), changed.getStatus(),
+                changed.getCloseReasonCode(), changed.getCloseReasonNote(), changed.getClosedAt(),
+                now, expected);
+
+        if (updated == 0) {
+            throw new ConflictException(ProjectErrorCode.PROJECT_VERSION_CONFLICT);
+        }
+
+        return new ProjectStatusResult(changed.getProjectId(),
+                changed.getStatus().name(), now, expected + 1);
     }
 
-    /** 사유를 붙여 종결한다. 상태 제한이 없다 — 진행 중이든 정산 중이든 종결할 수 있다 (PRJ-004). */
+    /**
+     * 사유를 붙여 종결한다. 상태 제한이 없다 — 진행 중이든 정산 중이든 종결할 수 있다 (PRJ-004).
+     *
+     * <p>⛔ 여기에는 낙관적 락을 걸지 않는다 ({@code CONCURRENCY.md} §9). 종결은 사유가 필수라
+     * 두 번 눌러도 같은 결과다 — 갱신 유실로 잃을 편집 내용이 없다.
+     */
     @Override
     public ProjectCloseResult closeProject(CloseProjectCommand command) {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         Project closed = projectRepository.save(project.close(
                 parseCloseReason(command.closeReasonCode()), command.closeReasonNote(),
@@ -208,7 +243,10 @@ public class ProjectCommandService implements ProjectCommandUseCase {
 
         projectBusinessCategoryRepository.linkAll(command.projectId(), categoryIds);
 
-        return new ProjectCategoryResult(command.projectId(), resolveCategories(
+        // ⚠️ 응답은 describeLinked 다. resolveCategories(검증용)로 돌리면 예전에 연결해 둔 카테고리가
+        //    그 사이 삭제됐을 때 개수가 안 맞아 404 가 나고, 방금 성공한 연결까지 롤백된다.
+        //    그 프로젝트는 카테고리를 영영 추가할 수 없게 된다.
+        return new ProjectCategoryResult(command.projectId(), describeLinked(
                 projectBusinessCategoryRepository.findCategoryIds(command.projectId())));
     }
 
@@ -237,8 +275,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         projectAccessUseCase.requireEditable(
                 command.projectId(), command.requesterUserId(), command.role());
 
-        Project project = projectRepository.findById(command.projectId())
-                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        Project project = requireProject(command.projectId());
 
         if (project.getStatus() != ProjectStatus.NOT_STARTED
                 || stepStatLookupPort.countByProjectId(command.projectId()).totalCount() > 0) {
@@ -256,25 +293,56 @@ public class ProjectCommandService implements ProjectCommandUseCase {
         return categoryIds.stream().distinct().toList();
     }
 
-    /** 같은 공고로 이미 프로젝트가 만들어졌으면 막는다 — 안 막으면 UNIQUE 제약이 DB 500 으로 샌다. */
-    private void checkBidNoticeNotLinked(Long bidNoticeId) {
-        projectRepository.findByBidNoticeId(bidNoticeId).ifPresent(existing -> {
+    /** 현재 회사 소유의 프로젝트를 불러온다. 타사 프로젝트와 삭제분은 404 로 귀결된다. */
+    private Project requireProject(Long projectId) {
+        return projectRepository.findById(projectId, currentCompanyIdProvider.currentCompanyId())
+                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+    }
+
+    /**
+     * 같은 회사에서 같은 공고로 이미 프로젝트가 만들어졌으면 막는다 —
+     * 안 막으면 UNIQUE 제약이 DB 500 으로 샌다. 다른 회사가 같은 공고를 쓰는 것은 정상이라 걸리지 않는다.
+     */
+    private void checkBidNoticeNotLinked(Long bidNoticeId, Long companyId) {
+        projectRepository.findByBidNoticeId(bidNoticeId, companyId).ifPresent(existing -> {
             throw new ConflictException(ProjectErrorCode.PROJECT_BID_NOTICE_ALREADY_LINKED);
         });
     }
 
-    /** 요청된 카테고리 id 가 전부 존재하는지 확인하고 응답용 요약으로 바꾼다. */
+    /**
+     * <b>요청으로 들어온</b> 카테고리 id 가 전부 살아있는지 확인하고 응답용 요약으로 바꾼다.
+     *
+     * <p>⛔ 이미 연결된 카테고리를 여기 태우지 마라 — 그중 하나가 삭제돼 있으면 개수가 안 맞아
+     * 404 가 난다. 그건 {@link #describeLinked} 소관이다.
+     */
     private List<BusinessCategorySummary> resolveCategories(List<Long> categoryIds) {
         if (categoryIds.isEmpty()) {
             return List.of();
         }
         List<BusinessCategoryLookupPort.BusinessCategoryView> found =
-                businessCategoryLookupPort.findByIds(categoryIds);
+                businessCategoryLookupPort.findByIds(
+                        categoryIds, currentCompanyIdProvider.currentCompanyId());
         if (found.size() != Set.copyOf(categoryIds).size()) {
             throw new NotFoundException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NOT_FOUND);
         }
         return found.stream()
-                .map(view -> new BusinessCategorySummary(view.categoryId(), view.name(), view.code()))
+                // 쓰기 경로다 — findByIds 가 deleted_at IS NULL 을 보므로 삭제된 카테고리는 여기 못 온다.
+                .map(view -> new BusinessCategorySummary(view.categoryId(), view.name(), view.code(), false))
+                .toList();
+    }
+
+    /**
+     * <b>이미 연결된</b> 카테고리를 응답용 요약으로 옮긴다. 존재 검증을 하지 않는다 —
+     * 연결 시점에 이미 검증했고, 그 뒤 삭제됐다는 사실은 막을 게 아니라 알릴 값이다 (DELETE.md D-6).
+     */
+    private List<BusinessCategorySummary> describeLinked(List<Long> categoryIds) {
+        if (categoryIds.isEmpty()) {
+            return List.of();
+        }
+        return businessCategoryLookupPort.findRefsByIds(
+                        categoryIds, currentCompanyIdProvider.currentCompanyId()).stream()
+                .map(ref -> new BusinessCategorySummary(
+                        ref.categoryId(), ref.name(), ref.code(), ref.deleted()))
                 .toList();
     }
 }
