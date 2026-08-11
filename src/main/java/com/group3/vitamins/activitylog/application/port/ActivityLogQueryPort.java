@@ -9,9 +9,9 @@ import java.util.Optional;
 
 public interface ActivityLogQueryPort {
 
-    Optional<StepAccessResult> findStepAccess(Long stepId, String userId);
+    Optional<StepAccessResult> findStepAccess(Long stepId, String userId, Long companyId);
 
-    Optional<BlockStepResult> findBlockStep(Long blockId);
+    Optional<BlockStepResult> findBlockStep(Long blockId, Long companyId);
 
     List<ActivityLogLookupResult> findActivityLogs(
             Long stepId,

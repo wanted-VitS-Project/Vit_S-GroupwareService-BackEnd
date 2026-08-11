@@ -22,6 +22,7 @@ import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import com.group3.vitamins.issue.domain.model.Issue;
 import com.group3.vitamins.issue.domain.repository.IssueRepository;
 import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -59,6 +60,23 @@ class IssueCommandServiceTest {
             issueQueryPort,
             domainEventPublisher
     );
+
+    @BeforeEach
+    void setUp() {
+        when(issueQueryPort.findIssue(101L)).thenReturn(Optional.of(new IssueResult(
+                101L,
+                1,
+                10L,
+                "경쟁사 제안서 벤치마킹",
+                "기존 내용",
+                "TODO",
+                "HIGH",
+                LocalDateTime.of(2026, 8, 5, 0, 0),
+                null,
+                List.of(),
+                List.of()
+        )));
+    }
 
     @Test
     @DisplayName("이슈 생성 시 담당자별 ISSUE_ASSIGNED 알림을 발행한다")
@@ -399,6 +417,7 @@ class IssueCommandServiceTest {
     @Test
     @DisplayName("상태 변경 대상 이슈가 없으면 권한 확인 없이 404를 던진다")
     void changeIssueStatus_notFound() {
+        when(issueQueryPort.findIssue(101L)).thenReturn(Optional.empty());
         when(issueRepository.findActiveById(101L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.changeIssueStatus(
@@ -453,6 +472,7 @@ class IssueCommandServiceTest {
     @Test
     @DisplayName("이슈가 없거나 이미 삭제됐으면 권한 확인 없이 404를 던진다")
     void deleteIssue_notFound() {
+        when(issueQueryPort.findIssue(101L)).thenReturn(Optional.empty());
         when(issueRepository.findActiveById(101L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.deleteIssue(new DeleteIssueCommand(101L, "EMP002", "MEMBER")))
@@ -460,6 +480,20 @@ class IssueCommandServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISS_NOT_FOUND));
 
         verify(issueStepAccessPort, never()).requireEditable(10L, "EMP002", "MEMBER");
+        verify(issueRepository, never()).deleteAssignees(101L);
+        verify(issueRepository, never()).deleteBlockLinks(101L);
+    }
+
+    @Test
+    @DisplayName("현재 회사 범위 밖 이슈면 JPA 변경 대상을 조회하지 않고 404를 반환한다")
+    void deleteIssue_outOfCompanyScope() {
+        when(issueQueryPort.findIssue(101L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteIssue(new DeleteIssueCommand(101L, "EMP002", "MEMBER")))
+                .isInstanceOfSatisfying(NotFoundException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISS_NOT_FOUND));
+
+        verify(issueRepository, never()).findActiveById(101L);
         verify(issueRepository, never()).deleteAssignees(101L);
         verify(issueRepository, never()).deleteBlockLinks(101L);
     }

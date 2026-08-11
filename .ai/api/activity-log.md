@@ -1,6 +1,7 @@
 # ActivityLog API
 
 **상태**: md 명세 기준 계약 (`../API.md` §0·§1)
+**최종 업데이트**: 2026-08-11 (Project 상속 멀티테넌시 2차 적용 — Step·Block·목록 조회가 `activity_log.company_id`와 부모 `project.company_id`를 모두 만족할 때만 반환, API 계약 변경 없음) · **담당**: 김용준
 **최종 업데이트**: 2026-08-11 (활동 수행자 응답에 `resignedAt` 추가 및 FE 사용 API 명시 — 사원은 삭제하지 않고 퇴사일을 기록하므로, 과거 활동의 수행자 이름을 보존하면서 FE가 퇴사 상태를 표시함) · **담당**: 김용준
 **최종 업데이트**: 2026-08-07 (결재선 `lines` 값을 사번→이름으로 변경, "필드별 표시 규칙" FE 가이드 섹션 신설) · **담당**: 김용준
 **Domain**: `프로젝트` · SUB-Domain `ActivityLog`
@@ -260,8 +261,9 @@ Block 활동 로그 버튼 선택
 ## BE 처리 흐름
 
 ```text
-Step 및 접근 권한 확인
-→ blockId 전달 시 Block과 Step 관계 검증
+현재 회사 범위의 Step 및 접근 권한 확인
+→ blockId 전달 시 현재 회사 범위의 Block과 Step 관계 검증
+→ `activity_log.company_id`와 Block → Step → Project.company_id를 모두 만족하는 기록만 조회
 → cursor보다 작은 활동 기록 조회
 → activityLogId 내림차순 정렬
 → nextCursor와 hasNext 계산
@@ -316,12 +318,12 @@ Issue 생성·수정·상태 변경·삭제는 현재 Activity Log 기록 및 �
 - Controller나 FE에서 로그 생성 API를 별도로 호출하지 않는다.
 - 각 도메인은 Activity Log Repository, Service, Port를 직접 호출하지 않는다.
 
-### 멀티테넌시 1차 — Activity Log 직접 격리
+### 멀티테넌시 — Activity Log 직접 격리 + Project 상속 검증
 
 - `activity_log`은 회사별 감사 타임라인이므로 `company_id`를 직접 저장한다. `block → step → project` 경로는 부모 소유권 검증에만 쓰고, 로그 행 자체의 격리를 대신하지 않는다.
 - `ActivityLogRecordService`가 동기 `BEFORE_COMMIT` 경로에서 `CurrentCompanyIdProvider`로 현재 회사를 읽어 저장한다. 타 Block 도메인은 기존 `ActivityOccurredEvent` 계약을 유지하며 `companyId`를 전달하지 않는다.
-- 목록 조회는 반드시 `activity_log.company_id = 현재 회사` 조건을 포함한다. Project 멀티테넌시 완료 뒤에는 Step·Block 소유권 검증도 `project.company_id`까지 연결해 이중으로 제한한다.
-- 마이그레이션의 `DEFAULT 1`은 기존 단일 회사 로그 백필과 배포 전환을 위한 임시값이다. 모든 기록 경로의 명시 스탬핑을 운영에서 확인한 뒤 별도 마이그레이션으로 제거한다.
+- Step·Block 검증과 목록 조회는 부모 `Block → Step → Project.company_id = 현재 회사`를 함께 확인한다. 목록은 여기에 `activity_log.company_id = 현재 회사`까지 더해 이중으로 제한한다.
+- 현재 기록 경로는 `ActivityLogEventListener → ActivityLogRecordService → ActivityLogRecordPort` 한 곳이며, `ActivityLogRecordService`가 회사 ID를 명시 스탬핑한다. `V20260811160200__drop_activity_log_company_default.sql` 이후 새 직접 INSERT가 회사 ID를 생략하면 실패해야 한다.
 
 ## 공통 이벤트 정보
 
