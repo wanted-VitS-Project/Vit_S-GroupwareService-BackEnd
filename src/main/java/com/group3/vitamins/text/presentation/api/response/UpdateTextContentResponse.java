@@ -12,6 +12,9 @@ public record UpdateTextContentResponse(
         String content,
 
         @Schema(description = "텍스트 블록 수정일")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "수정 후 버전 — 다음 수정 요청에 그대로 실어 보낸다", example = "2")
+        int version
 ) {
 }

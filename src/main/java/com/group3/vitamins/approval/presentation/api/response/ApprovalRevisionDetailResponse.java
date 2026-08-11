@@ -56,6 +56,7 @@ public record ApprovalRevisionDetailResponse(
         List<LineItem> lines
 ) {
 
+    @Schema(name = "ApprovalRevisionDetailResponseDocumentItem")
     public record DocumentItem(
             @Schema(description = "결재 문서 구분 번호", example = "1")
             Long documentId,
@@ -78,6 +79,7 @@ public record ApprovalRevisionDetailResponse(
     ) {
     }
 
+    @Schema(name = "ApprovalRevisionDetailResponseLineItem")
     public record LineItem(
             @Schema(description = "결재선 구분 번호", example = "3")
             Long lineId,

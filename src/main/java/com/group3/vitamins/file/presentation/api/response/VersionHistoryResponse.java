@@ -16,6 +16,7 @@ public record VersionHistoryResponse(
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    @Schema(name = "VersionHistoryResponseItem")
     public record Item(
             Long fileVersionId,
             int versionNo,

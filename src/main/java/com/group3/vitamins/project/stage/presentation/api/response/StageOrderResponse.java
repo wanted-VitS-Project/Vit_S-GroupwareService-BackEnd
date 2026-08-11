@@ -12,7 +12,7 @@ public record StageOrderResponse(
         List<Item> stages
 ) {
 
-    @Schema(description = "서버가 확정한 스테이지 순서")
+    @Schema(name = "StageOrderResponseItem", description = "서버가 확정한 스테이지 순서")
     public record Item(
 
             @Schema(description = "스테이지 ID", example = "8")

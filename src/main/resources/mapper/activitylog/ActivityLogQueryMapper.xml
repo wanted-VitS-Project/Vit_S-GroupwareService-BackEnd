@@ -13,6 +13,7 @@
           FROM step s
           JOIN project p
             ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
            AND p.deleted_at IS NULL
           LEFT JOIN project_member pm
             ON pm.project_id = s.project_id
@@ -23,11 +24,18 @@
 
     <select id="findBlockStep"
             resultType="com.group3.vitamins.activitylog.infrastructure.adapter.BlockStepRow">
-        SELECT block_id AS blockId,
-               step_id AS stepId
-          FROM block
-         WHERE block_id = #{blockId}
-           AND deleted_at IS NULL
+        SELECT b.block_id AS blockId,
+               b.step_id AS stepId
+          FROM block b
+          JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
+         WHERE b.block_id = #{blockId}
+           AND b.deleted_at IS NULL
     </select>
 
     <select id="findActivityLogs"
@@ -49,8 +57,16 @@
          FROM activity_log al
           JOIN block b
             ON b.block_id = al.block_id
+          JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
           JOIN employee e
             ON e.user_id = al.user_id
+           AND e.company_id = p.company_id
          WHERE al.company_id = #{companyId}
            AND b.step_id = #{stepId}
            AND al.block_id IS NOT NULL

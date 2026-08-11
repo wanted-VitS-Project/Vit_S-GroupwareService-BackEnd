@@ -18,6 +18,7 @@ public record CashFlowDeleteResponse(
                 view.deletedCount(), view.skippedItems().stream().map(SkippedItem::from).toList());
     }
 
+    @Schema(name = "CashFlowDeleteResponseSkippedItem")
     public record SkippedItem(
             @Schema(description = "삭제하지 못한 입출금 내역 ID", example = "3")
             Long cashFlowId,

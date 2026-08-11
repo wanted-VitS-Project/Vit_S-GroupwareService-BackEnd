@@ -12,7 +12,7 @@ public record StepOrderResponse(
         List<Item> steps
 ) {
 
-    @Schema(description = "서버가 확정한 스텝 위치")
+    @Schema(name = "StepOrderResponseItem", description = "서버가 확정한 스텝 위치")
     public record Item(
 
             @Schema(description = "스텝 ID", example = "11")

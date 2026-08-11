@@ -24,7 +24,7 @@ public record JobPositionEmployeeListResponse(
         List<Item> content
 ) {
 
-    @Schema(description = "직급에 속한 사원")
+    @Schema(name = "JobPositionEmployeeListResponseItem", description = "직급에 속한 사원")
     public record Item(
 
             @Schema(description = "사번", example = "EMP001")

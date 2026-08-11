@@ -76,6 +76,8 @@ public class ProjectStepController {
 
     @Operation(summary = "스텝 목록 조회",
             description = "프로젝트의 스텝을 sortOrder 오름차순으로 조회한다. "
+                    + "sortOrder 는 프로젝트 전체 기준 통번호다 — 스테이지별 1..n 이 아니다. "
+                    + "화면의 스테이지 그룹은 stageId 로 묶어 그린다(그룹 안 상대순서는 그대로 보존된다). "
                     + "step_permission 이 NONE 인 스텝은 목록에서 제외된다(STP-010) — 사용자마다 보이는 개수가 다르다. "
                     + "이슈가 0개인 스텝은 progressRate 를 담지 않는다.")
     @ApiResponses({
@@ -111,6 +113,8 @@ public class ProjectStepController {
             description = "스텝의 소속 스테이지와 정렬 순서를 일괄 재정렬한다. "
                     + "위치를 바꾸는 유일한 경로이며, 스텝 수정 API 는 위치를 건드리지 않는다. "
                     + "stageId 가 0 이거나 생략되면 미소속으로 이동한다. "
+                    + "sortOrder 는 프로젝트 전체 기준 통번호다 — 스테이지별로 1 부터 다시 매기지 마라. "
+                    + "스테이지마다 1 을 보내면 값이 겹쳐 STEP_ORDER_INVALID 로 거부된다. "
                     + "보드 전체의 최종 배치를 보내야 한다 — 일부만 보내면 나머지 스텝과 순서가 겹친다. "
                     + "선행 스텝의 완료 여부는 검사하지 않는다(STP-002). "
                     + "항목마다 조회 시점의 version 을 함께 보내며, 하나라도 어긋나면 "

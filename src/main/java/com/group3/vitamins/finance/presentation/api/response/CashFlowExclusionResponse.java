@@ -18,6 +18,7 @@ public record CashFlowExclusionResponse(
                 view.updatedCount(), view.skippedItems().stream().map(SkippedItem::from).toList());
     }
 
+    @Schema(name = "CashFlowExclusionResponseSkippedItem")
     public record SkippedItem(
             @Schema(description = "제외 처리되지 못한 입출금 내역 ID", example = "31")
             Long cashFlowId,

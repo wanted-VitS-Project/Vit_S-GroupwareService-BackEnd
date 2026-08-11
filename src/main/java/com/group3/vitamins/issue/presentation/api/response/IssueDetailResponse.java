@@ -65,6 +65,7 @@ public record IssueDetailResponse(
                         .toList());
     }
 
+    @Schema(name = "IssueDetailResponseAssignee")
     public record AssigneeResponse(
             @Schema(description = "담당자 사번", example = "EMP003")
             String userId,
@@ -77,6 +78,7 @@ public record IssueDetailResponse(
     ) {
     }
 
+    @Schema(name = "IssueDetailResponseRelatedBlock")
     public record RelatedBlockResponse(
             @Schema(description = "관련 Block 번호", example = "15")
             Long blockId,
