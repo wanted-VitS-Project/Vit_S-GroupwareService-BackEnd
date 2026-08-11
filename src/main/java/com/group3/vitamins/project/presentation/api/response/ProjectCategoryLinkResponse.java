@@ -15,7 +15,7 @@ public record ProjectCategoryLinkResponse(
         List<Item> businessCategories
 ) {
 
-    @Schema(description = "사업 카테고리")
+    @Schema(name = "ProjectCategoryLinkResponseItem", description = "사업 카테고리")
     public record Item(
 
             @Schema(description = "카테고리 ID", example = "1")

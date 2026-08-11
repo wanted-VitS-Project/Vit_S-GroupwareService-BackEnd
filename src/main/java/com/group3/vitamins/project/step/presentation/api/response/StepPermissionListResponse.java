@@ -12,7 +12,7 @@ public record StepPermissionListResponse(
         List<Item> permissions
 ) {
 
-    @Schema(description = "참여자 한 명의 스텝 권한")
+    @Schema(name = "StepPermissionListResponseItem", description = "참여자 한 명의 스텝 권한")
     public record Item(
 
             @Schema(description = "사원 사번", example = "E2024007")

@@ -10,7 +10,7 @@ import java.util.List;
 public record GrantPermissionsRequest(
         @Schema(description = "부여 대상 목록(1개 이상)") List<Item> permissions
 ) {
-    @Schema(description = "부여 대상 1명")
+    @Schema(name = "GrantPermissionsRequestItem", description = "부여 대상 1명")
     public record Item(
             @Schema(description = "사번", example = "vitas-EMP001") String userId,
             @Schema(description = "권한 등급 VIEWER·EDITOR", example = "EDITOR") String permission
