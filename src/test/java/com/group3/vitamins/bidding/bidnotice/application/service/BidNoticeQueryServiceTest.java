@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.bidnotice.application.service;
 
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeListCachePort;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeQueryPort;
 import com.group3.vitamins.bidding.bidnotice.application.query.GetBidNoticeDetailQuery;
 import com.group3.vitamins.bidding.bidnotice.application.query.SearchBidNoticesQuery;
@@ -36,6 +37,7 @@ class BidNoticeQueryServiceTest {
     private static final Long COMPANY_ID = 10L;
 
     @Mock private BidNoticeQueryPort queryPort;
+    @Mock private BidNoticeListCachePort cachePort;
     @Mock private CurrentCompanyIdProvider companyIdProvider;
     @Mock private BiddingAccessPolicy accessPolicy;
     private BidNoticeQueryService service;
@@ -47,7 +49,11 @@ class BidNoticeQueryServiceTest {
                 Instant.parse("2026-08-11T00:00:00Z"),
                 ZoneId.of("Asia/Seoul")
         );
-        service = new BidNoticeQueryService(queryPort, companyIdProvider, accessPolicy, clock);
+        lenient().when(cachePort.lookup(anyLong(), any(SearchBidNoticesQuery.class)))
+                .thenReturn(new BidNoticeListCachePort.CacheLookup("0", Optional.empty()));
+        service = new BidNoticeQueryService(
+                queryPort, cachePort, companyIdProvider, accessPolicy, clock
+        );
     }
 
     @Test
@@ -63,7 +69,7 @@ class BidNoticeQueryServiceTest {
                 .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                         .isEqualTo(BiddingErrorCode.BIDDING_INVALID_NOTICE_QUERY));
 
-        verifyNoInteractions(queryPort, companyIdProvider, accessPolicy);
+        verifyNoInteractions(queryPort, cachePort, companyIdProvider, accessPolicy);
     }
 
     @Test
@@ -86,6 +92,74 @@ class BidNoticeQueryServiceTest {
         var result = service.handle(query);
 
         assertThat(result.content().get(0).dDay()).isEqualTo(3);
+        verify(cachePort).put(
+                eq(COMPANY_ID), any(SearchBidNoticesQuery.class), eq("0"), eq(result)
+        );
+    }
+
+    @Test
+    void returnsCachedListWithoutCallingDatabase() {
+        SearchBidNoticesQuery query = new SearchBidNoticesQuery(
+                null, null, null, null, null, null, null, null,
+                "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
+        );
+        var cached = new com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeListResult(
+                List.of(), 0, 0, 0, 20
+        );
+        when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+        when(cachePort.lookup(eq(COMPANY_ID), any(SearchBidNoticesQuery.class)))
+                .thenReturn(new BidNoticeListCachePort.CacheLookup(
+                        "7", Optional.of(cached)
+                ));
+
+        var result = service.handle(query);
+
+        assertThat(result).isEqualTo(cached);
+        verifyNoInteractions(queryPort);
+        verify(cachePort, never()).put(anyLong(), any(), anyString(), any());
+    }
+
+    @Test
+    void recalculatesDDayWhenReturningCachedList() {
+        SearchBidNoticesQuery query = new SearchBidNoticesQuery(
+                null, null, null, null, null, null, null, null,
+                "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
+        );
+        BidNoticeListItemResult cachedItem = new BidNoticeListItemResult(
+                1L, "공고", "NARA", "나라장터", null, "기관", null, null,
+                BigDecimal.ONE, BigDecimal.TEN, null,
+                LocalDateTime.of(2026, 8, 14, 18, 0), 99,
+                false, "COLLECTED", null
+        );
+        var cached = new com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeListResult(
+                List.of(cachedItem), 1, 1, 0, 20
+        );
+        when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+        when(cachePort.lookup(eq(COMPANY_ID), any(SearchBidNoticesQuery.class)))
+                .thenReturn(new BidNoticeListCachePort.CacheLookup("7", Optional.of(cached)));
+
+        var result = service.handle(query);
+
+        assertThat(result.content().get(0).dDay()).isEqualTo(3);
+        verifyNoInteractions(queryPort);
+    }
+
+    @Test
+    void bypassesCacheForDeadlineSoonQuery() {
+        SearchBidNoticesQuery query = new SearchBidNoticesQuery(
+                null, null, null, null, null, true, null, null,
+                "DEADLINE_ASC", 0, 20, "EMP001", "ADMIN"
+        );
+        when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+        when(queryPort.findAll(eq(COMPANY_ID), any(SearchBidNoticesQuery.class)))
+                .thenReturn(List.of());
+        when(queryPort.count(eq(COMPANY_ID), any(SearchBidNoticesQuery.class))).thenReturn(0L);
+
+        service.handle(query);
+
+        verifyNoInteractions(cachePort);
+        verify(queryPort).findAll(eq(COMPANY_ID), any(SearchBidNoticesQuery.class));
+        verify(queryPort).count(eq(COMPANY_ID), any(SearchBidNoticesQuery.class));
     }
 
     @Test
@@ -99,7 +173,7 @@ class BidNoticeQueryServiceTest {
 
         assertThatThrownBy(() -> service.handle(query)).isInstanceOf(ForbiddenException.class);
 
-        verifyNoInteractions(queryPort, companyIdProvider);
+        verifyNoInteractions(queryPort, cachePort, companyIdProvider);
     }
 
     @Test

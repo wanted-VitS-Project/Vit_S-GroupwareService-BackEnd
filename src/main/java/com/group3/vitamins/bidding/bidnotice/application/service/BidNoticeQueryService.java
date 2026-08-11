@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.bidnotice.application.service;
 
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeListCachePort;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeQueryPort;
 import com.group3.vitamins.bidding.bidnotice.application.query.GetBidNoticeDetailQuery;
 import com.group3.vitamins.bidding.bidnotice.application.query.SearchBidNoticesQuery;
@@ -33,6 +34,7 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
     private static final Set<String> ALLOWED_STATUSES = Set.of("COLLECTED", "DISMISSED");
 
     private final BidNoticeQueryPort queryPort;
+    private final BidNoticeListCachePort cachePort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final BiddingAccessPolicy biddingAccessPolicy;
     private final Clock clock;
@@ -44,6 +46,13 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
         biddingAccessPolicy.assertAccess(query.userId(), query.role());
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         SearchBidNoticesQuery effectiveQuery = withDefaultNoticeStatus(query);
+        boolean cacheable = !Boolean.TRUE.equals(effectiveQuery.deadlineSoon());
+        BidNoticeListCachePort.CacheLookup cacheLookup = cacheable
+                ? cachePort.lookup(companyId, effectiveQuery)
+                : BidNoticeListCachePort.CacheLookup.unavailable();
+        if (cacheLookup.result().isPresent()) {
+            return withCalculatedDDay(cacheLookup.result().get());
+        }
 
         List<BidNoticeListItemResult> content = queryPort.findAll(companyId, effectiveQuery)
                 .stream()
@@ -51,9 +60,13 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
                 .toList();
         long totalElements = queryPort.count(companyId, effectiveQuery);
         int totalPages = (int) Math.ceil((double) totalElements / query.size());
-        return new BidNoticeListResult(
+        BidNoticeListResult result = new BidNoticeListResult(
                 content, totalElements, totalPages, query.page(), query.size()
         );
+        if (cacheable) {
+            cachePort.put(companyId, effectiveQuery, cacheLookup.version(), result);
+        }
+        return result;
     }
 
     // 상태를 생략한 일반 목록에서는 제외 공고를 숨기고 수집된 공고만 조회합니다.
@@ -107,6 +120,14 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
                 item.businessCategoryName(), item.baseAmount(), item.estimatedAmount(),
                 item.announcedAt(), item.bidDeadlineAt(), calculateDDay(item.bidDeadlineAt()),
                 item.isNew(), item.noticeStatus(), item.projectId()
+        );
+    }
+
+    // 장기 캐시가 자정을 지나도 현재 날짜를 기준으로 목록의 D-day를 다시 계산합니다.
+    private BidNoticeListResult withCalculatedDDay(BidNoticeListResult result) {
+        return new BidNoticeListResult(
+                result.content().stream().map(this::withCalculatedDDay).toList(),
+                result.totalElements(), result.totalPages(), result.page(), result.size()
         );
     }
 

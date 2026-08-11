@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.collectionrun.application.service;
 
+import com.group3.vitamins.bidding.bidnotice.domain.event.BidNoticeListChangedEvent;
 import com.group3.vitamins.bidding.collectionrun.application.model.ClaimedCollectionRun;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectedBidNoticePage;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRequestCombination;
@@ -15,6 +16,7 @@ import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunS
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionSourceCollectorPort;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -34,6 +36,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
     private final CollectionRunTaskFailureService taskFailureService;
     private final List<CollectionSourceCollectorPort> collectors;
     private final CollectedBidNoticeStorePort noticeStorePort;
+    private final DomainEventPublisher eventPublisher;
     private final Clock clock;
 
     public CollectionRunJobHandlerService(
@@ -42,6 +45,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
             CollectionRunTaskFailureService taskFailureService,
             List<CollectionSourceCollectorPort> collectors,
             CollectedBidNoticeStorePort noticeStorePort,
+            DomainEventPublisher eventPublisher,
             Clock clock
     ) {
         this.runStatePort = runStatePort;
@@ -49,6 +53,7 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
         this.taskFailureService = taskFailureService;
         this.collectors = collectors;
         this.noticeStorePort = noticeStorePort;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -213,11 +218,14 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
         CollectionRunStatus finalStatus = summary.failedCount() > 0
                 ? CollectionRunStatus.PARTIAL_SUCCESS
                 : CollectionRunStatus.COMPLETED;
-        runStatePort.complete(
+        boolean completed = runStatePort.complete(
                 job.runId(), job.conditionId(), job.attemptId(), finalStatus,
                 summary.collectedCount(), summary.insertedCount(),
                 summary.updatedCount(), summary.skippedCount(), now
         );
+        if (completed && summary.collectedCount() > 0) {
+            eventPublisher.publish(new BidNoticeListChangedEvent(job.companyId()));
+        }
         return CollectionRunJobResult.success();
     }
 

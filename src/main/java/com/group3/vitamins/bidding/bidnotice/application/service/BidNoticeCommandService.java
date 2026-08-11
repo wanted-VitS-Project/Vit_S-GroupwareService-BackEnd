@@ -17,9 +17,11 @@ import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeData;
 import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeCompanyStatus;
 import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeStatusHistory;
 import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
+import com.group3.vitamins.bidding.bidnotice.domain.event.BidNoticeListChangedEvent;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -58,6 +60,7 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final BiddingAccessPolicy biddingAccessPolicy;
     private final ManualBidNoticeDedupKeyGenerator dedupKeyGenerator;
+    private final DomainEventPublisher eventPublisher;
 
     // 입력값을 검증하고 현재 회사 소유의 직접 등록 공고를 생성합니다.
     @Override
@@ -90,6 +93,7 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
                 saved.getNoticeId(),
                 now
         );
+        publishListChanged(companyId);
         return ManualBidNoticeResult.from(saved);
     }
 
@@ -107,7 +111,9 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
         assertNotDuplicated(companyId, dedupKey, notice.getNoticeId());
         notice.update(merged, dedupKey, LocalDateTime.now());
 
-        return ManualBidNoticeResult.from(commandPort.save(notice));
+        ManualBidNotice saved = commandPort.save(notice);
+        publishListChanged(companyId);
+        return ManualBidNoticeResult.from(saved);
     }
 
     @Override
@@ -126,6 +132,7 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
         CompanyBidNoticeState changed = current.dismiss(reason, now);
         companyStatePort.update(changed);
         saveStatusHistory(current, changed, reason, command.userId(), now);
+        publishListChanged(companyId);
         return toStatusResult(changed);
     }
 
@@ -144,7 +151,12 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
         CompanyBidNoticeState changed = current.restore(now);
         companyStatePort.update(changed);
         saveStatusHistory(current, changed, null, command.userId(), now);
+        publishListChanged(companyId);
         return toStatusResult(changed);
+    }
+
+    private void publishListChanged(Long companyId) {
+        eventPublisher.publish(new BidNoticeListChangedEvent(companyId));
     }
 
     private CompanyBidNoticeState findCompanyState(Long companyId, Long noticeId) {
