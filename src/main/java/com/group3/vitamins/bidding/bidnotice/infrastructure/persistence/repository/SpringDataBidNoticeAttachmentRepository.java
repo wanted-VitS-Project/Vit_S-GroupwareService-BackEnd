@@ -14,4 +14,8 @@ public interface SpringDataBidNoticeAttachmentRepository
     findAllByBidNoticeIdIn(
             Collection<Long> bidNoticeIds
     );
+
+    // 직접 등록 공고의 삭제 이력을 포함한 첨부 링크를 순번대로 조회합니다.
+    List<BidNoticeAttachmentJpaEntity>
+    findAllByBidNoticeIdOrderByAttachmentOrder(Long bidNoticeId);
 }

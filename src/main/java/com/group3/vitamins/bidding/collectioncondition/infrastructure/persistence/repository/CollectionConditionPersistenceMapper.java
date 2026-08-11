@@ -5,6 +5,7 @@ import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCo
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionConditionJpaEntity;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionSourceJpaEntity;
 import lombok.RequiredArgsConstructor;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -28,6 +29,13 @@ public class CollectionConditionPersistenceMapper {
                 parsedParams.noticeTypes(),
                 parsedParams.filters(),
                 entity.isEnabled(),
+                entity.isAutoCollectionEnabled(),
+                entity.getScheduleType() == null
+                        ? null : CollectionScheduleType.valueOf(entity.getScheduleType()),
+                entity.getScheduledTime(),
+                entity.getTimezone(),
+                entity.getNextRunAt(),
+                entity.getLastScheduledAt(),
                 entity.getLastSuccessAt(),
                 entity.getLastCollectedCount(),
                 entity.getCreatedBy(),
@@ -54,6 +62,13 @@ public class CollectionConditionPersistenceMapper {
                 condition.getConditionName(),
                 params,
                 condition.isActive(),
+                condition.isAutoCollectionEnabled(),
+                condition.getScheduleType() == null
+                        ? null : condition.getScheduleType().name(),
+                condition.getScheduledTime(),
+                condition.getTimezone(),
+                condition.getNextRunAt(),
+                condition.getLastScheduledAt(),
                 condition.getLastSuccessAt(),
                 condition.getLastCollectedCount(),
                 condition.getCreatedBy(),

@@ -17,6 +17,11 @@ import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -85,6 +90,38 @@ class CollectionConditionServiceTest {
         assertThat(saved.getCompanyId()).isEqualTo(COMPANY_ID);
         assertThat(saved.getSourceCode()).isEqualTo("NARA");
         assertThat(saved.getCreatedBy()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("UTC 환경의 주말에도 서울 시간 기준 다음 평일을 계산한다")
+    void calculatesNextWeekdayUsingSeoulTimezone() {
+        CollectionConditionService fixedService = serviceWithClock(
+                Instant.parse("2026-08-14T23:30:00Z")
+        );
+        prepareSuccessfulSave();
+
+        fixedService.create(scheduledCommand(
+                CollectionScheduleType.WEEKDAYS, LocalTime.of(9, 0)
+        ));
+
+        assertThat(captureSavedCondition().getNextRunAt())
+                .isEqualTo(LocalDateTime.of(2026, 8, 17, 9, 0));
+    }
+
+    @Test
+    @DisplayName("서울 예약 시각과 정확히 같으면 다음 회차를 계산한다")
+    void advancesWhenCurrentTimeEqualsScheduledTime() {
+        CollectionConditionService fixedService = serviceWithClock(
+                Instant.parse("2026-08-10T00:00:00Z")
+        );
+        prepareSuccessfulSave();
+
+        fixedService.create(scheduledCommand(
+                CollectionScheduleType.DAILY, LocalTime.of(9, 0)
+        ));
+
+        assertThat(captureSavedCondition().getNextRunAt())
+                .isEqualTo(LocalDateTime.of(2026, 8, 11, 9, 0));
     }
 
     @Test
@@ -166,6 +203,40 @@ class CollectionConditionServiceTest {
                 USER_ID,
                 "ADMIN"
         );
+    }
+
+    private CreateCollectionConditionCommand scheduledCommand(
+            CollectionScheduleType scheduleType,
+            LocalTime scheduledTime
+    ) {
+        return new CreateCollectionConditionCommand(
+                "NARA", "자동 수집 조건", List.of(BidNoticeType.SERVICE),
+                validFilter(), true, true, scheduleType, scheduledTime,
+                "Asia/Seoul", USER_ID, "ADMIN"
+        );
+    }
+
+    private CollectionConditionService serviceWithClock(Instant instant) {
+        return new CollectionConditionService(
+                conditionRepository, sourceRepository, companyIdProvider,
+                biddingAccessPolicy, Clock.fixed(instant, ZoneOffset.UTC)
+        );
+    }
+
+    private void prepareSuccessfulSave() {
+        when(sourceRepository.findNotDeletedByCode("NARA"))
+                .thenReturn(Optional.of(new CollectionSource(
+                        1L, "NARA", "나라장터", "OPEN_API", true
+                )));
+        when(conditionRepository.save(any(CollectionCondition.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private CollectionCondition captureSavedCondition() {
+        ArgumentCaptor<CollectionCondition> captor =
+                ArgumentCaptor.forClass(CollectionCondition.class);
+        verify(conditionRepository).save(captor.capture());
+        return captor.getValue();
     }
 
     @Test
