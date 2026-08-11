@@ -8,6 +8,10 @@
     <select id="findProjectId" resultType="java.lang.Long">
         SELECT s.project_id
           FROM step s
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
          WHERE s.step_id = #{stepId}
            AND s.deleted_at IS NULL
     </select>
@@ -17,6 +21,10 @@
         SELECT s.step_id AS stepId,
                s.name AS stepName
           FROM step s
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
          WHERE s.project_id = #{projectId}
            AND s.deleted_at IS NULL
          ORDER BY s.sort_order ASC
@@ -40,6 +48,10 @@
           JOIN step s
             ON s.step_id = i.step_id
            AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
          WHERE s.project_id = #{projectId}
            AND i.deleted_at IS NULL
          ORDER BY s.sort_order ASC, i.issue_id DESC
@@ -50,6 +62,13 @@
         SELECT b.block_id AS blockId,
                b.step_id AS stepId
           FROM block b
+          JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
          WHERE b.block_id = #{blockId}
            AND b.deleted_at IS NULL
     </select>
@@ -69,6 +88,13 @@
                i.due_date AS dueDate,
                i.finish_day AS completedAt
           FROM issue i
+          JOIN step s
+            ON s.step_id = i.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
          WHERE i.step_id = #{stepId}
            AND i.deleted_at IS NULL
            <if test="blockId != null">
@@ -97,6 +123,13 @@
                i.due_date AS dueDate,
                i.finish_day AS completedAt
           FROM issue i
+          JOIN step s
+            ON s.step_id = i.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
          WHERE i.issue_id = #{issueId}
            AND i.deleted_at IS NULL
     </select>
@@ -108,8 +141,19 @@
                e.name AS name,
                e.resigned_at AS resignedAt
           FROM issue_assign ia
+          JOIN issue i
+            ON i.issue_id = ia.issue_id
+           AND i.deleted_at IS NULL
+          JOIN step s
+            ON s.step_id = i.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
           JOIN employee e
             ON e.user_id = ia.user_id
+           AND e.company_id = p.company_id
          WHERE ia.issue_id IN
         <foreach item="issueId" collection="issueIds" open="(" separator="," close=")">
             #{issueId}
@@ -123,7 +167,8 @@
                e.name AS name,
                e.resigned_at AS resignedAt
           FROM employee e
-         WHERE e.user_id IN
+         WHERE e.company_id = #{companyId}
+           AND e.user_id IN
         <foreach item="userId" collection="userIds" open="(" separator="," close=")">
             #{userId}
         </foreach>
@@ -136,14 +181,50 @@
                b.title AS title,
                b.type AS type
           FROM issue_block ib
+          JOIN issue i
+            ON i.issue_id = ib.issue_id
+           AND i.deleted_at IS NULL
+          JOIN step issue_step
+            ON issue_step.step_id = i.step_id
+           AND issue_step.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = issue_step.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
           JOIN block b
             ON b.block_id = ib.block_id
            AND b.deleted_at IS NULL
+          JOIN step block_step
+            ON block_step.step_id = b.step_id
+           AND block_step.step_id = issue_step.step_id
+           AND block_step.project_id = p.project_id
+           AND block_step.deleted_at IS NULL
          WHERE ib.issue_id IN
         <foreach item="issueId" collection="issueIds" open="(" separator="," close=")">
             #{issueId}
         </foreach>
          ORDER BY ib.issue_id DESC, ib.issue_block_id ASC
+    </select>
+
+    <select id="findLinkableBlocks"
+            resultType="com.group3.vitamins.issue.infrastructure.adapter.IssueBlockLinkableRow">
+        SELECT b.block_id AS blockId,
+               b.step_id AS stepId,
+               b.title AS title,
+               b.type AS type
+          FROM block b
+          JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
+         WHERE b.block_id IN
+        <foreach item="blockId" collection="blockIds" open="(" separator="," close=")">
+            #{blockId}
+        </foreach>
+           AND b.deleted_at IS NULL
     </select>
 
     <select id="findMyCalendarIssues"
@@ -170,6 +251,7 @@
            AND s.deleted_at IS NULL
           JOIN project p
             ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
            AND p.deleted_at IS NULL
          WHERE i.deleted_at IS NULL
            AND i.status != 'DONE'

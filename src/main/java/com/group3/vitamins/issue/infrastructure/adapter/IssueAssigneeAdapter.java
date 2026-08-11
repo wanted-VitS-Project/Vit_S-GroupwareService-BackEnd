@@ -2,6 +2,7 @@ package com.group3.vitamins.issue.infrastructure.adapter;
 
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.issue.application.port.IssueAssigneePort;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
@@ -23,6 +24,7 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
     private final IssueQueryMapper issueQueryMapper;
     private final EmployeeLookupPort employeeLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public List<AssigneeView> validateAssignable(Long projectId, List<String> userIds) {
@@ -36,7 +38,8 @@ public class IssueAssigneeAdapter implements IssueAssigneePort {
             throw new NotFoundException(IssueErrorCode.ISS_ASSIGNEE_NOT_FOUND);
         }
 
-        Map<String, IssueAssigneeCandidateRow> candidates = issueQueryMapper.findAssigneeCandidates(userIds).stream()
+        Map<String, IssueAssigneeCandidateRow> candidates = issueQueryMapper
+                .findAssigneeCandidates(userIds, currentCompanyIdProvider.currentCompanyId()).stream()
                 .collect(Collectors.toMap(IssueAssigneeCandidateRow::userId, candidate -> candidate));
         if (candidates.size() != userIds.size()) {
             throw new NotFoundException(IssueErrorCode.ISS_ASSIGNEE_NOT_FOUND);

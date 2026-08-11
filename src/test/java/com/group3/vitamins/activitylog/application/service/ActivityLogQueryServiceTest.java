@@ -56,7 +56,7 @@ class ActivityLogQueryServiceTest {
                 "USER"
         );
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(7L);
-        when(activityLogQueryPort.findStepAccess(1L, "EMP001"))
+        when(activityLogQueryPort.findStepAccess(1L, "EMP001", 7L))
                 .thenReturn(Optional.of(new StepAccessResult(1L, 10L, "VIEWER")));
         when(activityLogQueryPort.findActivityLogs(1L, null, null, 21, 7L))
                 .thenReturn(List.of());

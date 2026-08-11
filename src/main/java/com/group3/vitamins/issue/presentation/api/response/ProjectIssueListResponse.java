@@ -87,6 +87,7 @@ public record ProjectIssueListResponse(
         }
     }
 
+    @Schema(name = "ProjectIssueListResponseIssueSummary")
     public record IssueSummaryResponse(
             @Schema(description = "이슈 ID", example = "101")
             Long issueId,
@@ -139,6 +140,7 @@ public record ProjectIssueListResponse(
         }
     }
 
+    @Schema(name = "ProjectIssueListResponseAssignee")
     public record AssigneeResponse(
             @Schema(description = "담당자 사번", example = "EMP001")
             String userId,
@@ -151,6 +153,7 @@ public record ProjectIssueListResponse(
     ) {
     }
 
+    @Schema(name = "ProjectIssueListResponseRelatedBlock")
     public record RelatedBlockResponse(
             @Schema(description = "Block ID", example = "15")
             Long blockId,

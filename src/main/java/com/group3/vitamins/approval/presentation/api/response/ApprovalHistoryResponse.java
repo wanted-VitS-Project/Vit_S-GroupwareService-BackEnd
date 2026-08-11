@@ -14,6 +14,7 @@ public record ApprovalHistoryResponse(
         List<Item> content
 ) {
 
+    @Schema(name = "ApprovalHistoryResponseItem")
     public record Item(
             @Schema(description = "회차 구분 번호", example = "55")
             Long revisionId,

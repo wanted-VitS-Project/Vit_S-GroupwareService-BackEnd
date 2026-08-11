@@ -52,7 +52,7 @@ public record VitamateAnalysisCallbackRequest(
     }
 
     // Python worker가 반환한 분석 근거 요청 DTO
-    @Schema(description = "Python 분석 근거 청크")
+    @Schema(name = "VitamateAnalysisCallbackRequestCitation", description = "Python 분석 근거 청크")
     public record Citation(
             @Schema(description = "근거 청크 ID", example = "9001")
             @NotNull

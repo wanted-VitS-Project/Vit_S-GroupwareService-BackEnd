@@ -26,7 +26,9 @@ public record UserProfileRow(
         LocalDate hiredAt,
         LocalDateTime lastLoginAt,
         /** 소속 회사(테넌트) 번호 — 로그인 시 세션(TenantContext)에 실린다. 화면에 노출하지 않는다 */
-        Long companyId
+        Long companyId,
+        /** 프로필 사진 S3 키. {@code null} 이면 사진 없음 (`auth.md` §3 · `employee.md` §10) */
+        String profileImageKey
 ) {
 
     /** 명세의 {@code departmentPath} — {@code "기술본부 / 개발팀"}. 최상위면 부서명 하나만 */
@@ -42,6 +44,14 @@ public record UserProfileRow(
     /** 명세의 {@code passwordStatus} */
     public String passwordStatus() {
         return mustChangePassword ? "RESET_REQUIRED" : "NORMAL";
+    }
+
+    /**
+     * 명세의 {@code profileImageUrl} — 사진이 있으면 서빙 엔드포인트 경로, 없으면 {@code null}.
+     * presigned URL 이 아니라 안 만료되는 우리 경로다(서빙 API 가 매 요청 새로 서명 — `employee.md` §10).
+     */
+    public String profileImageUrl() {
+        return profileImageKey == null ? null : "/api/v1/employees/" + userId + "/profile-image";
     }
 
     /**

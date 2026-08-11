@@ -3,16 +3,14 @@ package com.group3.vitamins.issue.infrastructure.adapter;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.issue.application.port.IssueBlockPort;
+import com.group3.vitamins.issue.application.port.IssueQueryPort;
 import com.group3.vitamins.issue.domain.exception.IssueErrorCode;
-import com.group3.vitamins.project.block.domain.model.Block;
-import com.group3.vitamins.project.block.domain.repository.BlockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Component
@@ -20,7 +18,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class IssueBlockAdapter implements IssueBlockPort {
 
-    private final BlockRepository blockRepository;
+    private final IssueQueryPort issueQueryPort;
 
     @Override
     public List<BlockView> validateLinkable(Long stepId, List<Long> blockIds) {
@@ -28,20 +26,20 @@ public class IssueBlockAdapter implements IssueBlockPort {
             return List.of();
         }
 
-        List<Block> blocks = blockRepository.findAllByIds(blockIds);
+        List<IssueQueryPort.LinkableBlockResult> blocks = issueQueryPort.findLinkableBlocks(blockIds);
         if (blocks.size() != blockIds.size()) {
             throw new NotFoundException(IssueErrorCode.ISS_BLOCK_NOT_FOUND);
         }
 
-        Map<Long, Block> byId = blocks.stream()
-                .collect(Collectors.toMap(Block::getBlockId, Function.identity()));
+        Map<Long, IssueQueryPort.LinkableBlockResult> byId = blocks.stream()
+                .collect(Collectors.toMap(IssueQueryPort.LinkableBlockResult::blockId, block -> block));
         return blockIds.stream()
                 .map(byId::get)
                 .map(block -> {
-                    if (!stepId.equals(block.getStepId())) {
+                    if (!stepId.equals(block.stepId())) {
                         throw new ValidationException(IssueErrorCode.ISS_BLOCK_STEP_MISMATCH);
                     }
-                    return new BlockView(block.getBlockId(), block.getTitle(), block.getType().name());
+                    return new BlockView(block.blockId(), block.title(), block.type());
                 })
                 .toList();
     }

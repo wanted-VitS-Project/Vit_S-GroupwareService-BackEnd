@@ -20,6 +20,8 @@ public interface IssueQueryPort {
 
     List<RelatedBlockResult> findRelatedBlocks(Collection<Long> issueIds);
 
+    List<LinkableBlockResult> findLinkableBlocks(Collection<Long> blockIds);
+
     List<CalendarIssueResult> findMyCalendarIssues(String userId);
 
     Optional<Long> findProjectId(Long stepId);
@@ -40,6 +42,9 @@ public interface IssueQueryPort {
     }
 
     record RelatedBlockResult(Long issueId, Long blockId, String title, String type) {
+    }
+
+    record LinkableBlockResult(Long blockId, Long stepId, String title, String type) {
     }
 
     record CalendarIssueResult(

@@ -8,12 +8,17 @@
     <!--
         "정산현황에 등장하는" = 활성 정산 블록이 하나 이상 있는 프로젝트만 대상으로 한다.
         정산 블록이 하나도 없는 프로젝트의 발주처는 정산현황 화면에 나올 일이 없으므로 필터에도 안 담는다.
+
+        ⚠️ 회사 범위(companyId) — 2026-08-11 추가. project에 company_id가 생기기 전(2026-08-09
+        구현 당시)에는 회사 스코프를 걸 수 없어 전체 프로젝트 대상이었다 — develop에 project.company_id
+        마이그레이션이 들어온 뒤 반영한다(재무 관리 요약 조회와 동일한 이유).
     -->
     <select id="findDistinctClientNames" resultType="java.lang.String">
         SELECT DISTINCT p.client_name
         FROM project p
         WHERE p.deleted_at IS NULL
         AND p.client_name IS NOT NULL
+        AND p.company_id = #{companyId}
         AND EXISTS (
         SELECT 1
         FROM settlement_block sb
@@ -90,6 +95,7 @@
         GROUP BY nb.project_id
         ) nxt ON nxt.project_id = p.project_id
         WHERE p.deleted_at IS NULL
+        AND p.company_id = #{companyId}
         <if test="client != null">AND p.client_name = #{client}</if>
         <!-- endedOn은 생성 시 입력하는 예정 종료일이라 진행 중 프로젝트도 값이 있을 수 있다 — "종결(완료)"
              판정은 project.status(COMPLETED · CLOSED)로 한다 (2026-08-09 정정, ended_on 기준에서 변경). -->
@@ -99,10 +105,14 @@
         ORDER BY p.project_id ASC
     </select>
 
-    <!-- 정산 현황 블록 조회의 404 판정용 — project_member 여부와 무관한 단순 존재 확인(FINANCE 페이지 권한이라 프로젝트 참여자가 아니어도 조회할 수 있어야 한다). -->
+    <!--
+        정산 현황 블록 조회의 404 판정용 — project_member 여부와 무관한 단순 존재 확인(FINANCE 페이지
+        권한이라 프로젝트 참여자가 아니어도 조회할 수 있어야 한다). companyId도 같이 확인해서 다른
+        회사의 projectId를 넣으면 "존재하지 않음"과 동일하게(404) 처리한다(2026-08-11 추가).
+    -->
     <select id="existsActiveProject" resultType="boolean">
         SELECT EXISTS (
-        SELECT 1 FROM project WHERE project_id = #{projectId} AND deleted_at IS NULL
+        SELECT 1 FROM project WHERE project_id = #{projectId} AND deleted_at IS NULL AND company_id = #{companyId}
         )
     </select>
 
@@ -143,6 +153,7 @@
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id
         JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id
         LEFT JOIN tax_invoice ti ON ti.tax_id = (
         SELECT ti2.tax_id FROM tax_invoice ti2
         WHERE ti2.settle_block_id = sb.settle_id AND ti2.deleted_at IS NULL
@@ -160,6 +171,7 @@
         WHERE st.project_id = #{projectId}
         AND sb.deleted_at IS NULL
         AND b.deleted_at IS NULL
+        AND p.company_id = #{companyId}
         ORDER BY (sb.round_no IS NULL) ASC, sb.round_no ASC, sb.settle_id ASC
     </select>
 

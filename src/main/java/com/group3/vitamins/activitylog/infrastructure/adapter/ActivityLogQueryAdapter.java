@@ -17,14 +17,14 @@ public class ActivityLogQueryAdapter implements ActivityLogQueryPort {
     private final ActivityLogQueryMapper activityLogQueryMapper;
 
     @Override
-    public Optional<StepAccessResult> findStepAccess(Long stepId, String userId) {
-        return activityLogQueryMapper.findStepAccess(stepId, userId)
+    public Optional<StepAccessResult> findStepAccess(Long stepId, String userId, Long companyId) {
+        return activityLogQueryMapper.findStepAccess(stepId, userId, companyId)
                 .map(row -> new StepAccessResult(row.stepId(), row.projectId(), row.permission()));
     }
 
     @Override
-    public Optional<BlockStepResult> findBlockStep(Long blockId) {
-        return activityLogQueryMapper.findBlockStep(blockId)
+    public Optional<BlockStepResult> findBlockStep(Long blockId, Long companyId) {
+        return activityLogQueryMapper.findBlockStep(blockId, companyId)
                 .map(row -> new BlockStepResult(row.blockId(), row.stepId()));
     }
 
