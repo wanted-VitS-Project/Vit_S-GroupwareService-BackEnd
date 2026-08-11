@@ -1,6 +1,6 @@
 # 🔐 AUTH API
 
-**최종 업데이트**: 2026-08-04 (약관 동의 API·게이트 추가 — 최초 로그인 전용·ADMIN 스킵·`termsStatus`) · 2026-08-03 (에러코드 3종 확정) · **담당**: 김동현 · Domain `인사` · SUB-Domain `AUTH`
+**최종 업데이트**: 2026-08-11 (프로필 사진 API 추가 — `me` 업로드/삭제·`me` 응답 `profileImageUrl`, 본인만) · 2026-08-04 (약관 동의 API·게이트 추가 — 최초 로그인 전용·ADMIN 스킵·`termsStatus`) · 2026-08-03 (에러코드 3종 확정) · **담당**: 김동현 · Domain `인사` · SUB-Domain `AUTH`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
@@ -29,6 +29,11 @@
 | 내 정보 조회 | GET | `/api/v1/auth/me` | 전체 사용자 |
 | 비밀번호 변경 | PATCH | `/api/v1/auth/password` | 전체 사용자 (본인만) |
 | 약관 동의 | POST | `/api/v1/auth/terms-agreements` | 전체 사용자 (본인만, 최초 로그인 전용) |
+| 프로필 사진 등록/변경 | PUT | `/api/v1/auth/me/profile-image` | 전체 사용자 (본인만) |
+| 프로필 사진 삭제 | DELETE | `/api/v1/auth/me/profile-image` | 전체 사용자 (본인만) |
+
+> 🖼️ **프로필 사진은 본인만 바꾼다** (2026-08-11 설계). 관리자가 남의 사진을 바꾸는 경로는 없다.
+> 업로드/삭제는 여기(마이페이지), **아바타를 뿌리는 서빙 API 는 employee 도메인**(`GET /api/v1/employees/{userId}/profile-image`, `employee.md` §10)에 있다 — 좌상단·프로젝트 멤버 동그라미·결재선 아바타가 전부 그 URL 하나를 공유한다.
 
 ---
 
@@ -140,6 +145,7 @@ Request Body 없음 · `data` 는 `null`
 | `data.jobPositionName` | String | 직급명 (`null` 허용) |
 | `data.hiredAt` | String | 입사일 `yyyy-MM-dd` (`null` 허용) |
 | `data.lastLoginAt` | String | 마지막 로그인 `yyyy-MM-dd HH:mm:ss` (`null` 허용) |
+| `data.profileImageUrl` | String | 프로필 사진 URL (`null` 허용). 값은 `/api/v1/employees/{userId}/profile-image`, 사진이 없으면 `null` → 프론트가 이니셜/기본 아바타를 그린다 |
 
 | 코드 | code | 설명 |
 |---|---|---|
@@ -225,6 +231,86 @@ Request Body 없음 · `data` 는 `null`
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 
 > **약관 게이트** — `termsStatus=REQUIRED` 상태에서 이 API·`/auth/logout`·`/auth/me` 를 제외한 모든 요청은 `403 AUTH_TERMS_AGREEMENT_REQUIRED` 로 막힌다. **비밀번호 변경(`/auth/password`)보다 먼저**다. 상세는 §6-7.
+
+---
+
+## 5-1. 프로필 사진 등록/변경
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `PUT /api/v1/auth/me/profile-image` |
+| 인증 필요 | Y · 전체 사용자 (본인만) |
+| Content-Type | `multipart/form-data` |
+| 요구사항 | 마이페이지 프로필 사진 — 요구사항 번호 미부여 (2026-08-11 설계) |
+
+⛔ **본인 사진만 바꾼다.** 남의 사진을 바꾸는 경로는 없다(경로 자체가 `me`).
+⛔ **덮어쓰기다(멱등).** 이미 사진이 있으면 교체된다. 신규·교체 모두 `200` 이며, 별도 생성 코드(`201`)를 쓰지 않는다.
+
+**Request Body (multipart)**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `file` | File | Y | 이미지 파일 1장 |
+
+> **검증** — 확장자 화이트리스트(`jpg`·`jpeg`·`png`·`gif`·`webp`) + 매직바이트 + `ImageIO` 디코딩까지 확인한다(이미지 도메인의 업로드 검증과 동일 원칙, `image.md` §S3 저장 정책 / 생성 API 콜아웃 참고 — 확장자만 바꾼 위장 파일 차단). **webp 는 JDK 내장 디코더가 없어 매직바이트까지만** 검사한다(이미지 도메인과 동일한 알려진 제한).
+> **용량 상한 5MB.** 초과 시 `400 AUTH_PROFILE_IMAGE_SIZE_EXCEEDED`.
+> **저장** — S3 키 `profile-images/{userId}/{UUID}.{ext}`, DB `employee.profile_image_key` 에는 **키만** 저장한다(이미지 도메인과 동일 — 응답·서빙 시점에 처리). 아바타라 정사각 썸네일(예: 512px)로 축소 저장하는 것을 권장한다(원본 보존 불필요).
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.profileImageUrl` | String | 저장된 프로필 사진 URL — `/api/v1/employees/{userId}/profile-image` |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "프로필 사진 등록 성공",
+  "data": { "profileImageUrl": "/api/v1/employees/EMP001/profile-image" }
+}
+```
+
+**Status Code**
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 등록/변경 성공 |
+| 400 | `EMP_PROFILE_IMAGE_REQUIRED` | 파일이 없음 |
+| 400 | `EMP_PROFILE_IMAGE_TYPE_INVALID` | 지원하지 않는 형식 또는 위장 파일 |
+| 400 | `EMP_PROFILE_IMAGE_SIZE_EXCEEDED` | 5MB 초과 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+
+> 📌 **에러 접두어가 `EMP_` 인 이유** — 경로는 `/auth/me` 지만 프로필 사진은 **사원 속성**이라 구현·에러코드를 employee 도메인이 소유한다(서빙 API 도 employee). 프론트는 코드 문자열로 분기하므로 접두어가 `EMP_` 여도 무방하다.
+
+> ⚠️ **교체 시 이전 S3 객체는 지우지 않는다**(2026-08-11, 이미지 도메인 소프트 정책과 통일). 아바타는 복구 기능이 없어 남길 이유가 약하지만, 하드 삭제 정책이 팀에서 정해지기 전까지는 도메인 간 정책을 통일해 둔다 — 쌓인 고아 객체 정리는 백로그(`.ai/local/STATE.md`).
+
+---
+
+## 5-2. 프로필 사진 삭제
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `DELETE /api/v1/auth/me/profile-image` |
+| 인증 필요 | Y · 전체 사용자 (본인만) |
+| 요구사항 | 마이페이지 프로필 사진 — 요구사항 번호 미부여 (2026-08-11 설계) |
+
+`employee.profile_image_key` 를 `null` 로 만든다. 프론트는 이후 `profileImageUrl: null` 을 받아 이니셜/기본 아바타를 그린다.
+
+⛔ **사진이 없어도 `200` 이다(멱등).** "지울 게 없음"을 에러로 취급하지 않는다.
+> ⚠️ **S3 객체는 지우지 않는다** — §5-1 교체와 동일 원칙.
+
+**Request Body 없음** · `data` 는 `null`.
+
+**Status Code**
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 삭제 성공 (사진이 없었어도 성공) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 
 ---
 

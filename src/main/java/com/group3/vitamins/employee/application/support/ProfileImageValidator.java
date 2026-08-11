@@ -1,0 +1,120 @@
+package com.group3.vitamins.employee.application.support;
+
+import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
+
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.Set;
+
+/**
+ * 프로필 사진 업로드 파일 검증. 이미지 블록 도메인의 {@code ImageEligibilityPolicy} 와 같은 원칙을
+ * 프로필 사진 계약(단건·5MB)에 맞춰 옮긴 것이다 — 확장자 화이트리스트 + 매직 바이트 + 실제 디코딩.
+ *
+ * <p>도메인 경계상 이미지 도메인 정책을 직접 재사용하지 않고 별도로 둔다(사원 → 이미지 의존을 만들지
+ * 않기 위함). 두 곳을 공용 유틸로 합치는 것은 백로그(`.ai/local/STATE.md`).
+ */
+@Component
+@Slf4j
+public class ProfileImageValidator {
+
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
+    private static final long MAX_SIZE_BYTES = 5L * 1024 * 1024;
+
+    /**
+     * 업로드 파일을 검증한다. 업로드를 시작하기 <b>전에</b> 전부 확인한다.
+     *
+     * @return 검증을 통과한 확장자(소문자, 점 없음)
+     */
+    public String validate(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_REQUIRED);
+        }
+        if (file.getSize() > MAX_SIZE_BYTES) {
+            log.warn("프로필 사진 용량 초과 - size={}", file.getSize());
+            throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_SIZE_EXCEEDED);
+        }
+
+        String extension = extractExtension(file.getOriginalFilename());
+        if (extension.isEmpty() || !ALLOWED_EXTENSIONS.contains(extension)) {
+            log.warn("지원하지 않는 프로필 사진 형식 - originalFilename={}", file.getOriginalFilename());
+            throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_TYPE_INVALID);
+        }
+        assertActualImageContent(file, extension);
+        return extension;
+    }
+
+    /**
+     * 확장자(이름)가 아니라 실제 바이트가 그 포맷의 이미지인지 매직 바이트로 확인하고(위장 업로드 방지),
+     * webp 를 제외한 포맷은 {@code ImageIO} 로 실제 디코딩까지 한 번 더 확인한다(헤더만 맞고 본문이 깨진 파일 차단).
+     * webp 는 JDK 내장 디코더가 없어 매직 바이트까지만 검사한다(알려진 제한 — 이미지 도메인과 동일).
+     */
+    private void assertActualImageContent(MultipartFile file, String extension) {
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        if (!matchesSignature(content, extension)) {
+            log.warn("프로필 사진 내용이 확장자와 불일치(위장 의심) - originalFilename={}, extension={}",
+                    file.getOriginalFilename(), extension);
+            throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_TYPE_INVALID);
+        }
+        if (!"webp".equals(extension) && !isDecodableImage(content)) {
+            log.warn("프로필 사진 헤더는 맞지만 디코딩 실패(손상/위장 의심) - originalFilename={}, extension={}",
+                    file.getOriginalFilename(), extension);
+            throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_TYPE_INVALID);
+        }
+    }
+
+    private boolean isDecodableImage(byte[] content) {
+        try {
+            return ImageIO.read(new ByteArrayInputStream(content)) != null;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private boolean matchesSignature(byte[] content, String extension) {
+        return switch (extension) {
+            case "jpg", "jpeg" -> startsWith(content, 0xFF, 0xD8, 0xFF);
+            case "png" -> startsWith(content, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+            case "gif" -> startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
+                    || startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
+            case "webp" -> startsWith(content, 0x52, 0x49, 0x46, 0x46)
+                    && content.length >= 12
+                    && startsWith(Arrays.copyOfRange(content, 8, 12), 0x57, 0x45, 0x42, 0x50);
+            default -> false;
+        };
+    }
+
+    private boolean startsWith(byte[] content, int... signature) {
+        if (content.length < signature.length) {
+            return false;
+        }
+        for (int i = 0; i < signature.length; i++) {
+            if ((content[i] & 0xFF) != signature[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String extractExtension(String originalFilename) {
+        if (originalFilename == null) {
+            return "";
+        }
+        int dotIndex = originalFilename.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == originalFilename.length() - 1) {
+            return "";
+        }
+        return originalFilename.substring(dotIndex + 1).toLowerCase();
+    }
+}

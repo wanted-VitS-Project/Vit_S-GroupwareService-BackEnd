@@ -54,7 +54,21 @@ public enum EmployeeErrorCode implements ErrorCode {
 
     // /bulk(skipErrors=false) 는 예외 — 행 오류가 하나라도 있으면 파일을 연 뒤라도 등록을 전량 거부하는 400 이다.
     EMP_HAS_ERRORS("EMP_HAS_ERRORS",
-            "오류 행이 있어 등록할 수 없습니다. 오류 제외 등록을 사용하세요.");
+            "오류 행이 있어 등록할 수 없습니다. 오류 제외 등록을 사용하세요."),
+
+    // ── 프로필 사진 (auth.md §5-1·§5-2 · employee.md §10) ──
+    // 업로드/삭제는 auth 마이페이지 경로지만 데이터가 사원 속성이라 사원 도메인이 소유한다 → EMP_ 접두어로 통일.
+    EMP_PROFILE_IMAGE_REQUIRED("EMP_PROFILE_IMAGE_REQUIRED",
+            "업로드할 이미지 파일이 없습니다."),
+
+    EMP_PROFILE_IMAGE_TYPE_INVALID("EMP_PROFILE_IMAGE_TYPE_INVALID",
+            "지원하지 않는 이미지 형식입니다. (jpg·jpeg·png·gif·webp)"),
+
+    EMP_PROFILE_IMAGE_SIZE_EXCEEDED("EMP_PROFILE_IMAGE_SIZE_EXCEEDED",
+            "이미지 크기가 5MB를 초과했습니다."),
+
+    EMP_PROFILE_IMAGE_NOT_FOUND("EMP_PROFILE_IMAGE_NOT_FOUND",
+            "프로필 사진이 없습니다.");
 
     private final String code;
     private final String message;

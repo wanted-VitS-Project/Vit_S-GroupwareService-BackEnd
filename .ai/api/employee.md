@@ -1,6 +1,6 @@
 # 👤 Employee API
 
-**최종 업데이트**: 2026-08-04 · **담당**: 김동현 · Domain `인사` · SUB-Domain `Employee`
+**최종 업데이트**: 2026-08-11 (프로필 사진 아바타 서빙 API 추가 §10 — `GET /employees/{userId}/profile-image`, 로그인 사용자 전체) · 2026-08-04 · **담당**: 김동현 · Domain `인사` · SUB-Domain `Employee`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
@@ -18,6 +18,9 @@
 | 엑셀 템플릿 내려받기 | GET | `/api/v1/employees/bulk-template` | ADMIN |
 | 엑셀 일괄 등록 **검증** | POST | `/api/v1/employees/bulk/validate` | ADMIN |
 | 엑셀 일괄 등록 | POST | `/api/v1/employees/bulk` | ADMIN |
+| 프로필 사진 조회(아바타 서빙) | GET | `/api/v1/employees/{userId}/profile-image` | **로그인 사용자 누구나** |
+
+> ⚠️ **이 목록은 대부분 ADMIN 전용이지만 프로필 사진 조회만 로그인 사용자 전체다** (§9 이름 검색과 같은 예외). 좌상단·프로젝트 멤버·결재선 아바타가 남의 사진을 그려야 하기 때문. `SecurityConfig` 에서 이 경로의 권한을 분리한다. 업로드/삭제(본인만)는 auth 도메인(`auth.md` §5-1·§5-2)에 있다.
 
 ⭐ **상태 필드는 원본 2개다** (2026-08-03 재설계)
 
@@ -357,3 +360,48 @@
 | 200 | – | 조회 성공 (결과 없으면 빈 배열) |
 | 400 | `EMP_INVALID_PARAMETER` | `name` 누락 등 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+
+---
+
+## 10. 프로필 사진 조회 (아바타 서빙)
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/employees/{userId}/profile-image` |
+| 인증 필요 | Y · **로그인 사용자 누구나** (ADMIN 전용 아님) |
+| 요구사항 | 프로필 사진 아바타 — 요구사항 번호 미부여 (2026-08-11 설계) |
+| 요청 출처 | 좌상단 프로필·프로젝트 멤버 동그라미·결재선 아바타 등 사진이 보이는 모든 화면 |
+
+> ⭐ **왜 employee 도메인인가** — 사진은 사원 속성(`employee.profile_image_key`)이고, **남의 아바타**를 그려야 하는 화면이 많다. 업로드/삭제는 본인만이라 auth 마이페이지(`auth.md` §5-1·§5-2)에 두지만, **뿌리는 URL 은 사원 단위**라 여기에 둔다. 프론트는 목록/카드 응답의 `profileImageUrl`(값 = 이 경로)을 `<img src>` 에 그대로 박으면 된다.
+
+**Path Parameter** — `userId` String Y (사번)
+
+**Request Body**: 없음
+
+**Response**: JSON 이 아니라 presigned S3 URL 로 **`302` redirect** 한다(트래픽이 S3 로 직행 → 서버 대역폭·부하 최소화). presigned 유효기간이 짧아도 매 요청 새로 발급하므로 이 API 는 항상 살아있는 안정 URL 이다.
+
+```text
+HTTP/1.1 302 Found
+Location: <presigned S3 URL>
+Cache-Control: no-store, private
+```
+
+> ⚠️ **`profileImageUrl` 은 이 경로이지 presigned URL 이 아니다.** 이미지 블록(`image.md`)은 presigned URL 을 JSON 에 직접 담지만, 아바타는 목록마다 수십 개가 반복 노출되고 거의 안 바뀌므로 그 방식이 맞지 않는다. 대신 **안 만료되는 우리 경로**를 내려주고, 만료·재서명은 이 서빙 API 가 내부에서 책임진다.
+> **캐시 전략** — presigned 는 1시간이면 만료되므로 **redirect 응답을 캐시하면 안 된다(`no-store`)** — 매 조회가 이 엔드포인트를 거쳐 항상 새 presigned 를 받는다. 사진을 교체하면 다음 조회부터 새 키로 서명돼 즉시 반영된다.
+
+**Status Code**
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 이미지 응답 (또는 302 redirect) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 404 | `EMP_PROFILE_IMAGE_NOT_FOUND` | 해당 사원의 프로필 사진이 없음 |
+| 404 | `EMP_NOT_FOUND` | 사원 없음 |
+
+> 📌 **프론트는 `profileImageUrl` 이 `null` 인 사원에는 이 API 를 부르지 않는다**(이니셜/기본 아바타를 그린다). 따라서 정상 흐름에서 `EMP_PROFILE_IMAGE_NOT_FOUND` 는 사진 삭제와 조회 사이의 경합 정도에서만 난다.
+
+---
+
+## 📌 스키마 요청 (마이그레이션 담당자에게 전달)
+
+- 🔴 **`employee.profile_image_key` 컬럼 추가** (`VARCHAR`, `NULL` 허용) — 프로필 사진의 S3 키를 저장한다. 값이 없으면 사진 없음. Flyway 마이그레이션 필요.
