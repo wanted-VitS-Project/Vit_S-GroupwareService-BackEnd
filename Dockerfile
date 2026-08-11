@@ -15,6 +15,9 @@ WORKDIR /app
 # 컨테이너/JVM 타임존 KST 고정 (기본 UTC → created_at·로그 시각 KST 통일)
 ENV TZ=Asia/Seoul
 COPY --from=build /app/build/libs/*.jar app.jar
+# 비루트 사용자로 실행 — 컨테이너 침해 시 권한 범위 축소
+RUN useradd -r -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
 EXPOSE 8080
 # -Duser.timezone: OS tzdata 유무와 무관하게 JVM 기본 타임존을 KST 로 못박음
 ENTRYPOINT ["java", "-Duser.timezone=Asia/Seoul", "-jar", "/app/app.jar"]

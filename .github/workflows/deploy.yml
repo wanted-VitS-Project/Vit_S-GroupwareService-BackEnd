@@ -34,19 +34,19 @@ jobs:
       contents: read
     steps:
       - name: 코드 체크아웃
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: AWS 자격증명 (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}   # arn:aws:iam::<acct>:role/team05-github-actions
           aws-region: ${{ env.AWS_REGION }}
 
       - name: ECR 로그인
         id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
 
       - name: 이미지 빌드 & ECR 푸시
         env:
@@ -137,6 +137,8 @@ jobs:
 
           # EC2 명령: S3에서 .env·compose 받기 → ECR 로그인 → compose pull/up → 기동확인
           # (ECR 레지스트리 URL 은 비밀 아님. 실제 시크릿은 S3 의 .env 에만)
+          # ⚠️ 기동확인은 "HTTP 응답 존재"로 판정한다(actuator 미도입 — 인증 없이 200 주는 엔드포인트가 없음).
+          #    actuator 도입 후 /actuator/health 200 엄밀검증 + Prometheus 연동으로 강화 예정(백로그).
           cat > params.json <<EOF
           {"commands":[
             "set -e",
