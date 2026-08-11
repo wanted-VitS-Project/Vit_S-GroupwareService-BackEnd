@@ -1,6 +1,7 @@
 package com.group3.vitamins.issue.application.service;
 
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
@@ -117,11 +118,12 @@ class IssueCommandServiceTest {
                 ));
         when(issueBlockPort.validateLinkable(10L, List.of(15L)))
                 .thenReturn(List.of(new IssueBlockPort.BlockView(15L, "제안서 작성 체크리스트", "CHECKLIST")));
-        when(issueRepository.save(issue)).thenReturn(issue);
+        when(issueRepository.updateFieldsIfVersionMatches(issue, 1)).thenReturn(1);
         stubLatestIssue();
 
         IssueResult result = service.updateIssue(new UpdateIssueCommand(
                 101L,
+                1,
                 PatchField.present(" 제안서 최종 초안 작성 "),
                 PatchField.present("수정 내용"),
                 PatchField.present(LocalDate.of(2026, 8, 7)),
@@ -141,7 +143,7 @@ class IssueCommandServiceTest {
         verify(issueRepository).saveAssignees(101L, List.of("EMP003", "EMP005"));
         verify(issueRepository).deleteBlockLinks(101L);
         verify(issueRepository).saveBlockLinks(101L, List.of(15L));
-        verify(issueRepository).save(issue);
+        verify(issueRepository).updateFieldsIfVersionMatches(issue, 1);
         verify(domainEventPublisher, never()).publish(argThat(event ->
                 event instanceof NotificationRequestedEvent notification
                         && notification.recipientUserId().equals("EMP003")));
@@ -161,11 +163,12 @@ class IssueCommandServiceTest {
         when(issueRepository.findActiveById(101L)).thenReturn(Optional.of(issue));
         when(issueStepAccessPort.requireEditable(10L, "EMP002", "MEMBER"))
                 .thenReturn(new IssueStepAccessPort.StepAccessView(10L, 20L));
-        when(issueRepository.save(issue)).thenReturn(issue);
+        when(issueRepository.updateFieldsIfVersionMatches(issue, 1)).thenReturn(1);
         stubLatestIssue();
 
         service.updateIssue(new UpdateIssueCommand(
                 101L,
+                1,
                 PatchField.absent(),
                 PatchField.present(null),
                 PatchField.present(null),
@@ -183,10 +186,73 @@ class IssueCommandServiceTest {
     }
 
     @Test
+    @DisplayName("일반 필드의 버전이 오래됐으면 관계와 알림을 변경하지 않고 409를 던진다")
+    void updateIssue_versionConflict() {
+        Issue issue = issue(101L, IssueStatus.IN_PROGRESS, null);
+        when(issueRepository.findActiveById(101L)).thenReturn(Optional.of(issue));
+        when(issueStepAccessPort.requireEditable(10L, "EMP002", "MEMBER"))
+                .thenReturn(new IssueStepAccessPort.StepAccessView(10L, 20L));
+        when(issueAssigneePort.validateAssignable(20L, List.of("EMP003"))).thenReturn(List.of());
+        when(issueQueryPort.findAssignees(List.of(101L))).thenReturn(List.of());
+        when(issueRepository.updateFieldsIfVersionMatches(issue, 1)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.updateIssue(new UpdateIssueCommand(
+                101L,
+                1,
+                PatchField.present("A의 제목"),
+                PatchField.absent(),
+                PatchField.absent(),
+                PatchField.absent(),
+                PatchField.present(List.of("EMP003")),
+                PatchField.absent(),
+                "EMP002",
+                "MEMBER"
+        )))
+                .isInstanceOfSatisfying(ConflictException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISSUE_VERSION_CONFLICT));
+
+        verify(issueRepository).updateFieldsIfVersionMatches(issue, 1);
+        verify(issueRepository, never()).deleteAssignees(101L);
+        verify(issueRepository, never()).saveAssignees(101L, List.of("EMP003"));
+        verifyNoInteractions(domainEventPublisher);
+    }
+
+    @Test
+    @DisplayName("관계 목록만 수정할 때도 버전이 오래됐으면 관계를 변경하지 않고 409를 던진다")
+    void updateIssue_relationOnlyVersionConflict() {
+        Issue issue = issue(101L, IssueStatus.IN_PROGRESS, null);
+        when(issueRepository.findActiveById(101L)).thenReturn(Optional.of(issue));
+        when(issueStepAccessPort.requireEditable(10L, "EMP002", "MEMBER"))
+                .thenReturn(new IssueStepAccessPort.StepAccessView(10L, 20L));
+        when(issueBlockPort.validateLinkable(10L, List.of(15L))).thenReturn(List.of());
+        when(issueRepository.touchIfVersionMatches(101L, 1)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.updateIssue(new UpdateIssueCommand(
+                101L,
+                1,
+                PatchField.absent(),
+                PatchField.absent(),
+                PatchField.absent(),
+                PatchField.absent(),
+                PatchField.absent(),
+                PatchField.present(List.of(15L)),
+                "EMP002",
+                "MEMBER"
+        )))
+                .isInstanceOfSatisfying(ConflictException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISSUE_VERSION_CONFLICT));
+
+        verify(issueRepository).touchIfVersionMatches(101L, 1);
+        verify(issueRepository, never()).deleteBlockLinks(101L);
+        verify(issueRepository, never()).saveBlockLinks(101L, List.of(15L));
+    }
+
+    @Test
     @DisplayName("수정할 필드가 없으면 ISS_INVALID_REQUEST를 던진다")
     void updateIssue_noFields() {
         assertThatThrownBy(() -> service.updateIssue(new UpdateIssueCommand(
                 101L,
+                1,
                 PatchField.absent(),
                 PatchField.absent(),
                 PatchField.absent(),
@@ -212,6 +278,7 @@ class IssueCommandServiceTest {
 
         assertThatThrownBy(() -> service.updateIssue(new UpdateIssueCommand(
                 101L,
+                1,
                 PatchField.absent(),
                 PatchField.absent(),
                 PatchField.absent(),
@@ -234,7 +301,7 @@ class IssueCommandServiceTest {
         Issue issue = issue(101L, IssueStatus.TO_DO, null);
         when(issueRepository.findActiveById(101L))
                 .thenReturn(Optional.of(issue), Optional.of(issue));
-        when(issueRepository.save(issue)).thenReturn(issue);
+        when(issueRepository.changeStatusIfVersionMatches(issue, 1)).thenReturn(1);
 
         IssueStatusResult result = service.changeIssueStatus(
                 new ChangeIssueStatusCommand(101L, "DONE", "EMP002", "MEMBER"));
@@ -243,7 +310,7 @@ class IssueCommandServiceTest {
         assertThat(result.status()).isEqualTo("DONE");
         assertThat(result.completedAt()).isNotNull();
         verify(issueStepAccessPort).requireEditable(10L, "EMP002", "MEMBER");
-        verify(issueRepository).save(issue);
+        verify(issueRepository).changeStatusIfVersionMatches(issue, 1);
     }
 
     @Test
@@ -256,14 +323,29 @@ class IssueCommandServiceTest {
         );
         when(issueRepository.findActiveById(101L))
                 .thenReturn(Optional.of(issue), Optional.of(issue));
-        when(issueRepository.save(issue)).thenReturn(issue);
+        when(issueRepository.changeStatusIfVersionMatches(issue, 1)).thenReturn(1);
 
         IssueStatusResult result = service.changeIssueStatus(
                 new ChangeIssueStatusCommand(101L, "TODO", "EMP002", "MEMBER"));
 
         assertThat(result.status()).isEqualTo("TODO");
         assertThat(result.completedAt()).isNull();
-        verify(issueRepository).save(issue);
+        verify(issueRepository).changeStatusIfVersionMatches(issue, 1);
+    }
+
+    @Test
+    @DisplayName("상태 변경의 버전이 오래됐으면 409를 던진다")
+    void changeIssueStatus_versionConflict() {
+        Issue issue = issue(101L, IssueStatus.TO_DO, null);
+        when(issueRepository.findActiveById(101L)).thenReturn(Optional.of(issue));
+        when(issueRepository.changeStatusIfVersionMatches(issue, 1)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.changeIssueStatus(
+                new ChangeIssueStatusCommand(101L, "DONE", 1, "EMP002", "MEMBER")))
+                .isInstanceOfSatisfying(ConflictException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISSUE_VERSION_CONFLICT));
+
+        verify(issueRepository).changeStatusIfVersionMatches(issue, 1);
     }
 
     @Test
@@ -278,7 +360,8 @@ class IssueCommandServiceTest {
 
         assertThat(result.status()).isEqualTo("DONE");
         assertThat(result.completedAt()).isEqualTo(completedAt);
-        verify(issueRepository, never()).save(issue);
+        verify(issueRepository, never()).changeStatusIfVersionMatches(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
@@ -293,7 +376,8 @@ class IssueCommandServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISS_STATUS_REQUIRED));
 
         verify(issueStepAccessPort).requireEditable(10L, "EMP002", "MEMBER");
-        verify(issueRepository, never()).save(issue);
+        verify(issueRepository, never()).changeStatusIfVersionMatches(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
@@ -308,7 +392,8 @@ class IssueCommandServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISS_INVALID_STATUS));
 
         verify(issueStepAccessPort).requireEditable(10L, "EMP002", "MEMBER");
-        verify(issueRepository, never()).save(issue);
+        verify(issueRepository, never()).changeStatusIfVersionMatches(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
@@ -322,7 +407,8 @@ class IssueCommandServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(IssueErrorCode.ISS_NOT_FOUND));
 
         verifyNoInteractions(issueStepAccessPort);
-        verify(issueRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(issueRepository, never()).changeStatusIfVersionMatches(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
@@ -339,7 +425,8 @@ class IssueCommandServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(
                                 IssueErrorCode.ISS_EDIT_PERMISSION_REQUIRED));
 
-        verify(issueRepository, never()).save(issue);
+        verify(issueRepository, never()).changeStatusIfVersionMatches(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
@@ -386,6 +473,7 @@ class IssueCommandServiceTest {
                 LocalDateTime.of(2026, 8, 5, 0, 0),
                 status,
                 IssuePriority.HIGH,
+                1,
                 "EMP001",
                 LocalDateTime.of(2026, 8, 1, 10, 0),
                 LocalDateTime.of(2026, 8, 1, 10, 0),
@@ -397,6 +485,7 @@ class IssueCommandServiceTest {
     private void stubLatestIssue() {
         when(issueQueryPort.findIssue(101L)).thenReturn(Optional.of(new IssueResult(
                 101L,
+                2,
                 10L,
                 "제안서 최종 초안 작성",
                 "수정 내용",

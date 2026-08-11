@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record IssueStatusResult(
         Long issueId,
+        int version,
         String status,
         LocalDateTime completedAt,
         LocalDateTime updatedAt

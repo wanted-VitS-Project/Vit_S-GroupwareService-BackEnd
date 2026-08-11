@@ -64,7 +64,8 @@ public class FileController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "FILE_INVALID_REQUEST — 이름이 비었거나 255자 초과"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "FILE_EDIT_PERMISSION_REQUIRED"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "FILE_NOT_FOUND — 문서 없음 또는 이미 휴지통")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "FILE_NOT_FOUND — 문서 없음 또는 이미 휴지통"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "FILE_VERSION_CONFLICT — 다른 사용자가 먼저 수정함(재조회/덮어쓰기)")
     })
     @PatchMapping("/{fileId}")
     public ApiResponse<FileRenameResponse> rename(

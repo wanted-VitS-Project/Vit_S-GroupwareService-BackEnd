@@ -9,6 +9,7 @@ public record IssueCalendarResult(
 
     public record CalendarIssueResult(
             Long issueId,
+            int version,
             String title,
             String status,
             String priority,

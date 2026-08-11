@@ -16,6 +16,7 @@ public record ProjectSummary(
         List<BusinessCategorySummary> businessCategories,
         List<MemberBrief> members,
         int myIssueInProgressCount,
-        int myApprovalInProgressCount
+        int myApprovalInProgressCount,
+        int version
 ) {
 }

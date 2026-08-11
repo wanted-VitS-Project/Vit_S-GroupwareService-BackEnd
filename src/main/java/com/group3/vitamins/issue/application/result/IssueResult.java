@@ -5,6 +5,7 @@ import java.util.List;
 
 public record IssueResult(
         Long issueId,
+        int version,
         Long stepId,
         String title,
         String content,

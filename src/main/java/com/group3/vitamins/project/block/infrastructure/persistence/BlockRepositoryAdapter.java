@@ -6,6 +6,7 @@ import com.group3.vitamins.project.block.domain.repository.BlockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -73,5 +74,26 @@ public class BlockRepositoryAdapter implements BlockRepository {
     public Optional<Block> findByTypeAndTypeId(BlockType type, Long typeId) {
         return springDataRepository.findByTypeAndTypeIdAndDeletedAtIsNull(type, typeId)
                 .map(BlockMapper::toDomain);
+    }
+
+    @Override
+    public int updateIfVersionMatches(Long blockId, String title, String owner,
+                                      LocalDateTime updatedAt, int expectedVersion) {
+        return springDataRepository.updateIfVersionMatches(
+                blockId, title, owner, updatedAt, expectedVersion);
+    }
+
+    @Override
+    public int relocateIfVersionMatches(Long blockId, int rowIndex, int sortOrder, int colSpan,
+                                        LocalDateTime updatedAt, int expectedVersion) {
+        return springDataRepository.relocateIfVersionMatches(
+                blockId, rowIndex, sortOrder, colSpan, updatedAt, expectedVersion);
+    }
+
+    @Override
+    public int moveToStepIfVersionMatches(Long blockId, Long stepId, int rowIndex, int sortOrder,
+                                          LocalDateTime updatedAt, int expectedVersion) {
+        return springDataRepository.moveToStepIfVersionMatches(
+                blockId, stepId, rowIndex, sortOrder, updatedAt, expectedVersion);
     }
 }

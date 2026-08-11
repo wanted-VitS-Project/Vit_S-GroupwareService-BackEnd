@@ -6,6 +6,7 @@ public record MemberSummary(
         String name,
         String department,
         String permission,
-        boolean resigned
+        boolean resigned,
+        boolean deleted
 ) {
 }

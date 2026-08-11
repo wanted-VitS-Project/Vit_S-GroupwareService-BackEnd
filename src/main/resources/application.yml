@@ -173,3 +173,14 @@ vitamate:
 settlement:
   account-number:
     encryption-key: ${SETTLEMENT_ACCOUNT_ENC_KEY}
+
+
+#나라장터
+bidding:
+  nara:
+    base-url: ${NARA_API_BASE_URL:}
+    service-key: ${NARA_API_SERVICE_KEY:}
+    page-size: ${NARA_API_PAGE_SIZE:100}
+    connect-timeout: ${NARA_API_CONNECT_TIMEOUT:5s}
+    read-timeout: ${NARA_API_READ_TIMEOUT:15s}
+    max-in-memory-size: ${NARA_API_MAX_IN_MEMORY_SIZE:2097152}

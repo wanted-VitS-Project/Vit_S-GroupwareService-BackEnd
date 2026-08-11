@@ -112,18 +112,22 @@ public class ProjectStepController {
                     + "위치를 바꾸는 유일한 경로이며, 스텝 수정 API 는 위치를 건드리지 않는다. "
                     + "stageId 가 0 이거나 생략되면 미소속으로 이동한다. "
                     + "보드 전체의 최종 배치를 보내야 한다 — 일부만 보내면 나머지 스텝과 순서가 겹친다. "
-                    + "선행 스텝의 완료 여부는 검사하지 않는다(STP-002).")
+                    + "선행 스텝의 완료 여부는 검사하지 않는다(STP-002). "
+                    + "항목마다 조회 시점의 version 을 함께 보내며, 하나라도 어긋나면 "
+                    + "요청 전체가 409 로 롤백된다(부분 적용 없음).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "재정렬 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "STEP_ORDER_INVALID — 목록이 비었거나 스텝·순서 값이 중복"),
+                    description = "STEP_ORDER_INVALID / STEP_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "PROJECT_NOT_FOUND / STEP_NOT_FOUND / STAGE_NOT_FOUND")
+                    description = "PROJECT_NOT_FOUND / STEP_NOT_FOUND / STAGE_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "STEP_VERSION_CONFLICT — 목록 중 하나라도 먼저 수정됨")
     })
     @PatchMapping("/order")
     public ResponseEntity<ApiResponse<StepOrderResponse>> reorderSteps(

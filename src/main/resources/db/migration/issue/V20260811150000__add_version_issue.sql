@@ -1,0 +1,2 @@
+ALTER TABLE issue
+    ADD COLUMN version INT NOT NULL DEFAULT 1 COMMENT '낙관적 락 버전';

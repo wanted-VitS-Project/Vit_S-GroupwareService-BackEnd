@@ -15,11 +15,14 @@ public record ProjectStatusUpdateResponse(
         String status,
 
         @Schema(description = "변경 일시", example = "2026-08-01T11:30:00")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "저장 후의 새 version", example = "8")
+        int version
 ) {
 
     public static ProjectStatusUpdateResponse from(ProjectStatusResult result) {
         return new ProjectStatusUpdateResponse(result.projectId(), result.status(),
-                result.updatedAt());
+                result.updatedAt(), result.version());
     }
 }

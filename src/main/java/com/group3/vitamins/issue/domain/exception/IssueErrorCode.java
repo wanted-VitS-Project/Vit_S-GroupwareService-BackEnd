@@ -5,6 +5,7 @@ import com.group3.vitamins.global.domain.common.error.ErrorCode;
 public enum IssueErrorCode implements ErrorCode {
 
     ISS_INVALID_REQUEST("ISS_INVALID_REQUEST", "요청 값이 올바르지 않습니다."),
+    ISSUE_VERSION_CONFLICT("ISSUE_VERSION_CONFLICT", "다른 사용자가 먼저 수정했습니다."),
     ISS_STATUS_REQUIRED("ISS_STATUS_REQUIRED", "상태가 전달되지 않았습니다."),
     ISS_INVALID_STATUS("ISS_INVALID_STATUS", "지원하지 않는 상태입니다."),
     ISS_ASSIGNEE_NOT_PROJECT_MEMBER("ISS_ASSIGNEE_NOT_PROJECT_MEMBER", "담당자가 해당 Step에 접근할 수 없습니다."),

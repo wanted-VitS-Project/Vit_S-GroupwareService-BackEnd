@@ -8,6 +8,8 @@ import com.group3.vitamins.bidding.collectionrun.application.command.StartCollec
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunOutbox;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunConditionPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
+import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRequestCombinationGenerator;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
 import com.group3.vitamins.bidding.collectionrun.application.result.CollectionRunResult;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRun;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,6 +50,8 @@ class CollectionRunServiceTest {
     private CollectionRunConditionPort conditionPort;
     private CollectionRunRepository runRepository;
     private CollectionRunOutboxStorePort outboxStorePort;
+    private CollectionRunTaskPort taskPort;
+    private CollectionRequestCombinationGenerator combinationGenerator;
     private CurrentCompanyIdProvider companyIdProvider;
     private Clock clock;
     private CollectionRunService service;
@@ -56,6 +61,8 @@ class CollectionRunServiceTest {
         conditionPort = mock(CollectionRunConditionPort.class);
         runRepository = mock(CollectionRunRepository.class);
         outboxStorePort = mock(CollectionRunOutboxStorePort.class);
+        taskPort = mock(CollectionRunTaskPort.class);
+        combinationGenerator = new CollectionRequestCombinationGenerator();
         companyIdProvider = mock(CurrentCompanyIdProvider.class);
         clock = Clock.fixed(
                 Instant.parse("2026-08-10T06:00:00Z"),
@@ -69,6 +76,8 @@ class CollectionRunServiceTest {
                 conditionPort,
                 runRepository,
                 outboxStorePort,
+                taskPort,
+                combinationGenerator,
                 companyIdProvider,
                 clock
         );
@@ -105,6 +114,7 @@ class CollectionRunServiceTest {
                 ArgumentCaptor.forClass(CollectionRun.class);
 
         verify(runRepository).save(captor.capture());
+        verify(taskPort).createTasks(eq(RUN_ID), any());
 
         CollectionRun saved = captor.getValue();
         assertThat(saved.conditionId()).isEqualTo(CONDITION_ID);
@@ -152,6 +162,7 @@ class CollectionRunServiceTest {
         verify(runRepository, never())
                 .existsActiveByConditionId(any());
         verify(runRepository, never()).save(any());
+        verify(taskPort, never()).createTasks(any(), any());
         verify(outboxStorePort, never()).savePending(any());
     }
 
@@ -283,6 +294,7 @@ class CollectionRunServiceTest {
         when(condition.getConditionName()).thenReturn("테스트 수집 조건");
         when(condition.getNoticeTypes()).thenReturn(List.of(BidNoticeType.SERVICE));
         when(condition.getFilters()).thenReturn(testFilter());
+        when(condition.getLastSuccessAt()).thenReturn(null);
         when(condition.isActive()).thenReturn(true);
 
         return condition;
@@ -350,7 +362,9 @@ class CollectionRunServiceTest {
                 "NARA",
                 "테스트 수집 조건",
                 List.of(BidNoticeType.SERVICE),
-                testFilter()
+                testFilter(),
+                LocalDateTime.of(2026, 8, 9, 6, 0),
+                LocalDateTime.of(2026, 8, 10, 6, 0)
         );
     }
 

@@ -46,10 +46,11 @@ public class BlockQueryService implements BlockQueryUseCase {
                 .countByBlockIds(blocks.stream().map(Block::getBlockId).toList());
 
 
-        Map<String, String> names = employeeLookupPort.findNamesByUserIds(blocks.stream()
-                .map(Block::getOwner)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet()));
+        Map<String, EmployeeLookupPort.EmployeeRef> names = employeeLookupPort.findRefsByUserIds(
+                blocks.stream()
+                        .map(Block::getOwner)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()));
 
 
         Map<Long, BlockDetail> details = loadDetails(blocks);
@@ -120,7 +121,7 @@ public class BlockQueryService implements BlockQueryUseCase {
 
     private BlockSummary toSummary(Block block,
                                    Map<Long, BlockIssueStatLookupPort.BlockIssueStat> issueStats,
-                                   Map<String, String> names,
+                                   Map<String, EmployeeLookupPort.EmployeeRef> names,
                                    Map<Long, BlockDetail> details) {
         BlockIssueStatLookupPort.BlockIssueStat stat = issueStats.getOrDefault(
                 block.getBlockId(), BlockIssueStatLookupPort.BlockIssueStat.empty());
@@ -130,14 +131,24 @@ public class BlockQueryService implements BlockQueryUseCase {
                 toOwner(block.getOwner(), names),
                 block.getRowIndex(), block.getSortOrder(), block.getColSpan(),
                 details.get(block.getBlockId()),
-                stat.totalCount(), stat.doneCount());
+                stat.totalCount(), stat.doneCount(),
+                block.getVersion());
     }
 
-    /** 담당자를 안 지정했으면 null, 이름을 못 찾으면 사번만 담는다 (퇴사자로 조회가 비어도 응답이 깨지지 않게). */
-    private BlockOwner toOwner(String userId, Map<String, String> names) {
+    /**
+     * 담당자를 안 지정했으면 null, 사번을 못 찾으면 사번만 담는다 (응답이 깨지지 않게).
+     *
+     * <p>삭제된 사원은 이름을 그대로 담고 {@code deleted = true} 로 알린다 — 지우면 화면에서
+     * "담당자 없음" 과 구분이 안 된다 (DELETE.md D-6). 이름이 {@code null} 인 건
+     * <b>사번이 employee 에 아예 없다</b>는 뜻이고, 그건 정합성 문제다.
+     */
+    private BlockOwner toOwner(String userId, Map<String, EmployeeLookupPort.EmployeeRef> names) {
         if (userId == null) {
             return null;
         }
-        return new BlockOwner(userId, names.get(userId));
+        EmployeeLookupPort.EmployeeRef ref = names.get(userId);
+        return ref == null
+                ? new BlockOwner(userId, null, false)
+                : new BlockOwner(userId, ref.name(), ref.deleted());
     }
 }

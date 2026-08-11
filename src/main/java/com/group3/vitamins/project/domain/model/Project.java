@@ -6,7 +6,10 @@ import java.time.LocalDateTime;
 
 public class Project {
 
+    private static final int INITIAL_VERSION = 1;
+
     private final Long projectId;
+    private final Long companyId;
     private Long bidNoticeId;
     private String name;
     private String description;
@@ -18,17 +21,21 @@ public class Project {
     private CloseReasonCode closeReasonCode;
     private String closeReasonNote;
     private LocalDateTime closedAt;
+    private final int version;
     private final String createdBy;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
 
-    private Project(Long projectId, Long bidNoticeId, String name, String description, ProjectStatus status,
-                    String clientName, BigDecimal contractAmount, LocalDate startedOn, LocalDate endedOn,
+    private Project(Long projectId, Long companyId, Long bidNoticeId, String name, String description,
+                    ProjectStatus status, String clientName, BigDecimal contractAmount,
+                    LocalDate startedOn, LocalDate endedOn,
                     CloseReasonCode closeReasonCode, String closeReasonNote, LocalDateTime closedAt,
+                    int version,
                     String createdBy, LocalDateTime createdAt, LocalDateTime updatedAt,
                     LocalDateTime deletedAt) {
         this.projectId = projectId;
+        this.companyId = companyId;
         this.bidNoticeId = bidNoticeId;
         this.name = name;
         this.description = description;
@@ -40,6 +47,7 @@ public class Project {
         this.closeReasonCode = closeReasonCode;
         this.closeReasonNote = closeReasonNote;
         this.closedAt = closedAt;
+        this.version = version;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -49,23 +57,23 @@ public class Project {
     /** 프로젝트를 생성한다. 상태는 항상 NOT_STARTED. bidNoticeId 는 null 이면 공고 없이 생성된다 (PRJ-001·002). */
     public static Project create(Long bidNoticeId, String name, String description, String clientName,
                                  LocalDate startedOn, LocalDate endedOn, BigDecimal contractAmount,
-                                 String createdBy, LocalDateTime now) {
-        return new Project(null, bidNoticeId, name, description, ProjectStatus.NOT_STARTED,
+                                 String createdBy, LocalDateTime now, Long companyId) {
+        return new Project(null, companyId, bidNoticeId, name, description, ProjectStatus.NOT_STARTED,
                 clientName, contractAmount, startedOn, endedOn, null, null, null,
-                createdBy, now, now, null);
+                INITIAL_VERSION, createdBy, now, now, null);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
-    public static Project restore(Long projectId, Long bidNoticeId, String name, String description,
-                                  ProjectStatus status, String clientName, BigDecimal contractAmount,
-                                  LocalDate startedOn, LocalDate endedOn,
+    public static Project restore(Long projectId, Long companyId, Long bidNoticeId, String name,
+                                  String description, ProjectStatus status, String clientName,
+                                  BigDecimal contractAmount, LocalDate startedOn, LocalDate endedOn,
                                   CloseReasonCode closeReasonCode, String closeReasonNote,
-                                  LocalDateTime closedAt, String createdBy,
+                                  LocalDateTime closedAt, int version, String createdBy,
                                   LocalDateTime createdAt, LocalDateTime updatedAt,
                                   LocalDateTime deletedAt) {
-        return new Project(projectId, bidNoticeId, name, description, status, clientName, contractAmount,
-                startedOn, endedOn, closeReasonCode, closeReasonNote, closedAt, createdBy,
-                createdAt, updatedAt, deletedAt);
+        return new Project(projectId, companyId, bidNoticeId, name, description, status, clientName,
+                contractAmount, startedOn, endedOn, closeReasonCode, closeReasonNote, closedAt,
+                version, createdBy, createdAt, updatedAt, deletedAt);
     }
 
     /**
@@ -131,6 +139,7 @@ public class Project {
     }
 
     public Long getProjectId() { return projectId; }
+    public Long getCompanyId() { return companyId; }
     public Long getBidNoticeId() { return bidNoticeId; }
     public String getName() { return name; }
     public String getDescription() { return description; }
@@ -142,6 +151,16 @@ public class Project {
     public CloseReasonCode getCloseReasonCode() { return closeReasonCode; }
     public String getCloseReasonNote() { return closeReasonNote; }
     public LocalDateTime getClosedAt() { return closedAt; }
+
+    /**
+     * 조회 시점의 낙관적 락 버전이다 (`.ai/docs/global/CONCURRENCY.md`).
+     *
+     * <p>⚠️ 도메인은 이 값을 <b>절대 올리지 않는다.</b> {@code +1} 은 {@code WHERE version = ?} 과
+     * 같은 UPDATE 문장 안에서 DB 가 한다. 여기서 올리면 덮어쓰기 기대값이 DB+1 이 되어
+     * <b>모든 덮어쓰기가 409</b> 가 된다.
+     */
+    public int getVersion() { return version; }
+
     public String getCreatedBy() { return createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

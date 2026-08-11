@@ -14,11 +14,11 @@ public class ProjectMemberQueryAdapter implements ProjectMemberQueryPort {
     private final ProjectMemberQueryMapper projectMemberQueryMapper;
 
     @Override
-    public List<MemberSummary> findMembers(Long projectId) {
-        return projectMemberQueryMapper.findMembers(projectId).stream()
+    public List<MemberSummary> findMembers(Long projectId, Long companyId) {
+        return projectMemberQueryMapper.findMembers(projectId, companyId).stream()
                 .map(row -> new MemberSummary(
                         row.memberId(), row.userId(), row.name(),
-                        row.department(), row.permission(), row.resigned()))
+                        row.department(), row.permission(), row.resigned(), row.deleted()))
                 .toList();
     }
 }

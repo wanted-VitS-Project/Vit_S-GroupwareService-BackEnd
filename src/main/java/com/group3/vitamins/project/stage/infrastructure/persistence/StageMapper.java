@@ -2,6 +2,11 @@ package com.group3.vitamins.project.stage.infrastructure.persistence;
 
 import com.group3.vitamins.project.stage.domain.model.Stage;
 
+/**
+ * ⚠️ {@link StageJpaEntity} 는 {@code @AllArgsConstructor} 라 <b>필드 선언 순서 = 아래 인자 순서</b>다.
+ * 엔티티에 필드를 끼워 넣고 여기를 안 고치면 타입이 같은 인접 필드끼리 값이 밀린다
+ * ({@code sortOrder} ↔ {@code version} 은 둘 다 {@code int} 라 <b>컴파일이 통과한다</b>).
+ */
 public class StageMapper {
 
     private StageMapper() {
@@ -14,6 +19,7 @@ public class StageMapper {
                 entity.getProjectId(),
                 entity.getName(),
                 entity.getSortOrder(),
+                entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getDeletedAt()
         );
@@ -26,6 +32,7 @@ public class StageMapper {
                 domain.getProjectId(),
                 domain.getName(),
                 domain.getSortOrder(),
+                domain.getVersion(),
                 domain.getCreatedAt(),
                 domain.getDeletedAt()
         );

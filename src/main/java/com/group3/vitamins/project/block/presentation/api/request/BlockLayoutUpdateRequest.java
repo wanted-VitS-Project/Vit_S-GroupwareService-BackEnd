@@ -38,11 +38,17 @@ public record BlockLayoutUpdateRequest(
 
             @Schema(description = "열 병합 수 (1~3). 총 열 수는 3 고정", example = "2",
                     requiredMode = Schema.RequiredMode.REQUIRED)
-            Integer colSpan
+            Integer colSpan,
+
+            @Schema(description = "이 블록을 조회했을 때의 version. "
+                    + "항목마다 따로 검사하며 하나라도 어긋나면 요청 전체가 409 다", example = "7",
+                    requiredMode = Schema.RequiredMode.REQUIRED)
+            Integer version
     ) {
 
         UpdateBlockLayoutCommand.BlockLayout toLayout() {
-            return new UpdateBlockLayoutCommand.BlockLayout(blockId, rowIndex, sortOrder, colSpan);
+            return new UpdateBlockLayoutCommand.BlockLayout(
+                    blockId, rowIndex, sortOrder, colSpan, version);
         }
     }
 }

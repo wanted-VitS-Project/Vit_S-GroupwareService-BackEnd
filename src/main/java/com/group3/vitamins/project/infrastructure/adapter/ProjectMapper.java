@@ -12,6 +12,7 @@ public class ProjectMapper {
     public static Project toDomain(ProjectJpaEntity entity) {
         return Project.restore(
                 entity.getProjectId(),
+                entity.getCompanyId(),
                 entity.getBidNoticeId(),
                 entity.getName(),
                 entity.getDescription(),
@@ -23,6 +24,7 @@ public class ProjectMapper {
                 entity.getCloseReasonCode(),
                 entity.getCloseReasonNote(),
                 entity.getClosedAt(),
+                entity.getVersion(),
                 entity.getCreatedBy(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
@@ -34,6 +36,7 @@ public class ProjectMapper {
     public static ProjectJpaEntity toEntity(Project domain) {
         return new ProjectJpaEntity(
                 domain.getProjectId(),
+                domain.getCompanyId(),
                 domain.getBidNoticeId(),
                 domain.getName(),
                 domain.getDescription(),
@@ -45,6 +48,7 @@ public class ProjectMapper {
                 domain.getCloseReasonCode(),
                 domain.getCloseReasonNote(),
                 domain.getClosedAt(),
+                domain.getVersion(),
                 domain.getCreatedBy(),
                 domain.getCreatedAt(),
                 domain.getUpdatedAt(),

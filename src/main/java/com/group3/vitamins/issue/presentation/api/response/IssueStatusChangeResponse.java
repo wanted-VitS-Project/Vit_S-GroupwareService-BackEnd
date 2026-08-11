@@ -11,6 +11,9 @@ public record IssueStatusChangeResponse(
         @Schema(description = "이슈 ID", example = "101")
         Long issueId,
 
+        @Schema(description = "동시 수정 검사용 변경 후 버전", example = "2")
+        int version,
+
         @Schema(description = "TODO · IN_PROGRESS · DONE", example = "DONE")
         String status,
 
@@ -24,6 +27,7 @@ public record IssueStatusChangeResponse(
     public static IssueStatusChangeResponse from(IssueStatusResult result) {
         return new IssueStatusChangeResponse(
                 result.issueId(),
+                result.version(),
                 result.status(),
                 result.completedAt(),
                 result.updatedAt());

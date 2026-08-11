@@ -172,7 +172,7 @@ class StepDeleteServiceTest {
     private void givenStep() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         given(stepRepository.findById(STEP_ID)).willReturn(Optional.of(
-                Step.restore(STEP_ID, PROJECT_ID, 7L, "제안서 작성", 1, null, null, null,
+                Step.restore(STEP_ID, PROJECT_ID, 7L, "제안서 작성", 1, 1, null, null, null,
                         StepStatus.IN_PROGRESS, null, null, createdAt, createdAt, null)));
         Mockito.lenient().when(stepRepository.save(any(Step.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -182,7 +182,7 @@ class StepDeleteServiceTest {
     private void givenMoveTarget(Long stepId, Long projectId) {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         given(stepRepository.findById(stepId)).willReturn(Optional.of(
-                Step.restore(stepId, projectId, 7L, "옮길 곳", 2, null, null, null,
+                Step.restore(stepId, projectId, 7L, "옮길 곳", 2, 1, null, null, null,
                         StepStatus.NOT_STARTED, null, null, createdAt, createdAt, null)));
     }
 

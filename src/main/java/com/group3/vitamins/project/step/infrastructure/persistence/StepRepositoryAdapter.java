@@ -6,6 +6,8 @@ import com.group3.vitamins.project.step.domain.repository.StepRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +62,29 @@ public class StepRepositoryAdapter implements StepRepository {
                 .stream()
                 .map(StepMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public int updateIfVersionMatches(Long stepId, String name, LocalDate startedOn,
+                                      LocalDate endedOn, String ownerUserId,
+                                      LocalDateTime updatedAt, int expectedVersion) {
+        return springDataRepository.updateIfVersionMatches(
+                stepId, name, startedOn, endedOn, ownerUserId, updatedAt, expectedVersion);
+    }
+
+    @Override
+    public int changeStatusIfVersionMatches(Long stepId, StepStatus status,
+                                            LocalDateTime completedAt, String completedBy,
+                                            LocalDateTime updatedAt, int expectedVersion) {
+        return springDataRepository.changeStatusIfVersionMatches(
+                stepId, status, completedAt, completedBy, updatedAt, expectedVersion);
+    }
+
+    @Override
+    public int moveIfVersionMatches(Long stepId, Long stageId, int sortOrder,
+                                    LocalDateTime updatedAt, int expectedVersion) {
+        return springDataRepository.moveIfVersionMatches(
+                stepId, stageId, sortOrder, updatedAt, expectedVersion);
     }
 
     /** stageId 가 null 이면 전체, 0 이면 미소속만, 그 외는 해당 스테이지만 남긴다. */
