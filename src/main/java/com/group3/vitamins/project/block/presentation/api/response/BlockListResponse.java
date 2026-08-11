@@ -55,18 +55,22 @@ public record BlockListResponse(
             int linkedIssueTotal,
 
             @Schema(description = "연결된 이슈 중 완료 수", example = "0")
-            int linkedIssueDone
+            int linkedIssueDone,
+
+            @Schema(description = "낙관적 락 버전. 수정·배치·이동 요청에 그대로 실어 보낸다", example = "7")
+            int version
     ) {
 
         static BlockItemResponse from(BlockSummary summary) {
             BlockOwnerResponse owner = summary.owner() == null
                     ? null
-                    : new BlockOwnerResponse(summary.owner().userId(), summary.owner().name());
+                    : new BlockOwnerResponse(summary.owner().userId(), summary.owner().name(), summary.owner().deleted());
 
             return new BlockItemResponse(
                     summary.blockId(), summary.type(), summary.title(), owner,
                     summary.rowIndex(), summary.sortOrder(), summary.colSpan(),
-                    summary.detail(), summary.linkedIssueTotal(), summary.linkedIssueDone());
+                    summary.detail(), summary.linkedIssueTotal(), summary.linkedIssueDone(),
+                    summary.version());
         }
     }
 }

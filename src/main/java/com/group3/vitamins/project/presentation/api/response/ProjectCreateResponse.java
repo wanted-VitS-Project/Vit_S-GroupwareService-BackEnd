@@ -48,7 +48,7 @@ public record ProjectCreateResponse(
     /** 생성 결과를 응답으로 옮긴다. */
     public static ProjectCreateResponse from(ProjectResult result) {
         List<BusinessCategorySummaryResponse> categories = result.businessCategories().stream()
-                .map(c -> new BusinessCategorySummaryResponse(c.categoryId(), c.name(), c.code()))
+                .map(c -> new BusinessCategorySummaryResponse(c.categoryId(), c.name(), c.code(), c.deleted()))
                 .toList();
 
         return new ProjectCreateResponse(

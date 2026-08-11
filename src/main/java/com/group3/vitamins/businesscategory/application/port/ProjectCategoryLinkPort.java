@@ -15,8 +15,8 @@ public interface ProjectCategoryLinkPort {
      * 프로젝트에 연결된 카테고리 ID 전체를 조회한다.
      * 목록 항목마다 따로 세면 N+1 이 되므로 한 번에 받아 대조한다.
      */
-    Set<Long> findLinkedCategoryIds();
+    Set<Long> findLinkedCategoryIds(Long companyId);
 
-    /** 이 카테고리에 연결된 프로젝트 수. DELETE 409 메시지에 건수를 담을 때 쓴다. */
-    long countLinkedProjects(Long categoryId);
+    /** 같은 회사에서 이 카테고리에 연결된 프로젝트 수. DELETE 409 메시지에 건수를 담을 때 쓴다. */
+    long countLinkedProjects(Long categoryId, Long companyId);
 }

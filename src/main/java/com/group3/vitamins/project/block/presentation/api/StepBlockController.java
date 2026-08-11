@@ -104,18 +104,23 @@ public class StepBlockController {
     @Operation(summary = "블록 배치 변경",
             description = "드래그 결과를 한 트랜잭션에서 일괄 반영한다. 총 열 수는 3 고정이고, "
                     + "같은 행에 순서가 겹쳐도 허용한다(드래그 중간 상태) — UNIQUE 를 걸지 않은 이유다. "
-                    + "다른 스텝의 블록이 섞이면 400 이다. 제목·담당자는 PATCH /api/v1/blocks/{blockId} 담당이다.")
+                    + "다른 스텝의 블록이 섞이면 400 이다. 제목·담당자는 PATCH /api/v1/blocks/{blockId} 담당이다. "
+                    + "항목마다 조회 시점의 version 을 함께 보내며, 하나라도 어긋나면 "
+                    + "요청 전체가 409 로 롤백된다(부분 적용 없음).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "배치 변경 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "BLOCK_COL_SPAN_INVALID / BLOCK_LAYOUT_INVALID"),
+                    description = "BLOCK_COL_SPAN_INVALID / BLOCK_LAYOUT_INVALID / "
+                            + "BLOCK_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "STEP_NOT_FOUND / BLOCK_NOT_FOUND")
+                    description = "STEP_NOT_FOUND / BLOCK_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "BLOCK_VERSION_CONFLICT — 목록 중 하나라도 먼저 수정됨")
     })
     @PatchMapping("/layout")
     public ResponseEntity<ApiResponse<BlockLayoutListResponse>> updateLayout(

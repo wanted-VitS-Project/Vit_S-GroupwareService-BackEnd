@@ -35,7 +35,8 @@ public class StageQueryService implements StageQueryUseCase {
                         stage.getStageId(),
                         stage.getName(),
                         stage.getSortOrder(),
-                        stepCounts.getOrDefault(stage.getStageId(), 0)))
+                        stepCounts.getOrDefault(stage.getStageId(), 0),
+                        stage.getVersion()))
                 .toList();
     }
 }

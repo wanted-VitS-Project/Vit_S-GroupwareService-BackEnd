@@ -26,9 +26,20 @@ public record ProjectDetailRow(
         String closeReasonNote,
         String memberPermission,
         LocalDateTime createdAt,
+
+        /**
+         * 낙관적 락 버전 (`.ai/docs/global/CONCURRENCY.md`).
+         *
+         * <p>🚨 이 필드를 <b>다른 위치에 끼워 넣으면</b> XML SELECT 와 어긋나 값이 전부 한 칸씩 밀린다.
+         * MyBatis 위치 기반 매핑이라 <b>컴파일도 되고 예외도 안 난다</b> (§6-7).
+         * {@code createdAt} 뒤 · {@code categoryId} 앞 — XML 의 {@code p.version} 위치와 같아야 한다.
+         */
+        int version,
+
         Long categoryId,
         String categoryName,
-        String categoryCode
+        String categoryCode,
+        boolean categoryDeleted
 
 ) {
 }

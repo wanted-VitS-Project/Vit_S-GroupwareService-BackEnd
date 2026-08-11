@@ -37,7 +37,7 @@ public record StepCompleteResponse(
                 result.completedBy() == null
                         ? null
                         : new StepPersonResponse(
-                                result.completedBy().userId(), result.completedBy().name()),
+                                result.completedBy().userId(), result.completedBy().name(), result.completedBy().deleted()),
                 result.completedAt());
     }
 }

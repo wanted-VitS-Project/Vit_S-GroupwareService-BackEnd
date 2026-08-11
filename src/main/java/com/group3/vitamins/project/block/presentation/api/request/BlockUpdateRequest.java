@@ -15,6 +15,13 @@ public record BlockUpdateRequest(
 
         @Schema(description = "블록 담당자 사번. null 을 보내면 담당자를 해제한다. 생략하면 안 바뀐다",
                 example = "E2024001", nullable = true)
-        String owner
+        String owner,
+
+        @Schema(description = "조회에서 받은 version 을 그대로 실어 보낸다. 누락하면 400",
+                example = "7", requiredMode = Schema.RequiredMode.REQUIRED)
+        Integer version,
+
+        @Schema(description = "true 면 충돌을 무시하고 덮어쓴다. 생략하면 false", example = "false")
+        Boolean overwrite
 ) {
 }

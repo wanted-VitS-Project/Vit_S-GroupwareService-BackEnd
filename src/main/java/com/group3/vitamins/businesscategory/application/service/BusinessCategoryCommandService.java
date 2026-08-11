@@ -9,6 +9,7 @@ import com.group3.vitamins.businesscategory.application.usecase.BusinessCategory
 import com.group3.vitamins.businesscategory.domain.exception.BusinessCategoryErrorCode;
 import com.group3.vitamins.businesscategory.domain.model.BusinessCategory;
 import com.group3.vitamins.businesscategory.domain.repository.BusinessCategoryRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -30,20 +31,23 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
     private final BusinessCategoryRepository businessCategoryRepository;
     private final ProjectCategoryLinkPort projectCategoryLinkPort;
     private final BusinessCategoryAdminPolicy businessCategoryAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public BusinessCategoryResult createCategory(CreateBusinessCategoryCommand command) {
         businessCategoryAdminPolicy.assertAdmin(command.role());
         validateName(command.name());
         validateCode(command.code());
-        checkNameDuplicate(command.name(), null);
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        checkNameDuplicate(command.name(), null, companyId);
         if (command.code() != null) {
-            checkCodeDuplicate(command.code(), null);
+            checkCodeDuplicate(command.code(), null, companyId);
         }
 
         BusinessCategory saved = businessCategoryRepository.save(
                 BusinessCategory.create(command.name(), command.code(), command.description(),
-                        LocalDateTime.now()));
+                        LocalDateTime.now(), companyId));
 
         return BusinessCategoryResult.of(saved, true);
     }
@@ -56,18 +60,20 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
             throw new ValidationException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NO_FIELD_TO_UPDATE);
         }
 
-        BusinessCategory category = businessCategoryRepository.findActiveById(command.categoryId())
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        BusinessCategory category = businessCategoryRepository
+                .findActiveById(command.categoryId(), companyId)
                 .orElseThrow(() -> new NotFoundException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NOT_FOUND));
 
         if (command.nameProvided()) {
             validateName(command.name());
-            checkNameDuplicate(command.name(), category.getBusinessCategoryId());
+            checkNameDuplicate(command.name(), category.getBusinessCategoryId(), companyId);
             category.rename(command.name());
         }
         if (command.codeProvided()) {
             validateCode(command.code());
             if (command.code() != null) {
-                checkCodeDuplicate(command.code(), category.getBusinessCategoryId());
+                checkCodeDuplicate(command.code(), category.getBusinessCategoryId(), companyId);
             }
             category.changeCode(command.code());
         }
@@ -76,7 +82,8 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
         }
 
         BusinessCategory saved = businessCategoryRepository.save(category);
-        boolean deletable = !projectCategoryLinkPort.findLinkedCategoryIds().contains(saved.getBusinessCategoryId());
+        boolean deletable = !projectCategoryLinkPort.findLinkedCategoryIds(companyId)
+                .contains(saved.getBusinessCategoryId());
 
         return BusinessCategoryResult.of(saved, deletable);
     }
@@ -85,10 +92,13 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
     public void deleteCategory(DeleteBusinessCategoryCommand command) {
         businessCategoryAdminPolicy.assertAdmin(command.role());
 
-        BusinessCategory category = businessCategoryRepository.findActiveById(command.categoryId())
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        BusinessCategory category = businessCategoryRepository
+                .findActiveById(command.categoryId(), companyId)
                 .orElseThrow(() -> new NotFoundException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NOT_FOUND));
 
-        long linkedCount = projectCategoryLinkPort.countLinkedProjects(category.getBusinessCategoryId());
+        long linkedCount = projectCategoryLinkPort.countLinkedProjects(
+                category.getBusinessCategoryId(), companyId);
         if (linkedCount > 0) {
             throw new ConflictException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_IN_USE,
                     "사용 중인 카테고리는 삭제할 수 없습니다. (프로젝트 " + linkedCount + "건)");
@@ -122,8 +132,8 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
     }
 
     /** 이름 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. 삭제분에 걸리면 안내 문구를 달리 낸다 (§3-1). */
-    private void checkNameDuplicate(String name, Long excludeId) {
-        businessCategoryRepository.findByName(name)
+    private void checkNameDuplicate(String name, Long excludeId, Long companyId) {
+        businessCategoryRepository.findByName(name, companyId)
                 .filter(existing -> !existing.getBusinessCategoryId().equals(excludeId))
                 .ifPresent(existing -> {
                     BusinessCategoryErrorCode errorCode = BusinessCategoryErrorCode.BUSINESS_CATEGORY_NAME_DUPLICATED;
@@ -135,8 +145,8 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
     }
 
     /** 업무코드 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. 삭제분에 걸리면 안내 문구를 달리 낸다 (§3-1). */
-    private void checkCodeDuplicate(String code, Long excludeId) {
-        businessCategoryRepository.findByCode(code)
+    private void checkCodeDuplicate(String code, Long excludeId, Long companyId) {
+        businessCategoryRepository.findByCode(code, companyId)
                 .filter(existing -> !existing.getBusinessCategoryId().equals(excludeId))
                 .ifPresent(existing -> {
                     BusinessCategoryErrorCode errorCode = BusinessCategoryErrorCode.BUSINESS_CATEGORY_CODE_DUPLICATED;

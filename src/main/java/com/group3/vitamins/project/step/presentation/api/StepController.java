@@ -82,18 +82,23 @@ public class StepController {
             description = "이름·기간·책임자를 수정한다. 편집 화면의 폼 전체를 보내며, "
                     + "보내지 않은 필드는 비워진다. "
                     + "소속 스테이지·순서 변경은 PATCH /projects/{projectId}/steps/order 소관이다. "
-                    + "상태 변경·완료 처리도 각각 별도 API 다.")
+                    + "상태 변경·완료 처리도 각각 별도 API 다. "
+                    + "조회에서 받은 version 을 함께 보내야 하며, 그 사이 남이 먼저 저장했으면 409 다. "
+                    + "409 를 받으면 재조회 / 덮어쓰기(overwrite: true)를 사용자에게 묻는다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "STEP_NAME_REQUIRED / STEP_NAME_TOO_LONG / STEP_DATE_RANGE_INVALID"),
+                    description = "STEP_NAME_REQUIRED / STEP_NAME_TOO_LONG / "
+                            + "STEP_DATE_RANGE_INVALID / STEP_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "STEP_NOT_FOUND / USER_NOT_FOUND")
+                    description = "STEP_NOT_FOUND / USER_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "STEP_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{stepId}")
     public ResponseEntity<ApiResponse<StepUpdateResponse>> updateStep(
@@ -114,18 +119,22 @@ public class StepController {
     @Operation(summary = "스텝 상태 변경",
             description = "NOT_STARTED · IN_PROGRESS 로만 바꿀 수 있다. "
                     + "DONE 은 미완료 이슈 처리 선택이 필요해 완료 처리 API 를 써야 한다(STP-006). "
-                    + "스텝 상태는 진척률과 별개 값이다(STP-004) — 이슈를 다 끝내도 자동으로 완료되지 않는다.")
+                    + "스텝 상태는 진척률과 별개 값이다(STP-004) — 이슈를 다 끝내도 자동으로 완료되지 않는다. "
+                    + "조회에서 받은 version 을 함께 보내야 하며, 그 사이 남이 먼저 저장했으면 409 다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "상태 변경 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "STEP_STATUS_INVALID — 허용되지 않은 상태 값 (DONE 포함)"),
+                    description = "STEP_STATUS_INVALID — 허용되지 않은 상태 값 (DONE 포함) / "
+                            + "STEP_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "STEP_NOT_FOUND — 스텝이 존재하지 않음")
+                    description = "STEP_NOT_FOUND — 스텝이 존재하지 않음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "STEP_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{stepId}/status")
     public ResponseEntity<ApiResponse<StepStatusUpdateResponse>> changeStatus(

@@ -19,13 +19,16 @@ public record StageOrderResponse(
             Long stageId,
 
             @Schema(description = "정렬 순서", example = "1")
-            int sortOrder
+            int sortOrder,
+
+            @Schema(description = "저장 후의 새 version", example = "8")
+            int version
     ) {
     }
 
     public static StageOrderResponse from(List<StageOrderResult> results) {
         return new StageOrderResponse(results.stream()
-                .map(result -> new Item(result.stageId(), result.sortOrder()))
+                .map(result -> new Item(result.stageId(), result.sortOrder(), result.version()))
                 .toList());
     }
 }

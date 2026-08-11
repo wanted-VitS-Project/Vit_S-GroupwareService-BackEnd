@@ -56,7 +56,10 @@ public record StepDetailResponse(
         LocalDateTime completedAt,
 
         @Schema(description = "요청자의 스텝 권한", example = "EDITOR")
-        String myPermission
+        String myPermission,
+
+        @Schema(description = "낙관적 락 버전. 수정·상태변경 요청에 그대로 실어 보낸다", example = "7")
+        int version
 ) {
 
     /** 조회 결과를 응답으로 옮긴다. */
@@ -67,10 +70,11 @@ public record StepDetailResponse(
                 toPerson(result.owner()),
                 result.totalIssueCount(), result.doneIssueCount(),
                 result.inProgressIssueCount(), result.progressRate(),
-                toPerson(result.completedBy()), result.completedAt(), result.myPermission());
+                toPerson(result.completedBy()), result.completedAt(), result.myPermission(),
+                result.version());
     }
 
     private static StepPersonResponse toPerson(StepPerson person) {
-        return person == null ? null : new StepPersonResponse(person.userId(), person.name());
+        return person == null ? null : new StepPersonResponse(person.userId(), person.name(), person.deleted());
     }
 }

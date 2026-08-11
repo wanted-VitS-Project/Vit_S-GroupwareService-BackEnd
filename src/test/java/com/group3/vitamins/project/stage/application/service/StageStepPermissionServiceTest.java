@@ -128,7 +128,7 @@ class StageStepPermissionServiceTest {
 
     private void givenStage() {
         given(stageRepository.findById(STAGE_ID)).willReturn(Optional.of(
-                Stage.restore(STAGE_ID, PROJECT_ID, "요구분석", 1,
+                Stage.restore(STAGE_ID, PROJECT_ID, "요구분석", 1, 1,
                         LocalDateTime.of(2026, 8, 1, 9, 0), null)));
     }
 }

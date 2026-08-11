@@ -7,6 +7,7 @@ import com.group3.vitamins.businesscategory.application.result.BusinessCategoryR
 import com.group3.vitamins.businesscategory.application.usecase.BusinessCategoryQueryUseCase;
 import com.group3.vitamins.businesscategory.domain.model.BusinessCategory;
 import com.group3.vitamins.businesscategory.domain.repository.BusinessCategoryRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ public class BusinessCategoryQueryService implements BusinessCategoryQueryUseCas
     private final BusinessCategoryRepository businessCategoryRepository;
     private final ProjectCategoryLinkPort projectCategoryLinkPort;
     private final BusinessCategoryAdminPolicy businessCategoryAdminPolicy;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public List<BusinessCategoryResult> listCategories(BusinessCategoryListQuery query) {
@@ -29,13 +31,14 @@ public class BusinessCategoryQueryService implements BusinessCategoryQueryUseCas
             businessCategoryAdminPolicy.assertAdmin(query.role());
         }
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<BusinessCategory> categories =
-                businessCategoryRepository.search(query.keyword(), query.includeDeleted());
+                businessCategoryRepository.search(query.keyword(), query.includeDeleted(), companyId);
         if (categories.isEmpty()) {
             return List.of();
         }
 
-        Set<Long> linkedCategoryIds = projectCategoryLinkPort.findLinkedCategoryIds();
+        Set<Long> linkedCategoryIds = projectCategoryLinkPort.findLinkedCategoryIds(companyId);
 
         return categories.stream()
                 .map(category -> BusinessCategoryResult.of(

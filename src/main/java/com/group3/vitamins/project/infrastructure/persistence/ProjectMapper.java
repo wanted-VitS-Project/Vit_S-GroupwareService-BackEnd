@@ -2,6 +2,10 @@ package com.group3.vitamins.project.infrastructure.persistence;
 
 import com.group3.vitamins.project.domain.model.Project;
 
+/**
+ * ⚠️ {@link ProjectJpaEntity} 는 {@code @AllArgsConstructor} 라 <b>필드 선언 순서 = 아래 인자 순서</b>다.
+ * 엔티티에 필드를 끼워 넣고 여기를 안 고치면 값이 밀린다.
+ */
 public class ProjectMapper {
 
     private ProjectMapper() {
@@ -11,6 +15,7 @@ public class ProjectMapper {
     public static Project toDomain(ProjectJpaEntity entity) {
         return Project.restore(
                 entity.getProjectId(),
+                entity.getCompanyId(),
                 entity.getBidNoticeId(),
                 entity.getName(),
                 entity.getDescription(),
@@ -22,6 +27,7 @@ public class ProjectMapper {
                 entity.getCloseReasonCode(),
                 entity.getCloseReasonNote(),
                 entity.getClosedAt(),
+                entity.getVersion(),
                 entity.getCreatedBy(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
@@ -33,6 +39,7 @@ public class ProjectMapper {
     public static ProjectJpaEntity toEntity(Project domain) {
         return new ProjectJpaEntity(
                 domain.getProjectId(),
+                domain.getCompanyId(),
                 domain.getBidNoticeId(),
                 domain.getName(),
                 domain.getDescription(),
@@ -44,6 +51,7 @@ public class ProjectMapper {
                 domain.getCloseReasonCode(),
                 domain.getCloseReasonNote(),
                 domain.getClosedAt(),
+                domain.getVersion(),
                 domain.getCreatedBy(),
                 domain.getCreatedAt(),
                 domain.getUpdatedAt(),

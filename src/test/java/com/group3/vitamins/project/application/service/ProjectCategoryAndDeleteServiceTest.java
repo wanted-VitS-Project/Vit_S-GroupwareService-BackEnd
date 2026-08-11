@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.application.service;
 
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -9,6 +10,7 @@ import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCom
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
+import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.domain.model.Project;
@@ -16,6 +18,7 @@ import com.group3.vitamins.project.domain.model.ProjectStatus;
 import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
 import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
 import com.group3.vitamins.project.domain.repository.ProjectRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +35,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
@@ -47,29 +51,57 @@ class ProjectCategoryAndDeleteServiceTest {
     @Mock private EmployeeLookupPort employeeLookupPort;
     @Mock private StepStatLookupPort stepStatLookupPort;
     @Mock private ProjectAccessUseCase projectAccessUseCase;
+    @Mock private CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @InjectMocks private ProjectCommandService projectCommandService;
 
     private static final Long PROJECT_ID = 12L;
     private static final String REQUESTER = "E2024001";
+    private static final Long COMPANY_ID = 1L;
+
+    @BeforeEach
+    void 회사_컨텍스트() {
+        Mockito.lenient().when(currentCompanyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+    }
 
     // ────────────────────────────── 카테고리 연결 ──────────────────────────────
 
     @Test
     @DisplayName("연결 후 전체 카테고리를 돌려준다 — 방금 추가한 것만이 아니다")
     void 연결() {
-        given(businessCategoryLookupPort.findByIds(List.of(4L))).willReturn(List.of(
+        given(businessCategoryLookupPort.findByIds(List.of(4L), COMPANY_ID)).willReturn(List.of(
                 new BusinessCategoryLookupPort.BusinessCategoryView(4L, "상하수도", null)));
         given(projectBusinessCategoryRepository.findCategoryIds(PROJECT_ID))
                 .willReturn(List.of(1L), List.of(1L, 4L));
-        given(businessCategoryLookupPort.findByIds(List.of(1L, 4L))).willReturn(List.of(
-                new BusinessCategoryLookupPort.BusinessCategoryView(1L, "환경", "ENV"),
-                new BusinessCategoryLookupPort.BusinessCategoryView(4L, "상하수도", null)));
+        given(businessCategoryLookupPort.findRefsByIds(List.of(1L, 4L), COMPANY_ID)).willReturn(List.of(
+                new BusinessCategoryLookupPort.BusinessCategoryRef(1L, "환경", "ENV", false),
+                new BusinessCategoryLookupPort.BusinessCategoryRef(4L, "상하수도", null, false)));
 
         ProjectCategoryResult result = projectCommandService.linkBusinessCategories(
                 new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(4L), REQUESTER, "USER"));
 
         assertThat(result.businessCategories()).hasSize(2);
+        Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
+    }
+
+    @Test
+    @DisplayName("이미 연결돼 있던 카테고리가 삭제됐어도 새 연결은 성공하고 deleted 로 내려간다")
+    void 연결_기존_카테고리_삭제됨() {
+        given(businessCategoryLookupPort.findByIds(List.of(4L), COMPANY_ID)).willReturn(List.of(
+                new BusinessCategoryLookupPort.BusinessCategoryView(4L, "상하수도", null)));
+        given(projectBusinessCategoryRepository.findCategoryIds(PROJECT_ID))
+                .willReturn(List.of(1L), List.of(1L, 4L));
+        // 1번은 그 사이 삭제됐다 — 응답 조회가 검증용 findByIds 를 타면 개수가 안 맞아 404 가 난다.
+        given(businessCategoryLookupPort.findRefsByIds(List.of(1L, 4L), COMPANY_ID)).willReturn(List.of(
+                new BusinessCategoryLookupPort.BusinessCategoryRef(1L, "환경", "ENV", true),
+                new BusinessCategoryLookupPort.BusinessCategoryRef(4L, "상하수도", null, false)));
+
+        ProjectCategoryResult result = projectCommandService.linkBusinessCategories(
+                new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(4L), REQUESTER, "USER"));
+
+        assertThat(result.businessCategories())
+                .extracting(BusinessCategorySummary::categoryId, BusinessCategorySummary::deleted)
+                .containsExactly(tuple(1L, true), tuple(4L, false));
         Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
     }
 
@@ -86,7 +118,7 @@ class ProjectCategoryAndDeleteServiceTest {
     @Test
     @DisplayName("이미 연결된 카테고리가 섞이면 409 다")
     void 연결_중복() {
-        given(businessCategoryLookupPort.findByIds(List.of(1L))).willReturn(List.of(
+        given(businessCategoryLookupPort.findByIds(List.of(1L), COMPANY_ID)).willReturn(List.of(
                 new BusinessCategoryLookupPort.BusinessCategoryView(1L, "환경", "ENV")));
         given(projectBusinessCategoryRepository.findCategoryIds(PROJECT_ID))
                 .willReturn(List.of(1L));
@@ -102,7 +134,7 @@ class ProjectCategoryAndDeleteServiceTest {
     @Test
     @DisplayName("없는 카테고리는 404 다")
     void 연결_카테고리_없음() {
-        given(businessCategoryLookupPort.findByIds(List.of(99L))).willReturn(List.of());
+        given(businessCategoryLookupPort.findByIds(List.of(99L), COMPANY_ID)).willReturn(List.of());
 
         assertThatThrownBy(() -> projectCommandService.linkBusinessCategories(
                 new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(99L), REQUESTER, "USER")))
@@ -168,7 +200,7 @@ class ProjectCategoryAndDeleteServiceTest {
     @Test
     @DisplayName("없는 프로젝트는 404 다")
     void 삭제_프로젝트_없음() {
-        given(projectRepository.findById(PROJECT_ID)).willReturn(Optional.empty());
+        given(projectRepository.findById(PROJECT_ID, COMPANY_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> projectCommandService.deleteProject(
                 new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
@@ -177,9 +209,9 @@ class ProjectCategoryAndDeleteServiceTest {
 
     private void givenProject(ProjectStatus status, Long bidNoticeId) {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
-        given(projectRepository.findById(PROJECT_ID)).willReturn(Optional.of(
-                Project.restore(PROJECT_ID, bidNoticeId, "하수관로 정비", null, status,
-                        "○○시청", BigDecimal.TEN, null, null, null, null, null,
+        given(projectRepository.findById(PROJECT_ID, COMPANY_ID)).willReturn(Optional.of(
+                Project.restore(PROJECT_ID, COMPANY_ID, bidNoticeId, "하수관로 정비", null, status,
+                        "○○시청", BigDecimal.TEN, null, null, null, null, null, 1,
                         REQUESTER, createdAt, createdAt, null)));
         Mockito.lenient().when(projectRepository.save(any(Project.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
