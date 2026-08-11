@@ -24,11 +24,7 @@
             #{notice.bidMethod}, #{notice.contractMethod},
             #{notice.participationQualificationText},
             #{notice.jointContractAllowed}, #{notice.jointContractText},
-            #{notice.sourceUrl},
-            <choose>
-                <when test="notice.attachments != null and !notice.attachments.isEmpty()">TRUE</when>
-                <otherwise>FALSE</otherwise>
-            </choose>,
+            #{notice.sourceUrl}, #{hasAttachments},
             'COLLECTED', #{crawledAt}, #{crawledAt}
         )
     </insert>
@@ -63,7 +59,7 @@
             joint_contract_text = #{notice.jointContractText},
             source_url = #{notice.sourceUrl},
             has_attachment = CASE
-                WHEN #{notice.attachments.size} > 0 THEN TRUE
+                WHEN #{hasAttachments} THEN TRUE
                 ELSE has_attachment
             END,
             crawled_at = #{crawledAt},

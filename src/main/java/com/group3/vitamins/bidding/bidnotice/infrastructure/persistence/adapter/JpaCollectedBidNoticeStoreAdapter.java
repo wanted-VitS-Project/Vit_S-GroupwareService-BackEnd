@@ -1,8 +1,6 @@
 package com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.adapter;
 
-import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.entity.*;
 import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.CollectedBidNoticeUpsertMapper;
-import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.repository.*;
 import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionSource;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionSourceRepository;
@@ -21,7 +19,6 @@ public class JpaCollectedBidNoticeStoreAdapter
         implements CollectedBidNoticeStorePort {
 
     private final CollectionSourceRepository sourceRepository;
-    private final SpringDataBidNoticeRepository noticeRepository;
     private final CollectedBidNoticeUpsertMapper upsertMapper;
     private final BidNoticeAttachmentSynchronizer attachmentSynchronizer;
     private final CompanyBidNoticeStatePort companyStatePort;
@@ -58,7 +55,7 @@ public class JpaCollectedBidNoticeStoreAdapter
         for (CollectedBidNoticePayload payload : payloads) {
             CollectedBidNotice notice = payload.notice();
             int noticeInserted = upsertMapper.insertNoticeIfAbsent(
-                    source.sourceId(), notice, crawledAt
+                    source.sourceId(), notice, notice.hasAttachments(), crawledAt
             );
             Long noticeId = requireNoticeId(source.sourceId(), notice);
             observedNoticeIds.add(noticeId);
@@ -77,7 +74,9 @@ public class JpaCollectedBidNoticeStoreAdapter
             if (noticeInserted == 1) {
                 inserted++;
             } else {
-                upsertMapper.updateCollectedNotice(noticeId, notice, crawledAt);
+                upsertMapper.updateCollectedNotice(
+                        noticeId, notice, notice.hasAttachments(), crawledAt
+                );
                 updated++;
             }
             attachments.put(noticeId, notice.attachments());

@@ -12,6 +12,7 @@ public interface CollectedBidNoticeUpsertMapper {
     int insertNoticeIfAbsent(
             @Param("sourceId") Long sourceId,
             @Param("notice") CollectedBidNotice notice,
+            @Param("hasAttachments") boolean hasAttachments,
             @Param("crawledAt") LocalDateTime crawledAt
     );
 
@@ -24,6 +25,7 @@ public interface CollectedBidNoticeUpsertMapper {
     int updateCollectedNotice(
             @Param("noticeId") Long noticeId,
             @Param("notice") CollectedBidNotice notice,
+            @Param("hasAttachments") boolean hasAttachments,
             @Param("crawledAt") LocalDateTime crawledAt
     );
 
