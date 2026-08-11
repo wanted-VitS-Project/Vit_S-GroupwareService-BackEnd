@@ -17,6 +17,7 @@
         FROM project_member pm
                  LEFT JOIN employee e
                       ON e.user_id = pm.user_id
+                     AND e.company_id = #{companyId}
                  LEFT JOIN department d
                            ON d.department_id = e.department_id
         WHERE pm.project_id = #{projectId}

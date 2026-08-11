@@ -27,6 +27,7 @@ public record ProjectListRow(
         boolean categoryDeleted,
         String memberUserId,
         String memberName,
-        boolean memberDeleted
+        boolean memberDeleted,
+        int version
 ) {
 }

@@ -40,7 +40,7 @@ public class ProjectListQueryAdapter implements ProjectListQueryPort {
                 head.startedOn(), head.endedOn(), head.contractAmount(),
                 head.totalStepCount(), head.doneStepCount(),
                 head.myIssueInProgressCount(), head.myApprovalInProgressCount(),
-                foldCategories(rows), foldMembers(rows));
+                foldCategories(rows), foldMembers(rows), head.version());
     }
 
     /** 참여자 수만큼 중복된 카테고리를 id 기준으로 접는다. */

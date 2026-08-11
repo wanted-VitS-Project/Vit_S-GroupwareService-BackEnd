@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -138,7 +139,7 @@ class StepStatusCommandServiceTest {
     void KEEP_완료() {
         givenStep(StepStatus.IN_PROGRESS);
         given(issueStatLookupPort.findOpenIssueIds(STEP_ID)).willReturn(List.of(1L, 2L, 3L));
-        given(employeeLookupPort.findNameByUserId(REQUESTER)).willReturn("김동훈");
+        givenEmployee(REQUESTER, "김동훈", false);
 
         StepCompleteResult result = stepCommandService.completeStep(
                 new CompleteStepCommand(STEP_ID, "KEEP", REQUESTER, "USER"));
@@ -187,7 +188,7 @@ class StepStatusCommandServiceTest {
         given(stepRepository.findById(STEP_ID)).willReturn(Optional.of(
                 step(StepStatus.DONE, completedAt, "E2024099")));
         given(issueStatLookupPort.findOpenIssueIds(STEP_ID)).willReturn(List.of());
-        given(employeeLookupPort.findNameByUserId("E2024099")).willReturn("김용준");
+        givenEmployee("E2024099", "김용준", false);
 
         StepCompleteResult result = stepCommandService.completeStep(
                 new CompleteStepCommand(STEP_ID, "KEEP", REQUESTER, "USER"));
@@ -221,6 +222,15 @@ class StepStatusCommandServiceTest {
         given(stepRepository.findById(STEP_ID)).willReturn(Optional.of(step(status, null, null)));
         Mockito.lenient().when(stepRepository.save(any(Step.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    /**
+     * 완료자 조회는 배치 포트를 쓴다 — 재완료 요청 때 과거 완료자가 <b>삭제됐을 수 있어</b>
+     * 삭제된 사원도 돌려주는 경로여야 한다 (D-6).
+     */
+    private void givenEmployee(String userId, String name, boolean deleted) {
+        given(employeeLookupPort.findRefsByUserIds(List.of(userId)))
+                .willReturn(Map.of(userId, new EmployeeLookupPort.EmployeeRef(name, deleted)));
     }
 
     private Step step(StepStatus status, LocalDateTime completedAt, String completedBy) {

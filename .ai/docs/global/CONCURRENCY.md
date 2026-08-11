@@ -1,5 +1,6 @@
 # 🔒 동시수정 정합성 — 낙관적 락 표준
 
+**최종 업데이트**: 2026-08-11 (§9-3·§9-4 신설 — 블록·프로젝트 낙관락 완료. 프로젝트 계열 4도메인 종료)
 **최종 업데이트**: 2026-08-11 (§9-2 신설 — 스텝 낙관락 구현 · §7 번호 대역 재배정 · §3-3 정정)
 **최종 업데이트**: 2026-08-10 (신설 — 동시수정 방어를 **낙관락 단일 정책**으로 확정. Redis 편집 잠금·SSE 사전 차단 폐기)
 **담당**: 김동현 (DevOps)
@@ -371,6 +372,10 @@ B는 한참 뒤 새로고침하고 *"내가 옮긴 게 왜 원래대로지?"* �
 
 **대상 리소스의 조회 응답에 `version` 을 반드시 포함한다.**
 
+⚠️ **상세뿐 아니라 목록도다.** 카드·행에서 곧바로 수정을 시작하는 화면이 있으면, 목록에 `version` 이
+없는 순간 프론트는 보낼 값이 없어 상세를 한 번 더 부르거나 400 을 맞는다
+(2026-08-11 · 프로젝트 목록에 추가).
+
 ```jsonc
 {
   "httpStatus": 200,
@@ -528,13 +533,15 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 | 1 | 이 문서 작성 | 김동현 | ✅ 완료 |
 | 2 | **스테이지 낙관락 실구현** (참조 구현 검증) | 김동현 | ✅ 완료 — 마이그레이션 1 + Java 16 |
 | 3 | `PRJ-V1-REALTIME.md` 개정 (잠금 정책 → 낙관락) + FE 통보 | 김동현 | ✅ 완료 (2026-08-11) |
-| 4 | **스텝 낙관락** | 김동현 | ✅ 완료 (2026-08-11) — Java 24 · 조건부 UPDATE 3종 |
-| 5 | `block` → `project` 낙관락 (마이그레이션 컬럼은 2번에서 이미 넣었다) | 김동현 | ⬜ |
-| 6 | 나머지 6개 도메인 각자 구현 | 담당자 6명 | ⬜ (선행: 2) |
+| 4 | **스텝 낙관락** | 김동현 | ✅ 완료 (2026-08-11) — 조건부 UPDATE 3종 |
+| 5 | **블록 낙관락** | 김동현 | ✅ 완료 (2026-08-11) — 조건부 UPDATE 3종 |
+| 6 | **프로젝트 낙관락** (마이그레이션 컬럼은 2번에서 이미 넣었다) | 김동현 | ✅ 완료 (2026-08-11) — 조건부 UPDATE 2종 · MyBatis 동반 수정 |
+| 7 | 나머지 6개 도메인 각자 구현 | 담당자 6명 | ⬜ (선행: 2) |
 
-> 📌 **2·4 검증 (2026-08-11)**: `compileJava`·`compileTestJava` 통과 + stage·step 테스트 **65개 전부 통과**
-> (StageCommandService 15 · StageStepPermission 6 · StepCommandService 18 · StepDelete 8 · StepPermission 9 · StepStatusCommandService 9).
-> ⚠️ **전체 스위트는 아직 못 돌렸다** — 같은 시각 멀티테넌시(`companyId`) 작업이 병렬로 진행돼 빌드 산출물이 계속 바뀐다.
+> 📌 **검증 (2026-08-11)**: `clean` 후 **전체 테스트 775개 통과** (159 클래스 · 실패 0 · 에러 0).
+> 프로젝트 계열 4도메인(project·stage·step·block)이 전부 낙관락 적용 완료다.
+> ⚠️ **런타임 확인은 아직이다** — §10 검증 순서 1·2번(조회 응답에 version 이 실려 나가는지 · 계정 2개로 409)은
+> 빌드·테스트로 잡히지 않으므로 별도로 봐야 한다.
 
 ⚠️ **2번을 먼저 끝냈다.** 문서만 주고 6명이 동시에 시작하면 §6 의 함정이 6번 반복된다.
 
@@ -579,6 +586,42 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 
 ⛔ **`deleteStep` · `StepRelocationService` 도 제외다.** 여전히 `save()` 를 쓴다 — 스테이지 삭제 cascade 경로다.
 
+### 9-3. 블록 구현 (2026-08-11)
+
+조건부 UPDATE **3종** — `updateIfVersionMatches`(제목·담당자) · `relocateIfVersionMatches`(배치) ·
+`moveToStepIfVersionMatches`(스텝 이동).
+
+⚠️ **부분 수정이라도 UPDATE 는 두 컬럼을 모두 SET 한다.** `updateBlock` 은 `titleProvided`·`ownerProvided` 로
+"생략" 과 "null 명시" 를 구분하는데, **요청값이 아니라 도메인이 반영을 끝낸 최종값**(`block.getTitle()`)을 넘겨야 한다.
+`command.title()` 을 그대로 넘기면 **생략한 필드가 null 로 지워진다.**
+
+⚠️ **`PATCH /blocks/{id}` 는 `JsonNode` 바인딩이라 `@Valid` 가 안 돈다.** version 누락을 Bean Validation 이
+대신 잡아주지 않으므로 `BlockController.requireVersion()` 이 직접 400 을 던진다. 안 막으면 **version 0 이 흘러가
+모든 저장이 409** 가 된다.
+
+⛔ **cascade 이동(`moveBlocks`)·삭제는 제외.** 스텝 삭제가 연쇄로 부르는 경로라 사용자가 버전을 들고 있지 않다.
+
+### 9-4. 프로젝트 구현 (2026-08-11) — 🚨 유일한 MyBatis 도메인
+
+조건부 UPDATE **2종** — `updateIfVersionMatches`(6필드) · `changeStatusIfVersionMatches`(상태 + 종결정보).
+
+🚨 **MyBatis 위치 기반 매핑을 두 파일에서 동시에 고쳐야 한다.**
+
+| 파일 | 넣은 위치 |
+|---|---|
+| `ProjectDetailRow` | `createdAt` 뒤 · `categoryId` 앞 |
+| `mapper/project/ProjectDetailQueryMapper.xml` | `p.created_at` 뒤 · `bc.business_category_id` 앞 |
+
+두 위치가 어긋나면 **컴파일도 되고 예외도 안 나는데 값이 전부 한 칸씩 밀린다** (§6-7).
+`ProjectMapperTest` 가 왕복 검증으로 이걸 지킨다 — version 단언을 추가해 뒀다.
+
+⚠️ **`ProjectMapper` 가 두 개다** (`infrastructure/persistence` · `infrastructure/adapter`). 한쪽만 고치면 컴파일이 잡아 주지만, 존재 자체를 모르고 시작하면 헤맨다.
+
+⚠️ **조건부 UPDATE 에서 `companyId` 조건을 빼지 마라.** 회사 격리는 낙관락과 별개 규칙이라
+version 이 우연히 맞으면 타사 프로젝트가 수정된다.
+
+⛔ **`closeProject`·`deleteProject` 는 제외.** 종결은 사유가 필수라 두 번 눌러도 같은 결과이고, 삭제는 멱등이다.
+
 ---
 
 ## 10. 검증 순서 — 틀렸을 때 눈에 안 보이는 것부터
@@ -596,5 +639,6 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 | 날짜 | 내용 | 담당 |
 |---|---|---|
 | 2026-08-10 | 신설 — 낙관락 단일 정책 확정. Redis 편집 잠금·SSE 사전 차단 폐기. 대상 9테이블, 스테이지 참조 구현, 마이그레이션 번호 대역 배정 | 김동현 |
+| 2026-08-11 | **블록·프로젝트 낙관락 구현** (§9-3·§9-4 신설 — 블록 부분수정 시 도메인 최종값 전달 · JsonNode 경로의 version 수동 검증 · 프로젝트 MyBatis 위치 매핑 2파일 동반 수정 · `companyId` 조건 유지) · **프로젝트 계열 4도메인 완료, 전체 테스트 775개 통과** | 김동현 |
 | 2026-08-11 | **스텝 낙관락 구현** (§9-2 신설 — 조건부 UPDATE 3종 · `changeStatus` 완료정보 동반 SET · `completeStep` 제외 근거) · §7 **마이그레이션 번호 대역 전면 재배정**(tenant 와 충돌) · §3-3 정정(도메인은 version 을 올리지 않는다 · `rename()` 삭제) | 김동현 |
 | 2026-08-10 | ⭐ **§4 묶음 version 컬럼 4종 폐기** — 순서 변경이 이미 항목마다 `save()` 를 돌고 있어(`StageCommandService.reorderStages`) **개별 version + 전체 롤백**으로 동일한 결과를 얻는다. 새 컬럼 0개·새 포트 0개. §7 마이그레이션도 `ADD COLUMN version` 한 줄씩으로 단순화 · §6 함정에 부분 커밋·MyBatis 위치 매핑 2건 추가 | 김동현 |

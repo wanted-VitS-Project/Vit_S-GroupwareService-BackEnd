@@ -59,7 +59,8 @@
         (bc.deleted_at IS NOT NULL) AS categoryDeleted,
         pm.user_id                AS memberUserId,
         e.name                    AS memberName,
-        (e.deleted_at IS NOT NULL)  AS memberDeleted
+        (e.deleted_at IS NOT NULL)  AS memberDeleted,
+        b.version                 AS version
         FROM (
         SELECT p.project_id      AS projectId,
         p.name            AS name,
@@ -100,7 +101,8 @@
         AND a.user_id = #{requesterUserId}
         AND a.status = 'IN_PROGRESS'
         AND a.deleted_at IS NULL)          AS myApprovalInProgressCount,
-        p.created_at      AS createdAt
+        p.created_at      AS createdAt,
+        p.version         AS version
         FROM project p
         <include refid="listFilters"/>
         ORDER BY p.created_at DESC, p.project_id DESC
@@ -121,6 +123,7 @@
         AND pm.permission &lt;&gt; 'NONE'
         LEFT JOIN employee e
         ON e.user_id = pm.user_id
+        AND e.company_id = #{companyId}
         ORDER BY b.createdAt DESC, b.projectId DESC,
         bc.business_category_id ASC, e.name ASC, pm.user_id ASC
     </select>

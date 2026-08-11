@@ -156,7 +156,12 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 changed.getStatus().name(), now, expected + 1);
     }
 
-    /** 사유를 붙여 종결한다. 상태 제한이 없다 — 진행 중이든 정산 중이든 종결할 수 있다 (PRJ-004). */
+    /**
+     * 사유를 붙여 종결한다. 상태 제한이 없다 — 진행 중이든 정산 중이든 종결할 수 있다 (PRJ-004).
+     *
+     * <p>⛔ 여기에는 낙관적 락을 걸지 않는다 ({@code CONCURRENCY.md} §9). 종결은 사유가 필수라
+     * 두 번 눌러도 같은 결과다 — 갱신 유실로 잃을 편집 내용이 없다.
+     */
     @Override
     public ProjectCloseResult closeProject(CloseProjectCommand command) {
         projectAccessUseCase.requireEditable(

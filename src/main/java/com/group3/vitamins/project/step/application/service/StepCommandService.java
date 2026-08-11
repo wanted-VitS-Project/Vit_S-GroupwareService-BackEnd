@@ -346,13 +346,24 @@ public class StepCommandService implements StepCommandUseCase {
                         new ValidationException(StepErrorCode.OPEN_ISSUE_ACTION_INVALID));
     }
 
-    /** 완료자 사번에 이름을 붙인다. 완료자는 요청자 본인이라 존재 검증을 따로 하지 않는다. */
+    /**
+     * 완료자 사번에 이름·삭제여부를 붙인다.
+     *
+     * <p>⚠️ 요청자 본인만 오는 게 아니다 — 이미 DONE 인 스텝에 완료 요청이 다시 오면 <b>과거 완료자</b>가
+     * 온다. 그 사원이 그 사이 삭제됐으면 {@code findNameByUserId} 는 null 을 돌려주고, 화면에는
+     * 이름 없는 완료자가 「삭제 안 됨」으로 뜬다. 그래서 삭제된 사원도 돌려주는 배치 조회를 쓴다
+     * (D-6 · {@code BlockQueryService.toOwner} 와 같은 기준).
+     */
     private StepPerson toPerson(String userId) {
         if (userId == null) {
             return null;
         }
-        // 쓰기 경로다 — findNameByUserId 가 deleted_at IS NULL 을 검증하므로 삭제된 사원은 여기 못 온다.
-        return new StepPerson(userId, employeeLookupPort.findNameByUserId(userId), false);
+        EmployeeLookupPort.EmployeeRef ref =
+                employeeLookupPort.findRefsByUserIds(List.of(userId)).get(userId);
+
+        return ref == null
+                ? new StepPerson(userId, null, false)
+                : new StepPerson(userId, ref.name(), ref.deleted());
     }
 
     /**

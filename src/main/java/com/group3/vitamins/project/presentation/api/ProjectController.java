@@ -205,8 +205,8 @@ public class ProjectController {
                     description = "수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
-                            + "/ CONTRACT_AMOUNT_INVALID / PROJECT_VERSION_REQUIRED "
-                            + "/ COMMON_INVALID_REQUEST(형식 오류)"),
+                            + "/ CLIENT_NAME_TOO_LONG / CONTRACT_AMOUNT_INVALID "
+                            + "/ PROJECT_VERSION_REQUIRED / COMMON_INVALID_REQUEST(형식 오류)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",

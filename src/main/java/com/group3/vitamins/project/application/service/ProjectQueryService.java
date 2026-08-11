@@ -133,7 +133,8 @@ public class ProjectQueryService implements ProjectQueryUseCase {
                 view.startedOn(), view.endedOn(), view.contractAmount(),
                 progressRate(view.totalStepCount(), view.doneStepCount()),
                 view.businessCategories(), view.members(),
-                view.myIssueInProgressCount(), view.myApprovalInProgressCount());
+                view.myIssueInProgressCount(), view.myApprovalInProgressCount(),
+                view.version());
     }
 
     /** 완료 스텝 / 전체 스텝 비율. 스텝이 없으면 null 을 돌려 응답에서 빠지게 한다 (INV-04). */
