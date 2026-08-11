@@ -31,6 +31,7 @@ public class RedisCollectionRunTaskDlqAdapter implements CollectionRunTaskDlqPor
     public void publish(CollectionRunTaskFailure failure) {
         CollectionRequestCombination target = failure.target();
         Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("dedupKey", failure.taskId() + ":" + failure.attemptId());
         fields.put("runId", String.valueOf(failure.runId()));
         fields.put("taskId", String.valueOf(failure.taskId()));
         fields.put("companyId", String.valueOf(failure.companyId()));

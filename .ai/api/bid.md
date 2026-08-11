@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-10 (나라장터 공사·용역 OpenAPI 실제 검색 필드와 호출량 제한 반영)
+**최종 동기화**: 2026-08-10 (회사별 공고 상태 및 목록·상세 조회 계약 확정)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -18,8 +18,8 @@
 | ✅ 확정 | 수집 조건 수정 | PATCH | `/api/v1/bidding/collection-conditions/{conditionId}` | `BIDDING` |
 | ✅ 확정 | 입찰 공고 수집 실행 | POST | `/api/v1/bidding/collection-conditions/{conditionId}/runs` | `BIDDING` |
 | ✅ 확정 | 수집 실행 결과 조회 | GET | `/api/v1/bidding/collection-runs/{runId}` | `BIDDING` |
-| 📝 초안 | 입찰 공고 목록 조회 | GET | `/api/v1/bidding/notices` | `BIDDING` |
-| 📝 초안 | 입찰 공고 상세 조회 | GET | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
+| ✅ 확정 | 입찰 공고 목록 조회 | GET | `/api/v1/bidding/notices` | `BIDDING` |
+| ✅ 확정 | 입찰 공고 상세 조회 | GET | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
 | 📝 초안 | 입찰 공고 직접 등록 | POST | `/api/v1/bidding/notices` | `BIDDING` |
 | 📝 초안 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
 | 📝 초안 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
@@ -503,6 +503,18 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `lastError` | 민감 정보를 제거한 마지막 발행 오류 |
 | `createdAt` | 생성 시각 |
 
+### Task 영구 실패 DLQ Outbox 계약
+
+| 항목 | 규칙 |
+|------|------|
+| 원자성 | `crawl_run_task`의 `FAILED` 전이와 Task DLQ Outbox 저장은 같은 DB 트랜잭션에서 처리한다 |
+| 직접 발행 금지 | Worker 처리 흐름에서는 Task 실패 직후 Redis DLQ를 직접 호출하지 않는다 |
+| 발행 주체 | Outbox Dispatcher가 `BIDDING_COLLECTION_TASK_DLQ_REQUESTED` 이벤트를 Task DLQ Stream으로 발행한다 |
+| Redis 장애 | 발행 실패 시 Outbox를 `PENDING`으로 되돌리고 최대 5회까지 재시도한다 |
+| 중복 방지 | DB는 `eventType + taskId + attemptId` 조합의 Outbox 중복 생성을 차단한다 |
+| 소비자 멱등성 | Redis 중복 전달에 대비해 DLQ 소비자는 `dedupKey = taskId:attemptId`로 중복 처리를 차단한다 |
+| 보관 정보 | `runId`, `taskId`, `companyId`, `attemptId`, 재시도 횟수, 실패 유형과 수집 조건 조합만 저장한다 |
+
 ### Worker 재시도 정책
 
 외부 요청 조합 하나를 독립적인 처리 단위로 보고 일시적 오류만 최대 3회 재시도한다.
@@ -537,7 +549,17 @@ Outbox는 최소한 아래 정보를 관리한다.
 
 ## 입찰 공고 목록 조회 `GET /api/v1/bidding/notices`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
+
+회사 경계:
+
+| 항목 | 규칙 |
+|------|------|
+| 공고 원본 | `bid_notice`는 모든 회사가 공유하는 공공 원천 데이터다 |
+| 회사별 상태 | `company_bid_notice_state`에 회사별 `COLLECTED`, `DISMISSED`, 제외 사유와 최초·최종 확인 실행을 저장한다 |
+| 목록 노출 | 현재 회사의 `company_bid_notice_state`가 존재하는 공고만 반환한다 |
+| 다른 회사 접근 | 목록에서 제외하고 상세 조회는 `BIDDING_NOTICE_NOT_FOUND`로 응답한다 |
+| 공용 칼럼 | 기존 `bid_notice.notice_status`, `dismiss_reason`은 호환 목적으로 유지하되 조회 계약에는 사용하지 않는다 |
 
 **Query**
 
@@ -550,10 +572,10 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `region` | 지역 |
 | `deadlineSoon` | 마감 임박 여부 |
 | `keyword` | 검색어 |
-| `noticeStatus` | 공고 상태 |
-| `sort` | 정렬 |
-| `page` | 페이지 |
-| `size` | 크기 |
+| `noticeStatus` | 회사별 공고 상태. `COLLECTED`, `DISMISSED` |
+| `sort` | `ANNOUNCED_DESC`(기본), `DEADLINE_ASC`, `AMOUNT_DESC` |
+| `page` | 0부터 시작하는 페이지. 기본 `0` |
+| `size` | 페이지 크기. 기본 `20`, 최대 `100` |
 
 **Response 주요값**
 
@@ -576,6 +598,8 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `noticeStatus` | 공고 상태 |
 | `projectId` | 전환된 프로젝트 ID |
 
+목록 응답은 `content`, `totalElements`, `totalPages`, `page`, `size`를 반환한다.
+
 화면 규칙:
 
 | 조건 | 표시 |
@@ -590,7 +614,7 @@ Outbox는 최소한 아래 정보를 관리한다.
 
 | 항목 | 규칙 |
 |------|------|
-| 기준 | 마지막 성공 수집 실행에서 신규 INSERT 된 공고 |
+| 기준 | 현재 회사의 마지막 성공 또는 부분 성공 수집 실행과 `firstSeenRunId`가 같은 공고 |
 | 유지 기간 | 다음 성공 수집 실행 전까지 |
 | 수동 등록 | 등록 직후 `isNew=true`, 다음 성공 수집 실행 전까지 유지 |
 | 저장 방식 | 프론트가 계산하지 않고 서버가 Boolean으로 내려준다 |
@@ -599,20 +623,30 @@ Outbox는 최소한 아래 정보를 관리한다.
 
 ## 입찰 공고 상세 조회 `GET /api/v1/bidding/notices/{noticeId}`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
 
 | 영역 | 필드 |
 |------|------|
-| 기본 정보 | `noticeId`, `externalId`, `noticeOrder`, `noticeName`, `noticeAgency`, `demandAgency`, `noticeStatus`, `dismissReason`, `projectId` |
+| 기본 정보 | `noticeId`, `externalId`, `noticeOrder`, `noticeName`, `noticeType`, `externalNoticeStatus`, `noticeAgency`, `demandAgency`, `noticeStatus`, `dismissReason`, `projectId` |
 | 출처 | `sourceCode`, `sourceName`, `sourceUrl`, `hasAttachment` |
 | 일정 | `announcedAt`, `bidStartAt`, `questionDeadlineAt`, `applicationDeadlineAt`, `bidDeadlineAt`, `openingAt`, `dDay` |
 | 금액 | `baseAmount`, `estimatedAmount`, `priceRangeText`, `minimumBidRateText` |
 | 계약 및 제한 | `participationQualificationText`, `regionLimitText`, `businessLimitText`, `jointContractAllowed`, `jointContractText`, `contractMethod`, `evaluationMethod` |
-| 참여사 | `participantCount`, `participants` |
+| 첨부파일 | `attachments[].attachmentOrder`, `attachments[].fileName`, `attachments[].sourceUrl` |
 
 `dDay`는 DB에 저장하지 않고 서버에서 계산한다.
 
-첨부파일 상세 테이블은 구현 범위에서 제외할 수 있다. 이 경우 파일명과 크기를 보여주지 않고 `hasAttachment`와 원문 링크만 제공한다.
+첨부파일은 삭제되지 않은 항목만 순서 오름차순으로 반환한다. 파일 크기는 수집 원천에 일관된 값이 없어 반환하지 않는다.
+
+**Status Code**
+
+| 코드 | code | 설명 |
+|------|------|------|
+| 200 | - | 조회 성공 |
+| 400 | `BIDDING_INVALID_NOTICE_QUERY` | 조회 조건이 올바르지 않음 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음 또는 만료 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
 
 참여 요건 필드는 REQ-02에 따라 원문 문자열을 보존한다.
 
