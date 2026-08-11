@@ -73,6 +73,14 @@ public class EmployeeJpaEntity implements Persistable<String> {
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
+    /**
+     * 프로필 사진 S3 키. {@code null} 이면 사진 없음 (`.ai/api/employee.md` §10).
+     * 등록·정보수정 경로(Persistable INSERT / applyInfo)와 무관하게 프로필 사진 API 만
+     * {@link #changeProfileImageKey} 로 이 컬럼만 갱신한다({@code @DynamicUpdate} — 다른 작업과 충돌 없음).
+     */
+    @Column(name = "profile_image_key", length = 512)
+    private String profileImageKey;
+
     /** 신규 여부 — persist(INSERT) 강제용. 영속화되거나 로드되면 false 로 내려간다. 컬럼이 아니다. */
     @Transient
     @Getter(AccessLevel.NONE)
@@ -125,5 +133,13 @@ public class EmployeeJpaEntity implements Persistable<String> {
     /** 퇴사 처리 (`employee.md` §5). {@code resigned_at} 만 바꾼다 — 정보 컬럼은 건드리지 않아 동시 수정과 충돌하지 않는다. */
     void resign(LocalDate resignedAt) {
         this.resignedAt = resignedAt;
+    }
+
+    /**
+     * 프로필 사진 키 갱신 (`employee.md` §10). {@code profile_image_key} 만 바꾼다 — {@code null} 이면 삭제.
+     * {@code @DynamicUpdate} 로 이 컬럼만 UPDATE 되어 정보 수정·퇴사와 충돌하지 않는다.
+     */
+    void changeProfileImageKey(String profileImageKey) {
+        this.profileImageKey = profileImageKey;
     }
 }
