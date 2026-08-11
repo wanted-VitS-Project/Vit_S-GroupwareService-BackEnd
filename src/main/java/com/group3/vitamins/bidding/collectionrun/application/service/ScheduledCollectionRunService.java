@@ -2,7 +2,6 @@ package com.group3.vitamins.bidding.collectionrun.application.service;
 
 import com.group3.vitamins.bidding.collectioncondition.application.support.CollectionScheduleCalculator;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
-import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionConditionRepository;
 import com.group3.vitamins.bidding.collectionrun.application.port.ScheduledCollectionConditionPort;
 import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRunCreator;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
@@ -25,7 +24,6 @@ public class ScheduledCollectionRunService {
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
     private final ScheduledCollectionConditionPort scheduledConditionPort;
-    private final CollectionConditionRepository conditionRepository;
     private final CollectionRunRepository runRepository;
     private final CollectionRunCreator runCreator;
     private final CollectionScheduleCalculator scheduleCalculator;
@@ -51,8 +49,9 @@ public class ScheduledCollectionRunService {
             if (runRepository.existsActiveByConditionId(
                     condition.getConditionId()
             )) {
-                condition.advanceSchedule(nextRunAt, now);
-                conditionRepository.save(condition);
+                scheduledConditionPort.advanceSchedule(
+                        condition.getConditionId(), nextRunAt, now
+                );
                 log.info(
                         "Scheduled collection skipped because active run exists. conditionId={} nextRunAt={}",
                         condition.getConditionId(),
@@ -68,8 +67,9 @@ public class ScheduledCollectionRunService {
                     null,
                     now
             );
-            condition.recordScheduledRun(scheduledAt, nextRunAt, now);
-            conditionRepository.save(condition);
+            scheduledConditionPort.recordScheduledRun(
+                    condition.getConditionId(), scheduledAt, nextRunAt, now
+            );
             createdCount++;
         }
 

@@ -20,15 +20,26 @@ public class CollectionRunScheduler {
     // 매분 실행 시각이 된 조건을 확인하여 자동 수집 실행을 생성합니다.
     @Scheduled(
             cron = "${bidding.collection.schedule.cron:0 * * * * *}",
-            zone = "Asia/Seoul"
+            zone = "Asia/Seoul",
+            scheduler = "biddingTaskScheduler"
     )
     public void createScheduledRuns() {
         try {
             int createdCount = scheduledRunService.createDueRuns(batchSize);
-            log.info(
-                    "Scheduled bidding collection scan completed. createdCount={}",
-                    createdCount
-            );
+            if (createdCount == 0) {
+                log.debug("Scheduled bidding collection scan completed. createdCount=0");
+            } else if (createdCount >= batchSize) {
+                log.warn(
+                        "Scheduled bidding collection batch limit reached. createdCount={} batchSize={}",
+                        createdCount,
+                        batchSize
+                );
+            } else {
+                log.info(
+                        "Scheduled bidding collection scan completed. createdCount={}",
+                        createdCount
+                );
+            }
         } catch (RuntimeException exception) {
             log.error(
                     "Scheduled bidding collection failed. errorType={}",

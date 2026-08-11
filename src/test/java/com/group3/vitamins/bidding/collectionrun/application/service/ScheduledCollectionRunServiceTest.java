@@ -5,7 +5,6 @@ import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeTyp
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionConditionFilter;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
-import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionConditionRepository;
 import com.group3.vitamins.bidding.collectionrun.application.port.ScheduledCollectionConditionPort;
 import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRunCreator;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
@@ -36,7 +35,6 @@ class ScheduledCollectionRunServiceTest {
     private static final Long COMPANY_ID = 10L;
 
     private ScheduledCollectionConditionPort scheduledConditionPort;
-    private CollectionConditionRepository conditionRepository;
     private CollectionRunRepository runRepository;
     private CollectionRunCreator runCreator;
     private ScheduledCollectionRunService service;
@@ -44,7 +42,6 @@ class ScheduledCollectionRunServiceTest {
     @BeforeEach
     void setUp() {
         scheduledConditionPort = mock(ScheduledCollectionConditionPort.class);
-        conditionRepository = mock(CollectionConditionRepository.class);
         runRepository = mock(CollectionRunRepository.class);
         runCreator = mock(CollectionRunCreator.class);
 
@@ -55,7 +52,6 @@ class ScheduledCollectionRunServiceTest {
 
         service = new ScheduledCollectionRunService(
                 scheduledConditionPort,
-                conditionRepository,
                 runRepository,
                 runCreator,
                 new CollectionScheduleCalculator(),
@@ -75,10 +71,6 @@ class ScheduledCollectionRunServiceTest {
         int createdCount = service.createDueRuns(50);
 
         assertThat(createdCount).isEqualTo(1);
-        assertThat(condition.getLastScheduledAt())
-                .isEqualTo(LocalDateTime.of(2026, 8, 11, 9, 0));
-        assertThat(condition.getNextRunAt())
-                .isEqualTo(LocalDateTime.of(2026, 8, 12, 9, 0));
         verify(runCreator).create(
                 condition,
                 COMPANY_ID,
@@ -86,7 +78,12 @@ class ScheduledCollectionRunServiceTest {
                 null,
                 LocalDateTime.of(2026, 8, 11, 10, 0)
         );
-        verify(conditionRepository).save(condition);
+        verify(scheduledConditionPort).recordScheduledRun(
+                CONDITION_ID,
+                LocalDateTime.of(2026, 8, 11, 9, 0),
+                LocalDateTime.of(2026, 8, 12, 9, 0),
+                LocalDateTime.of(2026, 8, 11, 10, 0)
+        );
     }
 
     @Test
@@ -105,7 +102,11 @@ class ScheduledCollectionRunServiceTest {
         assertThat(condition.getNextRunAt())
                 .isEqualTo(LocalDateTime.of(2026, 8, 12, 9, 0));
         verify(runCreator, never()).create(any(), any(), any(), any(), any());
-        verify(conditionRepository).save(condition);
+        verify(scheduledConditionPort).advanceSchedule(
+                CONDITION_ID,
+                LocalDateTime.of(2026, 8, 12, 9, 0),
+                LocalDateTime.of(2026, 8, 11, 10, 0)
+        );
     }
 
     private CollectionCondition dueCondition() {

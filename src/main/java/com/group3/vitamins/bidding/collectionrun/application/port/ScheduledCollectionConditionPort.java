@@ -12,4 +12,13 @@ public interface ScheduledCollectionConditionPort {
             LocalDateTime now,
             int batchSize
     );
+
+    void advanceSchedule(Long conditionId, LocalDateTime nextRunAt, LocalDateTime updatedAt);
+
+    void recordScheduledRun(
+            Long conditionId,
+            LocalDateTime scheduledAt,
+            LocalDateTime nextRunAt,
+            LocalDateTime updatedAt
+    );
 }

@@ -54,7 +54,6 @@ public interface SpringDataCollectionConditionRepository
             name = "jakarta.persistence.lock.timeout",
             value = "-2"
     ))
-    @EntityGraph(attributePaths = "crawlSource")
     @Query("""
         SELECT condition
         FROM CollectionConditionJpaEntity condition
@@ -68,6 +67,36 @@ public interface SpringDataCollectionConditionRepository
     List<CollectionConditionJpaEntity> findDueConditionsForUpdate(
             @Param("now") LocalDateTime now,
             Pageable pageable
+    );
+
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE CollectionConditionJpaEntity condition
+        SET condition.nextRunAt = :nextRunAt,
+            condition.updatedAt = :updatedAt
+        WHERE condition.crawlConditionId = :conditionId
+          AND condition.deletedAt IS NULL
+        """)
+    int advanceSchedule(
+            @Param("conditionId") Long conditionId,
+            @Param("nextRunAt") LocalDateTime nextRunAt,
+            @Param("updatedAt") LocalDateTime updatedAt
+    );
+
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE CollectionConditionJpaEntity condition
+        SET condition.lastScheduledAt = :scheduledAt,
+            condition.nextRunAt = :nextRunAt,
+            condition.updatedAt = :updatedAt
+        WHERE condition.crawlConditionId = :conditionId
+          AND condition.deletedAt IS NULL
+        """)
+    int recordScheduledRun(
+            @Param("conditionId") Long conditionId,
+            @Param("scheduledAt") LocalDateTime scheduledAt,
+            @Param("nextRunAt") LocalDateTime nextRunAt,
+            @Param("updatedAt") LocalDateTime updatedAt
     );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

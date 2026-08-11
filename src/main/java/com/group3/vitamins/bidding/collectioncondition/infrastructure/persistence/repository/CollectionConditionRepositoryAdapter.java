@@ -5,12 +5,10 @@ import com.group3.vitamins.bidding.collectioncondition.domain.repository.Collect
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionConditionJpaEntity;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionSourceJpaEntity;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunConditionPort;
-import com.group3.vitamins.bidding.collectionrun.application.port.CollectionConditionResultPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.ScheduledCollectionConditionPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,7 +18,6 @@ import java.util.Optional;
 public class CollectionConditionRepositoryAdapter
         implements CollectionConditionRepository,
         CollectionRunConditionPort,
-        CollectionConditionResultPort,
         ScheduledCollectionConditionPort {
 
     private final SpringDataCollectionConditionRepository conditionRepository;
@@ -98,20 +95,36 @@ public class CollectionConditionRepositoryAdapter
     }
 
     @Override
-    @Transactional
-    public void recordSuccess(
+    public void advanceSchedule(
             Long conditionId,
-            java.time.LocalDateTime successAt,
-            int collectedCount
+            java.time.LocalDateTime nextRunAt,
+            java.time.LocalDateTime updatedAt
     ) {
-        int updatedCount = conditionRepository.recordCollectionSuccess(
-                conditionId,
-                successAt,
-                collectedCount
+        requireSingleUpdate(
+                conditionRepository.advanceSchedule(conditionId, nextRunAt, updatedAt),
+                conditionId
         );
+    }
+
+    @Override
+    public void recordScheduledRun(
+            Long conditionId,
+            java.time.LocalDateTime scheduledAt,
+            java.time.LocalDateTime nextRunAt,
+            java.time.LocalDateTime updatedAt
+    ) {
+        requireSingleUpdate(
+                conditionRepository.recordScheduledRun(
+                        conditionId, scheduledAt, nextRunAt, updatedAt
+                ),
+                conditionId
+        );
+    }
+
+    private void requireSingleUpdate(int updatedCount, Long conditionId) {
         if (updatedCount != 1) {
             throw new IllegalStateException(
-                    "완료된 수집 조건을 갱신할 수 없습니다. conditionId=" + conditionId
+                    "수집 조건의 예약 상태를 갱신할 수 없습니다. conditionId=" + conditionId
             );
         }
     }

@@ -111,28 +111,45 @@ class CollectionConditionRepositoryAdapterTest {
         CollectionCondition due = scheduledCondition(
                 "실행 대상",
                 now.minusMinutes(1),
+                true,
+                true
+        );
+        CollectionCondition dueExactlyNow = scheduledCondition(
+                "현재 시각 실행 대상",
+                now,
+                true,
                 true
         );
         CollectionCondition future = scheduledCondition(
                 "미래 실행",
                 now.plusMinutes(1),
+                true,
                 true
         );
         CollectionCondition disabled = scheduledCondition(
                 "자동 수집 꺼짐",
                 now.minusMinutes(1),
+                true,
                 false
         );
+        CollectionCondition inactive = scheduledCondition(
+                "비활성 조건",
+                now.minusMinutes(1),
+                false,
+                true
+        );
         adapter.save(due);
+        adapter.save(dueExactlyNow);
         adapter.save(future);
         adapter.save(disabled);
+        adapter.save(inactive);
 
         List<CollectionCondition> claimed =
                 adapter.claimDueConditions(now, 50);
 
         assertThat(claimed)
                 .extracting(CollectionCondition::getConditionName)
-                .containsExactly("실행 대상");
+                .containsExactly("실행 대상", "현재 시각 실행 대상");
     }
 
     @Test
@@ -228,6 +245,7 @@ class CollectionConditionRepositoryAdapterTest {
     private CollectionCondition scheduledCondition(
             String name,
             LocalDateTime nextRunAt,
+            boolean active,
             boolean autoCollectionEnabled
     ) {
         return CollectionCondition.create(
@@ -236,7 +254,7 @@ class CollectionConditionRepositoryAdapterTest {
                 name,
                 List.of(BidNoticeType.SERVICE),
                 condition(COMPANY_ID).getFilters(),
-                true,
+                active,
                 autoCollectionEnabled,
                 autoCollectionEnabled ? CollectionScheduleType.DAILY : null,
                 autoCollectionEnabled ? LocalTime.of(9, 0) : null,

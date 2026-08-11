@@ -10,7 +10,6 @@ import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRun
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunTaskFailure;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunTaskSummary;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectedBidNoticeStorePort;
-import com.group3.vitamins.bidding.collectionrun.application.port.CollectionConditionResultPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunJobHandlerPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunStatePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
@@ -35,7 +34,6 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
     private final CollectionRunTaskFailureService taskFailureService;
     private final List<CollectionSourceCollectorPort> collectors;
     private final CollectedBidNoticeStorePort noticeStorePort;
-    private final CollectionConditionResultPort conditionResultPort;
     private final Clock clock;
 
     public CollectionRunJobHandlerService(
@@ -44,7 +42,6 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
             CollectionRunTaskFailureService taskFailureService,
             List<CollectionSourceCollectorPort> collectors,
             CollectedBidNoticeStorePort noticeStorePort,
-            CollectionConditionResultPort conditionResultPort,
             Clock clock
     ) {
         this.runStatePort = runStatePort;
@@ -52,7 +49,6 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
         this.taskFailureService = taskFailureService;
         this.collectors = collectors;
         this.noticeStorePort = noticeStorePort;
-        this.conditionResultPort = conditionResultPort;
         this.clock = clock;
     }
 
@@ -217,18 +213,11 @@ public class CollectionRunJobHandlerService implements CollectionRunJobHandlerPo
         CollectionRunStatus finalStatus = summary.failedCount() > 0
                 ? CollectionRunStatus.PARTIAL_SUCCESS
                 : CollectionRunStatus.COMPLETED;
-        boolean completed = runStatePort.complete(
-                job.runId(), job.attemptId(), finalStatus,
+        runStatePort.complete(
+                job.runId(), job.conditionId(), job.attemptId(), finalStatus,
                 summary.collectedCount(), summary.insertedCount(),
                 summary.updatedCount(), summary.skippedCount(), now
         );
-        if (completed) {
-            conditionResultPort.recordSuccess(
-                    job.conditionId(),
-                    now,
-                    summary.collectedCount()
-            );
-        }
         return CollectionRunJobResult.success();
     }
 
