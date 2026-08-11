@@ -10,6 +10,7 @@ import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunC
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
 import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRequestCombinationGenerator;
+import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRunCreator;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
 import com.group3.vitamins.bidding.collectionrun.application.result.CollectionRunResult;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRun;
@@ -72,12 +73,17 @@ class CollectionRunServiceTest {
         when(companyIdProvider.currentCompanyId())
                 .thenReturn(COMPANY_ID);
 
-        service = new CollectionRunService(
-                conditionPort,
+        CollectionRunCreator runCreator = new CollectionRunCreator(
                 runRepository,
                 outboxStorePort,
                 taskPort,
-                combinationGenerator,
+                combinationGenerator
+        );
+
+        service = new CollectionRunService(
+                conditionPort,
+                runRepository,
+                runCreator,
                 companyIdProvider,
                 clock
         );

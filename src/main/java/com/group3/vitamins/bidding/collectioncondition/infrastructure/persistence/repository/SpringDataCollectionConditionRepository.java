@@ -6,7 +6,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.QueryHint;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,5 +46,42 @@ public interface SpringDataCollectionConditionRepository
     Optional<CollectionConditionJpaEntity> findOwnedConditionForUpdate(
             @Param("conditionId") Long conditionId,
             @Param("companyId") Long companyId
+    );
+
+    // 여러 서버가 동시에 조회해도 이미 잠긴 조건은 건너뛰고 실행 대상만 점유합니다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(
+            name = "jakarta.persistence.lock.timeout",
+            value = "-2"
+    ))
+    @EntityGraph(attributePaths = "crawlSource")
+    @Query("""
+        SELECT condition
+        FROM CollectionConditionJpaEntity condition
+        WHERE condition.enabled = true
+          AND condition.autoCollectionEnabled = true
+          AND condition.nextRunAt IS NOT NULL
+          AND condition.nextRunAt <= :now
+          AND condition.deletedAt IS NULL
+        ORDER BY condition.nextRunAt ASC, condition.crawlConditionId ASC
+        """)
+    List<CollectionConditionJpaEntity> findDueConditionsForUpdate(
+            @Param("now") LocalDateTime now,
+            Pageable pageable
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE CollectionConditionJpaEntity condition
+        SET condition.lastSuccessAt = :successAt,
+            condition.lastCollectedCount = :collectedCount,
+            condition.updatedAt = :successAt
+        WHERE condition.crawlConditionId = :conditionId
+          AND condition.deletedAt IS NULL
+        """)
+    int recordCollectionSuccess(
+            @Param("conditionId") Long conditionId,
+            @Param("successAt") LocalDateTime successAt,
+            @Param("collectedCount") int collectedCount
     );
 }

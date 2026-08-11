@@ -13,6 +13,7 @@ import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRun
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunTask;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunTaskSummary;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectedBidNoticeStorePort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionConditionResultPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunStatePort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionSourceCollectorPort;
@@ -79,6 +80,9 @@ class CollectionRunJobHandlerServiceTest {
     @Mock
     private CollectedBidNoticeStorePort noticeStorePort;
 
+    @Mock
+    private CollectionConditionResultPort conditionResultPort;
+
     private CollectionRunJobHandlerService service;
     private CollectionRunConditionSnapshot snapshot;
     private CollectionRunJob job;
@@ -111,6 +115,7 @@ class CollectionRunJobHandlerServiceTest {
                 taskFailureService,
                 List.of(collector),
                 noticeStorePort,
+                conditionResultPort,
                 clock
         );
     }
@@ -141,6 +146,10 @@ class CollectionRunJobHandlerServiceTest {
                 eq(TASK_ID), eq(ATTEMPT_ID), eq(1), eq(1), eq(0), eq(0), any()
         )).thenReturn(true);
         when(taskPort.summarize(RUN_ID)).thenReturn(completedSummary());
+        when(runStatePort.complete(
+                eq(RUN_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
+                eq(1), eq(1), eq(0), eq(0), any()
+        )).thenReturn(true);
 
         CollectionRunJobResult result = service.handle(job);
 
@@ -149,6 +158,11 @@ class CollectionRunJobHandlerServiceTest {
         verify(runStatePort).complete(
                 eq(RUN_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
                 eq(1), eq(1), eq(0), eq(0), any()
+        );
+        verify(conditionResultPort).recordSuccess(
+                eq(CONDITION_ID),
+                any(),
+                eq(1)
         );
     }
 

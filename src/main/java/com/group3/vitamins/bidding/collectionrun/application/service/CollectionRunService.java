@@ -3,16 +3,13 @@ package com.group3.vitamins.bidding.collectionrun.application.service;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
 import com.group3.vitamins.bidding.collectionrun.application.command.StartCollectionRunCommand;
-import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunOutbox;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunConditionPort;
-import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunOutboxStorePort;
-import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunTaskPort;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
 import com.group3.vitamins.bidding.collectionrun.application.result.CollectionRunResult;
-import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRequestCombinationGenerator;
+import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRunCreator;
 import com.group3.vitamins.bidding.collectionrun.application.usecase.CollectionRunUseCase;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRun;
-import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunConditionSnapshot;
+import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTriggerType;
 import com.group3.vitamins.bidding.collectionrun.domain.repository.CollectionRunRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
@@ -24,22 +21,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class CollectionRunService implements CollectionRunUseCase {
 
-    private static final String COLLECTION_RUN_REQUESTED =
-            "COLLECTION_RUN_REQUESTED";
-    private static final int INITIAL_COLLECTION_LOOKBACK_DAYS = 1;
-
     private final CollectionRunConditionPort conditionPort;
     private final CollectionRunRepository runRepository;
-    private final CollectionRunOutboxStorePort outboxStorePort;
-    private final CollectionRunTaskPort taskPort;
-    private final CollectionRequestCombinationGenerator combinationGenerator;
+    private final CollectionRunCreator runCreator;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final Clock clock;
 
@@ -62,49 +52,12 @@ public class CollectionRunService implements CollectionRunUseCase {
         validateConditionIsActive(condition);
         validateNoActiveRun(condition.getConditionId());
 
-        LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime collectionStartedAt = condition.getLastSuccessAt() == null
-                ? now.minusDays(INITIAL_COLLECTION_LOOKBACK_DAYS)
-                : condition.getLastSuccessAt();
-
-        CollectionRunConditionSnapshot snapshot =
-                new CollectionRunConditionSnapshot(
-                        condition.getSourceCode(),
-                        condition.getConditionName(),
-                        condition.getNoticeTypes(),
-                        condition.getFilters(),
-                        collectionStartedAt,
-                        now
-                );
-
-        CollectionRun pendingRun = CollectionRun.createPending(
-                condition.getConditionId(),
-                snapshot,
+        CollectionRun savedRun = runCreator.create(
+                condition,
+                companyId,
+                CollectionRunTriggerType.MANUAL,
                 command.userId(),
-                now
-        );
-
-        CollectionRun savedRun = runRepository.save(pendingRun);
-
-        taskPort.createTasks(
-                savedRun.runId(),
-                combinationGenerator.generate(snapshot)
-        );
-
-        String eventId = UUID.randomUUID().toString();
-        String attemptId = UUID.randomUUID().toString();
-
-        outboxStorePort.savePending(
-                new CollectionRunOutbox.Pending(
-                        eventId,
-                        savedRun.runId(),
-                        condition.getConditionId(),
-                        companyId,
-                        attemptId,
-                        COLLECTION_RUN_REQUESTED,
-                        0,
-                        now
-                )
+                LocalDateTime.now(clock)
         );
 
         return CollectionRunResult.from(savedRun);

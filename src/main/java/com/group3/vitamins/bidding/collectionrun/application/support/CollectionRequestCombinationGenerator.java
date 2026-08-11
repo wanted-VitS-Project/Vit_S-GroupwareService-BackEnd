@@ -10,7 +10,7 @@ import java.util.List;
 @Component
 public class CollectionRequestCombinationGenerator {
 
-    // 공고 유형과 선택 필터의 모든 조합을 첫 페이지 task로 생성합니다.
+    // 공고 유형과 선택 필터의 모든 조합을 첫 페이지 작업으로 생성합니다.
     public List<CollectionRequestCombination> generate(
             CollectionRunConditionSnapshot condition
     ) {

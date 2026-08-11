@@ -5,8 +5,12 @@ import com.group3.vitamins.bidding.collectioncondition.domain.repository.Collect
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionConditionJpaEntity;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionSourceJpaEntity;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunConditionPort;
+import com.group3.vitamins.bidding.collectionrun.application.port.CollectionConditionResultPort;
+import com.group3.vitamins.bidding.collectionrun.application.port.ScheduledCollectionConditionPort;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +19,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class CollectionConditionRepositoryAdapter
         implements CollectionConditionRepository,
-        CollectionRunConditionPort {
+        CollectionRunConditionPort,
+        CollectionConditionResultPort,
+        ScheduledCollectionConditionPort {
 
     private final SpringDataCollectionConditionRepository conditionRepository;
     private final SpringDataCollectionSourceRepository sourceRepository;
@@ -74,5 +80,39 @@ public class CollectionConditionRepositoryAdapter
         return conditionRepository
                 .findOwnedConditionForUpdate(conditionId, companyId)
                 .map(persistenceMapper::toDomain);
+    }
+
+    // 실행 시각이 지난 자동 수집 조건을 오래된 순서대로 점유합니다.
+    @Override
+    public List<CollectionCondition> claimDueConditions(
+            java.time.LocalDateTime now,
+            int batchSize
+    ) {
+        return conditionRepository.findDueConditionsForUpdate(
+                        now,
+                        PageRequest.of(0, batchSize)
+                )
+                .stream()
+                .map(persistenceMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void recordSuccess(
+            Long conditionId,
+            java.time.LocalDateTime successAt,
+            int collectedCount
+    ) {
+        int updatedCount = conditionRepository.recordCollectionSuccess(
+                conditionId,
+                successAt,
+                collectedCount
+        );
+        if (updatedCount != 1) {
+            throw new IllegalStateException(
+                    "완료된 수집 조건을 갱신할 수 없습니다. conditionId=" + conditionId
+            );
+        }
     }
 }
