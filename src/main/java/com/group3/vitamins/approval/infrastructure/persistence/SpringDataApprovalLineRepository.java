@@ -68,6 +68,15 @@ public interface SpringDataApprovalLineRepository extends JpaRepository<Approval
             + "WHERE l.approvalRevisionId = :approvalRevisionId AND l.deletedAt IS NULL")
     void softDeleteAllByApprovalRevisionId(@Param("approvalRevisionId") Long approvalRevisionId);
 
+    /** 참여 불가 결재자 교체 전 기존 미처리 행을 CANCELED로 종결하고 논리 삭제한다. */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalLineJpaEntity l SET l.status = :canceled, l.deletedAt = CURRENT_TIMESTAMP "
+            + "WHERE l.approvalLineId = :lineId AND l.deletedAt IS NULL "
+            + "AND l.status IN :replaceableStatuses")
+    int cancelAndSoftDelete(@Param("lineId") Long lineId,
+                            @Param("canceled") ApprovalLineStatus canceled,
+                            @Param("replaceableStatuses") Collection<ApprovalLineStatus> replaceableStatuses);
+
     /** SUB-002— 1번 순번은 ACTIVE, 나머지는 WAITING (회차 잠금이 이미 걸려 있어 조건 없이 전환) */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ApprovalLineJpaEntity l SET l.status = CASE WHEN l.sequenceNo = 1 THEN :activeStatus ELSE :waitingStatus END "

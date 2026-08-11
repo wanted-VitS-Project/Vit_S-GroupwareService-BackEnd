@@ -5,6 +5,8 @@ import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
+import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
+import com.group3.vitamins.approval.application.port.EmployeeSummary;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Component;
 public class ApprovalLineProcessingPolicy {
 
     private final ApprovalRepository approvalRepository;
+    private final EmployeeCatalogPort employeeCatalogPort;
 
     /** DEL-006 — line 잠금보다 먼저 활성 부모 approval을 찾아 잠근다. */
     public Approval getApprovalForLineForUpdateOrThrow(Long lineId) {
@@ -39,6 +42,11 @@ public class ApprovalLineProcessingPolicy {
      * {@code APPROVAL_LINE_FORBIDDEN}(403)으로 흡수한다(리소스 존재 여부 비노출, API 명세 확인 필요 표시됨).
      */
     public ApprovalLine getActiveOwnedLineOrThrow(Long lineId, String requesterId) {
+        EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId)
+                .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN));
+        if (requester.participationUnavailable() || "ADMIN".equals(requester.role())) {
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN);
+        }
         ApprovalLine line = approvalRepository.findLineByIdForUpdate(lineId)
                 .orElseThrow(() -> {
                     log.warn("결재선 없음 - lineId={}", lineId);

@@ -5,6 +5,9 @@ import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalRevision;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
+import com.group3.vitamins.approval.application.port.BlockCatalogPort;
+import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
+import com.group3.vitamins.approval.application.port.EmployeeSummary;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
@@ -22,6 +25,8 @@ import java.util.function.Function;
 public class ApprovalRevisionEligibilityPolicy {
 
     private final ApprovalRepository approvalRepository;
+    private final EmployeeCatalogPort employeeCatalogPort;
+    private final BlockCatalogPort blockCatalogPort;
 
     public Approval getApprovalOrThrow(Long approvalId) {
         return approvalRepository.findApproval(approvalId)
@@ -41,10 +46,57 @@ public class ApprovalRevisionEligibilityPolicy {
     }
 
     public void assertDrafter(Approval approval, String requesterId) {
-        if (!approval.getDrafterId().equals(requesterId)) {
+        String actingDrafterId = approval.getActingDrafterId();
+        String currentDrafterId = actingDrafterId != null && !isUnavailable(actingDrafterId)
+                ? actingDrafterId : approval.getDrafterId();
+        boolean assigned = currentDrafterId.equals(requesterId);
+        boolean available = employeeCatalogPort.findEmployee(requesterId)
+                .filter(employee -> !employee.participationUnavailable())
+                .filter(employee -> !"ADMIN".equals(employee.role()))
+                .isPresent();
+        if (!assigned || !available) {
             log.warn("기안자 아님 - approvalId={}, requesterId={}", approval.getApprovalId(), requesterId);
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
         }
+    }
+
+    /** 원 기안자와 기존 대행자가 모두 참여 불가일 때 최초 스텝 EDITOR를 대행자로 지정한다. */
+    public Approval claimActingDrafterOrThrow(Approval approval, String requesterId) {
+        EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId)
+                .filter(employee -> !employee.participationUnavailable())
+                .filter(employee -> !"ADMIN".equals(employee.role()))
+                .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER));
+
+        if (!blockCatalogPort.isBlockInCompany(approval.getBlockId(), requester.companyId())) {
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
+        }
+
+        String currentActing = approval.getActingDrafterId();
+        boolean actingUnavailable = currentActing == null || isUnavailable(currentActing);
+        if (!actingUnavailable) {
+            if (currentActing.equals(requesterId)) {
+                return approval;
+            }
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
+        }
+
+        if (!isUnavailable(approval.getDrafterId())) {
+            if (approval.getDrafterId().equals(requesterId)) {
+                return approval;
+            }
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
+        }
+        if (!blockCatalogPort.isStepEditor(approval.getBlockId(), requesterId, requester.role())) {
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
+        }
+        return approvalRepository.assignActingDrafter(approval.getApprovalId(), requesterId);
+    }
+
+    public boolean isUnavailable(String userId) {
+        return employeeCatalogPort.findEmployee(userId)
+                .map(employee -> employee.participationUnavailable()
+                        || "ADMIN".equals(employee.role()))
+                .orElse(true);
     }
 
     /**
@@ -66,6 +118,11 @@ public class ApprovalRevisionEligibilityPolicy {
      */
     public ApprovalRevision getDraftRevisionForUpdateOrThrow(Long approvalId, Long revisionId) {
         return assertDraft(findOwnedRevision(approvalId, revisionId, approvalRepository::findRevisionByIdForUpdate));
+    }
+
+    /** DRAFT·IN_PROGRESS 분기 전에 소속과 잠금만 확인하는 결재선 수정용 조회. */
+    public ApprovalRevision getRevisionForUpdateOrThrow(Long approvalId, Long revisionId) {
+        return findOwnedRevision(approvalId, revisionId, approvalRepository::findRevisionByIdForUpdate);
     }
 
     private ApprovalRevision assertDraft(ApprovalRevision revision) {

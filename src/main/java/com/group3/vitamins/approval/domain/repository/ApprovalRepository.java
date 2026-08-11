@@ -27,6 +27,9 @@ public interface ApprovalRepository {
     /** DEL-013 — 삭제 전파가 이미 삭제된 행까지 잠근 뒤 멱등 종료할 수 있게 하는 조회 */
     Optional<Approval> findApprovalIncludingDeletedForUpdate(Long approvalId);
 
+    /** 원 기안자 참여 불가 시 현재 스텝 EDITOR를 대행 기안자로 지정한다. 부모 행 잠금 뒤 호출한다. */
+    Approval assignActingDrafter(Long approvalId, String actingDrafterId);
+
     /** 승인·반려가 line 잠금 전에 부모 approval을 찾기 위한 활성 관계 조회 */
     Optional<Long> findApprovalIdByLineId(Long lineId);
 
@@ -89,6 +92,12 @@ public interface ApprovalRepository {
 
     /** APR-009 — 기존 결재선을 전부 지우고({@code sequenceNo} 순으로) 새로 만든다 */
     List<ApprovalLine> replaceLines(Long revisionId, List<NewApprovalLine> lines);
+
+    /** 진행 중 참여 불가 결재선 1건을 감사 이력 보존 후 같은 순번·상태의 새 결재자로 교체한다. */
+    ApprovalLine replaceUnavailableLine(ApprovalLine previousLine, String newApproverId);
+
+    /** 진행 중 참여 불가 결재선을 제외하고 남은 활성 결재선의 순번을 1부터 다시 매긴다. */
+    List<ApprovalLine> excludeUnavailableLines(Long revisionId, List<Long> excludedLineIds);
 
     /** SUB-006 — 이전 회차 제목·내용을 그대로 넘긴 새 DRAFT 회차 */
     ApprovalRevision createRevisionDraft(Long approvalId, int revisionNo, String title, String content);

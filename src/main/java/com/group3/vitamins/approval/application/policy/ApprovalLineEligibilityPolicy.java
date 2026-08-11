@@ -20,8 +20,8 @@ import java.util.Set;
 @Slf4j
 public class ApprovalLineEligibilityPolicy {
 
-    /** APR-012 — MASTER 는 검증 제외. ADMIN 은 인사 전용 시스템 계정이라 프로젝트 소속이 없어 마찬가지로 제외 */
-    private static final Set<String> MEMBERSHIP_CHECK_EXEMPT_ROLES = Set.of("MASTER", "ADMIN");
+    /** APR-012 — MASTER만 프로젝트 소속 검증 제외. ADMIN은 결재 참여 자체가 불가능하다. */
+    private static final Set<String> MEMBERSHIP_CHECK_EXEMPT_ROLES = Set.of("MASTER");
 
     private final EmployeeCatalogPort employeeCatalogPort;
     private final BlockCatalogPort blockCatalogPort;
@@ -46,10 +46,10 @@ public class ApprovalLineEligibilityPolicy {
     }
 
     /**
-     * APR-012 — 결재자마다 존재 확인 + 회사 일치 확인 + (MASTER·ADMIN 제외) project member 자격을 확인하고,
+     * APR-012 — 결재자마다 존재·참여 가능·회사 일치 확인 + (MASTER 제외) project member 자격을 확인하고,
      * 응답에 필요한 라이브 조회 결과(INV-11)를 입력 순서 그대로 반환한다.
      *
-     * <p>회사 검사는 <b>면제 판정보다 먼저</b> 한다. MASTER·ADMIN 면제는 "같은 회사 안에서 소속을 안 따진다"는
+     * <p>회사 검사는 <b>면제 판정보다 먼저</b> 한다. MASTER 면제는 "같은 회사 안에서 소속을 안 따진다"는
      * 뜻이지 회사 경계까지 넘으라는 뜻이 아니다 — 순서를 바꾸면 타 회사 특권 계정이 검사 없이 통과한다.
      */
     public List<EmployeeSummary> assertApproversEligible(Long blockId, List<String> approverIds) {
@@ -70,6 +70,11 @@ public class ApprovalLineEligibilityPolicy {
                         throw new ValidationException(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
                     }
 
+                    if (employee.participationUnavailable() || "ADMIN".equals(employee.role())) {
+                        log.warn("결재선 등록 - 참여 불가 사원 approverId={}", approverId);
+                        throw new ValidationException(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+                    }
+
                     boolean exempt = MEMBERSHIP_CHECK_EXEMPT_ROLES.contains(employee.role());
                     if (!exempt && !blockCatalogPort.isProjectMember(projectId, approverId)) {
                         log.warn("결재선 등록 - project member 아님 approverId={}", approverId);
@@ -78,5 +83,11 @@ public class ApprovalLineEligibilityPolicy {
                     return employee;
                 })
                 .toList();
+    }
+
+    public boolean isParticipationUnavailable(String userId) {
+        return employeeCatalogPort.findEmployee(userId)
+                .map(EmployeeSummary::participationUnavailable)
+                .orElse(true);
     }
 }

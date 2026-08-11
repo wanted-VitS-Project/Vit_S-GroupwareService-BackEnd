@@ -73,13 +73,13 @@ public class ApprovalRevisionController {
 
     @Operation(summary = "결재관리 목록조회",
             description = "scope=drafted(기본)는 요청자 본인이 기안한 결재, pending은 요청자가 현재 ACTIVE인 결재, "
-                    + "all은 MASTER·ADMIN만 전체 결재를 조회한다.")
+                    + "all은 MASTER만 전체 결재를 조회한다. ADMIN은 결재 권한이 없다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER·ADMIN이 아닌 사용자의 scope=all 요청")
+                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER가 아닌 사용자의 scope=all 요청 또는 ADMIN 접근")
     })
     @GetMapping
     public ApiResponse<ApprovalListResponse> listApprovals(
@@ -185,7 +185,8 @@ public class ApprovalRevisionController {
     }
 
     @Operation(summary = "결재 제목·내용 수정",
-            description = "DRAFT 상태의 회차에서 제목·내용을 수정한다. title/content 중 하나만 보내도 부분 수정된다.")
+            description = "DRAFT 상태의 회차에서 기안자 또는 지정된 대행 기안자가 제목·내용을 수정한다. "
+                    + "title/content 중 하나만 보내도 부분 수정된다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -213,7 +214,8 @@ public class ApprovalRevisionController {
     }
 
     @Operation(summary = "결재 문서 추가",
-            description = "업로드 완료된 파일 버전을 결재 문서로 연결한다. 실제 파일 업로드는 공용 파일 API 소관이며, "
+            description = "기안자 또는 지정된 대행 기안자가 업로드 완료된 파일 버전을 결재 문서로 연결한다. "
+                    + "실제 파일 업로드는 공용 파일 API 소관이며, "
                     + "이 API는 fileVersionId 연결만 한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "추가 성공"),
@@ -242,7 +244,8 @@ public class ApprovalRevisionController {
                 .body(ApiResponse.created("추가 성공", AddApprovalDocumentResponse.from(view)));
     }
 
-    @Operation(summary = "결재 문서 제거", description = "DRAFT 상태의 회차에서 연결된 문서를 하드 삭제한다(이력 보존 대상 아님).")
+    @Operation(summary = "결재 문서 제거",
+            description = "DRAFT 상태의 회차에서 기안자 또는 지정된 대행 기안자가 연결 문서를 논리 삭제한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "제거 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -272,7 +275,9 @@ public class ApprovalRevisionController {
     }
 
     @Operation(summary = "결재선 등록·수정",
-            description = "DRAFT 상태의 회차에서 결재선 전체를 요청받은 목록으로 치환한다. MASTER·ADMIN 은 project member 검증에서 제외된다.")
+            description = "DRAFT에서는 결재선 전체를 치환한다. IN_PROGRESS에서는 참여 불가한 ACTIVE·WAITING 결재자만 "
+                    + "교체하거나 요청 배열에서 제외한다. 제외하면 뒤 순번을 당기고, 현재 결재자를 제외한 경우 다음 "
+                    + "결재자를 활성화하거나 결재를 완료한다. MASTER만 project member 검증에서 제외되고 ADMIN은 지정할 수 없다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록·수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -282,13 +287,13 @@ public class ApprovalRevisionController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "APPROVAL_NOT_DRAFTER — 기안자 아님"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "APPROVAL_REVISION_NOT_DRAFT — DRAFT 아닌 회차 수정 시도"),
+                    description = "APPROVAL_REVISION_NOT_DRAFT — 허용되지 않은 회차 또는 진행 중 결재선 변경"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "APPROVAL_LINE_EMPTY — 결재자 0명"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "APPROVAL_LINE_ORDER_INVALID — 순서 중복/누락"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "APPROVAL_LINE_APPROVER_NOT_MEMBER — 일반 결재자가 project member 아님(MASTER·ADMIN 제외)")
+                    description = "APPROVAL_LINE_APPROVER_NOT_MEMBER — 참여 불가·ADMIN·project member 아님(MASTER만 제외)")
     })
     @PutMapping("/{approvalId}/revisions/{revisionId}/lines")
     public ApiResponse<UpdateApprovalLinesResponse> updateLines(
@@ -311,7 +316,8 @@ public class ApprovalRevisionController {
 
     @Operation(summary = "재상신 회차 생성",
             description = "반려된 결재의 새 DRAFT 회차를 만든다. 이전 회차의 제목·내용·문서를 복사하고, "
-                    + "결재선은 반려자부터만 재구성한다. 이미 준비된 DRAFT 회차가 있으면 그대로 반환한다(멱등).")
+                    + "결재선은 반려자부터만 재구성한다. 원 기안자가 참여 불가이면 최초 활성 스텝 EDITOR가 "
+                    + "대행 기안자로 지정된다. 이미 준비된 DRAFT 회차가 있으면 그대로 반환한다(멱등).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "새 회차 생성"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
@@ -342,7 +348,7 @@ public class ApprovalRevisionController {
     }
 
     @Operation(summary = "결재 상신",
-            description = "DRAFT 회차를 상신한다. 제목·내용·문서·결재선 유효성을 전부 재검증하고, "
+            description = "기안자 또는 지정된 대행 기안자가 DRAFT 회차를 상신한다. 제목·내용·문서·결재선 유효성을 전부 재검증하고, "
                     + "통과하면 회차·결재는 IN_PROGRESS로, 1번 결재선은 ACTIVE로 전환된다. 최초 상신·재상신 겸용이다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상신 성공"),

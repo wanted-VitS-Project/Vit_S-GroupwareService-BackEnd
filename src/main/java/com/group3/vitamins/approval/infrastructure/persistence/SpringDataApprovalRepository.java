@@ -24,6 +24,12 @@ public interface SpringDataApprovalRepository extends JpaRepository<ApprovalJpaE
     @Query("SELECT a FROM ApprovalJpaEntity a WHERE a.approvalId = :approvalId")
     Optional<ApprovalJpaEntity> findIncludingDeletedByIdForUpdate(@Param("approvalId") Long approvalId);
 
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ApprovalJpaEntity a SET a.actingDrafterId = :actingDrafterId, a.updatedAt = CURRENT_TIMESTAMP "
+            + "WHERE a.approvalId = :approvalId AND a.deletedAt IS NULL")
+    void assignActingDrafter(@Param("approvalId") Long approvalId,
+                             @Param("actingDrafterId") String actingDrafterId);
+
     /**
      * SUB-002 — 상신 시 approval 을 IN_PROGRESS 로, {@code current_revision_no} 를 이 회차로 갱신한다.
      * 회차 잠금(`findByIdForUpdate`)이 이미 이 트랜잭션 안에서 걸려 있어 별도 조건은 안 건다(INV-07).
