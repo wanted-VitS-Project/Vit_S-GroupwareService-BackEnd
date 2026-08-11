@@ -1,10 +1,6 @@
 package com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.adapter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.entity.*;
-import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.repository.*;
+import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.CollectedBidNoticeUpsertMapper;
 import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionSource;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionSourceRepository;
@@ -16,8 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -25,11 +19,9 @@ public class JpaCollectedBidNoticeStoreAdapter
         implements CollectedBidNoticeStorePort {
 
     private final CollectionSourceRepository sourceRepository;
-    private final SpringDataBidNoticeRepository noticeRepository;
-    private final SpringDataBidNoticeRawRepository rawRepository;
+    private final CollectedBidNoticeUpsertMapper upsertMapper;
     private final BidNoticeAttachmentSynchronizer attachmentSynchronizer;
     private final CompanyBidNoticeStatePort companyStatePort;
-    private final ObjectMapper objectMapper;
 
     // 공고, 원문, 첨부파일을 같은 트랜잭션에서 저장합니다.
     @Override
@@ -52,12 +44,7 @@ public class JpaCollectedBidNoticeStoreAdapter
                         "사용 가능한 수집처를 찾을 수 없습니다: " + sourceCode
                 ));
 
-        Map<NoticeKey, BidNoticeJpaEntity> notices =
-                loadExistingNotices(source.sourceId(), payloads);
-        Set<RawKey> existingRawKeys =
-                loadExistingRawKeys(notices.values(), payloads);
-
-        List<BidNoticeRawJpaEntity> newRawEntities = new ArrayList<>();
+        Set<Long> observedNoticeIds = new LinkedHashSet<>();
         Map<Long, List<CollectedBidNotice.Attachment>> attachments =
                 new HashMap<>();
 
@@ -67,59 +54,38 @@ public class JpaCollectedBidNoticeStoreAdapter
 
         for (CollectedBidNoticePayload payload : payloads) {
             CollectedBidNotice notice = payload.notice();
-            NoticeKey noticeKey = NoticeKey.from(notice);
-            BidNoticeJpaEntity entity = notices.get(noticeKey);
+            int noticeInserted = upsertMapper.insertNoticeIfAbsent(
+                    source.sourceId(), notice, notice.hasAttachments(), crawledAt
+            );
+            Long noticeId = requireNoticeId(source.sourceId(), notice);
+            observedNoticeIds.add(noticeId);
 
-            if (entity == null) {
-                entity = noticeRepository.save(
-                        BidNoticeJpaEntity.create(
-                                source.sourceId(),
-                                notice,
-                                crawledAt
-                        )
-                );
-                notices.put(noticeKey, entity);
-                inserted++;
-            } else {
-                RawKey rawKey = new RawKey(
-                        entity.getBidNoticeId(),
-                        payload.rawPayloadHash()
-                );
-
-                if (existingRawKeys.contains(rawKey)) {
-                    entity.markObserved(crawledAt);
-                    skipped++;
-                    continue;
-                }
-
-                entity.updateFrom(notice, crawledAt);
-                updated++;
-            }
-
-            RawKey rawKey = new RawKey(
-                    entity.getBidNoticeId(),
-                    payload.rawPayloadHash()
+            int rawInserted = upsertMapper.insertRawIfAbsent(
+                    noticeId, runId, sourceCode, payload.rawPayload(),
+                    payload.rawPayloadHash(), crawledAt
             );
 
-            newRawEntities.add(BidNoticeRawJpaEntity.create(
-                    entity.getBidNoticeId(),
-                    runId,
-                    sourceCode,
-                    parseRawPayload(payload.rawPayload()),
-                    payload.rawPayloadHash(),
-                    crawledAt
-            ));
-            existingRawKeys.add(rawKey);
-            attachments.put(entity.getBidNoticeId(), notice.attachments());
+            if (rawInserted == 0) {
+                upsertMapper.touchObservedAt(noticeId, crawledAt);
+                skipped++;
+                continue;
+            }
+
+            if (noticeInserted == 1) {
+                inserted++;
+            } else {
+                upsertMapper.updateCollectedNotice(
+                        noticeId, notice, notice.hasAttachments(), crawledAt
+                );
+                updated++;
+            }
+            attachments.put(noticeId, notice.attachments());
         }
 
-        rawRepository.saveAll(newRawEntities);
         attachmentSynchronizer.synchronize(attachments, crawledAt);
         companyStatePort.observeAll(
                 companyId,
-                notices.values().stream()
-                        .map(BidNoticeJpaEntity::getBidNoticeId)
-                        .toList(),
+                List.copyOf(observedNoticeIds),
                 runId,
                 crawledAt
         );
@@ -127,75 +93,13 @@ public class JpaCollectedBidNoticeStoreAdapter
         return new StoreResult(inserted, updated, skipped);
     }
 
-    private Map<NoticeKey, BidNoticeJpaEntity> loadExistingNotices(
-            Long sourceId,
-            List<CollectedBidNoticePayload> payloads
-    ) {
-        Set<String> externalIds = payloads.stream()
-                .map(payload -> payload.notice().externalId())
-                .collect(Collectors.toSet());
-
-        return noticeRepository
-                .findAllByCrawlSourceIdAndExternalIdIn(sourceId, externalIds)
-                .stream()
-                .collect(Collectors.toMap(
-                        NoticeKey::from,
-                        Function.identity()
-                ));
-    }
-
-    private Set<RawKey> loadExistingRawKeys(
-            Collection<BidNoticeJpaEntity> notices,
-            List<CollectedBidNoticePayload> payloads
-    ) {
-        Set<Long> noticeIds = notices.stream()
-                .map(BidNoticeJpaEntity::getBidNoticeId)
-                .collect(Collectors.toSet());
-
-        if (noticeIds.isEmpty()) {
-            return new HashSet<>();
+    private Long requireNoticeId(Long sourceId, CollectedBidNotice notice) {
+        Long noticeId = upsertMapper.findNoticeId(
+                sourceId, notice.externalId(), notice.noticeOrder()
+        );
+        if (noticeId == null) {
+            throw new IllegalStateException("원자 저장된 입찰 공고를 찾을 수 없습니다.");
         }
-
-        Set<String> hashes = payloads.stream()
-                .map(CollectedBidNoticePayload::rawPayloadHash)
-                .collect(Collectors.toSet());
-
-        return rawRepository.findExistingRawKeys(noticeIds, hashes)
-                .stream()
-                .map(raw -> new RawKey(
-                        raw.getBidNoticeId(),
-                        raw.getRawPayloadHash()
-                ))
-                .collect(Collectors.toCollection(HashSet::new));
-    }
-
-    private JsonNode parseRawPayload(String rawPayload) {
-        try {
-            return objectMapper.readTree(rawPayload);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException(
-                    "입찰 공고 원문 JSON이 올바르지 않습니다.",
-                    exception
-            );
-        }
-    }
-
-    private record NoticeKey(String externalId, String noticeOrder) {
-        private static NoticeKey from(CollectedBidNotice notice) {
-            return new NoticeKey(
-                    notice.externalId(),
-                    notice.noticeOrder()
-            );
-        }
-
-        private static NoticeKey from(BidNoticeJpaEntity notice) {
-            return new NoticeKey(
-                    notice.getExternalId(),
-                    notice.getNoticeOrder()
-            );
-        }
-    }
-
-    private record RawKey(Long bidNoticeId, String rawPayloadHash) {
+        return noticeId;
     }
 }

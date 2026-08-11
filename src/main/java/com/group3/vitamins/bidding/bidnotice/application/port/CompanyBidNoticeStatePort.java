@@ -2,6 +2,9 @@ package com.group3.vitamins.bidding.bidnotice.application.port;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Optional;
+
+import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
 
 public interface CompanyBidNoticeStatePort {
 
@@ -21,4 +24,8 @@ public interface CompanyBidNoticeStatePort {
             Long runId,
             LocalDateTime observedAt
     );
+
+    Optional<CompanyBidNoticeState> findForUpdate(Long companyId, Long bidNoticeId);
+
+    void update(CompanyBidNoticeState state);
 }

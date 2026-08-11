@@ -80,6 +80,21 @@ public enum BiddingErrorCode implements ErrorCode {
     BIDDING_NOTICE_EDIT_NOT_ALLOWED(
             "BIDDING_NOTICE_EDIT_NOT_ALLOWED",
             "수정할 수 없는 입찰 공고입니다."
+    ),
+
+    BIDDING_INVALID_DISMISS_REASON(
+            "BIDDING_INVALID_DISMISS_REASON",
+            "입찰 공고 제외 사유가 올바르지 않습니다."
+    ),
+
+    BIDDING_NOTICE_ALREADY_DISMISSED(
+            "BIDDING_NOTICE_ALREADY_DISMISSED",
+            "이미 제외된 입찰 공고입니다."
+    ),
+
+    BIDDING_NOTICE_NOT_DISMISSED(
+            "BIDDING_NOTICE_NOT_DISMISSED",
+            "제외 상태가 아닌 입찰 공고입니다."
     );
 
     private final String code;
