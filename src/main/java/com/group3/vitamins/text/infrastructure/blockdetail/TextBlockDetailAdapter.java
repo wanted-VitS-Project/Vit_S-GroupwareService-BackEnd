@@ -44,6 +44,6 @@ public class TextBlockDetailAdapter implements BlockDetailPort {
         }
         return textDetailMapper.findByTxtIds(typeIds).stream()
                 .collect(Collectors.toMap(TextDetailRow::txtId,
-                        row -> new TextDetail(row.txtId(), row.content())));
+                        row -> new TextDetail(row.txtId(), row.content(), row.version())));
     }
 }

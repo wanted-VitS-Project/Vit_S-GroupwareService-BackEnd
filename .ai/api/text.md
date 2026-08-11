@@ -41,12 +41,15 @@
 | 파라미터명 | 타입 | 필수 여부 | 설명 |
 | --- | --- | --- | --- |
 | `content` | String | Y | 사용자가 수정한 부분을 포함한 모든 내용 |
+| `version` | Integer | Y | 블록 목록/상세 조회에서 받은 version 그대로. 2026-08-11 낙관적 락 추가(`.ai/docs/global/CONCURRENCY.md`) |
+| `overwrite` | Boolean | N | true면 충돌 무시하고 덮어씀. 생략 시 false. 2026-08-11 추가 |
 
 **Request Example**
 
 ```json
 {
-  "content": "**오전 회의록** \n주제: 제안서 분담하기 \n기한: 오늘 오후"
+  "content": "**오전 회의록** \n주제: 제안서 분담하기 \n기한: 오늘 오후",
+  "version": 1
 }
 ```
 
@@ -59,6 +62,7 @@
 | `data.txtId` | Long | 수정된 텍스트 블록 ID |
 | `data.content` | String | 수정된 텍스트 블록 내용 |
 | `data.updatedAt` | LocalDateTime | 텍스트 블록 수정일 |
+| `data.version` | int | 수정 후 버전(기존값+1). 2026-08-11 추가 |
 
 **Success Example**
 
@@ -69,7 +73,8 @@
   "data": {
     "txtId": 1,
     "content": "**오전 회의록** \n주제: 제안서 분담하기 \n기한: 오늘 오후",
-    "updatedAt": "2026-07-31T15:20:00"
+    "updatedAt": "2026-07-31T15:20:00",
+    "version": 2
   }
 }
 ```
@@ -80,11 +85,21 @@
 | --- | --- | --- | --- |
 | 200 | OK | — | "텍스트 본문 수정 성공" |
 | 400 | Bad Request | `TXT-003` | "내용을 입력해 주세요." |
+| 400 | Bad Request | `TEXT_VERSION_REQUIRED` | "버전 정보가 없습니다. 화면을 새로고침해 주세요." (2026-08-11 추가) |
 | 403 | Forbidden | `TXT-001` | "편집 권한이 없습니다." |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `TXT-002` | "존재하지 않는 블록입니다." |
+| 409 | Conflict | `TEXT_VERSION_CONFLICT` | "다른 사용자가 먼저 수정했습니다." (2026-08-11 추가 — 낙관적 락) |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
 | 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
+
+## 구현 메모 — 낙관적 락 (2026-08-11)
+
+`.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `text` 테이블에 `version` 컬럼 추가
+(`V20260811130000__add_version_text.sql`). 블록 목록 조회(`GET /steps/{stepId}/blocks`)의
+`TEXT` 상세에도 `version`이 함께 내려간다(위 문서 §5-1 "목록도" 규칙 — 카드에서 바로 수정을
+시작하는 화면이라 목록에 값이 없으면 프론트가 보낼 게 없음). `@Version`(JPA) 대신 수동
+`WHERE version = ?` 조건부 UPDATE로 검사한다(§6-1 — detached merge라 JPA 낙관락은 항상 통과함).
 
 ---
 
