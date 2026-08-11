@@ -38,7 +38,8 @@ import java.util.UUID;
 @Slf4j
 public class S3ProfileImageStorageAdapter implements ProfileImageStoragePort {
 
-    private static final Set<String> NON_RESIZABLE_EXTENSIONS = Set.of("gif", "webp");
+    // gif 는 리사이즈하면 애니메이션이 깨진다(Thumbnailator 가 첫 프레임만 남김) — 원본 그대로 올린다.
+    private static final Set<String> NON_RESIZABLE_EXTENSIONS = Set.of("gif");
     private static final int MAX_DIMENSION_PX = 512;
     private static final long RESIZE_THRESHOLD_BYTES = 512L * 1024;
     private static final Duration VIEW_URL_DURATION = Duration.ofHours(1);

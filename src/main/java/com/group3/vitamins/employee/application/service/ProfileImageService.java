@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -32,20 +34,34 @@ public class ProfileImageService implements ProfileImageUseCase {
         String extension = profileImageValidator.validate(file);
         // 교체여도 이전 S3 객체는 지우지 않는다(소프트 정책, 이미지 도메인과 통일 — 하드삭제 정책 대기).
         String key = profileImageStoragePort.upload(userId, file, extension);
-        try {
-            employeeRepository.updateProfileImageKey(userId, key);
-        } catch (RuntimeException e) {
-            // 업로드는 됐는데 DB 반영(saveAndFlush)이 실패하면 방금 올린 새 객체는 참조가 없어 고아가 된다 →
-            // 보상 삭제. (기존 사진을 안 지우는 소프트 정책과는 무관한 '실패 경로'다.) 삭제가 또 실패해도 원인 예외를 던진다.
-            try {
-                profileImageStoragePort.delete(key);
-            } catch (RuntimeException cleanupFailure) {
-                log.error("프로필 사진 DB 반영 실패 후 S3 보상 삭제도 실패 - userId={}, key={}", userId, key, cleanupFailure);
-            }
-            throw e;
-        }
+        // S3 업로드는 트랜잭션 밖이라, 이 트랜잭션이 끝내 롤백되면(DB 반영 실패·커밋 실패·상위 트랜잭션 롤백)
+        // 방금 올린 새 객체는 DB 참조가 없어 고아가 된다 → afterCompletion 에서 정리한다. in-method try/catch 는
+        // 커밋 시점 실패·상위 롤백을 못 잡으므로 트랜잭션 동기화로 모든 롤백 경로를 덮는다(소프트 정책과 무관한 실패 경로).
+        registerOrphanCleanupOnRollback(userId, key);
+        employeeRepository.updateProfileImageKey(userId, key);
         log.info("프로필 사진 등록/변경 - userId={}", userId);
         return ProfileImagePath.of(userId);
+    }
+
+    /** 이 트랜잭션이 커밋되지 못하고 끝나면(롤백/불명) 방금 올린 새 S3 객체를 지운다. 커밋되면 아무것도 안 한다. */
+    private void registerOrphanCleanupOnRollback(String userId, String key) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return; // @Transactional 이라 정상적으론 항상 활성 — 방어적 가드
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    return; // 커밋됨 → 새 키가 DB 에 반영됨, 유지
+                }
+                try {
+                    profileImageStoragePort.delete(key);
+                    log.warn("프로필 사진 트랜잭션 롤백 - 고아 S3 객체 정리 - userId={}, key={}", userId, key);
+                } catch (RuntimeException e) {
+                    log.error("프로필 사진 롤백 보상 삭제 실패 - userId={}, key={}", userId, key, e);
+                }
+            }
+        });
     }
 
     @Override

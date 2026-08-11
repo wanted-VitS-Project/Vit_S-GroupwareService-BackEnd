@@ -62,7 +62,7 @@ public enum EmployeeErrorCode implements ErrorCode {
             "업로드할 이미지 파일이 없습니다."),
 
     EMP_PROFILE_IMAGE_TYPE_INVALID("EMP_PROFILE_IMAGE_TYPE_INVALID",
-            "지원하지 않는 이미지 형식입니다. (jpg·jpeg·png·gif·webp)"),
+            "지원하지 않는 이미지 형식입니다. (jpg·jpeg·png·gif)"),
 
     EMP_PROFILE_IMAGE_SIZE_EXCEEDED("EMP_PROFILE_IMAGE_SIZE_EXCEEDED",
             "이미지 크기가 5MB를 초과했습니다."),

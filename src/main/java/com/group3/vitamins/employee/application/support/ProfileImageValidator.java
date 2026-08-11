@@ -12,7 +12,6 @@ import javax.imageio.stream.ImageInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -27,7 +26,9 @@ import java.util.Set;
 @Slf4j
 public class ProfileImageValidator {
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
+    // webp 제외 — JDK 에 내장 디코더가 없어 실제 디코딩·픽셀 수 검사를 못 한다. 매직바이트만으로 통과시키면
+    // 대형 webp 가 픽셀 폭탄 상한을 우회한다(코드 리뷰 지적). 안전한 webp 검증기(외부 라이브러리)가 붙으면 그때 추가한다.
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif");
     private static final long MAX_SIZE_BYTES = 5L * 1024 * 1024;
     // 디코딩 폭탄 방어 — 바이트 상한(5MB)은 압축 해제 후 픽셀 메모리를 못 막는다(작은 파일이 수억 픽셀로 팽창 가능).
     // 실제 디코딩 전에 헤더의 가로×세로만 읽어 픽셀 수를 제한한다. 50MP 는 고화소 휴대폰 사진(48MP)까지는 통과.
@@ -58,8 +59,8 @@ public class ProfileImageValidator {
 
     /**
      * 확장자(이름)가 아니라 실제 바이트가 그 포맷의 이미지인지 매직 바이트로 확인하고(위장 업로드 방지),
-     * webp 를 제외한 포맷은 {@code ImageIO} 로 실제 디코딩까지 한 번 더 확인한다(헤더만 맞고 본문이 깨진 파일 차단).
-     * webp 는 JDK 내장 디코더가 없어 매직 바이트까지만 검사한다(알려진 제한 — 이미지 도메인과 동일).
+     * {@code ImageIO} 로 실제 디코딩까지(픽셀 수 상한 검사 포함) 확인한다(헤더만 맞고 본문이 깨진 파일·디코딩 폭탄 차단).
+     * 허용 포맷(jpg·jpeg·png·gif)은 모두 JDK 로 디코딩 가능하다 — webp 는 디코더가 없어 허용 목록에서 제외했다.
      */
     private void assertActualImageContent(MultipartFile file, String extension) {
         byte[] content;
@@ -73,8 +74,8 @@ public class ProfileImageValidator {
                     file.getOriginalFilename(), extension);
             throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_TYPE_INVALID);
         }
-        if (!"webp".equals(extension) && !isDecodableImage(content)) {
-            log.warn("프로필 사진 헤더는 맞지만 디코딩 실패(손상/위장 의심) - originalFilename={}, extension={}",
+        if (!isDecodableImage(content)) {
+            log.warn("프로필 사진 헤더는 맞지만 디코딩 실패/픽셀 과다(손상·위장·폭탄 의심) - originalFilename={}, extension={}",
                     file.getOriginalFilename(), extension);
             throw new ValidationException(EmployeeErrorCode.EMP_PROFILE_IMAGE_TYPE_INVALID);
         }
@@ -117,9 +118,6 @@ public class ProfileImageValidator {
             case "png" -> startsWith(content, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
             case "gif" -> startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
                     || startsWith(content, 0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
-            case "webp" -> startsWith(content, 0x52, 0x49, 0x46, 0x46)
-                    && content.length >= 12
-                    && startsWith(Arrays.copyOfRange(content, 8, 12), 0x57, 0x45, 0x42, 0x50);
             default -> false;
         };
     }

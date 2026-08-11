@@ -32,7 +32,7 @@ public class MyProfileImageController {
 
     @Operation(summary = "프로필 사진 등록/변경",
             description = "본인 프로필 사진을 업로드한다(멱등 — 기존 사진이 있으면 교체). multipart/form-data 의 file 파트로 "
-                    + "이미지 1장을 보낸다. 형식: jpg·jpeg·png·gif·webp, 최대 5MB.")
+                    + "이미지 1장을 보낸다. 형식: jpg·jpeg·png·gif, 최대 5MB.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록/변경 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
