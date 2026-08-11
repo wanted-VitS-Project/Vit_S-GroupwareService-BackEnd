@@ -1,12 +1,18 @@
 package com.group3.vitamins.bidding.bidnotice.application.service;
 
 import com.group3.vitamins.bidding.bidnotice.application.command.CreateManualBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.DismissBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.PatchField;
+import com.group3.vitamins.bidding.bidnotice.application.command.RestoreBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.UpdateManualBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort;
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeStatusHistoryPort;
 import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
 import com.group3.vitamins.bidding.bidnotice.application.support.ManualBidNoticeDedupKeyGenerator;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNotice;
+import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeCompanyStatus;
+import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeStatusHistory;
+import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeAttachment;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeData;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
@@ -43,6 +49,7 @@ class BidNoticeCommandServiceTest {
 
     private BidNoticeCommandPort commandPort;
     private CompanyBidNoticeStatePort companyStatePort;
+    private BidNoticeStatusHistoryPort statusHistoryPort;
     private CurrentCompanyIdProvider companyIdProvider;
     private BiddingAccessPolicy biddingAccessPolicy;
     private BidNoticeCommandService service;
@@ -51,6 +58,7 @@ class BidNoticeCommandServiceTest {
     void setUp() {
         commandPort = mock(BidNoticeCommandPort.class);
         companyStatePort = mock(CompanyBidNoticeStatePort.class);
+        statusHistoryPort = mock(BidNoticeStatusHistoryPort.class);
         companyIdProvider = mock(CurrentCompanyIdProvider.class);
         biddingAccessPolicy = mock(BiddingAccessPolicy.class);
 
@@ -62,6 +70,7 @@ class BidNoticeCommandServiceTest {
         service = new BidNoticeCommandService(
                 commandPort,
                 companyStatePort,
+                statusHistoryPort,
                 companyIdProvider,
                 biddingAccessPolicy,
                 new ManualBidNoticeDedupKeyGenerator()
@@ -197,6 +206,102 @@ class BidNoticeCommandServiceTest {
         );
 
         verify(commandPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("현재 회사의 수집 공고를 제외하고 상태 변경 이력을 저장한다")
+    void dismissesCompanyNoticeAndSavesHistory() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(collectedState()));
+
+        var result = service.dismiss(new DismissBidNoticeCommand(
+                NOTICE_ID, " 사업 범위와 맞지 않음 ", USER_ID, "ADMIN"
+        ));
+
+        ArgumentCaptor<CompanyBidNoticeState> stateCaptor =
+                ArgumentCaptor.forClass(CompanyBidNoticeState.class);
+        verify(companyStatePort).update(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().status()).isEqualTo(BidNoticeCompanyStatus.DISMISSED);
+        assertThat(stateCaptor.getValue().dismissReason()).isEqualTo("사업 범위와 맞지 않음");
+
+        ArgumentCaptor<BidNoticeStatusHistory> historyCaptor =
+                ArgumentCaptor.forClass(BidNoticeStatusHistory.class);
+        verify(statusHistoryPort).save(historyCaptor.capture());
+        assertThat(historyCaptor.getValue().previousStatus()).isEqualTo(BidNoticeCompanyStatus.COLLECTED);
+        assertThat(historyCaptor.getValue().changedStatus()).isEqualTo(BidNoticeCompanyStatus.DISMISSED);
+        assertThat(historyCaptor.getValue().changedBy()).isEqualTo(USER_ID);
+        assertThat(result.noticeStatus()).isEqualTo("DISMISSED");
+    }
+
+    @Test
+    @DisplayName("현재 회사가 제외한 공고를 복구하고 제외 사유를 제거한다")
+    void restoresDismissedCompanyNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(dismissedState()));
+
+        var result = service.restore(new RestoreBidNoticeCommand(
+                NOTICE_ID, USER_ID, "ADMIN"
+        ));
+
+        ArgumentCaptor<CompanyBidNoticeState> stateCaptor =
+                ArgumentCaptor.forClass(CompanyBidNoticeState.class);
+        verify(companyStatePort).update(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().status()).isEqualTo(BidNoticeCompanyStatus.COLLECTED);
+        assertThat(stateCaptor.getValue().dismissReason()).isNull();
+        assertThat(result.noticeStatus()).isEqualTo("COLLECTED");
+        assertThat(result.dismissReason()).isNull();
+        verify(statusHistoryPort).save(any(BidNoticeStatusHistory.class));
+    }
+
+    @Test
+    @DisplayName("현재 회사에서 조회되지 않는 타 회사 공고는 제외할 수 없다")
+    void rejectsDismissingNoticeOwnedByAnotherCompany() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.empty());
+
+        assertError(
+                () -> service.dismiss(new DismissBidNoticeCommand(
+                        NOTICE_ID, "제외 사유", USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_NOTICE_NOT_FOUND
+        );
+
+        verify(companyStatePort, never()).update(any());
+        verifyNoInteractions(statusHistoryPort);
+    }
+
+    @Test
+    @DisplayName("이미 제외된 공고의 중복 제외를 거부한다")
+    void rejectsDismissingAlreadyDismissedNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(dismissedState()));
+
+        assertError(
+                () -> service.dismiss(new DismissBidNoticeCommand(
+                        NOTICE_ID, "다시 제외", USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_NOTICE_ALREADY_DISMISSED
+        );
+
+        verify(companyStatePort, never()).update(any());
+        verifyNoInteractions(statusHistoryPort);
+    }
+
+    @Test
+    @DisplayName("제외되지 않은 공고의 복구를 거부한다")
+    void rejectsRestoringCollectedNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(collectedState()));
+
+        assertError(
+                () -> service.restore(new RestoreBidNoticeCommand(
+                        NOTICE_ID, USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_NOTICE_NOT_DISMISSED
+        );
+
+        verify(companyStatePort, never()).update(any());
+        verifyNoInteractions(statusHistoryPort);
     }
 
     // 명세의 필수값과 대표 선택값을 포함한 유효한 등록 명령을 만듭니다.
@@ -337,6 +442,26 @@ class BidNoticeCommandServiceTest {
                 ),
                 existing.getNoticeStatus(), existing.getCreatedBy(),
                 existing.getCreatedAt(), existing.getUpdatedAt()
+        );
+    }
+
+    private CompanyBidNoticeState collectedState() {
+        return new CompanyBidNoticeState(
+                COMPANY_ID,
+                NOTICE_ID,
+                BidNoticeCompanyStatus.COLLECTED,
+                null,
+                ANNOUNCED_AT
+        );
+    }
+
+    private CompanyBidNoticeState dismissedState() {
+        return new CompanyBidNoticeState(
+                COMPANY_ID,
+                NOTICE_ID,
+                BidNoticeCompanyStatus.DISMISSED,
+                "기존 제외 사유",
+                ANNOUNCED_AT
         );
     }
 

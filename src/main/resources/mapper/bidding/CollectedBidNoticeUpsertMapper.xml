@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.CollectedBidNoticeUpsertMapper">
+
+    <insert id="insertNoticeIfAbsent">
+        INSERT IGNORE INTO bid_notice (
+            crawl_source_id, external_id, notice_ord, notice_type,
+            notice_name, external_notice_status, international_bid_type,
+            notice_agency, demand_agency, announced_at, bid_start_at,
+            bid_deadline_at, opening_at, base_amount, estimated_amount,
+            bid_method, contract_method, participation_qualification_text,
+            joint_contract_allowed, joint_contract_text, source_url,
+            has_attachment, notice_status, crawled_at, created_at
+        ) VALUES (
+            #{sourceId}, #{notice.externalId}, #{notice.noticeOrder},
+            #{notice.noticeType}, #{notice.noticeName},
+            #{notice.externalNoticeStatus}, #{notice.internationalBidType},
+            #{notice.noticeAgency}, #{notice.demandAgency},
+            #{notice.announcedAt}, #{notice.bidStartAt},
+            #{notice.bidDeadlineAt}, #{notice.openingAt},
+            #{notice.baseAmount}, #{notice.estimatedAmount},
+            #{notice.bidMethod}, #{notice.contractMethod},
+            #{notice.participationQualificationText},
+            #{notice.jointContractAllowed}, #{notice.jointContractText},
+            #{notice.sourceUrl}, #{hasAttachments},
+            'COLLECTED', #{crawledAt}, #{crawledAt}
+        )
+    </insert>
+
+    <select id="findNoticeId" resultType="long">
+        SELECT bid_notice_id
+        FROM bid_notice
+        WHERE crawl_source_id = #{sourceId}
+          AND external_id = #{externalId}
+          AND notice_ord = #{noticeOrder}
+        LIMIT 1
+    </select>
+
+    <update id="updateCollectedNotice">
+        UPDATE bid_notice
+        SET notice_type = #{notice.noticeType},
+            notice_name = #{notice.noticeName},
+            external_notice_status = #{notice.externalNoticeStatus},
+            international_bid_type = #{notice.internationalBidType},
+            notice_agency = #{notice.noticeAgency},
+            demand_agency = #{notice.demandAgency},
+            announced_at = #{notice.announcedAt},
+            bid_start_at = #{notice.bidStartAt},
+            bid_deadline_at = #{notice.bidDeadlineAt},
+            opening_at = #{notice.openingAt},
+            base_amount = #{notice.baseAmount},
+            estimated_amount = #{notice.estimatedAmount},
+            bid_method = #{notice.bidMethod},
+            contract_method = #{notice.contractMethod},
+            participation_qualification_text = #{notice.participationQualificationText},
+            joint_contract_allowed = #{notice.jointContractAllowed},
+            joint_contract_text = #{notice.jointContractText},
+            source_url = #{notice.sourceUrl},
+            has_attachment = CASE
+                WHEN #{hasAttachments} THEN TRUE
+                ELSE has_attachment
+            END,
+            crawled_at = #{crawledAt},
+            updated_at = #{crawledAt},
+            deleted_at = NULL
+        WHERE bid_notice_id = #{noticeId}
+    </update>
+
+    <update id="touchObservedAt">
+        UPDATE bid_notice
+        SET crawled_at = #{crawledAt}
+        WHERE bid_notice_id = #{noticeId}
+    </update>
+
+    <insert id="insertRawIfAbsent">
+        INSERT IGNORE INTO bid_notice_raw (
+            bid_notice_id, crawl_run_id, source_code, payload_type,
+            raw_payload, raw_payload_hash, parsed_at, created_at
+        ) VALUES (
+            #{noticeId}, #{runId}, #{sourceCode}, 'JSON',
+            CAST(#{rawPayload} AS JSON), #{rawPayloadHash},
+            #{parsedAt}, #{parsedAt}
+        )
+    </insert>
+</mapper>

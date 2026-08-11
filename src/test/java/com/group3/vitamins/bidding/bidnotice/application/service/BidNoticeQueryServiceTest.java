@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -78,8 +79,9 @@ class BidNoticeQueryServiceTest {
                 false, "COLLECTED", null
         );
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
-        when(queryPort.findAll(COMPANY_ID, query)).thenReturn(List.of(item));
-        when(queryPort.count(COMPANY_ID, query)).thenReturn(1L);
+        when(queryPort.findAll(eq(COMPANY_ID), any(SearchBidNoticesQuery.class)))
+                .thenReturn(List.of(item));
+        when(queryPort.count(eq(COMPANY_ID), any(SearchBidNoticesQuery.class))).thenReturn(1L);
 
         var result = service.handle(query);
 
@@ -116,6 +118,25 @@ class BidNoticeQueryServiceTest {
     void listQueryUsesCurrentCompanyId() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
                 null, null, null, null, null, null, null, null,
+                "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
+        );
+        when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+        when(queryPort.findAll(eq(COMPANY_ID), any(SearchBidNoticesQuery.class))).thenReturn(List.of());
+        when(queryPort.count(eq(COMPANY_ID), any(SearchBidNoticesQuery.class))).thenReturn(0L);
+
+        service.handle(query);
+
+        ArgumentCaptor<SearchBidNoticesQuery> queryCaptor =
+                ArgumentCaptor.forClass(SearchBidNoticesQuery.class);
+        verify(queryPort).findAll(eq(COMPANY_ID), queryCaptor.capture());
+        verify(queryPort).count(eq(COMPANY_ID), eq(queryCaptor.getValue()));
+        assertThat(queryCaptor.getValue().noticeStatus()).isEqualTo("COLLECTED");
+    }
+
+    @Test
+    void preservesExplicitDismissedStatusForDismissedNoticeList() {
+        SearchBidNoticesQuery query = new SearchBidNoticesQuery(
+                null, null, null, null, null, null, null, "DISMISSED",
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
         );
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);

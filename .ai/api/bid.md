@@ -22,8 +22,8 @@
 | ✅ 확정 | 입찰 공고 상세 조회 | GET | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
 | ✅ 확정 | 입찰 공고 직접 등록 | POST | `/api/v1/bidding/notices` | `BIDDING` |
 | ✅ 확정 | 직접 등록 공고 수정 | PATCH | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
-| 📝 초안 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
-| 📝 초안 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
+| ✅ 확정 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
+| ✅ 확정 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
 | 📝 초안 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
 | 📝 초안 | 입찰 AI 요약 조회 | GET | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
 | 📝 초안 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
@@ -622,7 +622,7 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `region` | 지역 |
 | `deadlineSoon` | 마감 임박 여부 |
 | `keyword` | 검색어 |
-| `noticeStatus` | 회사별 공고 상태. `COLLECTED`, `DISMISSED` |
+| `noticeStatus` | 회사별 공고 상태. `COLLECTED`, `DISMISSED`. 생략하면 `COLLECTED`로 조회하여 제외 공고를 일반 목록에서 숨긴다 |
 | `sort` | `ANNOUNCED_DESC`(기본), `DEADLINE_ASC`, `AMOUNT_DESC` |
 | `page` | 0부터 시작하는 페이지. 기본 `0` |
 | `size` | 페이지 크기. 기본 `20`, 최대 `100` |
@@ -868,20 +868,86 @@ Outbox는 최소한 아래 정보를 관리한다.
 
 ## 공고 제외 및 복구
 
+**상태**: ✅ 확정
+
+현재 회사의 공고 검토 상태만 변경한다. 공용 원본인 `bid_notice`는 수정하거나 삭제하지 않으며,
+나라장터 수집 공고와 직접 등록 공고 모두 제외·복구할 수 있다.
+
 | API | 설명 |
 |-----|------|
-| `PATCH /api/v1/bidding/notices/{noticeId}/dismiss` | 공고 제외 |
-| `PATCH /api/v1/bidding/notices/{noticeId}/restore` | 공고 복구 |
+| `PATCH /api/v1/bidding/notices/{noticeId}/dismiss` | 현재 회사의 공고를 검토 대상에서 제외 |
+| `PATCH /api/v1/bidding/notices/{noticeId}/restore` | 현재 회사가 제외한 공고를 검토 대상으로 복구 |
 
-**제외 Request**
+### 공고 제외 `PATCH /api/v1/bidding/notices/{noticeId}/dismiss`
+
+**Request Body**
 
 ```json
 {
-  "reason": "지역 제한 조건을 충족하지 못함"
+  "reason": "현재 회사의 사업 범위와 맞지 않는 공고입니다."
 }
 ```
 
-제외 시 `notice_status = DISMISSED`, `dismiss_reason` 저장, 상태 변경 이력을 남긴다.
+| 필드 | 타입 | 필수 | 규칙 |
+|------|------|------|------|
+| `reason` | String | Y | 공백 제외 1~500자 |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입찰 공고 제외 성공",
+  "data": {
+    "noticeId": 1,
+    "noticeStatus": "DISMISSED",
+    "dismissReason": "현재 회사의 사업 범위와 맞지 않는 공고입니다.",
+    "updatedAt": "2026-08-11T16:00:00"
+  }
+}
+```
+
+### 공고 복구 `PATCH /api/v1/bidding/notices/{noticeId}/restore`
+
+Request Body는 없다.
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입찰 공고 복구 성공",
+  "data": {
+    "noticeId": 1,
+    "noticeStatus": "COLLECTED",
+    "dismissReason": null,
+    "updatedAt": "2026-08-11T16:05:00"
+  }
+}
+```
+
+### 상태 및 이력 규칙
+
+| 항목 | 규칙 |
+|------|------|
+| 회사 격리 | `company_bid_notice_state`에서 현재 회사의 행만 변경한다 |
+| 제외 | `notice_status = DISMISSED`, `dismiss_reason` 저장 |
+| 복구 | `notice_status = COLLECTED`, `dismiss_reason = null` |
+| 공고 원본 | `bid_notice`의 공용 상태와 원본 데이터는 변경하지 않는다 |
+| 이력 | 회사별 상태 변경 이력에 변경 전후 상태, 사유, 작업자, 변경 시각을 저장한다 |
+| 삭제 | 영구 삭제 API는 제공하지 않는다 |
+
+### Status Code
+
+| HTTP | code | 적용 API | 설명 |
+|------|------|----------|------|
+| 200 | - | 제외·복구 | 처리 성공 |
+| 400 | `BIDDING_INVALID_DISMISS_REASON` | 제외 | 제외 사유 누락 또는 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | 제외·복구 | 인증되지 않음 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 제외·복구 | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 제외·복구 | 현재 회사에서 조회할 수 없는 공고 |
+| 409 | `BIDDING_NOTICE_ALREADY_DISMISSED` | 제외 | 이미 제외된 공고 |
+| 409 | `BIDDING_NOTICE_NOT_DISMISSED` | 복구 | 제외 상태가 아닌 공고 |
 
 ---
 
