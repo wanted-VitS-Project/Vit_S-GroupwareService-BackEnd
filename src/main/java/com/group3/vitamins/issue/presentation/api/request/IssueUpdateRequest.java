@@ -15,6 +15,10 @@ import java.util.List;
 @Schema(description = "이슈 부분 수정 요청")
 public record IssueUpdateRequest(
 
+        @Schema(description = "조회 응답에서 받은 Issue 버전", example = "1",
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        int version,
+
         @Schema(description = "제목. 전달 시 빈 값 불가, 최대 200자", example = "제안서 최종 초안 작성")
         PatchField<String> title,
 
@@ -37,6 +41,7 @@ public record IssueUpdateRequest(
     public static IssueUpdateRequest from(JsonNode body) {
         JsonNode safeBody = body == null ? com.fasterxml.jackson.databind.node.MissingNode.getInstance() : body;
         return new IssueUpdateRequest(
+                requiredVersion(safeBody),
                 textField(safeBody, "title"),
                 textField(safeBody, "content"),
                 dateField(safeBody, "dueDate"),
@@ -49,6 +54,7 @@ public record IssueUpdateRequest(
     public UpdateIssueCommand toCommand(Long issueId, String requesterUserId, String role) {
         return new UpdateIssueCommand(
                 issueId,
+                version,
                 title,
                 content,
                 dueDate,
@@ -58,6 +64,14 @@ public record IssueUpdateRequest(
                 requesterUserId,
                 role
         );
+    }
+
+    private static int requiredVersion(JsonNode body) {
+        JsonNode node = body.get("version");
+        if (node == null || !node.isIntegralNumber() || !node.canConvertToInt() || node.asInt() < 1) {
+            throw invalidRequest();
+        }
+        return node.asInt();
     }
 
     private static PatchField<String> textField(JsonNode body, String name) {

@@ -5,6 +5,7 @@ import java.util.List;
 
 public record UpdateIssueCommand(
         Long issueId,
+        int version,
         PatchField<String> title,
         PatchField<String> content,
         PatchField<LocalDate> dueDate,

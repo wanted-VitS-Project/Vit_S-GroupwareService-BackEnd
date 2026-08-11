@@ -44,6 +44,7 @@ public interface IssueQueryPort {
 
     record CalendarIssueResult(
             Long issueId,
+            int version,
             String title,
             String status,
             String priority,

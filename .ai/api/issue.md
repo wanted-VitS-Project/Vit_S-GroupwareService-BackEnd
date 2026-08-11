@@ -2,9 +2,9 @@
 
 **상태**: `✅ 확정`
 **담당**: 김용준
-**최종 업데이트**: 2026-08-11 (담당자 응답에 `resignedAt` 추가 및 FE 사용 API 명시 — 사원은 삭제하지 않고 퇴사일을 기록하므로, 과거 이슈의 담당자 이름을 보존하면서 FE가 퇴사 상태를 표시함)
+**최종 업데이트**: 2026-08-11 (상태 변경 요청의 `status`·`version` HTTP 경계 검증 보강 — version 누락·0·음수는 `400 ISS_INVALID_REQUEST`)
+**최종 업데이트**: 2026-08-11 (이슈 수정·상태 변경에 `version` 기반 낙관적 락 적용 — 조회 응답의 `version`을 수정 요청에 필수 전달, 불일치 시 `409 ISSUE_VERSION_CONFLICT`. 프론트 draft 보존·필드 단위 병합 UX는 별도 명세)
 **최종 업데이트**: 2026-08-10 (조회/수정 권한 게이트 분리 — 목록·상세 조회는 project 권한만 확인, 생성·수정·상태변경·삭제만 step EDITOR 확인. 신규 에러코드 없음, `ISS_ACCESS_PERMISSION_REQUIRED` 의미만 변경)
-**최종 업데이트**: 2026-08-10 (프로젝트 단위 이슈 목록 조회 신규 추가 — `GET /api/v1/projects/{projectId}/issues`. Step별로 묶어 반환, 이슈 없는 Step도 포함, 삭제된 Step은 제외, Step별·전체 이슈 진척도(`totalIssueCount`·`doneIssueCount`·`inProgressIssueCount`·`progressRate`) 포함)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -95,25 +95,6 @@
 | 접근 판정 | 알림 도메인은 이동 대상만 반환하고, 실제 조회 가능 여부는 기존 이슈 상세 API의 Step 접근 권한이 판단 |
 | 에러코드 | 신규 추가 없음. 이슈 삭제는 기존 `ISS_NOT_FOUND`, Step 접근 불가는 기존 `ISS_ACCESS_PERMISSION_REQUIRED` |
 
-### 퇴사 담당자 표시 — FE 연동 명세
-
-담당자 객체에 `resignedAt`이 추가된다. JSON에서는 `"yyyy-MM-dd"` 문자열 또는 `null`이다.
-
-| API | 응답 경로 | FE 사용 화면 |
-|---|---|---|
-| `GET /api/v1/steps/{stepId}/issues` | `data.issues[].assignees[].resignedAt` | Step 이슈 보드·Block 연결 이슈 팝업 |
-| `GET /api/v1/issues/{issueId}` | `data.assignees[].resignedAt` | 이슈 상세 |
-| `GET /api/v1/projects/{projectId}/issues` | `data.steps[].issues[].assignees[].resignedAt` | 프로젝트 단위 Step 아코디언 이슈 목록 |
-| `POST /api/v1/steps/{stepId}/issues` | `data.assignees[].resignedAt` | 생성 직후 상세/보드 상태 갱신 |
-| `PATCH /api/v1/issues/{issueId}` | `data.assignees[].resignedAt` | 수정 직후 상세/보드 상태 갱신 |
-
-| 값 | FE 표시 규칙 |
-|---|---|
-| `null` | 기존처럼 `name`만 표시 |
-| 날짜 문자열 | `name`은 그대로 표시하고, 옆에 `퇴사함` 상태를 표시. 담당자 관계를 목록에서 제거하지 않음 |
-
-⛔ `GET /api/v1/issues/calendar`, 상태 변경, 삭제 응답에는 담당자 객체가 없으므로 `resignedAt`도 없다.
-
 ---
 
 ## 1. 스텝별 이슈 목록 조회
@@ -166,7 +147,6 @@ GET /api/v1/steps/10/issues?blockId=15
 | `data.issues[].assignees` | List | 담당자 목록 |
 | `data.issues[].assignees[].userId` | String | 담당자 사번 |
 | `data.issues[].assignees[].name` | String | 담당자 이름 |
-| `data.issues[].assignees[].resignedAt` | LocalDate | 퇴사일. 재직 중이면 `null` |
 | `data.issues[].relatedBlocks` | List | 연결된 Block 목록 |
 | `data.issues[].relatedBlocks[].blockId` | Long | Block ID |
 | `data.issues[].relatedBlocks[].title` | String | Block 제목 |
@@ -189,8 +169,7 @@ GET /api/v1/steps/10/issues?blockId=15
         "assignees": [
           {
             "userId": "EMP001",
-            "name": "김용준",
-            "resignedAt": null
+            "name": "김용준"
           }
         ],
         "relatedBlocks": [
@@ -354,7 +333,6 @@ Step 존재 및 접근 권한 확인
 | `data.completedAt` | LocalDateTime | `DONE` 완료 시각. 완료 상태가 아니면 `null` |
 | `data.assignees[].userId` | String | 담당자 사번 |
 | `data.assignees[].name` | String | 담당자 이름 |
-| `data.assignees[].resignedAt` | LocalDate | 퇴사일. 재직 중이면 `null` |
 | `data.relatedBlocks[].blockId` | Long | 관련 Block 번호 |
 | `data.relatedBlocks[].title` | String | 관련 Block명 |
 | `data.relatedBlocks[].type` | String | Block 타입 |
@@ -715,7 +693,6 @@ GET /api/v1/projects/3/issues
 | `data.steps[].issues[].assignees` | List | 담당자 목록 |
 | `data.steps[].issues[].assignees[].userId` | String | 담당자 사번 |
 | `data.steps[].issues[].assignees[].name` | String | 담당자 이름 |
-| `data.steps[].issues[].assignees[].resignedAt` | LocalDate | 퇴사일. 재직 중이면 `null` |
 | `data.steps[].issues[].relatedBlocks` | List | 연결된 Block 목록 |
 | `data.steps[].issues[].relatedBlocks[].blockId` | Long | Block ID |
 | `data.steps[].issues[].relatedBlocks[].title` | String | Block 제목 |
@@ -750,7 +727,7 @@ GET /api/v1/projects/3/issues
             "priority": "HIGH",
             "dueDate": "2026-07-25",
             "assignees": [
-              { "userId": "EMP001", "name": "김용준", "resignedAt": null }
+              { "userId": "EMP001", "name": "김용준" }
             ],
             "relatedBlocks": [
               { "blockId": 15, "title": "제안서 작성 체크리스트", "type": "CHECKLIST" }

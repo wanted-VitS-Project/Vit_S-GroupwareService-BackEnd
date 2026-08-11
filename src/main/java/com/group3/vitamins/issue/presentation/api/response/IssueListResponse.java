@@ -24,6 +24,9 @@ public record IssueListResponse(
             @Schema(description = "이슈 ID", example = "101")
             Long issueId,
 
+            @Schema(description = "동시 수정 검사용 현재 버전", example = "1")
+            int version,
+
             @Schema(description = "이슈 제목", example = "경쟁사 제안서 벤치마킹")
             String title,
 
@@ -46,6 +49,7 @@ public record IssueListResponse(
         private static IssueSummaryResponse from(IssueResult result) {
             return new IssueSummaryResponse(
                     result.issueId(),
+                    result.version(),
                     result.title(),
                     result.status(),
                     result.priority(),

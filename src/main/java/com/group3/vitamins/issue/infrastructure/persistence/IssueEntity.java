@@ -64,6 +64,9 @@ public class IssueEntity {
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "version", nullable = false)
+    private int version;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

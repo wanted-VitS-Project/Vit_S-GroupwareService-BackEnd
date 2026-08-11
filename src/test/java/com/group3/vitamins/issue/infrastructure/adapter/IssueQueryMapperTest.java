@@ -74,6 +74,7 @@ class IssueQueryMapperTest {
             assertThat(result).isPresent();
             IssueRow issue = result.orElseThrow();
             assertThat(issue.issueId()).isEqualTo(101L);
+            assertThat(issue.version()).isEqualTo(1);
             assertThat(issue.stepId()).isEqualTo(10L);
             assertThat(issue.title()).isEqualTo("제안서 1차 초안 작성");
             assertThat(issue.content()).isEqualTo("공고 요구사항에 맞춰 작성");
@@ -153,6 +154,7 @@ class IssueQueryMapperTest {
             assertThat(rows).hasSize(1);
             IssueCalendarRow row = rows.get(0);
             assertThat(row.issueId()).isEqualTo(101L);
+            assertThat(row.version()).isEqualTo(1);
             assertThat(row.title()).isEqualTo("제안서 1차 초안 작성");
             assertThat(row.status()).isEqualTo("TODO");
             assertThat(row.priority()).isEqualTo("HIGH");
@@ -271,6 +273,7 @@ class IssueQueryMapperTest {
                         content TEXT,
                         status VARCHAR(20) NOT NULL,
                         priority VARCHAR(20) NOT NULL,
+                        version INT NOT NULL DEFAULT 1,
                         due_date DATETIME NULL,
                         finish_day DATETIME NULL,
                         deleted_at DATETIME NULL

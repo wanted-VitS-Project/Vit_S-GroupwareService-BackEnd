@@ -14,6 +14,7 @@ public class Issue {
     private LocalDateTime dueDate;
     private IssueStatus status;
     private IssuePriority priority;
+    private final int version;
     private final String createdBy;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -21,7 +22,7 @@ public class Issue {
     private LocalDateTime deletedAt;
 
     private Issue(Long issueId, Long stepId, String title, String content,
-                  LocalDateTime dueDate, IssueStatus status, IssuePriority priority,
+                  LocalDateTime dueDate, IssueStatus status, IssuePriority priority, int version,
                   String createdBy, LocalDateTime createdAt, LocalDateTime updatedAt,
                   LocalDateTime completedAt, LocalDateTime deletedAt) {
         this.issueId = issueId;
@@ -31,6 +32,7 @@ public class Issue {
         this.dueDate = dueDate;
         this.status = status;
         this.priority = priority;
+        this.version = version;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -42,16 +44,16 @@ public class Issue {
                                IssueStatus status, IssuePriority priority,
                                String createdBy, LocalDateTime now) {
         IssueStatus resolvedStatus = status == null ? IssueStatus.TO_DO : status;
-        return new Issue(null, stepId, title, content, dueDate, resolvedStatus, priority,
+        return new Issue(null, stepId, title, content, dueDate, resolvedStatus, priority, 1,
                 createdBy, now, now, resolvedStatus == IssueStatus.DONE ? now : null, null);
     }
 
     public static Issue restore(Long issueId, Long stepId, String title, String content,
                                 LocalDateTime dueDate, IssueStatus status,
-                                IssuePriority priority, String createdBy,
+                                IssuePriority priority, int version, String createdBy,
                                 LocalDateTime createdAt, LocalDateTime updatedAt,
                                 LocalDateTime completedAt, LocalDateTime deletedAt) {
-        return new Issue(issueId, stepId, title, content, dueDate, status, priority,
+        return new Issue(issueId, stepId, title, content, dueDate, status, priority, version,
                 createdBy, createdAt, updatedAt, completedAt, deletedAt);
     }
 
@@ -81,6 +83,7 @@ public class Issue {
     public LocalDateTime getDueDate() { return dueDate; }
     public IssueStatus getStatus() { return status; }
     public IssuePriority getPriority() { return priority; }
+    public int getVersion() { return version; }
     public String getCreatedBy() { return createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
