@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.infrastructure.adapter.ProjectDetailQueryMapper">
+
+    <!--
+      요청자 권한을 WHERE 가 아니라 SELECT 로 가져온다 —
+      WHERE 로 거르면 미참여 프로젝트가 403 이 아니라 404 로 나간다.
+      스텝 집계는 스칼라 서브쿼리다. 카테고리 조인과 곱해지면 COUNT 가 부풀어오른다.
+      ⚠️ SELECT 컬럼 순서 = ProjectDetailRow 필드 순서 (MyBatis 위치 기반 생성자 매핑).
+    -->
+    <select id="findDetail"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.ProjectDetailRow">
+        SELECT p.project_id       AS projectId,
+               p.name             AS name,
+               p.description      AS description,
+               p.client_name      AS clientName,
+               p.status           AS status,
+               p.started_on       AS startedOn,
+               p.ended_on         AS endedOn,
+               p.contract_amount  AS contractAmount,
+               (SELECT COUNT(*)
+                FROM step s
+                WHERE s.project_id = p.project_id
+                  AND s.deleted_at IS NULL)        AS stepCount,
+               (SELECT COUNT(*)
+                FROM step s
+                WHERE s.project_id = p.project_id
+                  AND s.deleted_at IS NULL
+                  AND s.status = 'DONE')           AS doneStepCount,
+               p.bid_notice_id    AS bidNoticeId,
+               p.close_reason_code AS closeReasonCode,
+               p.close_reason_note AS closeReasonNote,
+               (SELECT pm.permission
+                FROM project_member pm
+                WHERE pm.project_id = p.project_id
+                  AND pm.user_id = #{requesterUserId}) AS memberPermission,
+               p.created_at       AS createdAt,
+               <!-- ⚠️ ProjectDetailRow.version 과 같은 위치여야 한다 (위치 기반 매핑) -->
+               p.version          AS version,
+               bc.business_category_id AS categoryId,
+               bc.name                 AS categoryName,
+               bc.code                 AS categoryCode,
+               (bc.deleted_at IS NOT NULL) AS categoryDeleted
+        FROM project p
+                 LEFT JOIN project_business_category pbc
+                           ON pbc.project_id = p.project_id
+                 <!--
+                   ⚠️ 조인 조건에 bc.deleted_at IS NULL 을 두지 않는다 (DELETE.md D-6).
+                      두면 삭제된 카테고리가 조용히 빠져서 "분류 없음" 과 구분이 안 된다 —
+                      이름은 그대로 내리고 categoryDeleted 로 알린다.
+                 -->
+                 LEFT JOIN business_category bc
+                           ON bc.business_category_id = pbc.business_category_id
+                               AND bc.company_id = #{companyId}
+        WHERE p.project_id = #{projectId}
+          AND p.company_id = #{companyId}
+          AND p.deleted_at IS NULL
+        ORDER BY bc.business_category_id ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  인사관리용 사원 조회 (employee.md §1 목록 · §2 상세). ADMIN 전용.
+  namespace = Mapper 인터페이스 FQN · id = 메서드명 (팀 MyBatis 컨벤션).
+  컬럼 별칭 = Row 컴포넌트명이라 record 생성자로 자동 매핑된다.
+  시스템 계정(is_system=1)은 목록/건수에서 제외한다. 상세는 존재/시스템 판정을 서비스가 해야 해 포함해 내려준다.
+-->
+<mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.EmployeeAdminQueryMapper">
+
+    <!--
+      목록/건수 공통 필터. 시스템 계정·삭제 사원은 항상 제외.
+      resignedOnly=false 면 재직자만(기본), true 면 퇴사자만.
+      화면 status 는 서비스가 accountStatus + mustChangePassword 로 이미 풀어 넘긴다(여기선 단순 비교).
+    -->
+    <sql id="listFilters">
+        WHERE e.is_system = 0
+          AND e.company_id = #{companyId}
+          AND e.deleted_at IS NULL
+          <choose>
+              <when test="resignedOnly">AND e.resigned_at IS NOT NULL</when>
+              <otherwise>AND e.resigned_at IS NULL</otherwise>
+          </choose>
+          <if test="keyword != null">
+              AND (e.name LIKE CONCAT('%', #{keyword}, '%')
+                   OR e.user_id LIKE CONCAT('%', #{keyword}, '%'))
+          </if>
+          <if test="departmentId != null">AND e.department_id = #{departmentId}</if>
+          <if test="role != null">AND a.role = #{role}</if>
+          <if test="accountStatus != null">AND a.status = #{accountStatus}</if>
+          <if test="mustChangePassword != null">AND a.must_change_password = #{mustChangePassword}</if>
+    </sql>
+
+    <!-- 사원 목록 한 페이지. 부서·직급은 미배정일 수 있어 LEFT JOIN. 상위 부서(p)는 경로 조립용. -->
+    <select id="findPage"
+            resultType="com.group3.vitamins.employee.application.result.EmployeeListRow">
+        SELECT e.user_id              AS userId,
+               e.name                 AS name,
+               e.email                AS email,
+               d.name                 AS departmentName,
+               p.name                 AS parentDepartmentName,
+               jp.name                AS jobPositionName,
+               a.role                 AS role,
+               a.status               AS accountStatus,
+               a.must_change_password AS mustChangePassword,
+               e.resigned_at          AS resignedAt
+          FROM employee e
+          JOIN account a           ON a.user_id = e.user_id
+          LEFT JOIN department d    ON d.department_id = e.department_id AND d.company_id = e.company_id
+          LEFT JOIN department p    ON p.department_id = d.parent_id     AND p.company_id = e.company_id
+          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
+        <include refid="listFilters"/>
+         ORDER BY e.name ASC, e.user_id ASC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 필터 적용 전체 건수. 정렬·컬럼이 필요 없어 부서/직급 조인은 생략(필터는 employee·account 만 본다). -->
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+          FROM employee e
+          JOIN account a ON a.user_id = e.user_id
+        <include refid="listFilters"/>
+    </select>
+
+    <!--
+      사원 상세. is_system 을 함께 내려 서비스가 403(시스템 계정)·404(없음)를 구분한다.
+      삭제 사원(deleted_at)은 없는 것으로 취급 → 결과 없음 → 404.
+    -->
+    <select id="findDetail"
+            resultType="com.group3.vitamins.employee.application.result.EmployeeDetailRow">
+        SELECT e.user_id              AS userId,
+               e.name                 AS name,
+               e.email                AS email,
+               e.department_id        AS departmentId,
+               d.name                 AS departmentName,
+               p.name                 AS parentDepartmentName,
+               e.job_position_id      AS jobPositionId,
+               jp.name                AS jobPositionName,
+               a.role                 AS role,
+               a.status               AS accountStatus,
+               a.must_change_password AS mustChangePassword,
+               e.phone                AS phone,
+               e.hired_at             AS hiredAt,
+               e.resigned_at          AS resignedAt,
+               a.last_login_at        AS lastLoginAt,
+               e.is_system            AS isSystem
+          FROM employee e
+          JOIN account a           ON a.user_id = e.user_id
+          LEFT JOIN department d    ON d.department_id = e.department_id AND d.company_id = e.company_id
+          LEFT JOIN department p    ON p.department_id = d.parent_id     AND p.company_id = e.company_id
+          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
+         WHERE e.user_id = #{userId}
+           AND e.company_id = #{companyId}
+           AND e.deleted_at IS NULL
+    </select>
+
+    <!-- 사원이 속한 그룹 목록 (그룹명 오름차순). -->
+    <select id="findGroups"
+            resultType="com.group3.vitamins.employee.application.result.EmployeeGroupRow">
+        SELECT g.group_id AS groupId,
+               g.name     AS name
+          FROM employee_group_member m
+          JOIN employee_group g ON g.group_id = m.group_id
+         WHERE m.user_id = #{userId}
+         ORDER BY g.name ASC
+    </select>
+
+</mapper>

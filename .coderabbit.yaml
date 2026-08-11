@@ -1,0 +1,182 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit AI 코드 리뷰 설정
+#
+# 📌 아키텍처는 헥사고날(포트&어댑터)로 확정됐다 — 기준 문서: .ai/ARCHITECTURE.md
+#    계층별 규칙은 그 문서의 패키지 구조·의존 방향을 따른다.
+#
+# 패키지 베이스: com.group3.vitamins
+
+language: "ko-KR"
+
+tone_instructions: >
+  한국어로 간결하고 단호하게 리뷰한다. LGTM/nit/FYI 같은 영어 약어 대신
+  문제 없음/참고/수정 권장 등 한국어 표현을 쓴다. 보안, API 명세 위반,
+  데이터 정합성, 성능 순으로 우선 지적하고 사유와 대안을 함께 제시한다.
+  부트캠프 팀 프로젝트이므로 지적할 때 왜 문제인지 짧게 설명한다.
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "draft"
+
+  path_filters:
+    - "!build/**"
+    - "!.gradle/**"
+    - "!gradle/wrapper/**"
+    - "!logs/**"
+    - "!**/generated/**"
+    - "!**/*.lock"
+    - "!gradlew"
+    - "!gradlew.bat"
+
+  path_instructions:
+    # ══ 🚨 최우선: API 명세 이탈 방지 ═══════════════════════════
+    # `.ai/api/*.md` 가 프론트와의 계약 단일 기준이다 (노션 계약 폐지, 2026-08-04). 명세 이탈은 연동을 깨뜨린다.
+    - path: "src/main/java/**/*Controller.java"
+      instructions: |
+        - 🚨 최우선: `.ai/api/{도메인}.md` 명세와 경로·HTTP 메서드·상태코드가 일치하는지 확인한다.
+          명세 파일이 저장소에 없다면 "명세 확인 필요"로 지적한다.
+        - Swagger 어노테이션 누락을 지적한다. 클래스에 @Tag, 메서드에 @Operation 과
+          @ApiResponses 가 필수다. 명세에 있는 에러코드가 @ApiResponses 에서 빠졌는지 확인한다.
+        - @Operation 설명이 명세에 없는 내용을 임의로 지어낸 것은 아닌지 확인한다.
+        - 인증/인가 누락을 최우선으로 확인한다.
+        - request DTO 에 @Valid 누락 여부를 확인한다.
+        - pagination, sort, filter 파라미터의 기본값과 최대값 제한을 확인한다.
+        - Controller 가 Entity, Repository, JPA 구현체에 직접 의존하지 않는지 확인한다.
+        - Controller 에 비즈니스 로직, 쿼리 조립이 들어가지 않았는지 확인한다.
+
+    # ══ 계층별 (헥사고날 확정 · .ai/ARCHITECTURE.md 기준) ══════════════
+    - path: "src/main/java/**/presentation/**"
+      instructions: |
+        - Web 계층은 요청/응답 변환과 유스케이스 호출에 집중하는지 확인한다.
+        - 민감 정보가 response DTO 나 로그로 노출되지 않는지 확인한다.
+        - Validation 어노테이션과 에러 응답 형식이 일관적인지 확인한다.
+
+    - path: "src/main/java/**/application/**"
+      instructions: |
+        - UseCase/Application Service 가 도메인 흐름을 조율하는지 확인한다.
+        - 트랜잭션 경계가 UseCase 단위로 적절한지 확인한다.
+        - 읽기 전용 UseCase 에 @Transactional(readOnly = true) 가 적용되어 있는지 확인한다.
+        - 외부 구현체, JPA Entity, Web DTO 에 과도하게 의존하지 않는지 확인한다.
+
+    - path: "src/main/java/**/domain/**"
+      instructions: |
+        - 도메인이 Spring, JPA, Web, DB 기술에 과도하게 의존하지 않는지 확인한다.
+        - public setter 나 무분별한 @Setter 사용을 지적한다.
+        - 상태 변경 로직이 도메인 내부 메서드로 표현되는지 확인한다.
+        - equals/hashCode 구현이 JPA 프록시·식별자 생성 전략과 충돌하지 않는지 확인한다.
+
+    - path: "src/main/java/**/infrastructure/**"
+      instructions: |
+        - Infrastructure 가 Application/Domain 의 port 를 구현하는 방향인지 확인한다.
+        - DB, 외부 API, 메시징 구현 세부사항이 Application 밖으로 새지 않는지 확인한다.
+        - 외부 호출 실패 시 timeout, retry, fallback, 롤백 영향 범위를 확인한다.
+
+    - path: "src/main/java/**/infrastructure/persistence/**"
+      instructions: |
+        - N+1 쿼리 가능성을 최우선으로 확인한다.
+        - Fetch Join, EntityGraph, BatchSize, IN 절 활용 여부를 확인한다.
+        - fetch = EAGER 사용을 지적한다.
+        - pagination 과 정렬 기준이 안정적인지 확인한다.
+        - native query 사용 시 SQL injection, DB 종속성, 인덱스 사용 가능성을 확인한다.
+        - cascade, orphanRemoval 이 의도치 않은 삭제 위험을 만들지 않는지 확인한다.
+
+    - path: "src/main/java/**/*Repository.java"
+      instructions: |
+        - Repository 인터페이스가 도메인 관점의 계약을 유지하는지 확인한다.
+        - findAll() 의 무분별한 사용과 대용량 조회 가능성을 지적한다.
+        - 조회 조건과 정렬 기준이 명확한지 확인한다.
+
+    # ══ DTO ════════════════════════════════════════════════════
+    - path: "src/main/java/**/*Request.java"
+      instructions: |
+        - @NotNull, @NotBlank, @Email, @Pattern, @Size 등 validation 누락을 확인한다.
+        - 필드명이 명세와 정확히 일치하는지 확인한다. 임의 개명(nickname → userName 등)을 지적한다.
+        - @Schema(description, example) 누락을 지적한다.
+        - example 에 실제 계정·토큰·개인정보가 들어가지 않았는지 확인한다. (저장소가 PUBLIC)
+        - 불필요한 가변 필드를 지적하고 record 사용을 권장한다.
+
+    - path: "src/main/java/**/*Response.java"
+      instructions: |
+        - password, token, 내부 ID, PII 가 노출되지 않는지 확인한다.
+        - Entity 를 API 응답으로 직접 반환하지 않는지 확인한다.
+        - 필드명·타입이 명세와 일치하는지 확인한다.
+        - @Schema 누락과 example 의 민감 정보를 확인한다.
+        - record 사용을 권장한다.
+
+    # ══ 공통 인프라 ════════════════════════════════════════════
+    - path: "src/main/java/**/global/**"
+      instructions: |
+        - 공통 응답, 예외, 로깅 변경이 기존 클라이언트를 깨지 않는지 확인한다.
+        - ErrorCode 추가 시 HTTP status, code prefix, message 일관성을 확인한다.
+        - 공통 인프라 변경은 모든 도메인에 영향을 주므로 영향 범위를 확인한다.
+        - 공통 응답 래퍼 클래스명이 `ApiResponse` 이면 Swagger 의
+          io.swagger.v3.oas.annotations.responses.ApiResponse 와 충돌하므로 지적한다.
+
+    - path: "src/main/java/**/config/security/**"
+      instructions: |
+        - requestMatchers 순서와 permitAll/hasRole 사용이 안전한지 확인한다.
+        - Swagger 경로(/swagger-ui.html, /swagger-ui/**, /v3/api-docs/**)가
+          허용되어 있는지 확인한다. 운영 프로필에서는 springdoc 이 꺼지므로 노출 위험은 없다.
+        - 인증/인가 예외 처리 흐름이 GlobalExceptionHandler 와 충돌하지 않는지 확인한다.
+        - 세션 기반 인증이므로 세션 고정 공격 방어, 쿠키 속성(HttpOnly, Secure, SameSite)을 확인한다.
+
+    # ══ 설정 파일 ══════════════════════════════════════════════
+    - path: "**/application*.{yaml,yml,properties}"
+      instructions: |
+        - 🚨 저장소가 PUBLIC 이다. credentials, API key, DB 주소, IP 가 평문으로
+          들어갔다면 최우선으로 차단한다. 환경변수 참조(${VAR}) 형태여야 한다.
+        - 운영 프로필에서 springdoc(Swagger)이 비활성화되어 있는지 확인한다.
+          운영에 Swagger 가 열리면 API 구조 전체가 노출된다.
+        - 운영 프로필에서 show-sql, format_sql, ddl-auto: create/update 가 켜져 있지 않은지 확인한다.
+        - 세션 저장소가 Redis/JDBC 2종이므로 spring.session.store-type 명시 여부를 확인한다.
+        - 프로필별 설정 분리가 적절한지 확인한다.
+
+    - path: "**/build.gradle*"
+      instructions: |
+        - 🚨 Spring Boot 3.5.x 를 쓴다. Boot 4 전용 아티팩트명
+          (spring-boot-starter-webmvc, spring-boot-starter-*-test 개별 스타터,
+          springdoc 3.0.x)이 섞이면 지적한다.
+        - 의존성 추가 시 보안 취약점, 라이선스, 버전 충돌 가능성을 확인한다.
+        - 불필요하게 무거운 라이브러리 추가를 지적한다.
+
+    # ══ CI/CD ══════════════════════════════════════════════════
+    - path: ".github/workflows/**"
+      instructions: |
+        - 시크릿이 로그로 출력되지 않는지 확인한다. echo 나 디버그 출력 주의.
+        - permissions 가 최소 권한으로 지정되어 있는지 확인한다.
+        - pull_request_target 사용 시 포크 PR 로부터의 코드 실행 위험을 지적한다.
+        - 서드파티 액션의 배포처를 신뢰할 수 있는지 확인한다.
+        - concurrency 설정으로 중복 실행이 정리되는지 확인한다.
+
+    # ══ 테스트 ═════════════════════════════════════════════════
+    - path: "src/test/**"
+      instructions: |
+        - happy path 외 실패 케이스, 경계값, 권한 실패 케이스가 있는지 확인한다.
+        - @BeforeEach 에서 테스트 격리가 보장되는지 확인한다.
+        - mock 이 실제 장애 상황을 충분히 반영하는지 확인한다.
+        - 테스트가 실제 외부 인프라(클라우드 DB, Redis)에 의존하지 않는지 확인한다.
+        - 현재 테스트는 자동설정 제외로 DB 없이 도는 임시 상태다. DB 연결 후에도
+          제외 목록이 남아 있으면 지적한다.
+
+    # ══ 문서 ═══════════════════════════════════════════════════
+    - path: ".ai/**"
+      instructions: |
+        - 🚨 실제 IP, 엔드포인트, 계정 ID, 시크릿 값이 들어가지 않았는지 확인한다.
+          INFRA.md 는 {{EC2_HOST}} 형태로 마스킹해야 한다. (저장소가 PUBLIC)
+        - 깨진 상대 링크가 없는지 확인한다.
+        # 노션 계약 폐지·상태 게이트(📝 초안/✅ 확정) 폐지 (2026-08-04) — .ai/api/*.md 가 단일 기준.
+        # md 에 명세가 적힌 순간 그게 계약이다. 상태 표기 유무는 검사하지 않는다.
+
+chat:
+  auto_reply: true

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.image.infrastructure.trash.ImageTrashMapper">
+
+    <select id="findTrashedByProjectId"
+            resultType="com.group3.vitamins.image.infrastructure.trash.ImageTrashRow">
+        SELECT i.img_id        AS imgId,
+        i.original_name AS originalName,
+        i.image_url     AS imageUrl,
+        i.caption       AS caption,
+        i.deleted_at    AS deletedAt
+        FROM image i
+        JOIN image_block ib ON ib.img_block_id = i.img_block_id
+        JOIN block b ON b.block_id = ib.block_id
+        JOIN step s ON s.step_id = b.step_id
+        WHERE s.project_id = #{projectId}
+        AND i.deleted_at IS NOT NULL
+        ORDER BY i.deleted_at DESC
+    </select>
+
+    <select id="findStepIdByImgBlockId" resultType="java.lang.Long">
+        SELECT b.step_id
+        FROM image_block ib
+        JOIN block b ON b.block_id = ib.block_id
+        WHERE ib.img_block_id = #{imgBlockId}
+    </select>
+
+</mapper>

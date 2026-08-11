@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalParticipationNotificationMapper">
+
+    <select id="findPendingApproverTargets"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalParticipationNotificationRow">
+        SELECT DISTINCT
+               a.approval_id          AS approvalId,
+               ar.approval_revision_id AS revisionId,
+               a.block_id             AS blockId,
+               ar.title               AS title,
+               a.user_id              AS drafterId,
+               a.acting_drafter_id    AS actingDrafterId
+        FROM approval a
+        JOIN employee drafter
+          ON drafter.user_id = a.user_id
+         AND drafter.company_id = #{companyId}
+        JOIN approval_revision ar
+          ON ar.approval_id = a.approval_id
+         AND ar.revision_no = a.current_revision_no
+         AND ar.deleted_at IS NULL
+        JOIN approval_line al
+          ON al.approval_revision_id = ar.approval_revision_id
+         AND al.deleted_at IS NULL
+        WHERE a.deleted_at IS NULL
+          AND a.status = 'IN_PROGRESS'
+          AND al.user_id = #{userId}
+          AND al.status IN ('ACTIVE', 'WAITING')
+        ORDER BY a.approval_id
+    </select>
+
+    <select id="findDrafterTargets"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalParticipationNotificationRow">
+        SELECT DISTINCT
+               a.approval_id           AS approvalId,
+               ar.approval_revision_id AS revisionId,
+               a.block_id              AS blockId,
+               ar.title                AS title,
+               a.user_id               AS drafterId,
+               a.acting_drafter_id     AS actingDrafterId
+        FROM approval a
+        JOIN employee drafter
+          ON drafter.user_id = a.user_id
+         AND drafter.company_id = #{companyId}
+        JOIN approval_revision ar
+          ON ar.approval_id = a.approval_id
+         AND ar.revision_no = a.current_revision_no
+         AND ar.deleted_at IS NULL
+        WHERE a.deleted_at IS NULL
+          AND a.status IN ('IN_PROGRESS', 'REJECTED')
+          AND (a.user_id = #{userId} OR a.acting_drafter_id = #{userId})
+        ORDER BY a.approval_id
+    </select>
+
+    <!-- 행이 없으면 프로젝트 권한을 상속하고, 행이 있으면 NONE/VIEWER/EDITOR 오버라이드를 그대로 쓴다. -->
+    <select id="findActiveStepEditors"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalStepEditorRow">
+        SELECT DISTINCT b.block_id AS blockId,
+                        pm.user_id AS userId
+        FROM block b
+        JOIN step s
+          ON s.step_id = b.step_id
+         AND s.deleted_at IS NULL
+        JOIN project p
+          ON p.project_id = s.project_id
+         AND p.deleted_at IS NULL
+        JOIN project_member pm
+          ON pm.project_id = p.project_id
+        LEFT JOIN step_permission sp
+          ON sp.step_id = s.step_id
+         AND sp.user_id = pm.user_id
+        JOIN employee e
+          ON e.user_id = pm.user_id
+         AND e.company_id = #{companyId}
+         AND e.resigned_at IS NULL
+         AND e.deleted_at IS NULL
+        JOIN account ac
+          ON ac.user_id = e.user_id
+         AND ac.status = 'ACTIVE'
+         AND ac.deleted_at IS NULL
+         AND ac.role &lt;&gt; 'ADMIN'
+        WHERE b.block_id IN
+        <foreach collection="blockIds" item="blockId" open="(" separator="," close=")">
+            #{blockId}
+        </foreach>
+          AND b.deleted_at IS NULL
+          AND pm.permission &lt;&gt; 'NONE'
+          AND COALESCE(sp.permission, pm.permission) = 'EDITOR'
+        ORDER BY b.block_id, pm.user_id
+    </select>
+
+</mapper>

@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.file.infrastructure.adapter.FileQueryMapper">
+
+    <!-- 블록 안 동명 문서 존재 여부 (§1 중복검사). block_file ⋈ file ⋈ file_version. -->
+    <!-- ⚠️ 완료(COMPLETED) 버전이 있는 문서만 "존재"로 본다 — §3 목록(완료본만 표시)과 정합. -->
+    <!-- 그러지 않으면 §1 이 완료 전에 만들어 두고 버려진 file row(UPLOADING/FAILED)가 이름을 선점해, -->
+    <!-- 화면엔 아무것도 없는데 재업로드가 409 FILE_NAME_DUPLICATED 로 막힌다. -->
+    <select id="existsActiveNameInBlock" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM block_file bf
+              JOIN file f ON f.file_id = bf.file_id
+              JOIN file_version fv ON fv.file_id = f.file_id
+             WHERE bf.block_id = #{blockId}
+               AND f.name = #{name}
+               AND f.deleted_at IS NULL
+               AND fv.upload_status = 'COMPLETED'
+               AND fv.deleted_at IS NULL
+        )
+    </select>
+
+    <!-- 문서가 연결된 블록 (파일 1 : 블록 1). 권한 판정 경로 fileId→block→step. -->
+    <select id="findBlockIdByFileId" resultType="long">
+        SELECT bf.block_id
+          FROM block_file bf
+         WHERE bf.file_id = #{fileId}
+         LIMIT 1
+    </select>
+
+    <!-- 문서→블록→스텝의 step_id. block.deleted_at 을 보지 않는다 — §6 복구는 블록이 삭제돼도 되므로 -->
+    <!-- 삭제된 블록의 스텝으로도 권한을 판정해야 한다. block_file 행은 블록이 죽어도 남는다. -->
+    <select id="findStepIdByFileIdIncludingDeletedBlock" resultType="long">
+        SELECT b.step_id
+          FROM block_file bf
+          JOIN block b ON b.block_id = bf.block_id
+         WHERE bf.file_id = #{fileId}
+         LIMIT 1
+    </select>
+
+    <!-- 완료된 버전 목록(§8 이력) — 차수 내림차순. 실패·미완료·삭제 버전 제외. -->
+    <select id="findCompletedVersions"
+            resultType="com.group3.vitamins.file.application.result.FileVersionProjection">
+        SELECT file_version_id     AS fileVersionId,
+               version_no          AS versionNo,
+               original_file_name  AS originalFileName,
+               extension           AS extension,
+               size_bytes          AS sizeBytes,
+               page_count          AS pageCount,
+               comment             AS comment,
+               uploader_name       AS uploaderName,
+               uploader_department AS uploaderDepartment,
+               uploader_position   AS uploaderPosition,
+               completed_at        AS completedAt
+          FROM file_version
+         WHERE file_id = #{fileId}
+           AND upload_status = 'COMPLETED'
+           AND deleted_at IS NULL
+         ORDER BY version_no DESC
+    </select>
+
+    <!-- 완료 버전 기준 최대 차수(§11 latest 판정). 완료 버전이 없으면 0. §8 이력과 같은 정의. -->
+    <select id="findMaxCompletedVersionNo" resultType="int">
+        SELECT COALESCE(MAX(version_no), 0)
+          FROM file_version
+         WHERE file_id = #{fileId}
+           AND upload_status = 'COMPLETED'
+           AND deleted_at IS NULL
+    </select>
+
+    <!-- 블록 파일 목록(§3) — 문서별 최신 완료 버전 + 전체 버전 수. 완료 버전 0개 문서는 INNER JOIN 으로 제외. -->
+    <!-- deleted=false: 재직 문서(deleted_at IS NULL) / true: 휴지통. 정렬은 블록 연결일 오름차순. -->
+    <select id="findBlockFiles"
+            resultType="com.group3.vitamins.file.application.result.BlockFileProjection">
+        SELECT f.file_id             AS fileId,
+               f.name                AS name,
+               lv.file_version_id    AS latestVersionId,
+               lv.version_no         AS latestVersionNo,
+               vc.cnt                AS versionCount,
+               lv.original_file_name AS originalFileName,
+               lv.extension          AS extension,
+               lv.size_bytes         AS sizeBytes,
+               lv.uploader_name      AS uploaderName,
+               lv.uploader_department AS uploaderDepartment,
+               lv.uploader_position  AS uploaderPosition,
+               lv.completed_at       AS updatedAt,
+               f.deleted_at          AS deletedAt,
+               <!-- ⚠️ version 은 맨 끝. BlockFileProjection record 필드 순서와 어긋나면 값이 전부 밀린다(CONCURRENCY.md §6 trap 7). -->
+               f.version             AS version
+          FROM block_file bf
+          JOIN file f ON f.file_id = bf.file_id
+          JOIN (
+                -- 블록에 연결된 문서로 먼저 좁힌 뒤 집계한다 — file_version 전체를 스캔하지 않도록.
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                  JOIN block_file bfi ON bfi.file_id = fv.file_id AND bfi.block_id = #{blockId}
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE bf.block_id = #{blockId}
+           AND (
+                (#{deleted} = FALSE AND f.deleted_at IS NULL)
+                OR (#{deleted} = TRUE AND f.deleted_at IS NOT NULL)
+               )
+         ORDER BY bf.linked_at ASC, f.file_id ASC
+    </select>
+
+    <!-- 프로젝트 파일 버전 목록(§11, #138) — 비타메이트 분석 선택용. 프로젝트 전체 문서의 완료 버전(과거 버전 포함). -->
+    <!-- 블록이 삭제돼 고아가 된 파일도 포함(파일은 프로젝트 소속). 휴지통 문서(file.deleted_at)는 제외. -->
+    <!-- file_index 는 LEFT JOIN — 인덱스 행이 없거나 소프트삭제됐으면 COALESCE 로 'PENDING' 을 내린다(쓰기는 AI 담당). -->
+    <select id="findProjectFileVersions"
+            resultType="com.group3.vitamins.file.application.result.ProjectFileVersionProjection">
+        SELECT f.file_id                                  AS fileId,
+               f.name                                     AS name,
+               fv.file_version_id                         AS fileVersionId,
+               fv.version_no                              AS versionNo,
+               fv.original_file_name                      AS originalFileName,
+               fv.extension                               AS extension,
+               fv.size_bytes                              AS sizeBytes,
+               fv.page_count                              AS pageCount,
+               fv.completed_at                            AS completedAt,
+               COALESCE(fi.index_status, 'PENDING')       AS indexStatus
+          FROM file f
+          JOIN file_version fv
+                ON fv.file_id = f.file_id
+               AND fv.upload_status = 'COMPLETED'
+               AND fv.deleted_at IS NULL
+          LEFT JOIN file_index fi
+                ON fi.file_version_id = fv.file_version_id
+               AND fi.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NULL
+         ORDER BY f.file_id ASC, fv.version_no DESC
+    </select>
+
+    <!-- 프로젝트 전체 파일 모아보기(§12) — 프로젝트 문서함. 활성 문서(f.deleted_at IS NULL)를 문서 단위 최신 완료 버전 1행으로. -->
+    <!-- 완료 버전 0개 문서는 vc INNER JOIN 으로 제외. 위치(스텝·블록)를 함께 준다(프론트가 스텝→블록 트리로 조합). -->
+    <!-- ⚠️ 고아 파일: 블록이 soft delete 돼도 block_file 행은 남는다 → block 조인은 되지만 b.deleted_at 이 채워져 있다. -->
+    <!--    이때 blockId·blockTitle 은 CASE 로 NULL 을 내리고 blockDeleted=TRUE, 스텝은 삭제된 블록의 step_id 로 해석한다. -->
+    <!-- ⚠️ 파일 1:블록 1(block_file)이라 fanout 없음. 최신버전은 vc(집계)로 좁힌 뒤 lv 로 단행 조인 — file_version 전체 스캔·카티전 곱 방지. -->
+    <select id="findProjectFiles"
+            resultType="com.group3.vitamins.file.application.result.ProjectFileProjection">
+        SELECT b.step_id                                              AS stepId,
+               s.name                                                 AS stepName,
+               CASE WHEN b.deleted_at IS NULL THEN b.block_id END      AS blockId,
+               CASE WHEN b.deleted_at IS NULL THEN b.title END         AS blockTitle,
+               (b.deleted_at IS NOT NULL)                             AS blockDeleted,
+               f.file_id                                              AS fileId,
+               f.name                                                 AS name,
+               lv.file_version_id                                     AS latestVersionId,
+               lv.version_no                                          AS latestVersionNo,
+               vc.cnt                                                 AS versionCount,
+               lv.original_file_name                                  AS originalFileName,
+               lv.extension                                           AS extension,
+               lv.size_bytes                                          AS sizeBytes,
+               lv.uploader_name                                       AS uploaderName,
+               lv.uploader_department                                 AS uploaderDepartment,
+               lv.uploader_position                                   AS uploaderPosition,
+               lv.completed_at                                        AS updatedAt
+          FROM file f
+          JOIN block_file bf ON bf.file_id = f.file_id
+          JOIN block b ON b.block_id = bf.block_id
+          JOIN step s ON s.step_id = b.step_id
+          JOIN (
+                -- 프로젝트 문서로 먼저 좁힌 뒤 집계한다 — file_version 전체를 스캔하지 않도록.
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                  JOIN file fj ON fj.file_id = fv.file_id AND fj.project_id = #{projectId}
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NULL
+         ORDER BY b.step_id ASC, b.block_id ASC, bf.linked_at ASC, f.file_id ASC
+    </select>
+
+    <!--
+      §13 프로젝트 휴지통 모아보기. §12 와 조인 구조는 같고 (문서→최신 완료 버전→블록→스텝, 고아 파일 포함),
+      필터만 f.deleted_at IS NOT NULL(휴지통) 로 뒤집는다. latest 버전 ID·차수·업로더·미리보기는 내리지 않고
+      (복구·영구삭제 전용 화면) 휴지통 진입 시각(f.deleted_at)을 deletedAt 으로 준다.
+      ⚠️ 파일 휴지통 이동은 file.deleted_at 만 설정하고 file_version.deleted_at 은 건드리지 않으므로
+      (§3 블록 휴지통과 동일 전제) 아래 vc/lv 조인(fv.deleted_at IS NULL)이 트래시 문서에도 그대로 성립한다.
+      정렬은 deletedAt 내림차순(이미지 휴지통과 통일) · 동시각 tie 는 file_id 로 결정적으로.
+    -->
+    <select id="findProjectTrashFiles"
+            resultType="com.group3.vitamins.file.application.result.ProjectTrashFileProjection">
+        SELECT b.step_id                                              AS stepId,
+               s.name                                                 AS stepName,
+               CASE WHEN b.deleted_at IS NULL THEN b.block_id END      AS blockId,
+               CASE WHEN b.deleted_at IS NULL THEN b.title END         AS blockTitle,
+               (b.deleted_at IS NOT NULL)                             AS blockDeleted,
+               f.file_id                                              AS fileId,
+               f.name                                                 AS name,
+               vc.cnt                                                 AS versionCount,
+               lv.original_file_name                                  AS originalFileName,
+               lv.extension                                           AS extension,
+               lv.size_bytes                                          AS sizeBytes,
+               f.deleted_at                                           AS deletedAt
+          FROM file f
+          JOIN block_file bf ON bf.file_id = f.file_id
+          JOIN block b ON b.block_id = bf.block_id
+          JOIN step s ON s.step_id = b.step_id
+          JOIN (
+                SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                  FROM file_version fv
+                  JOIN file fj ON fj.file_id = fv.file_id AND fj.project_id = #{projectId}
+                 WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+                 GROUP BY fv.file_id
+               ) vc ON vc.file_id = f.file_id
+          JOIN file_version lv
+                ON lv.file_id = f.file_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE f.project_id = #{projectId}
+           AND f.deleted_at IS NOT NULL
+         ORDER BY f.deleted_at DESC, f.file_id ASC
+    </select>
+
+</mapper>

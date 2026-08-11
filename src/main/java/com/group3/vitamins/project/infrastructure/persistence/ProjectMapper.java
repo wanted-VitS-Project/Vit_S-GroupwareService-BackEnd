@@ -1,0 +1,61 @@
+package com.group3.vitamins.project.infrastructure.persistence;
+
+import com.group3.vitamins.project.domain.model.Project;
+
+/**
+ * ⚠️ {@link ProjectJpaEntity} 는 {@code @AllArgsConstructor} 라 <b>필드 선언 순서 = 아래 인자 순서</b>다.
+ * 엔티티에 필드를 끼워 넣고 여기를 안 고치면 값이 밀린다.
+ */
+public class ProjectMapper {
+
+    private ProjectMapper() {
+    }
+
+    /** JPA 엔티티를 도메인 객체로 복원한다. */
+    public static Project toDomain(ProjectJpaEntity entity) {
+        return Project.restore(
+                entity.getProjectId(),
+                entity.getCompanyId(),
+                entity.getBidNoticeId(),
+                entity.getName(),
+                entity.getDescription(),
+                entity.getStatus(),
+                entity.getClientName(),
+                entity.getContractAmount(),
+                entity.getStartedOn(),
+                entity.getEndedOn(),
+                entity.getCloseReasonCode(),
+                entity.getCloseReasonNote(),
+                entity.getClosedAt(),
+                entity.getVersion(),
+                entity.getCreatedBy(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt(),
+                entity.getDeletedAt()
+        );
+    }
+
+    /** 도메인 객체를 JPA 엔티티로 옮긴다. */
+    public static ProjectJpaEntity toEntity(Project domain) {
+        return new ProjectJpaEntity(
+                domain.getProjectId(),
+                domain.getCompanyId(),
+                domain.getBidNoticeId(),
+                domain.getName(),
+                domain.getDescription(),
+                domain.getStatus(),
+                domain.getClientName(),
+                domain.getContractAmount(),
+                domain.getStartedOn(),
+                domain.getEndedOn(),
+                domain.getCloseReasonCode(),
+                domain.getCloseReasonNote(),
+                domain.getClosedAt(),
+                domain.getVersion(),
+                domain.getCreatedBy(),
+                domain.getCreatedAt(),
+                domain.getUpdatedAt(),
+                domain.getDeletedAt()
+        );
+    }
+}

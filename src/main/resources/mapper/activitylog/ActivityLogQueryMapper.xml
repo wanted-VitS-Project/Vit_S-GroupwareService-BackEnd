@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.activitylog.infrastructure.adapter.ActivityLogQueryMapper">
+
+    <select id="findStepAccess"
+            resultType="com.group3.vitamins.activitylog.infrastructure.adapter.StepAccessRow">
+        SELECT s.step_id AS stepId,
+               s.project_id AS projectId,
+               pm.permission AS permission
+          FROM step s
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
+          LEFT JOIN project_member pm
+            ON pm.project_id = s.project_id
+           AND pm.user_id = #{userId}
+         WHERE s.step_id = #{stepId}
+           AND s.deleted_at IS NULL
+    </select>
+
+    <select id="findBlockStep"
+            resultType="com.group3.vitamins.activitylog.infrastructure.adapter.BlockStepRow">
+        SELECT b.block_id AS blockId,
+               b.step_id AS stepId
+          FROM block b
+          JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
+         WHERE b.block_id = #{blockId}
+           AND b.deleted_at IS NULL
+    </select>
+
+    <select id="findActivityLogs"
+            resultType="com.group3.vitamins.activitylog.infrastructure.adapter.ActivityLogRow">
+        SELECT al.activity_log_id AS activityLogId,
+               UPPER(al.act) AS action,
+               al.resource_id AS resourceId,
+               al.resource_name AS resourceName,
+               al.field AS fieldName,
+               al.before_value AS beforeValue,
+               al.after_value AS afterValue,
+               al.user_id AS actorUserId,
+               e.name AS actorName,
+               e.resigned_at AS actorResignedAt,
+               b.block_id AS blockId,
+               b.title AS blockTitle,
+               b.type AS blockType,
+               al.created_at AS createdAt
+         FROM activity_log al
+          JOIN block b
+            ON b.block_id = al.block_id
+          JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+          JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
+          JOIN employee e
+            ON e.user_id = al.user_id
+           AND e.company_id = p.company_id
+         WHERE al.company_id = #{companyId}
+           AND b.step_id = #{stepId}
+           AND al.block_id IS NOT NULL
+           <if test="blockId != null">
+           AND al.block_id = #{blockId}
+           </if>
+           <if test="cursor != null">
+           AND al.activity_log_id &lt; #{cursor}
+           </if>
+         ORDER BY al.activity_log_id DESC
+         LIMIT #{limit}
+    </select>
+
+</mapper>

@@ -1,3 +1,41 @@
+### AI 협업 문서 — 개인 로컬 (커밋 금지) ###
+.ai/local/
+.ai/docs/domain/
+.claude/settings.local.json
+
+# 우리(김동현)가 작성한 도메인 초안 문서 — 커밋하지 않는다 (타 담당 문서는 그대로 둔다)
+.ai/docs/domain/인사/
+.ai/docs/domain/파일/
+
+### 시크릿 / 자격 정보 (⚠️ PUBLIC 레포) ###
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+application-local.yml
+application-local.yaml
+application-secret.yml
+
+### 로그 ###
+logs/
+*.log
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### iCloud 중복본 차단 (⚠️ 실수 커밋 방지) ###
+# iCloud Drive 동기화 충돌 시 "이름 2.확장자" · "이름 2/" 형태의 복제본이 생긴다.
+# 과거 `FileQueryMapper 2.xml` 같은 중복 매퍼가 커밋돼 MyBatis 네임스페이스 충돌로 기동 실패했다(#132).
+# ⚠️ 정상 파일이 "이름 2.ext" 로 매칭되면 무시되니, 그럴 땐 `git add -f <파일>` 로 강제 추가한다.
+* 2.*
+* 2/
+
+### Gradle / Spring ###
 HELP.md
 .gradle
 build/
@@ -35,3 +73,19 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Secrets / Environment ###
+# 개인 로컬 설정과 시크릿이 담긴 프로필 파일을 막는다.
+application-*.properties
+application-*.yml
+application-*.yaml
+
+# ⚠️ 아래는 **실제로 존재하고 리뷰를 거친** 커밋 대상 파일만 예외로 푼다.
+#    git 은 파일 내용이 ${VAR} 뿐인지 판별하지 못하므로, 예외를 열어두면
+#    누군가 실제 자격 증명을 넣어 PUBLIC 저장소에 올릴 수 있다.
+#
+#    예외를 추가할 때 지킬 것:
+#      1. 존재하지 않는 프로필을 미리 열어두지 말 것 (필요해질 때 추가)
+#      2. 파일 내용이 환경변수 자리와 비민감 설정만인지 PR 에서 확인할 것
+#      3. 보완 장치: Push Protection · Gitleaks · CodeRabbit 이 3중으로 검사한다
+!application-prod.yml

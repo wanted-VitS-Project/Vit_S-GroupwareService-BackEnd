@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  등록·수정 시 부서·직급 FK 존재 확인 (employee.md §3·§4).
+  namespace = Mapper 인터페이스 FQN · id = 메서드명 (팀 MyBatis 컨벤션).
+  SELECT EXISTS(...) 는 0/1 을 반환하고 MyBatis 가 boolean 으로 매핑한다.
+-->
+<mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.EmployeeReferenceQueryMapper">
+
+    <select id="departmentExists" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM department WHERE department_id = #{departmentId} AND company_id = #{companyId}
+        )
+    </select>
+
+    <select id="jobPositionExists" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM job_position WHERE job_position_id = #{jobPositionId} AND company_id = #{companyId}
+        )
+    </select>
+
+</mapper>

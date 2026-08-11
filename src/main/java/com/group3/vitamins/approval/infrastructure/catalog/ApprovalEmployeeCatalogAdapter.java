@@ -1,0 +1,29 @@
+package com.group3.vitamins.approval.infrastructure.catalog;
+
+import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
+import com.group3.vitamins.approval.application.port.EmployeeSummary;
+import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+import java.util.Optional;
+
+/**
+ * {@code AuthQueryMapper}(계정+사원+부서+직급 조인)를 재사용하는 실제 구현체.
+ * Block/Project 포트의 스텁과 다르게, Account/Auth 도메인이 이미 완성돼 있어 바로 연동한다.
+ */
+@Component
+@RequiredArgsConstructor
+public class ApprovalEmployeeCatalogAdapter implements EmployeeCatalogPort {
+
+    private final ApprovalQueryMapper approvalQueryMapper;
+
+    @Override
+    public Optional<EmployeeSummary> findEmployee(String userId) {
+        return approvalQueryMapper.findEmployee(userId)
+                .map(employee -> new EmployeeSummary(
+                        employee.userId(), employee.name(), employee.jobPositionName(), employee.departmentPath(),
+                        employee.role(), employee.companyId(), employee.accountStatus(),
+                        employee.resignedAt(), employee.deletedAt()));
+    }
+}

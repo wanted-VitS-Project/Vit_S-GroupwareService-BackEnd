@@ -1,0 +1,118 @@
+# 텍스트 블록 API 명세
+
+**이 문서가 텍스트 블록 API 계약의 단일 기준(source of truth)이다.** 노션과의 동기화 여부는 구현
+게이트가 아니다 — 여기 적힌 대로 구현·운영한다.
+**최종 동기화**: 2026-08-05 (활동 로그 새 계약 반영 완료)
+**도메인 담당**: 정림
+
+---
+
+## 🔴 2026-08-03 기획 변경 (2026-08-05 실제 연동 확인)
+
+블록 생성·삭제를 Block 도메인(동훈님)이 전부 처리한다. **텍스트 도메인 API는 PATCH(본문 수정) 하나만 남는다.**
+
+- **생성**: `POST /api/v1/blocks/texts/{stepId}` 폐기. Block 도메인이 블록 생성 트랜잭션 안에서 `TextHandlerService.create(blockId)`를 호출하고, 텍스트 도메인이 JPA로 빈 상세 행을 만들어 PK(txtId)를 돌려주면 그걸 `block.type_id`에 연결한다.
+- **조회**: 블록 일괄 조회(`GET /api/v1/steps/{stepId}/blocks`)에서 텍스트 상세(`content` 포함)는 텍스트 도메인이 만든 MyBatis 어댑터(`TextDetailMapper`, `text.infrastructure.blockdetail` 패키지)로 채워진다. 최초 생성 직후엔 `content: null`.
+- **삭제**: `DELETE /api/v1/blocks/texts/{txtId}` 폐기. **다만 Block 도메인 쪽 삭제 API 자체가 아직 없다** (2026-08-05 기준) — `BlockDetailPort.deleteDetail()` 인터페이스와 텍스트 쪽 구현(`TextHandlerService.delete`)은 준비돼 있지만 호출하는 진입점이 없어서 실제로 삭제가 되진 않는다. 삭제는 이벤트가 아니라 **블록 삭제와 같은 트랜잭션에서의 동기 호출**로 확정됨 (기존 이벤트 리스너 `TextLifeCycleEventHandler`는 죽은 코드라 삭제함).
+
+**노션 명세와 프론트 계약은 아직 안 맞춰봤다** — 프론트가 실제로 생성/삭제를 어느 경로로 호출하는지(Block 도메인의 통합 API 경로 등) 팀 확인 필요.
+
+| 상태 | 기능 | METHOD | URL | 권한 |
+|------|------|--------|-----|------|
+| ✅ 확정 (구현됨) | 텍스트 본문 수정 | PATCH | `/api/v1/blocks/texts/{txtId}` | 편집 권한 보유자 |
+
+---
+
+### 텍스트 본문 수정 `PATCH /api/v1/blocks/texts/{txtId}`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `txtId` | Long | Y | 수정할 텍스트 항목 ID |
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `content` | String | Y | 사용자가 수정한 부분을 포함한 모든 내용 |
+| `version` | Integer | Y | 블록 목록/상세 조회에서 받은 version 그대로. 2026-08-11 낙관적 락 추가(`.ai/docs/global/CONCURRENCY.md`) |
+| `overwrite` | Boolean | N | true면 충돌 무시하고 덮어씀. 생략 시 false. 2026-08-11 추가 |
+
+**Request Example**
+
+```json
+{
+  "content": "**오전 회의록** \n주제: 제안서 분담하기 \n기한: 오늘 오후",
+  "version": 1
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.txtId` | Long | 수정된 텍스트 블록 ID |
+| `data.content` | String | 수정된 텍스트 블록 내용 |
+| `data.updatedAt` | LocalDateTime | 텍스트 블록 수정일 |
+| `data.version` | int | 수정 후 버전(기존값+1). 2026-08-11 추가 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "텍스트 본문 수정 성공",
+  "data": {
+    "txtId": 1,
+    "content": "**오전 회의록** \n주제: 제안서 분담하기 \n기한: 오늘 오후",
+    "updatedAt": "2026-07-31T15:20:00",
+    "version": 2
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "텍스트 본문 수정 성공" |
+| 400 | Bad Request | `TXT-003` | "내용을 입력해 주세요." |
+| 400 | Bad Request | `TEXT_VERSION_REQUIRED` | "버전 정보가 없습니다. 화면을 새로고침해 주세요." (2026-08-11 추가) |
+| 403 | Forbidden | `TXT-001` | "편집 권한이 없습니다." |
+| 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
+| 404 | Not Found | `TXT-002` | "존재하지 않는 블록입니다." |
+| 409 | Conflict | `TEXT_VERSION_CONFLICT` | "다른 사용자가 먼저 수정했습니다." (2026-08-11 추가 — 낙관적 락) |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
+| 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
+
+## 구현 메모 — 낙관적 락 (2026-08-11)
+
+`.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `text` 테이블에 `version` 컬럼 추가
+(`V20260811172500__add_version_text.sql` — CI 마이그레이션 검증에서 기준 브랜치 최대 버전보다
+작다고 걸려 130000에서 172500으로 재배정함, 2026-08-11). 블록 목록 조회(`GET /steps/{stepId}/blocks`)의
+`TEXT` 상세에도 `version`이 함께 내려간다(위 문서 §5-1 "목록도" 규칙 — 카드에서 바로 수정을
+시작하는 화면이라 목록에 값이 없으면 프론트가 보낼 게 없음). `@Version`(JPA) 대신 수동
+`WHERE version = ?` 조건부 UPDATE로 검사한다(§6-1 — detached merge라 JPA 낙관락은 항상 통과함).
+
+---
+
+## 구현 메모 (사람이 확인할 것)
+
+- 응답 포맷은 로그인 기능 병합 이후 팀 공통 `ApiResponse`(`global.presentation.api.common.ApiResponse`: `httpStatus`/`message`/`data`)로 자리잡혔다 — 이 문서 명세와 정확히 일치한다. `success(message, data)` 사용.
+- **`text` 테이블엔 `block_id` 컬럼이 있지만 FK는 아니다** (다형성 역방향 — 공용 `block.type_id`가 반대로 `text.txt_id`를 가리킨다).
+- **편집 권한(403) 검사, 2026-08-05 실 연동 완료** — `BlockCatalogPort.hasEditPermission("TEXT", txtId, userId, role)`이 `CatalogBlockAdapter`에서 `BlockRepository.findByTypeAndTypeId`로 실제 stepId를 찾은 뒤 Step 도메인의 `StepAccessUseCase.requireEditable`을 재사용해서 판정한다 (더 이상 항상 true인 스텁이 아니다). role은 `TextController`가 `Authentication`에서 `RequesterRole.from(...)`으로 꺼내 Command→Service→Policy까지 실어 나른다.
+- **블록명(`getBlockTitle`)도 2026-08-05 실 연동 완료** — 같은 `BlockRepository.findByTypeAndTypeId` 조회로 `Block.getTitle()`을 반환한다.
+- 로컬 로그인 테스트는 `account`/`employee` 더미가 Flyway 밖(개인 로컬 스크립트)에서 관리되므로, DB 리셋 후엔 그 스크립트부터 실행해야 한다.
+
+## 활동 로그 (Activity Log)
+
+- **2026-08-05 새 계약(resourceName 포함) 반영 완료** — 용준님 활동 로그 헥사고날 구조 개선 PR 머지 후 develop 병합, `ActivityOccurredEvent.of` 6-파라미터 버전으로 전환.
+- 본문 수정(MODIFY) 실 구현 — 실제로 값이 바뀐 경우에만 발행. `resourceId=txtId`, `blockId`=공용 block ID, `resourceName=null`(텍스트 본문은 표시명으로 안 씀), 변경 필드 `content`.
+- 블록 자체의 생성/삭제 로그는 텍스트 도메인이 남기지 않는다 — Block 도메인 책임으로 결론 (§5.1, 어댑터 없는 블록 타입까지 커버해야 해서).
+- 로컬 테스트로 `activity_log` 테이블에 `resourceId`/`blockId`/`field`/`before_value`/`after_value` 전부 정상 적재 확인 완료.

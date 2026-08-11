@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  그룹 목록·단건 조회 SQL. 쓰기·존재검증은 JPA(EmployeeGroupRepositoryAdapter) 담당.
+  namespace = Mapper 인터페이스 FQN · id = 메서드명 (팀 MyBatis 컨벤션).
+-->
+<mapper namespace="com.group3.vitamins.employeegroup.infrastructure.adapter.EmployeeGroupQueryMapper">
+
+    <!-- record 는 setter 가 없어 생성자 인자로 매핑한다 (인자 순서 = record 정의 순서) -->
+    <resultMap id="groupListRow" type="com.group3.vitamins.employeegroup.application.result.GroupListRow">
+        <constructor>
+            <idArg column="group_id" javaType="java.lang.Long"/>
+            <arg column="name" javaType="java.lang.String"/>
+            <arg column="description" javaType="java.lang.String"/>
+            <arg column="member_count" javaType="_int"/>
+            <arg column="created_by_name" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <!--
+      공통 select. memberCount 는 시스템 계정·퇴사자 제외(부서 employeeCount 와 같은 기준).
+      created_by 는 NOT NULL FK 라 생성자(ADMIN 가상 사원 포함) 이름을 INNER JOIN 으로 얻는다.
+    -->
+    <sql id="selectGroup">
+        SELECT g.group_id,
+               g.name,
+               g.description,
+               (SELECT COUNT(*)
+                  FROM employee_group_member m
+                  JOIN employee e ON e.user_id = m.user_id
+                 WHERE m.group_id = g.group_id
+                   AND e.is_system = 0
+                   AND e.resigned_at IS NULL
+                   AND e.deleted_at IS NULL) AS member_count,
+               ce.name AS created_by_name,
+               g.created_at
+          FROM employee_group g
+          JOIN employee ce ON ce.user_id = g.created_by
+    </sql>
+
+    <!-- 목록 — 회사 범위, 이름 오름차순. keyword 있으면 그룹명 부분검색. -->
+    <select id="findGroups" resultMap="groupListRow">
+        <include refid="selectGroup"/>
+        <where>
+            g.company_id = #{companyId}
+            <if test="keyword != null">
+                AND g.name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY g.name ASC
+    </select>
+
+    <!-- 단건 — 회사 범위, 수정(§3) 응답 재조회. 타사 그룹은 결과 없음 → 서비스가 404. -->
+    <select id="findGroup" resultMap="groupListRow">
+        <include refid="selectGroup"/>
+        WHERE g.group_id = #{groupId}
+          AND g.company_id = #{companyId}
+    </select>
+
+    <!--
+      구성원 목록(§5). departmentPath 는 상위부서명+부서명을 서비스가 조립하므로 두 이름을 따로 내린다(jobposition 선례).
+      시스템 계정·퇴사자 제외. 이름 오름차순. addedAt = 매핑의 created_at(추가일).
+    -->
+    <select id="findMembers" resultType="com.group3.vitamins.employeegroup.application.result.MemberRow">
+        SELECT e.user_id  AS userId,
+               e.name     AS name,
+               d.name     AS departmentName,
+               p.name     AS parentDepartmentName,
+               jp.name    AS jobPositionName,
+               m.created_at AS addedAt
+          FROM employee_group_member m
+          JOIN employee e ON e.user_id = m.user_id
+          LEFT JOIN department d  ON d.department_id = e.department_id
+          LEFT JOIN department p  ON p.department_id = d.parent_id
+          LEFT JOIN job_position jp ON jp.job_position_id = e.job_position_id
+         WHERE m.group_id = #{groupId}
+           AND e.is_system = 0
+           AND e.resigned_at IS NULL
+           AND e.deleted_at IS NULL
+         ORDER BY e.name ASC, e.user_id ASC
+    </select>
+
+    <!-- 처리 후 구성원 수(§6·§7). 목록과 같은 제외 기준. -->
+    <select id="countMembers" resultType="int">
+        SELECT COUNT(*)
+          FROM employee_group_member m
+          JOIN employee e ON e.user_id = m.user_id
+         WHERE m.group_id = #{groupId}
+           AND e.is_system = 0
+           AND e.resigned_at IS NULL
+           AND e.deleted_at IS NULL
+    </select>
+
+    <!--
+      §6 검증 — 요청 사번 중 같은 회사에 실재(비삭제)하는 사원의 (사번·시스템여부).
+      타사 사번은 company_id 조건에서 빠져 서비스가 EMP_NOT_FOUND 로 전체 거부 → 크로스테넌트 구성원 유입 차단.
+    -->
+    <select id="findEmployeeRefs" resultType="com.group3.vitamins.employeegroup.application.result.EmployeeRefRow">
+        SELECT e.user_id AS userId,
+               e.is_system AS isSystem
+          FROM employee e
+         WHERE e.deleted_at IS NULL
+           AND e.company_id = #{companyId}
+           AND e.user_id IN
+        <foreach collection="userIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>

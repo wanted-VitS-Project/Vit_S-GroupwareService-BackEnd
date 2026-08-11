@@ -1,0 +1,54 @@
+name: 🔧 Task
+description: 기능 외 작업 — 설정·인프라·문서화·조사·리팩토링
+title: "[Task] "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **이 레포는 PUBLIC 입니다.** 비밀번호·API 키·IP·엔드포인트 등 민감 정보를 작성하지 마세요.
+
+        > 리팩토링 작업은 이 템플릿을 사용하되 제목을 `[Ref]` 로 바꿔주세요.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 배경 (Context)
+      description: 이 작업이 왜 필요한지, 어떤 배경에서 시작되었는지 작성해주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 조건
+      description: 완료되었다고 판단할 수 있는 구체적인 조건을 작성해주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: action-items
+    attributes:
+      label: 액션 아이템
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: input
+    id: due
+    attributes:
+      label: 기한
+      placeholder: "YYYY.MM.DD (요일) HH:mm"
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 참고 자료 및 의존성
+      description: 관련 PR·이슈·문서 링크를 작성해주세요.
+    validations:
+      required: false

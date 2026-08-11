@@ -1,0 +1,201 @@
+package com.group3.vitamins.issue.presentation.api;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.group3.vitamins.global.presentation.api.common.ApiResponse;
+import com.group3.vitamins.global.presentation.api.common.RequesterRole;
+import com.group3.vitamins.issue.application.command.DeleteIssueCommand;
+import com.group3.vitamins.issue.application.query.IssueCalendarQuery;
+import com.group3.vitamins.issue.application.query.IssueDetailQuery;
+import com.group3.vitamins.issue.application.result.IssueCalendarResult;
+import com.group3.vitamins.issue.application.result.IssueResult;
+import com.group3.vitamins.issue.application.result.IssueStatusResult;
+import com.group3.vitamins.issue.application.usecase.IssueCommandUseCase;
+import com.group3.vitamins.issue.application.usecase.IssueQueryUseCase;
+import com.group3.vitamins.issue.presentation.api.request.IssueStatusChangeRequest;
+import com.group3.vitamins.issue.presentation.api.request.IssueUpdateRequest;
+import com.group3.vitamins.issue.presentation.api.response.IssueCalendarResponse;
+import com.group3.vitamins.issue.presentation.api.response.IssueDetailResponse;
+import com.group3.vitamins.issue.presentation.api.response.IssueStatusChangeResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@Tag(name = "Issue - 이슈", description = "Issue 단건 API")
+@RestController
+@RequestMapping("/api/v1/issues")
+@RequiredArgsConstructor
+public class IssueManagementController {
+
+    private final IssueCommandUseCase issueCommandUseCase;
+    private final IssueQueryUseCase issueQueryUseCase;
+
+    @Operation(
+            summary = "이슈 상세 조회",
+            description = "선택한 이슈의 상세 정보와 담당자, 연결된 Block을 조회한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이슈 상세 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ISS_ACCESS_PERMISSION_REQUIRED — 소속 Step 열람 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "ISS_NOT_FOUND — Issue 없음 또는 논리 삭제됨")
+    })
+    @GetMapping("/{issueId}")
+    public ResponseEntity<ApiResponse<IssueDetailResponse>> getIssue(
+            @Parameter(description = "조회할 이슈 ID")
+            @PathVariable Long issueId,
+            Authentication authentication
+    ) {
+        IssueResult result = issueQueryUseCase.getIssue(new IssueDetailQuery(
+                issueId,
+                authentication.getName(),
+                RequesterRole.from(authentication)
+        ));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.DETAIL_SUCCESS,
+                IssueDetailResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "담당 이슈 캘린더 조회",
+            description = "로그인 사용자가 담당자로 지정된, 완료되지 않은 이슈 전체를 조회한다. "
+                    + "마이페이지 개인 캘린더에서 사용하며 월 이동은 FE가 응답 데이터로 분기 처리한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "담당 이슈 캘린더 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료")
+    })
+    @GetMapping("/calendar")
+    public ResponseEntity<ApiResponse<IssueCalendarResponse>> getMyCalendarIssues(
+            Authentication authentication
+    ) {
+        IssueCalendarResult result = issueQueryUseCase.getMyCalendarIssues(
+                new IssueCalendarQuery(authentication.getName()));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.CALENDAR_SUCCESS,
+                IssueCalendarResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "이슈 부분 수정",
+            description = "이슈의 제목, 설명, 마감일, 우선순위, 담당자, 연결 Block을 전달한 필드만 부분 수정한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이슈 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "ISS_INVALID_REQUEST / ISS_ASSIGNEE_NOT_PROJECT_MEMBER / ISS_BLOCK_STEP_MISMATCH"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ISS_EDIT_PERMISSION_REQUIRED — Step 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "ISS_NOT_FOUND / ISS_ASSIGNEE_NOT_FOUND / ISS_BLOCK_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "ISSUE_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
+    })
+    @PatchMapping("/{issueId}")
+    public ResponseEntity<ApiResponse<IssueDetailResponse>> updateIssue(
+            @Parameter(description = "수정할 이슈 ID")
+            @PathVariable Long issueId,
+            @RequestBody(required = false) JsonNode request,
+            Authentication authentication
+    ) {
+        IssueResult result = issueCommandUseCase.updateIssue(
+                IssueUpdateRequest.from(request)
+                        .toCommand(issueId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.UPDATE_SUCCESS,
+                IssueDetailResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "이슈 상태 변경",
+            description = "드래그 앤 드롭 또는 상세 화면의 상태 선택을 통해 이슈 상태를 변경한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이슈 상태 변경 성공 또는 동일 상태 멱등 처리"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "ISS_STATUS_REQUIRED / ISS_INVALID_STATUS / ISS_INVALID_REQUEST"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ISS_EDIT_PERMISSION_REQUIRED — Step 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "ISS_NOT_FOUND — Issue 없음 또는 논리 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "ISSUE_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
+    })
+    @PatchMapping("/{issueId}/status")
+    public ResponseEntity<ApiResponse<IssueStatusChangeResponse>> changeIssueStatus(
+            @Parameter(description = "상태를 변경할 이슈 ID")
+            @PathVariable Long issueId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true)
+            @Valid @RequestBody(required = false) IssueStatusChangeRequest request,
+            Authentication authentication
+    ) {
+        IssueStatusChangeRequest safeRequest = request == null
+                ? new IssueStatusChangeRequest(null, null)
+                : request;
+        IssueStatusResult result = issueCommandUseCase.changeIssueStatus(
+                safeRequest.toCommand(issueId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success(
+                IssueResponseMessage.STATUS_CHANGE_SUCCESS,
+                IssueStatusChangeResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "이슈 삭제",
+            description = "이슈를 논리 삭제하고, 담당자 및 관련 Block 연결 정보를 함께 제거한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "이슈 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "ISS_EDIT_PERMISSION_REQUIRED — Step 편집 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "ISS_NOT_FOUND — Issue 없음 또는 이미 논리 삭제됨")
+    })
+    @DeleteMapping("/{issueId}")
+    public ResponseEntity<ApiResponse<Void>> deleteIssue(
+            @Parameter(description = "삭제할 이슈 ID")
+            @PathVariable Long issueId,
+            Authentication authentication
+    ) {
+        issueCommandUseCase.deleteIssue(new DeleteIssueCommand(
+                issueId,
+                authentication.getName(),
+                RequesterRole.from(authentication)
+        ));
+
+        return ResponseEntity.ok(ApiResponse.success(IssueResponseMessage.DELETE_SUCCESS));
+    }
+}

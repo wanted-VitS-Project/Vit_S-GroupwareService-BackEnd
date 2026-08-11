@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.infrastructure.adapter.ProjectListQueryMapper">
+
+    <!--
+      ⚠️ 회사 조건은 adminAll 분기 <if> 바깥에 둔다. 안에 넣으면 ADMIN 경로에서 조건이 통째로 빠져
+         전 회사 프로젝트가 목록에 뜬다. adminAll 이 넓히는 것은 "참여 여부"이지 "회사"가 아니다.
+    -->
+    <sql id="listFilters">
+        WHERE p.deleted_at IS NULL
+        AND p.company_id = #{companyId}
+        <if test="adminAll == false">
+            AND EXISTS (SELECT 1
+            FROM project_member pm
+            WHERE pm.project_id = p.project_id
+            AND pm.user_id = #{requesterUserId}
+            AND pm.permission &lt;&gt; 'NONE')
+        </if>
+        <if test="status != null">AND p.status = #{status}</if>
+        <if test="businessCategoryId != null">
+            AND EXISTS (SELECT 1
+            FROM project_business_category pbc
+            WHERE pbc.project_id = p.project_id
+            AND pbc.business_category_id = #{businessCategoryId})
+        </if>
+        <if test="startedOnFrom != null">AND p.started_on &gt;= #{startedOnFrom}</if>
+        <if test="startedOnTo != null">AND p.started_on &lt;= #{startedOnTo}</if>
+        <if test="keyword != null">
+            AND (p.name LIKE CONCAT('%', #{keyword}, '%')
+            OR p.client_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <!--
+      한 페이지를 파생 테이블에서 먼저 자른 뒤(LIMIT), 바깥에서 카테고리·참여자를 붙인다.
+      LIMIT 을 조인 뒤로 빼면 카티전 곱 때문에 페이지 크기가 무너진다.
+      집계 4종은 스칼라 서브쿼리다 — 조인으로 세면 서로 곱해져 값이 부풀어오른다.
+      ⚠️ SELECT 컬럼 순서 = ProjectListRow 필드 순서 (MyBatis 위치 기반 생성자 매핑).
+    -->
+    <select id="findPage"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.ProjectListRow">
+        SELECT b.projectId               AS projectId,
+        b.name                    AS name,
+        b.clientName              AS clientName,
+        b.status                  AS status,
+        b.startedOn               AS startedOn,
+        b.endedOn                 AS endedOn,
+        b.contractAmount          AS contractAmount,
+        b.totalStepCount          AS totalStepCount,
+        b.doneStepCount           AS doneStepCount,
+        b.myIssueInProgressCount  AS myIssueInProgressCount,
+        b.myApprovalInProgressCount AS myApprovalInProgressCount,
+        bc.business_category_id   AS categoryId,
+        bc.name                   AS categoryName,
+        bc.code                   AS categoryCode,
+        (bc.deleted_at IS NOT NULL) AS categoryDeleted,
+        pm.user_id                AS memberUserId,
+        e.name                    AS memberName,
+        (e.deleted_at IS NOT NULL)  AS memberDeleted,
+        b.version                 AS version
+        FROM (
+        SELECT p.project_id      AS projectId,
+        p.name            AS name,
+        p.client_name     AS clientName,
+        p.status          AS status,
+        p.started_on      AS startedOn,
+        p.ended_on        AS endedOn,
+        p.contract_amount AS contractAmount,
+        (SELECT COUNT(*)
+        FROM step s
+        WHERE s.project_id = p.project_id
+        AND s.deleted_at IS NULL)          AS totalStepCount,
+        (SELECT COUNT(*)
+        FROM step s
+        WHERE s.project_id = p.project_id
+        AND s.deleted_at IS NULL
+        AND s.status = 'DONE')             AS doneStepCount,
+        (SELECT COUNT(*)
+        FROM issue i
+        JOIN issue_assign ia
+        ON ia.issue_id = i.issue_id
+        AND ia.user_id = #{requesterUserId}
+        JOIN step si
+        ON si.step_id = i.step_id
+        AND si.deleted_at IS NULL
+        WHERE si.project_id = p.project_id
+        AND i.status = 'IN_PROGRESS'
+        AND i.deleted_at IS NULL)          AS myIssueInProgressCount,
+        (SELECT COUNT(*)
+        FROM approval a
+        JOIN block bl
+        ON bl.block_id = a.block_id
+        AND bl.deleted_at IS NULL
+        JOIN step sa
+        ON sa.step_id = bl.step_id
+        AND sa.deleted_at IS NULL
+        WHERE sa.project_id = p.project_id
+        AND a.user_id = #{requesterUserId}
+        AND a.status = 'IN_PROGRESS'
+        AND a.deleted_at IS NULL)          AS myApprovalInProgressCount,
+        p.created_at      AS createdAt,
+        p.version         AS version
+        FROM project p
+        <include refid="listFilters"/>
+        ORDER BY p.created_at DESC, p.project_id DESC
+        LIMIT #{limit} OFFSET #{offset}
+        ) b
+        LEFT JOIN project_business_category pbc
+        ON pbc.project_id = b.projectId
+        <!--
+          ⚠️ deleted_at 조건을 조인에서 뺐다 (DELETE.md D-6) — 두면 삭제된 카테고리·사원이
+             조용히 사라져 "없음" 과 구분이 안 된다. 회사 조건(company_id)은 그대로 둔다:
+             타사 데이터는 애초에 보여줄 대상이 아니라 성격이 다르다.
+        -->
+        LEFT JOIN business_category bc
+        ON bc.business_category_id = pbc.business_category_id
+        AND bc.company_id = #{companyId}
+        LEFT JOIN project_member pm
+        ON pm.project_id = b.projectId
+        AND pm.permission &lt;&gt; 'NONE'
+        LEFT JOIN employee e
+        ON e.user_id = pm.user_id
+        AND e.company_id = #{companyId}
+        ORDER BY b.createdAt DESC, b.projectId DESC,
+        bc.business_category_id ASC, e.name ASC, pm.user_id ASC
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM project p
+        <include refid="listFilters"/>
+    </select>
+
+</mapper>

@@ -1,0 +1,41 @@
+# CODEOWNERS
+#
+# 여기 지정된 경로가 PR에 포함되면 해당 소유자에게 리뷰가 자동 요청된다.
+#
+# ⚠️ 현재는 "자동 리뷰어 지정"까지만 한다. 브랜치 보호의
+#    "Require review from Code Owners" 는 꺼져 있어서 소유자 승인이 강제되지는 않는다.
+#    (소유자 본인이 올린 PR 이 자기 승인을 못 해 막히는 것을 피하기 위함)
+#
+# 📌 도메인별 소유자는 아키텍처·패키지 구조 확정 후 추가한다.
+#    예) /src/main/java/com/group3/vitamins/auth/   @담당자
+#
+# 문법: 나중에 매치되는 규칙이 우선한다.
+
+# ── DevOps 소유 ─────────────────────────────────────────────
+
+# CI/CD · 이슈/PR 템플릿 · CODEOWNERS 자체
+/.github/                               @Izac626
+
+# AI 협업 문서 체계
+/.ai/                                   @Izac626
+/AGENTS.md                              @Izac626
+/CLAUDE.md                              @Izac626
+
+# 빌드 · 의존성
+/build.gradle                           @Izac626
+/settings.gradle                        @Izac626
+/gradlew                                @Izac626
+/gradlew.bat                            @Izac626
+/gradle/                                @Izac626
+
+# 환경 설정 · 프로필
+/src/main/resources/application*.yaml   @Izac626
+/src/test/resources/                    @Izac626
+
+# 컨테이너 · 배포 (생기면 적용)
+/Dockerfile                             @Izac626
+/docker-compose.yml                     @Izac626
+/.dockerignore                          @Izac626
+
+# 저장소 설정
+/.gitignore                             @Izac626

@@ -1,0 +1,54 @@
+version: 2
+
+# 📌 부트캠프 기간(약 4주)에 맞춰 월 1회로 낮춰 운영한다.
+#    브랜치 보호로 모든 PR 에 승인 1명이 필요하므로, 주간 주기는 리뷰 부담이 크다.
+#    운영 기간이 길어지면 interval 을 weekly 로 올린다.
+
+updates:
+  # GitHub Actions 를 커밋 SHA 로 고정해두면 수동 갱신이 번거롭다.
+  # Dependabot 이 새 버전을 SHA 로 바꿔 PR 을 올려준다.
+  # ⚠️ SHA 고정과 이 설정은 세트다. 이걸 끄면 액션이 오래된 채로 방치된다.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: ci
+    labels:
+      - infra
+      - chore
+
+  # Gradle 의존성 보안/버전 업데이트.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore
+    labels:
+      - chore
+    ignore:
+      # Spring Boot 는 3.5.x 유지. 4.x 로 올리면 스타터 명칭이 전부 바뀐다.
+      # 메이저 업그레이드는 팀 합의 사항이다.
+      - dependency-name: org.springframework.boot
+        update-types:
+          - version-update:semver-major
+
+      # ⚠️ springdoc 3.0.x 는 **Spring Boot 4 전용**이다.
+      #    Boot 3.5.x 에서 올리면 Swagger 가 깨진다. 2.8.x 를 유지한다.
+      #    (2026-07-29: Dependabot 이 실제로 3.0.3 업그레이드 PR 을 올려 차단)
+      - dependency-name: org.springdoc:springdoc-openapi-starter-webmvc-ui
+        update-types:
+          - version-update:semver-major
+
+      # Boot 3.5 와 함께 쓰는 Spring Framework/Security 도 메이저는 막는다.
+      # Boot 가 버전을 관리하므로 개별 메이저 업그레이드는 충돌을 만든다.
+      - dependency-name: org.springframework*
+        update-types:
+          - version-update:semver-major

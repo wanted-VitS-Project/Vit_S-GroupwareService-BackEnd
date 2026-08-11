@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper">
+
+    <select id="findEmployee"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalEmployeeRow">
+        SELECT e.user_id              AS userId,
+               e.name                 AS name,
+               a.role                 AS role,
+               a.status               AS accountStatus,
+               jp.name                AS jobPositionName,
+               d.name                 AS departmentName,
+               p.name                 AS parentDepartmentName,
+               e.company_id           AS companyId,
+               e.resigned_at          AS resignedAt,
+               e.deleted_at           AS deletedAt
+        FROM employee e
+        LEFT JOIN account a
+            ON a.user_id = e.user_id
+        LEFT JOIN department d
+            ON d.department_id = e.department_id
+        LEFT JOIN department p
+            ON p.department_id = d.parent_id
+        LEFT JOIN job_position jp
+            ON jp.job_position_id = e.job_position_id
+        WHERE e.user_id = #{userId}
+    </select>
+
+    <!-- 회차 상세조회(MGT-005) 결재선 목록. 결재선마다 employee 를 따로 조회하던 N+1 을 조인 한 번으로 대체 -->
+    <select id="findLineDetailsByRevisionId"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLineDetailRow">
+        SELECT
+            al.approval_line_id AS lineId,
+            al.user_id          AS approverId,
+            e.name              AS approverName,
+            jp.name             AS jobPositionName,
+            d.name              AS departmentName,
+            p.name              AS parentDepartmentName,
+            al.sequence_no      AS sequenceNo,
+            al.status           AS status,
+            al.opinion          AS opinion,
+            al.processed_at     AS processedAt,
+            CASE WHEN e.user_id IS NULL
+                       OR e.resigned_at IS NOT NULL
+                       OR e.deleted_at IS NOT NULL
+                       OR a.status IS NULL
+                       OR a.status &lt;&gt; 'ACTIVE'
+                 THEN TRUE ELSE FALSE END AS approverUnavailable
+        FROM approval_line al
+        LEFT JOIN employee e
+            ON e.user_id = al.user_id
+        LEFT JOIN account a
+            ON a.user_id = e.user_id
+        LEFT JOIN department d
+            ON d.department_id = e.department_id
+        LEFT JOIN department p
+            ON p.department_id = d.parent_id
+        LEFT JOIN job_position jp
+            ON jp.job_position_id = e.job_position_id
+        WHERE al.approval_revision_id = #{revisionId}
+          AND al.deleted_at IS NULL
+        ORDER BY al.sequence_no
+    </select>
+
+</mapper>

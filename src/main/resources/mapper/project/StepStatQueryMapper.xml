@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.infrastructure.adapter.StepStatQueryMapper">
+
+    <select id="countByProjectId"
+            resultType="com.group3.vitamins.project.infrastructure.adapter.StepStatRow">
+        SELECT COUNT(*) AS totalCount,
+               COALESCE(SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END), 0) AS doneCount
+        FROM step
+        WHERE project_id = #{projectId}
+          AND deleted_at IS NULL
+    </select>
+
+</mapper>
