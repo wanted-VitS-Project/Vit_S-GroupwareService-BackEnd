@@ -152,7 +152,7 @@ class IssueQueryMapperTest {
             insertProject(session, 4L, "타사 프로젝트", null, 2L);
             insertStep(session, 11L, 4L, "타사 스텝", null);
             insertIssue(session, 201L, 11L, "타사 이슈", null,
-                    "TO_DO", "HIGH", null, null, null);
+                    "TO_DO", "HIGH", LocalDateTime.of(2026, 8, 31, 0, 0), null, null);
             insertBlock(session, 21L, 11L, "타사 블록", "TEXT");
             try (Statement statement = session.getConnection().createStatement()) {
                 statement.execute("INSERT INTO employee (user_id, company_id, name) VALUES ('EMP002', 2, '타사 사용자')");
@@ -174,6 +174,28 @@ class IssueQueryMapperTest {
             assertThat(mapper.findBlockStep(21L, COMPANY_ID)).isEmpty();
             assertThat(mapper.findLinkableBlocks(List.of(21L), COMPANY_ID)).isEmpty();
             assertThat(mapper.findMyCalendarIssues("EMP002", COMPANY_ID)).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("같은 Project의 다른 Step Block 관계 행은 이슈 관련 Block 조회에서 제외한다")
+    void findRelatedBlocks_excludesBlockFromDifferentStep() throws Exception {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertProject(session, 3L, "기본 프로젝트", null);
+            insertStep(session, 10L, 3L, "이슈 스텝", null);
+            insertStep(session, 11L, 3L, "다른 스텝", null);
+            insertIssue(session, 101L, 10L, "기본 이슈", null,
+                    "TO_DO", "HIGH", null, null, null);
+            insertBlock(session, 15L, 11L, "다른 스텝 Block", "TEXT");
+            try (Statement statement = session.getConnection().createStatement()) {
+                statement.execute("INSERT INTO issue_block (issue_block_id, issue_id, block_id) VALUES (1, 101, 15)");
+            }
+            session.commit();
+
+            List<IssueRelatedBlockRow> rows = session.getMapper(IssueQueryMapper.class)
+                    .findRelatedBlocks(List.of(101L), COMPANY_ID);
+
+            assertThat(rows).isEmpty();
         }
     }
 

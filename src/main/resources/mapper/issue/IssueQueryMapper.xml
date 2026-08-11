@@ -196,6 +196,7 @@
            AND b.deleted_at IS NULL
           JOIN step block_step
             ON block_step.step_id = b.step_id
+           AND block_step.step_id = issue_step.step_id
            AND block_step.project_id = p.project_id
            AND block_step.deleted_at IS NULL
          WHERE ib.issue_id IN
