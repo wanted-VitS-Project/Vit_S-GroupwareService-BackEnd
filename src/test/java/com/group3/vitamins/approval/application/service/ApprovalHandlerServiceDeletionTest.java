@@ -99,6 +99,24 @@ class ApprovalHandlerServiceDeletionTest {
         // 결재가 삭제돼 상세가 404 이므로 이동 대상을 붙이지 않는다(DEL-008)
         assertThat(first.targetType()).isNull();
         assertThat(first.targetId()).isNull();
+        assertThat(first.targetContext()).isNull();
+    }
+
+    @Test
+    @DisplayName("기안자가 곧 현재 결재자면 취소 알림은 한 번만 간다")
+    void deduplicatesRecipientWhenDrafterIsActiveApprover() {
+        when(approvalRepository.findApprovalIncludingDeletedForUpdate(100L))
+                .thenReturn(Optional.of(approval(ApprovalStatus.IN_PROGRESS, null)));
+        // 기안자(EMP001)가 자기 결재선의 ACTIVE 결재자이기도 한 경우
+        when(approvalRepository.findLinesByApprovalId(100L))
+                .thenReturn(List.of(line(1L, "EMP001", 1, ApprovalLineStatus.ACTIVE)));
+
+        service.deleteByBlock(100L, "EMP009", "블록 제목", DELETED_AT);
+
+        ArgumentCaptor<NotificationRequestedEvent> captor =
+                ArgumentCaptor.forClass(NotificationRequestedEvent.class);
+        verify(domainEventPublisher, org.mockito.Mockito.times(1)).publish(captor.capture());
+        assertThat(captor.getValue().recipientUserId()).isEqualTo("EMP001");
     }
 
     @Test

@@ -166,7 +166,13 @@
 | 403 | Forbidden | `APPROVAL_NOT_DRAFTER` | |
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | |
 
-**비즈니스 규칙**: 하드 삭제(이력 보존 대상 아님, `APR-007`).
+**비즈니스 규칙**: 논리 삭제 — `approval_document.deleted_at` 을 기록한다(`APR-007`).
+같은 파일 버전을 다시 연결할 수 있다(중복 검사가 활성 행만 본다).
+2026-08-10 하드 삭제에서 전환했다 — 팀 삭제 정책 `DELETE.md` D-1(실물은 전부 soft delete)·
+D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 PK 가 없어 미해당).
+
+> 파일 영구삭제 잠금은 이 삭제를 상위 블록 삭제(`DEL-005`)와 **회차 생존으로 구분**한다 —
+> 여기서 뺀 문서는 회차가 살아 있어 파일 잠금을 풀고, 상위 삭제는 회차도 삭제돼 잠금을 유지한다.
 
 ---
 

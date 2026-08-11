@@ -18,6 +18,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("결재 첨부 파일 조회 — 휴지통 상태")
@@ -72,6 +73,8 @@ class ApprovalFileCatalogAdapterTest {
         given(fileVersionRepository.findById(FILE_VERSION_ID)).willReturn(Optional.empty());
 
         assertThat(adapter.findFileVersion(FILE_VERSION_ID)).isEmpty();
+        // 버전이 없으면 소유 문서를 물어볼 이유가 없다 — 불필요한 조회가 늘지 않게 고정한다
+        verifyNoInteractions(fileRepository);
     }
 
     private FileVersion fileVersion() {

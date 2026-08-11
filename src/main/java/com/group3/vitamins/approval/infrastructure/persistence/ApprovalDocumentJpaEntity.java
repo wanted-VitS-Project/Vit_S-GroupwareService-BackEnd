@@ -18,8 +18,9 @@ import java.time.LocalDateTime;
  * <p>INV-04: {@code file_version_id} 만 참조한다 — 파일 실물 저장은 파일 도메인 소관이라
  * 여기서 {@code file_version} 과 JPA 연관관계를 맺지 않는다.
  *
- * <p>APR-007의 DRAFT 수동 연결 해제는 하드 삭제하고, DEL-005의 상위 블록 삭제 전파는
- * {@code deleted_at}을 기록해 당시의 파일 버전 연결을 보존한다.
+ * <p>삭제는 두 경로 모두 논리 삭제다 — APR-007의 DRAFT 수동 연결 해제와 DEL-005의 상위 블록 삭제
+ * 전파 둘 다 {@code deleted_at}을 기록한다. 파일 영구삭제 잠금은 이 둘을 <b>회차 생존</b>으로
+ * 구분한다(수동 해제는 회차가 살아 있고, 상위 삭제는 회차도 삭제된다).
  */
 @Entity
 @NoArgsConstructor

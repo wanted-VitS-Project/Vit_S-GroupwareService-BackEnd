@@ -82,7 +82,7 @@
 | 문서 | 범위 | 상태 |
 |------|------|------|
 | [APR-V1.md](domain/결재·알림/APR-V1.md) · [USECASE](domain/결재·알림/APR-V1-USECASE.md) | 결재 블록 · 상신 · 승인/반려 · 결재관리 | 구현 계약 |
-| [APR-DELETE-DRAFT.md](domain/결재·알림/APR-DELETE-DRAFT.md) | 블록·스텝 삭제 전파 · 상태 종결 · 문서/파일 보존 · 조회/동시성 · 통지 · 파기 | `✅ 1차 핵심 구현` · 통지/표시/파기 `📝 초안` |
+| [APR-DELETE-DRAFT.md](domain/결재·알림/APR-DELETE-DRAFT.md) | 블록·스텝 삭제 전파 · 상태 종결 · 문서/파일 보존 · 조회/동시성 · 통지 · 파기 | 구현 계약 |
 | [NOTI-V1.md](domain/결재·알림/NOTI-V1.md) · [USECASE](domain/결재·알림/NOTI-V1-USECASE.md) | 알림 생성 · 조회 · 읽음 · 삭제 · 이동 대상 | 구현 계약 |
 
 ### 관리자 (마스터 데이터) — 동훈
