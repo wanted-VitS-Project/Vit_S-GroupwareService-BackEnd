@@ -114,8 +114,13 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         );
     }
 
+    // ⚠️ @Transactional을 일부러 안 붙인다(2026-08-11, CodeRabbit 지적으로 제거) — 파일 파싱(POI/
+    // commons-csv, DB 접근 없음)이 이 메서드 앞부분 대부분을 차지하는데, 트랜잭션이 붙어있으면
+    // 파싱하는 동안에도 커넥션 풀에서 커넥션을 하나 붙잡고 있게 된다. 동시 업로드가 몇 건만 겹쳐도
+    // 커넥션이 낭비된다. insertAll은 여러 행을 한 번에 묶은 단일 INSERT문이라 그 자체로 원자적이고,
+    // findExistingDedupKeys(조회)와 굳이 같은 트랜잭션으로 묶을 이유가 없다 — 그 사이의 아주 짧은
+    // 동시성 틈은 uk_cash_flow_dedup 유니크 제약이 최종 방어선으로 이미 커버한다(문서에 명시됨).
     @Override
-    @Transactional
     public CashFlowCsvUploadView uploadCashFlowCsv(CashFlowCsvUploadCommand command) {
         log.info("입출금 내역(CSV 기반) 업로드 요청 - userId={}, bankName={}", command.userId(), command.bankName());
 
@@ -145,7 +150,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (!parsedRows.isEmpty()) {
             List<CashFlowDedupKeyRow> existing =
                     cashFlowCommandMapper.findExistingDedupKeys(companyId, command.bankName(), parsedRows);
-            existing.forEach(row -> seenKeys.add(dedupKey(row.tradedAt(), row.amount(), row.balanceAfter())));
+            existing.forEach(row -> seenKeys.add(dedupKey(row.type(), row.tradedAt(), row.amount(), row.balanceAfter())));
         }
 
         List<ParsedCashFlowRow> toInsert = new ArrayList<>();
@@ -153,7 +158,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         for (ParsedCashFlowRow row : parsedRows) {
             // seenKeys에는 DB에 이미 있는 조합뿐 아니라, 같은 파일 안에서 먼저 처리된 행의 조합도 함께
             // 쌓인다 — 파일 내부 중복도 같은 로직으로 걸러진다.
-            if (!seenKeys.add(dedupKey(row.tradedAt(), row.amount(), row.balanceAfter()))) {
+            if (!seenKeys.add(dedupKey(row.type(), row.tradedAt(), row.amount(), row.balanceAfter()))) {
                 duplicateRows.add(new DuplicateRowView(row.tradedAt(), row.amount(), "이미 등록된 거래입니다."));
             } else {
                 toInsert.add(row);
@@ -171,10 +176,14 @@ public class FinanceCommandService implements FinanceCommandUseCase {
      * 은행명·거래일시·금액만으론 "같은 초·같은 금액의 서로 다른 거래"를 구분 못 해서(2026-08-10, 실제
      * 카카오뱅크 CSV로 확인) 잔액도 키에 포함한다. 잔액 컬럼이 없는 CSV는 balanceAfter가 항상 null이라
      * 문자열 "null"로 통일되고, 그 경우 기존과 동일하게 은행명+거래일시+금액만으로 판정된다.
+     *
+     * ⚠️ type도 반드시 포함해야 한다(2026-08-11, CodeRabbit Critical 지적) — amount는 항상 절댓값으로
+     * 저장하므로(parseAmount().abs()), type 없이는 같은 시각·같은 절댓값의 입금/출금 두 건이 완전히
+     * 같은 키가 돼서 서로 다른 정상 거래 중 하나가 "이미 등록된 거래"로 조용히 유실된다.
      */
-    private String dedupKey(java.time.LocalDateTime tradedAt, java.math.BigDecimal amount, java.math.BigDecimal balanceAfter) {
+    private String dedupKey(String type, java.time.LocalDateTime tradedAt, java.math.BigDecimal amount, java.math.BigDecimal balanceAfter) {
         String balancePart = balanceAfter == null ? "null" : balanceAfter.stripTrailingZeros().toPlainString();
-        return tradedAt + "|" + amount.stripTrailingZeros().toPlainString() + "|" + balancePart;
+        return type + "|" + tradedAt + "|" + amount.stripTrailingZeros().toPlainString() + "|" + balancePart;
     }
 
     private CashFlowDateTimeMode parseDateTimeMode(String raw) {
@@ -239,8 +248,8 @@ public class FinanceCommandService implements FinanceCommandUseCase {
 
         assertEditAccess(command.userId(), command.role());
 
-        CashFlowMatchLookupRow cashFlow =
-                cashFlowMapper.findMatchLookup(command.cashFlowId(), currentCompanyIdProvider.currentCompanyId());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CashFlowMatchLookupRow cashFlow = cashFlowMapper.findMatchLookup(command.cashFlowId(), companyId);
         if (cashFlow == null) {
             throw new NotFoundException(FinanceErrorCode.FINANCE_MATCH_TARGET_NOT_FOUND);
         }
@@ -248,7 +257,8 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_ALREADY_MATCHED);
         }
 
-        SettlementBlockMatchRow settlementBlock = cashFlowMapper.findSettlementBlockForMatch(command.settleId());
+        // 회사 스코프 확인(2026-08-11 추가) — companyId 없이는 타사 settleId를 그대로 매칭시킬 수 있었다.
+        SettlementBlockMatchRow settlementBlock = cashFlowMapper.findSettlementBlockForMatch(command.settleId(), companyId);
         if (settlementBlock == null) {
             throw new NotFoundException(FinanceErrorCode.FINANCE_MATCH_TARGET_NOT_FOUND);
         }

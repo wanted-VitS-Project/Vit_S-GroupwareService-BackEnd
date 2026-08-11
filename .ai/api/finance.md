@@ -87,6 +87,11 @@
   `project.status NOT IN ('COMPLETED', 'CLOSED')`(정산 현황 프로젝트 조회의 `includeCompleted`
   판정과 동일 기준)로 카운트했다. 정산현황 필터 옵션 조회처럼 "정산 블록이 있는 프로젝트"로 좁히지
   않는다 — 재무 관리 요약은 회사 전체 진행 상황을 보여주는 화면이라는 사용자 설명에 따른 것.
+- **✅ 회사(멀티테넌시) 범위 반영 (2026-08-11 추가)** — 최초 구현 시점엔 `cash_flow`/`tax_invoice`만
+  자체 `company_id`가 있었고 `settlement_block`/`project` 집계는 스코프가 없어 **다른 회사 데이터까지
+  합산되는 상태**였다(CodeRabbit Major 지적). `develop`에 `project.company_id`가 들어온 뒤
+  `findSummary(companyId)`로 바꿔 6개 서브쿼리 전부 현재 회사로 좁혔다 — `settlement_block`은
+  `block→step→project`를 타고 `project.company_id`로, 나머지는 자체 컬럼으로 직접.
 - **구현 위치 — 신규 `finance` 도메인 패키지 (2026-08-10 확정)** — `feature/finance` 브랜치 작업이라
   `settlement` 패키지에 얹지 않고 `com.group3.vitamins.finance`를 새로 만들었다. `cash_flow`/
   `tax_invoice`/`settlement_block`/`project`는 전부 다른 도메인(settlement·project) 소유 테이블이라
@@ -488,8 +493,13 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
   없음. 400 코드가 이거 하나뿐이라 세분화하지 않았다 — 프론트가 코드별 분기가 아니라 메시지를 그대로
   보여주는 흐름이라면 문제없지만, 세분화가 필요해지면 알려달라.
 - **⚠️ "구분" 컬럼(SINGLE_WITH_TYPE 모드) 값 해석 규칙도 명세에 없어 직접 설계했다** — 셀 값에 "입금"·
-  "입"·"INCOME"이 포함되면 INCOME, "출금"·"출"·"OUTCOME"이 포함되면 OUTCOME. 실제 은행 CSV의 "구분"
+  "INCOME"이 포함되면 INCOME, "출금"·"OUTCOME"이 포함되면 OUTCOME. 실제 은행 CSV의 "구분"
   컬럼 값(예: "입금"/"출금"만 쓰는지, 다른 표기가 있는지)으로 검증·보강이 필요하다.
+  ⚠️ **1글자 키워드("입"/"출")는 완전 일치로만 인정한다 (2026-08-11, CodeRabbit 지적으로 수정)** —
+  원래는 "입"/"출"도 부분 문자열로 인정해서, "카드매입"처럼 무관한 단어 속에 "입" 한 글자가 우연히
+  들어있으면 출금인데 입금으로 오판정될 위험이 있었다(신한·카카오 테스트 파일은 "입금"/"출금" 전체
+  단어만 써서 실제로는 안 겪었음). 셀 값이 정확히 "입"/"출" 한 글자뿐일 때만 인정하도록 좁혔다 — 그
+  외 애매한 값은 조용히 잘못 저장하지 않고 `FINANCE_CSV_MAPPING_REQUIRED`로 명확히 실패시킨다.
 - **⚠️ 날짜/시간 포맷도 직접 설계했다** — `yyyy-MM-dd`, `yyyy/MM/dd`, `yyyy.MM.dd`, `yyyyMMdd` (+시간
   `HH:mm:ss`, `HH:mm`, `HHmmss`, 그리고 이 조합들의 datetime 버전)를 순서대로 시도한다. 전부 실패하면
   `FINANCE_CSV_MAPPING_REQUIRED`. 실제 은행 CSV 샘플이 들어오면 포맷 목록을 검증·보강해야 한다.
@@ -540,6 +550,22 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
   정도). 중복 사전 조회 쿼리(`findExistingDedupKeys`)도 이 NULL 특성 때문에 로우값 `IN((?,?,?),...)`
   문법을 못 쓰고(그 문법은 NULL이 낀 튜플을 아예 못 매칭시켜서 잔액 없는 은행의 재업로드 중복 검사가
   통째로 무력화된다) `OR`로 묶은 `AND` 조건 + NULL-safe 비교 연산자(`<=>`)로 다시 짰다.
+- **업로드 메서드에 `@Transactional`을 일부러 안 붙인다 (2026-08-11, CodeRabbit 지적으로 제거)** —
+  파일 파싱(POI/commons-csv)은 DB 접근이 없는데, 트랜잭션이 붙어있으면 파싱하는 몇 초 동안에도
+  커넥션 풀에서 커넥션을 하나 붙잡고 있게 된다. `insertAll`이 여러 행을 한 번에 묶은 단일 INSERT문이라
+  그 자체로 원자적이라, 조회(`findExistingDedupKeys`)와 굳이 트랜잭션으로 묶을 필요가 없다.
+- **CodeRabbit이 지적했지만 반영 안 한 것 2건**:
+  1. **`SINGLE_WITH_TYPE` 모드에서 금액 칸이 빈 행이면 예외 대신 건너뛰자는 제안** — 실제 입출금
+     내역인 이상 금액이 없을 수 없다는 판단으로 반영 안 함(SEPARATE 모드가 빈 칸을 건너뛰는 건 "입금
+     칸/출금 칸 중 한쪽만" 비는 정상 케이스라 다른 상황).
+  2. **헤더 중복 시 대비(접미사 부여)** — 신한·카카오 실 테스트 파일 둘 다 중복 헤더가 없어서 근거
+     없는 가정으로 판단, 나중에 실제로 그런 파일이 나오면 그때 반영.
+- **⚠️ 중복 판정 키에 `type` 누락 — 진짜 버그, 수정 완료 (2026-08-11, CodeRabbit Critical 지적)** —
+  `amount`는 항상 절댓값으로 저장하므로(방향은 `type`만 책임짐), `type`이 빠진 채로는 같은 시각·같은
+  절댓값의 입금 1건과 출금 1건이 완전히 같은 dedup 키가 됐다. 잔액 컬럼이 없는 은행(둘 다
+  `balance_after = NULL`)이거나, 시간 없이 날짜만 있는 CSV(`atStartOfDay()`로 자정 고정)라면 실제로
+  터질 수 있는 시나리오였다. `dedupKey`·`findExistingDedupKeys`·`uk_cash_flow_dedup`(신규
+  `V20260809140200`) 세 곳 전부에 `type`을 추가해 맞췄다.
 
 ---
 
@@ -611,11 +637,11 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
 | 404 | Not Found | `FINANCE_CASH_FLOW_NOT_FOUND` | "존재하지 않는 입출금 내역입니다." |
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
-- **⚠️ "회사 단위" 스코프를 지금은 못 건다 — 백로그** — 요청은 "회사 단위로 존재하는 정산 블록"이었는데,
-  정산 블록은 `settlement_block → block → step → project`로만 조회되고 `project`엔 아직 `company_id`가
-  없다(멀티테넌시가 HR·재무(cash_flow/tax_invoice)·bid 쪽에만 적용됨). 지금은 스코프 없이 **전체
-  프로젝트 대상**으로 조회한다 — 회사가 1개(`company_id=1`)뿐인 지금은 결과가 같지만, `project`에
-  `company_id`가 생기면 `CashFlowMapper.findMatchCandidates`의 WHERE에 필터를 추가해야 한다.
+- **✅ "회사 단위" 스코프 반영 완료 (2026-08-11)** — 원래는 `project`에 `company_id`가 없어 스코프 없이
+  전체 프로젝트 대상으로 조회했는데(백로그로 남겨뒀던 항목), `develop`에 `project.company_id` 마이그레이션이
+  들어오면서(동훈님, 멀티테넌시 P1-2a) 실제로 걸었다. CodeRabbit이 Critical로 지적한 크로스테넌트 유출
+  ("타 회사 정산 블록/프로젝트 정보가 매칭 후보로 노출됨")도 같은 작업으로 해결됨 — `findMatchCandidates`·
+  `findSettlementBlockForMatch` 둘 다 `project.company_id = #{companyId}` 조건 추가.
 - **매칭 기준 3종 전부 명세에 없어 직접 설계했다 (사용자 확정)**:
   - 대상 정산 블록: **PENDING(미연결)만**, **같은 타입(INCOME/OUTCOME)만** — 이미 연결됐거나 반대
     방향인 블록은 추천 대상에서 제외

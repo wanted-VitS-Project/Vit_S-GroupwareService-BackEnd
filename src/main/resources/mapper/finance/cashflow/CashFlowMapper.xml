@@ -137,6 +137,7 @@
         WHERE sb.deleted_at IS NULL
         AND sb.status = 'PENDING'
         AND sb.type = #{type}
+        AND p.company_id = #{companyId}
         ) candidates
         WHERE amountMatchType IS NOT NULL OR dateMatchType IS NOT NULL OR traderMatchType IS NOT NULL
         ORDER BY
@@ -154,12 +155,20 @@
         WHERE cash_flow_id = #{cashFlowId} AND company_id = #{companyId} AND deleted_at IS NULL
     </select>
 
-    <!-- 매칭 대상 정산 블록 검증용 — 정산 블록·공용 블록 둘 다 살아있어야 한다. -->
+    <!--
+        매칭 대상 정산 블록 검증용 — 정산 블록·공용 블록 둘 다 살아있어야 한다.
+        ⚠️ 회사 스코프(2026-08-11 추가, CodeRabbit Critical 지적) — companyId 없이는 다른 회사의
+        settleId를 그대로 매칭시킬 수 있었다(정산 블록·상태·실적이 타사 소유인데 우리 cash_flow가
+        연결됨). block→step→project로 타고 올라가 project.company_id를 확인한다.
+    -->
     <select id="findSettlementBlockForMatch" resultType="com.group3.vitamins.finance.infrastructure.cashflow.SettlementBlockMatchRow">
         SELECT sb.type AS type, sb.status AS status, sb.planned_amount AS plannedAmount
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
         WHERE sb.settle_id = #{settleId} AND sb.deleted_at IS NULL
+        AND p.company_id = #{companyId}
     </select>
 
     <!-- 매칭 UPDATE 직후 같은 트랜잭션 안에서 응답 조립용으로 다시 조회한다(커밋 전에도 같은 커넥션이라 보임). -->

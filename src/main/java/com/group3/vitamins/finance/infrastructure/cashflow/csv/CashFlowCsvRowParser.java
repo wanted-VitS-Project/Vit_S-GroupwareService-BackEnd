@@ -43,8 +43,8 @@ public class CashFlowCsvRowParser {
             DateTimeFormatter.ofPattern("HHmmss")
     );
 
-    private static final List<String> INCOME_TYPE_KEYWORDS = List.of("입금", "입", "INCOME");
-    private static final List<String> OUTCOME_TYPE_KEYWORDS = List.of("출금", "출", "OUTCOME");
+    private static final List<String> INCOME_TYPE_KEYWORDS = List.of("입금", "INCOME");
+    private static final List<String> OUTCOME_TYPE_KEYWORDS = List.of("출금", "OUTCOME");
 
     public List<ParsedCashFlowRow> parseRows(
             CashFlowCsvTable table, String bankName,
@@ -150,12 +150,26 @@ public class CashFlowCsvRowParser {
         return new AmountAndType(type, parseAmount(amountRaw));
     }
 
+    /**
+     * ⚠️ 1글자 키워드("입"/"출")는 부분 문자열(contains)이 아니라 완전 일치로만 인정한다
+     * (2026-08-11, CodeRabbit 지적으로 수정) — "카드매입"처럼 무관한 단어 안에 "입" 한 글자가
+     * 우연히 들어있으면 출금인데 입금으로 오판정됐다. "입금"/"출금"/"INCOME"/"OUTCOME"은 부분
+     * 일치를 유지한다(온전한 단어라 오판정 위험이 낮음, 예: "이체입금"도 정상 인식). 어느 쪽에도
+     * 안 걸리면 조용히 잘못 저장하지 않고 명확히 에러를 던진다.
+     */
     private String classifyType(String raw) {
-        String upper = raw.toUpperCase();
-        if (INCOME_TYPE_KEYWORDS.stream().anyMatch(k -> raw.contains(k) || upper.contains(k))) {
+        String trimmed = raw.trim();
+        String upper = trimmed.toUpperCase(java.util.Locale.ROOT);
+        if (INCOME_TYPE_KEYWORDS.stream().anyMatch(k -> trimmed.contains(k) || upper.contains(k))) {
             return "INCOME";
         }
-        if (OUTCOME_TYPE_KEYWORDS.stream().anyMatch(k -> raw.contains(k) || upper.contains(k))) {
+        if (OUTCOME_TYPE_KEYWORDS.stream().anyMatch(k -> trimmed.contains(k) || upper.contains(k))) {
+            return "OUTCOME";
+        }
+        if (trimmed.equals("입")) {
+            return "INCOME";
+        }
+        if (trimmed.equals("출")) {
             return "OUTCOME";
         }
         throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,

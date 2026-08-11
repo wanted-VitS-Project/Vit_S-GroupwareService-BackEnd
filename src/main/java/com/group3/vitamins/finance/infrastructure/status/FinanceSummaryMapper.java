@@ -1,6 +1,7 @@
 package com.group3.vitamins.finance.infrastructure.status;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * 재무 관리 요약 위젯용 집계 조회. cash_flow·tax_invoice·settlement_block(settlement 도메인 소유)과
@@ -11,5 +12,5 @@ import org.apache.ibatis.annotations.Mapper;
 @Mapper
 public interface FinanceSummaryMapper {
 
-    FinanceSummaryRow findSummary();
+    FinanceSummaryRow findSummary(@Param("companyId") Long companyId);
 }

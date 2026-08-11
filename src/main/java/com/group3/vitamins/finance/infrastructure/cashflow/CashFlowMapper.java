@@ -34,13 +34,15 @@ public interface CashFlowMapper {
             @Param("type") String type,
             @Param("amount") BigDecimal amount,
             @Param("tradedDate") LocalDate tradedDate,
-            @Param("depositorName") String depositorName);
+            @Param("depositorName") String depositorName,
+            @Param("companyId") Long companyId);
 
     /** 매칭/매칭 해제 검증용 — 존재하지 않거나(삭제 포함) 다른 회사 소속이면 null. */
     CashFlowMatchLookupRow findMatchLookup(@Param("cashFlowId") Long cashFlowId, @Param("companyId") Long companyId);
 
-    /** 매칭 대상 정산 블록 검증용 — 존재하지 않거나(정산 블록·공용 블록 둘 다) 삭제됐으면 null. */
-    SettlementBlockMatchRow findSettlementBlockForMatch(@Param("settleId") Long settleId);
+    /** 매칭 대상 정산 블록 검증용 — 존재하지 않거나(정산 블록·공용 블록·다른 회사 소속) 이면 null. */
+    SettlementBlockMatchRow findSettlementBlockForMatch(
+            @Param("settleId") Long settleId, @Param("companyId") Long companyId);
 
     /** 매칭 UPDATE 직후 응답 조립용. */
     CashFlowMatchResultRow findMatchResultById(@Param("cashFlowId") Long cashFlowId);

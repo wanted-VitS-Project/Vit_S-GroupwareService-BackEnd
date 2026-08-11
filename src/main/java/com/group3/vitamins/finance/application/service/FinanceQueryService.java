@@ -44,7 +44,7 @@ public class FinanceQueryService implements FinanceQueryUseCase {
 
         assertFinanceAccess(query.userId(), query.role());
 
-        FinanceSummaryRow row = financeSummaryMapper.findSummary();
+        FinanceSummaryRow row = financeSummaryMapper.findSummary(currentCompanyIdProvider.currentCompanyId());
 
         return new FinanceSummaryView(
                 row.cashFlowUnlinkedCount(),
@@ -111,14 +111,15 @@ public class FinanceQueryService implements FinanceQueryUseCase {
 
         assertFinanceEditAccess(query.userId(), query.role());
 
-        CashFlowBasicRow cashFlow =
-                cashFlowMapper.findBasicById(query.cashFlowId(), currentCompanyIdProvider.currentCompanyId());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CashFlowBasicRow cashFlow = cashFlowMapper.findBasicById(query.cashFlowId(), companyId);
         if (cashFlow == null) {
             throw new NotFoundException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND);
         }
 
         List<MatchCandidateRow> rows = cashFlowMapper.findMatchCandidates(
-                cashFlow.type(), cashFlow.amount(), cashFlow.tradedAt().toLocalDate(), cashFlow.depositorName());
+                cashFlow.type(), cashFlow.amount(), cashFlow.tradedAt().toLocalDate(), cashFlow.depositorName(),
+                companyId);
 
         return new MatchCandidatesView(rows.stream().map(this::toMatchCandidateView).toList());
     }

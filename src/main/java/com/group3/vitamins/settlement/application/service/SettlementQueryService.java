@@ -1,5 +1,6 @@
 package com.group3.vitamins.settlement.application.service;
 
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -51,6 +52,7 @@ public class SettlementQueryService implements SettlementQueryUseCase {
     private final SettlementStatusMapper settlementStatusMapper;
     private final AccountNumberCipher accountNumberCipher;
     private final PagePermissionPort pagePermissionPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public SettlementRecommendationView getRecommendation(SettlementRecommendationQuery query) {
@@ -102,7 +104,8 @@ public class SettlementQueryService implements SettlementQueryUseCase {
             throw new ForbiddenException(SettlementErrorCode.FINANCE_ACCESS_DENIED);
         }
 
-        return new SettlementFilterView(settlementStatusMapper.findDistinctClientNames());
+        return new SettlementFilterView(
+                settlementStatusMapper.findDistinctClientNames(currentCompanyIdProvider.currentCompanyId()));
     }
 
     @Override
@@ -115,7 +118,8 @@ public class SettlementQueryService implements SettlementQueryUseCase {
         }
 
         List<SettlementProjectRow> rows = settlementStatusMapper.findProjectSettlements(
-                query.startDate(), query.endDate(), query.client(), query.includeCompleted());
+                query.startDate(), query.endDate(), query.client(), query.includeCompleted(),
+                currentCompanyIdProvider.currentCompanyId());
 
         return new SettlementProjectListView(rows.stream().map(this::toProjectView).toList());
     }
@@ -158,9 +162,11 @@ public class SettlementQueryService implements SettlementQueryUseCase {
     public SettlementProjectBlockListView getProjectSettlementBlocks(SettlementProjectBlockListQuery query) {
         log.info("정산 현황 블록 조회 요청 - projectId={}, userId={}", query.projectId(), query.userId());
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         // 재무팀 정산현황 화면의 드릴다운이라 프로젝트 참여자 여부와 무관하게 FINANCE 페이지 권한으로
-        // 판정한다 — 존재 확인이 권한 판정보다 먼저다(404가 403보다 앞선다, 팀 전체 컨벤션).
-        if (!settlementStatusMapper.existsActiveProject(query.projectId())) {
+        // 판정한다 — 존재 확인이 권한 판정보다 먼저다(404가 403보다 앞선다, 팀 전체 컨벤션). 다른 회사의
+        // projectId도 "존재하지 않음"과 동일하게 404로 처리한다(2026-08-11 추가, 크로스테넌트 방지).
+        if (!settlementStatusMapper.existsActiveProject(query.projectId(), companyId)) {
             log.warn("존재하지 않는 프로젝트 - projectId={}", query.projectId());
             throw new NotFoundException(SettlementErrorCode.PROJECT_NOT_FOUND);
         }
@@ -170,7 +176,7 @@ public class SettlementQueryService implements SettlementQueryUseCase {
         }
 
         List<SettlementProjectBlockRow> rows =
-                settlementStatusMapper.findProjectSettlementBlocks(query.projectId());
+                settlementStatusMapper.findProjectSettlementBlocks(query.projectId(), companyId);
 
         return new SettlementProjectBlockListView(rows.stream().map(this::toBlockView).toList());
     }
