@@ -128,7 +128,8 @@ public class FileQueryService implements FileQueryUseCase {
                 .map(p -> new BlockFileListResult.Item(
                         p.fileId(), p.name(), p.latestVersionId(), p.latestVersionNo(), p.versionCount(),
                         p.originalFileName(), p.extension(), p.sizeBytes(), isPreviewable(p.extension()),
-                        p.uploaderName(), p.uploaderDepartment(), p.uploaderPosition(), p.updatedAt(), p.deletedAt()))
+                        p.uploaderName(), p.uploaderDepartment(), p.uploaderPosition(), p.updatedAt(), p.deletedAt(),
+                        p.version()))
                 .toList();
 
         return new BlockFileListResult(blockId, canEdit, items);
