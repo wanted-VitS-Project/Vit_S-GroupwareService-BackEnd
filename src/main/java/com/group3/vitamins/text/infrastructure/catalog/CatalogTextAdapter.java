@@ -1,7 +1,5 @@
 package com.group3.vitamins.text.infrastructure.catalog;
 
-import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
-import com.group3.vitamins.text.domain.exception.TextErrorCode;
 import com.group3.vitamins.text.domain.model.Text;
 import com.group3.vitamins.text.domain.repository.TextRepository;
 import com.group3.vitamins.text.infrastructure.persistence.SpringDataTextRepository;
@@ -18,7 +16,7 @@ import java.util.Optional;
  * text 행을 만들 시점은 Block 도메인(동훈님)이 판단하고, 실제 INSERT 는 여기서 한다 — Block 도메인은
  * BlockDetailPort 로 요청만 보낸다.
  *
- * <p>updateContent/markDeleted 를 분리한 이유: 하나의 save() 가 content 와 deletedAt 을 같이
+ * <p>updateContentIfVersionMatches/markDeleted 를 분리한 이유: 하나의 save() 가 content 와 deletedAt 을 같이
  * 덮어쓰면, 수정 흐름이 오래전에 읽어둔 deletedAt(=null)을 그대로 다시 써서 동시에 삭제된
  * 행을 되살릴 수 있다. 각 메서드는 자기 컬럼만 조회 직전에 새로 읽어 갱신한다.
  */
@@ -39,17 +37,8 @@ public class CatalogTextAdapter implements TextRepository {
 
     @Override
     @Transactional
-    public Text updateContent(Long txtId, String content) {
-        // deleted_at IS NULL 조건을 UPDATE 문 자체에 걸어서 "확인 후 쓰기" 사이의 틈을 없앤다.
-        // 그 틈에 삭제됐으면 0건 갱신되고, 그걸 404로 처리한다.
-        int updated = springDataTextRepository.updateContentIfActive(txtId, content);
-        if (updated == 0) {
-            throw new NotFoundException(TextErrorCode.BLOCK_NOT_FOUND);
-        }
-
-        TextJpaEntity entity = springDataTextRepository.findById(txtId)
-                .orElseThrow(() -> new IllegalStateException("text not found after update: " + txtId));
-        return toDomain(entity);
+    public int updateContentIfVersionMatches(Long txtId, String content, LocalDateTime updatedAt, int expectedVersion) {
+        return springDataTextRepository.updateContentIfVersionMatches(txtId, content, updatedAt, expectedVersion);
     }
 
     @Override
@@ -76,7 +65,8 @@ public class CatalogTextAdapter implements TextRepository {
                 entity.getContent(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
-                entity.getDeletedAt()
+                entity.getDeletedAt(),
+                entity.getVersion()
         );
     }
 }

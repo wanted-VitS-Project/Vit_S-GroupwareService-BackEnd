@@ -8,7 +8,8 @@
     <select id="findByTxtIds"
             resultType="com.group3.vitamins.text.infrastructure.blockdetail.TextDetailRow">
         SELECT txt_id AS txtId,
-        content AS content
+        content AS content,
+        version AS version
         FROM text
         WHERE txt_id IN
         <foreach item="id" collection="txtIds" open="(" separator="," close=")">#{id}</foreach>

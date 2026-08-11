@@ -10,14 +10,16 @@ import java.time.LocalDateTime;
 public interface SpringDataTextRepository extends JpaRepository<TextJpaEntity, Long> {
 
     /**
-     * deleted_at 조건을 UPDATE 문 자체에 걸어서, "확인 후 쓰기" 2단계 사이의 틈을 없앤다.
-     * 이미 삭제된 행이면 0을 반환한다. clearAutomatically 로 벌크 업데이트 후 영속성 컨텍스트의
-     * 캐시된(오래된) 엔티티를 지워서, 이어지는 조회가 DB 최신값을 다시 읽게 한다.
+     * deleted_at·version 조건을 UPDATE 문 자체에 걸어서, "확인 후 쓰기" 2단계 사이의 틈을 없앤다.
+     * 이미 삭제됐거나 그 사이 남이 먼저 저장해 version이 어긋났으면 0을 반환한다(CONCURRENCY.md §3).
+     * clearAutomatically·flushAutomatically 를 빼면 같은 트랜잭션의 영속성 컨텍스트가 옛 값을
+     * 계속 들고 있어 UPDATE 후 재조회에서도 낡은 값이 나온다(§6-2).
      */
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE TextJpaEntity t SET t.content = :content, t.updatedAt = CURRENT_TIMESTAMP "
-            + "WHERE t.txtId = :txtId AND t.deletedAt IS NULL")
-    int updateContentIfActive(@Param("txtId") Long txtId, @Param("content") String content);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE TextJpaEntity t SET t.content = :content, t.updatedAt = :updatedAt, t.version = t.version + 1 "
+            + "WHERE t.txtId = :txtId AND t.deletedAt IS NULL AND t.version = :expectedVersion")
+    int updateContentIfVersionMatches(@Param("txtId") Long txtId, @Param("content") String content,
+            @Param("updatedAt") LocalDateTime updatedAt, @Param("expectedVersion") int expectedVersion);
 
     /**
      * 같은 이유로 삭제도 조건부 UPDATE — 이미 삭제된 행이면 0을 반환한다.

@@ -47,9 +47,23 @@ public class TextJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    /** 상세 빈 행 생성용. 본문은 나중에 applyContent 가 채운다. */
+    // ⚠️ @Version(JPA)을 붙이지 않는다 — 본문 수정은 엔티티를 save/merge하지 않고
+    // SpringDataTextRepository.updateContentIfVersionMatches의 JPQL 벌크 UPDATE로만 반영된다.
+    // 벌크 UPDATE는 JPA 엔티티 생명주기(dirty checking)를 안 타서 @Version 증가 로직 자체가 안 걸린다
+    // (CONCURRENCY.md §6-1) — 그래서 검사는 오직 그 UPDATE문의 WHERE version = ? 조건이 전담한다.
+    @Column(name = "version", nullable = false)
+    private int version;
+
+    /**
+     * 상세 빈 행 생성용. 본문은 나중에 applyContent 가 채운다.
+     *
+     * ⚠️ version을 명시적으로 1로 채운다 — Java int 필드 기본값은 0이라, 이 생성자로 만든 새 엔티티를
+     * 그대로 save()하면 컬럼의 {@code DEFAULT 1}과 무관하게 INSERT 문에 0이 그대로 실린다
+     * (CONCURRENCY.md §3-1 "기존 행은 전부 1로 시작해야 프론트가 받은 값과 맞물린다"가 신규 행에도 적용됨).
+     */
     public TextJpaEntity(Long blockId) {
         this.blockId = blockId;
+        this.version = 1;
     }
 
     public void applyContent(String content) {

@@ -20,7 +20,11 @@ public interface TextRepository {
      */
     Long create(Long blockId);
 
-    Text updateContent(Long txtId, String content);
+    /**
+     * 기대 버전과 DB 버전이 같을 때만 본문을 바꾼다. 바뀐 행 수를 돌려준다(0 = 충돌 또는 이미 삭제됨).
+     * CONCURRENCY.md §3-4 — 여기가 낙관락의 심장이다.
+     */
+    int updateContentIfVersionMatches(Long txtId, String content, LocalDateTime updatedAt, int expectedVersion);
 
     /**
      * @return 실제로 이번 호출이 삭제 처리했으면 true, 이미 삭제돼 있어 아무것도 안 했으면 false
