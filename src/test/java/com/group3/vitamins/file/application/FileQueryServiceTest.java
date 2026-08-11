@@ -91,11 +91,11 @@ class FileQueryServiceTest {
     // ---- 헬퍼 ---------------------------------------------------------------
 
     private File activeFile() {
-        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, null);
+        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, null, 1);
     }
 
     private File trashedFile() {
-        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now());
+        return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now(), 1);
     }
 
     private FileVersion version(int versionNo, UploadStatus status, String ext) {
@@ -260,7 +260,7 @@ class FileQueryServiceTest {
         private BlockFileProjection projection() {
             return new BlockFileProjection(FILE_ID, "제안서", 74L, 1, 1,
                     "제안서_v1.pdf", "pdf", 5000L, "이영희", "제안팀", "선임연구원",
-                    LocalDateTime.now(), null);
+                    LocalDateTime.now(), null, 3);
         }
 
         @Test
@@ -276,6 +276,7 @@ class FileQueryServiceTest {
             assertThat(result.canEdit()).isTrue();
             assertThat(result.content()).hasSize(1);
             assertThat(result.content().get(0).previewable()).isTrue();
+            assertThat(result.content().get(0).version()).isEqualTo(3); // 낙관락 version 이 projection→result 로 실려간다
         }
 
         @Test
