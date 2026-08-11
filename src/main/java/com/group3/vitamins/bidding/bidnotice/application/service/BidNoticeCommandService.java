@@ -1,18 +1,27 @@
 package com.group3.vitamins.bidding.bidnotice.application.service;
 
 import com.group3.vitamins.bidding.bidnotice.application.command.CreateManualBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.DismissBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.RestoreBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.UpdateManualBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort;
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeStatusHistoryPort;
 import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
+import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeStatusResult;
 import com.group3.vitamins.bidding.bidnotice.application.result.ManualBidNoticeResult;
 import com.group3.vitamins.bidding.bidnotice.application.support.ManualBidNoticeDedupKeyGenerator;
 import com.group3.vitamins.bidding.bidnotice.application.usecase.BidNoticeCommandUseCase;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNotice;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeAttachment;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeData;
+import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeCompanyStatus;
+import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeStatusHistory;
+import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
+import com.group3.vitamins.bidding.bidnotice.domain.event.BidNoticeListChangedEvent;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -47,9 +56,11 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
 
     private final BidNoticeCommandPort commandPort;
     private final CompanyBidNoticeStatePort companyStatePort;
+    private final BidNoticeStatusHistoryPort statusHistoryPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final BiddingAccessPolicy biddingAccessPolicy;
     private final ManualBidNoticeDedupKeyGenerator dedupKeyGenerator;
+    private final DomainEventPublisher eventPublisher;
 
     // 입력값을 검증하고 현재 회사 소유의 직접 등록 공고를 생성합니다.
     @Override
@@ -82,6 +93,7 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
                 saved.getNoticeId(),
                 now
         );
+        publishListChanged(companyId);
         return ManualBidNoticeResult.from(saved);
     }
 
@@ -99,7 +111,94 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
         assertNotDuplicated(companyId, dedupKey, notice.getNoticeId());
         notice.update(merged, dedupKey, LocalDateTime.now());
 
-        return ManualBidNoticeResult.from(commandPort.save(notice));
+        ManualBidNotice saved = commandPort.save(notice);
+        publishListChanged(companyId);
+        return ManualBidNoticeResult.from(saved);
+    }
+
+    @Override
+    public BidNoticeStatusResult dismiss(DismissBidNoticeCommand command) {
+        validateDismissCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CompanyBidNoticeState current = findCompanyState(companyId, command.noticeId());
+        if (current.status() == BidNoticeCompanyStatus.DISMISSED) {
+            throw new ConflictException(BiddingErrorCode.BIDDING_NOTICE_ALREADY_DISMISSED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String reason = command.reason().trim();
+        CompanyBidNoticeState changed = current.dismiss(reason, now);
+        companyStatePort.update(changed);
+        saveStatusHistory(current, changed, reason, command.userId(), now);
+        publishListChanged(companyId);
+        return toStatusResult(changed);
+    }
+
+    @Override
+    public BidNoticeStatusResult restore(RestoreBidNoticeCommand command) {
+        validateRestoreCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CompanyBidNoticeState current = findCompanyState(companyId, command.noticeId());
+        if (current.status() != BidNoticeCompanyStatus.DISMISSED) {
+            throw new ConflictException(BiddingErrorCode.BIDDING_NOTICE_NOT_DISMISSED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        CompanyBidNoticeState changed = current.restore(now);
+        companyStatePort.update(changed);
+        saveStatusHistory(current, changed, null, command.userId(), now);
+        publishListChanged(companyId);
+        return toStatusResult(changed);
+    }
+
+    private void publishListChanged(Long companyId) {
+        eventPublisher.publish(new BidNoticeListChangedEvent(companyId));
+    }
+
+    private CompanyBidNoticeState findCompanyState(Long companyId, Long noticeId) {
+        return companyStatePort.findForUpdate(companyId, noticeId)
+                .orElseThrow(() -> new NotFoundException(
+                        BiddingErrorCode.BIDDING_NOTICE_NOT_FOUND
+                ));
+    }
+
+    private void saveStatusHistory(
+            CompanyBidNoticeState previous,
+            CompanyBidNoticeState changed,
+            String reason,
+            String userId,
+            LocalDateTime now
+    ) {
+        statusHistoryPort.save(new BidNoticeStatusHistory(
+                changed.companyId(), changed.noticeId(), previous.status(),
+                changed.status(), reason, userId, now
+        ));
+    }
+
+    private BidNoticeStatusResult toStatusResult(CompanyBidNoticeState state) {
+        return new BidNoticeStatusResult(
+                state.noticeId(), state.status().name(),
+                state.dismissReason(), state.updatedAt()
+        );
+    }
+
+    private void validateDismissCommand(DismissBidNoticeCommand command) {
+        if (command == null || command.noticeId() == null || command.noticeId() <= 0
+                || isBlank(command.userId()) || isBlank(command.reason())
+                || command.reason().trim().length() > 500) {
+            throw new ValidationException(BiddingErrorCode.BIDDING_INVALID_DISMISS_REASON);
+        }
+    }
+
+    private void validateRestoreCommand(RestoreBidNoticeCommand command) {
+        if (command == null || command.noticeId() == null || command.noticeId() <= 0
+                || isBlank(command.userId())) {
+            throw new ValidationException(BiddingErrorCode.BIDDING_INVALID_NOTICE_QUERY);
+        }
     }
 
     // 현재 회사 소유 공고와 공용 외부 공고를 구분하여 명세에 맞는 오류를 반환합니다.

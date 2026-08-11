@@ -3,13 +3,16 @@ package com.group3.vitamins.bidding.bidnotice.presentation.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.bidding.bidnotice.application.query.GetBidNoticeDetailQuery;
 import com.group3.vitamins.bidding.bidnotice.application.query.SearchBidNoticesQuery;
+import com.group3.vitamins.bidding.bidnotice.application.command.RestoreBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.usecase.BidNoticeCommandUseCase;
 import com.group3.vitamins.bidding.bidnotice.application.usecase.BidNoticeQueryUseCase;
 import com.group3.vitamins.bidding.bidnotice.presentation.api.request.CreateManualBidNoticeRequest;
+import com.group3.vitamins.bidding.bidnotice.presentation.api.request.DismissBidNoticeRequest;
 import com.group3.vitamins.bidding.bidnotice.presentation.api.request.UpdateManualBidNoticeRequest;
 import com.group3.vitamins.bidding.bidnotice.presentation.api.request.UpdateManualBidNoticeRequestMapper;
 import com.group3.vitamins.bidding.bidnotice.presentation.api.response.BidNoticeDetailResponse;
 import com.group3.vitamins.bidding.bidnotice.presentation.api.response.BidNoticeListResponse;
+import com.group3.vitamins.bidding.bidnotice.presentation.api.response.BidNoticeStatusResponse;
 import com.group3.vitamins.bidding.bidnotice.presentation.api.response.ManualBidNoticeResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
@@ -164,5 +167,61 @@ public class BidNoticeController {
                 "입찰 공고 수정 성공",
                 response
         ));
+    }
+
+    @Operation(
+            summary = "입찰 공고 제외",
+            description = "현재 회사의 입찰 공고를 검토 대상에서 제외합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입찰 공고 제외 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "BIDDING_INVALID_DISMISS_REASON"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "BIDDING_ACCESS_PERMISSION_REQUIRED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "BIDDING_NOTICE_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "BIDDING_NOTICE_ALREADY_DISMISSED")
+    })
+    @PatchMapping("/{noticeId}/dismiss")
+    public ResponseEntity<ApiResponse<BidNoticeStatusResponse>> dismiss(
+            @Parameter(description = "제외할 입찰 공고 ID")
+            @PathVariable Long noticeId,
+            @Valid @RequestBody DismissBidNoticeRequest request,
+            Authentication authentication
+    ) {
+        BidNoticeStatusResponse response = BidNoticeStatusResponse.from(
+                bidNoticeCommandUseCase.dismiss(request.toCommand(
+                        noticeId,
+                        authentication.getName(),
+                        RequesterRole.from(authentication)
+                ))
+        );
+        return ResponseEntity.ok(ApiResponse.success("입찰 공고 제외 성공", response));
+    }
+
+    @Operation(
+            summary = "입찰 공고 복구",
+            description = "현재 회사가 제외한 입찰 공고를 검토 대상으로 복구합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입찰 공고 복구 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "BIDDING_ACCESS_PERMISSION_REQUIRED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "BIDDING_NOTICE_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "BIDDING_NOTICE_NOT_DISMISSED")
+    })
+    @PatchMapping("/{noticeId}/restore")
+    public ResponseEntity<ApiResponse<BidNoticeStatusResponse>> restore(
+            @Parameter(description = "복구할 입찰 공고 ID")
+            @PathVariable Long noticeId,
+            Authentication authentication
+    ) {
+        BidNoticeStatusResponse response = BidNoticeStatusResponse.from(
+                bidNoticeCommandUseCase.restore(new RestoreBidNoticeCommand(
+                        noticeId,
+                        authentication.getName(),
+                        RequesterRole.from(authentication)
+                ))
+        );
+        return ResponseEntity.ok(ApiResponse.success("입찰 공고 복구 성공", response));
     }
 }

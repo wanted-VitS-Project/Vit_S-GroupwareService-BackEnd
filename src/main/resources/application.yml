@@ -177,6 +177,14 @@ settlement:
 
 #나라장터
 bidding:
+  notice-cache:
+    # 공고는 변동 빈도가 낮아 기본 보관 주기를 일 단위로 둔다.
+    # 회사별 수집 완료 또는 공고 변경 시에는 TTL과 무관하게 즉시 무효화된다.
+    ttl: ${BIDDING_NOTICE_CACHE_TTL:24h}
+    retry:
+      initial-delay-ms: ${BIDDING_NOTICE_CACHE_RETRY_INITIAL_DELAY_MS:30000}
+      fixed-delay-ms: ${BIDDING_NOTICE_CACHE_RETRY_FIXED_DELAY_MS:30000}
+      batch-size: ${BIDDING_NOTICE_CACHE_RETRY_BATCH_SIZE:100}
   nara:
     base-url: ${NARA_API_BASE_URL:}
     service-key: ${NARA_API_SERVICE_KEY:}

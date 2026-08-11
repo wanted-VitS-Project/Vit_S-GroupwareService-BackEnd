@@ -54,4 +54,27 @@
                 incoming.last_seen_at
             )
     </insert>
+
+    <select id="findForUpdate"
+            resultType="com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.CompanyBidNoticeStateRow">
+        SELECT
+            company_id,
+            bid_notice_id,
+            notice_status,
+            dismiss_reason,
+            updated_at
+        FROM company_bid_notice_state
+        WHERE company_id = #{companyId}
+          AND bid_notice_id = #{bidNoticeId}
+        FOR UPDATE
+    </select>
+
+    <update id="updateStatus">
+        UPDATE company_bid_notice_state
+        SET notice_status = #{noticeStatus},
+            dismiss_reason = #{dismissReason},
+            updated_at = #{updatedAt}
+        WHERE company_id = #{companyId}
+          AND bid_notice_id = #{bidNoticeId}
+    </update>
 </mapper>
