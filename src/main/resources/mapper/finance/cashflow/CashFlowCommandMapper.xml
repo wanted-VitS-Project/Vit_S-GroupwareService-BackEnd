@@ -47,7 +47,7 @@
     <update id="updateCashFlowMatch">
         UPDATE cash_flow
         SET settle_block_id = #{settleId}, linked_by = #{linkedBy}, linked_at = #{linkedAt}
-        WHERE cash_flow_id = #{cashFlowId} AND settle_block_id IS NULL
+        WHERE cash_flow_id = #{cashFlowId} AND settle_block_id IS NULL AND deleted_at IS NULL
     </update>
 
     <!--
@@ -98,9 +98,12 @@
         UPDATE cash_flow SET bank_memo = #{memo} WHERE cash_flow_id = #{cashFlowId}
     </update>
 
+    <!-- deleted_at·settle_block_id 조건을 UPDATE 문 자체에 걸어서, 조회~삭제 사이에 동시 매칭된
+         행까지 지워버리는 것을 막는다(2026-08-11, CodeRabbit 지적). -->
     <update id="softDeleteBatch">
         UPDATE cash_flow SET deleted_at = NOW()
-        WHERE cash_flow_id IN
+        WHERE deleted_at IS NULL AND settle_block_id IS NULL
+        AND cash_flow_id IN
         <foreach collection="cashFlowIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>

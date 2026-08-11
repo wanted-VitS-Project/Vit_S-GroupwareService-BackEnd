@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -471,11 +472,12 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             }
         }
 
-        if (!deletable.isEmpty()) {
-            cashFlowCommandMapper.softDeleteBatch(deletable);
-        }
+        // softDeleteBatch가 실제로 지운 행 수를 그대로 쓴다 — deletable.size()를 그대로 응답하면
+        // 조회(findDeleteCandidates)~삭제 사이에 동시 매칭돼 조건부 UPDATE가 걸러낸 행까지
+        // "삭제 완료"로 잘못 보고하게 된다(2026-08-11, CodeRabbit 지적).
+        int deletedCount = deletable.isEmpty() ? 0 : cashFlowCommandMapper.softDeleteBatch(deletable);
 
-        return new CashFlowDeleteResultView(deletable.size(), skipped);
+        return new CashFlowDeleteResultView(deletedCount, skipped);
     }
 
     @Override
@@ -527,9 +529,14 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         return raw;
     }
 
+    // 같은 은행·같은 초에 금액/type만 다른 수동 거래는 중복 검사는 통과하는데 base가 같아진다
+    // (bank_txn_id엔 유니크 제약이 없어 예외는 안 나지만, 서로 다른 거래가 같은 참조번호로 표시된다 —
+    // 2026-08-11, CodeRabbit 지적). CSV 경로(CashFlowCsvRowParser)는 배치 내 시퀀스 카운터로 구분하는데
+    // 수동 등록은 한 번에 한 건씩 들어와 그 방식을 못 쓰므로, 짧은 랜덤 접미사로 유일성을 보장한다.
     private String generateBankTxnId(String bankName, LocalDateTime tradedAt) {
         String prefix = bankName.substring(0, Math.min(4, bankName.length()));
-        return prefix + "-" + tradedAt.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String suffix = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        return prefix + "-" + tradedAt.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + "-" + suffix;
     }
 
     private CashFlowDetailView toDetailView(CashFlowDetailRow row) {
