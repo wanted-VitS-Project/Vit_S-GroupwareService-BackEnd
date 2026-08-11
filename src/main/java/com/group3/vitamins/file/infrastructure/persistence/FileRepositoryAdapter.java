@@ -32,8 +32,8 @@ public class FileRepositoryAdapter implements FileRepository {
     }
 
     @Override
-    public int forceRename(Long fileId, String name) {
-        return springDataRepository.forceRename(fileId, name);
+    public Optional<Integer> lockCurrentVersion(Long fileId) {
+        return springDataRepository.findForUpdate(fileId).map(FileJpaEntity::getVersion);
     }
 
     @Override

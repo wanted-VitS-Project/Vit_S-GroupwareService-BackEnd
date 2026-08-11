@@ -101,10 +101,6 @@ class FileCommandServiceTest {
         return File.restore(FILE_ID, PROJECT_ID, "제안서", USER, LocalDateTime.now(), VERSION);
     }
 
-    private File fileWithVersion(int version) {
-        return File.restore(FILE_ID, PROJECT_ID, "강제", USER, null, version);
-    }
-
     private FileVersion version(long versionId, String storageKey) {
         return FileVersion.restore(versionId, FILE_ID, 1, UploadStatus.COMPLETED, storageKey,
                 "제안서.pdf", "pdf", "application/pdf", 100L, null, null, null,
@@ -239,21 +235,30 @@ class FileCommandServiceTest {
         }
 
         @Test
-        @DisplayName("덮어쓰기는 버전 조건 없이 무조건 저장하고, 갱신된 실제 버전을 돌려준다")
+        @DisplayName("덮어쓰기는 비관 잠금으로 현재 버전을 고정해 무조건 저장하고, current+1 을 돌려준다")
         void overwriteForcesUnconditional() {
-            // 최초 조회(version 3) → forceRename 후 재조회. 그새 남이 여러 번 올려 version 7 이 됐다고 가정.
-            when(fileRepository.findById(FILE_ID))
-                    .thenReturn(Optional.of(activeFile()))
-                    .thenReturn(Optional.of(fileWithVersion(7)));
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             stubEditable();
-            when(fileRepository.forceRename(FILE_ID, "강제")).thenReturn(1);
+            // 클라는 낡은 1 을 보냈지만, 잠금으로 읽은 DB 현재값은 7 이다
+            when(fileRepository.lockCurrentVersion(FILE_ID)).thenReturn(Optional.of(7));
+            when(fileRepository.renameIfVersionMatches(FILE_ID, "강제", 7)).thenReturn(1);
 
-            // 클라가 낡은 버전 1 을 보냈어도 overwrite=true 면 충돌 없이 저장된다
             FileRenameResult result = service.rename(cmd("강제", 1, true));
 
-            assertThat(result.version()).isEqualTo(7); // 스냅샷(1)이 아니라 갱신된 실제 버전
-            verify(fileRepository).forceRename(FILE_ID, "강제");
-            verify(fileRepository, never()).renameIfVersionMatches(any(), any(), anyInt());
+            assertThat(result.version()).isEqualTo(8); // 잠근 현재값(7) + 1 — 클라값(1)과 무관
+            // 클라가 보낸 1 이 아니라 잠근 현재값 7 로 저장한다
+            verify(fileRepository).renameIfVersionMatches(FILE_ID, "강제", 7);
+        }
+
+        @Test
+        @DisplayName("덮어쓰기 대상이 그새 삭제됐으면 FILE_NOT_FOUND")
+        void overwriteGoneWhileLocking() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            stubEditable();
+            when(fileRepository.lockCurrentVersion(FILE_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.rename(cmd("강제", 1, true)))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
         }
 
         @Test
@@ -266,7 +271,7 @@ class FileCommandServiceTest {
                     .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
             assertThatThrownBy(() -> service.rename(cmd("새이름", 0, true)))
                     .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
-            verify(fileRepository, never()).forceRename(any(), any());
+            verify(fileRepository, never()).lockCurrentVersion(any());
             verify(fileRepository, never()).renameIfVersionMatches(any(), any(), anyInt());
         }
     }

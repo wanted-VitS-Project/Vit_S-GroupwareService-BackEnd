@@ -85,16 +85,13 @@ public class FileCommandService implements FileCommandUseCase {
         // 낙관락. 조건부 UPDATE 라야 검사와 저장이 한 문장에서 원자적으로 일어난다(§1-2). save() 아님.
         int newVersion;
         if (command.overwrite()) {
-            // 덮어쓰기(§5)는 충돌을 무시하고 무조건 저장한다 — 조회 시점 스냅샷 version 을 조건에 걸면
-            // 조회~저장 사이에 남이 끼어들 때 409 로 새어 "덮어쓰기=무조건 저장" 계약이 깨진다.
-            // 그래서 버전 조건 없는 별도 UPDATE 를 쓰고, 낡았을 수 있는 스냅샷 대신 갱신된 실제 version 을 다시 읽는다.
-            if (fileRepository.forceRename(command.fileId(), name) == 0) {
-                throw new NotFoundException(FileErrorCode.FILE_NOT_FOUND); // 그새 삭제됨 — 덮어쓸 대상 없음
-            }
-            newVersion = fileRepository.findById(command.fileId())
-                    .filter(f -> !f.isDeleted())
-                    .map(File::getVersion)
-                    .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+            // 덮어쓰기(§5)는 충돌을 무시하고 무조건 저장한다. 비관 잠금으로 현재 version 을 고정한 뒤 그 값으로
+            // 조건부 UPDATE 를 돌린다 — 잠금이 커밋까지 유지돼 version 이 안 변하므로 항상 성공하고, 결과 version 을
+            // 재조회 없이 current+1 로 확정한다(별도 재조회는 그새 커밋된 다른 수정 값과 섞일 수 있어 비원자적).
+            int current = fileRepository.lockCurrentVersion(command.fileId())
+                    .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND)); // 그새 삭제됨
+            fileRepository.renameIfVersionMatches(command.fileId(), name, current);
+            newVersion = current + 1;
         } else {
             // 기대 버전과 DB 버전이 같을 때만 저장(0행이면 그새 남이 먼저 저장 → 409).
             if (fileRepository.renameIfVersionMatches(command.fileId(), name, command.version()) == 0) {

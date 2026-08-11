@@ -1,9 +1,13 @@
 package com.group3.vitamins.file.infrastructure.persistence;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.util.Optional;
 
 public interface SpringDataFileRepository extends JpaRepository<FileJpaEntity, Long> {
 
@@ -30,20 +34,17 @@ public interface SpringDataFileRepository extends JpaRepository<FileJpaEntity, L
     );
 
     /**
-     * 버전 조건 없이 무조건 표시명을 바꾸고 version 을 올린다(덮어쓰기 · §5).
-     * 조회~저장 사이에 남이 먼저 저장해도 충돌로 막지 않는다 — "덮어쓰기 = 무조건 저장" 계약을 지키려면
-     * 기대 버전을 조건에 걸면 안 된다. 삭제된 문서는 제외하므로 0 이면 그새 삭제된 것이다.
+     * 덮어쓰기(§5)용 — 문서 행을 비관 잠금(SELECT … FOR UPDATE)하고 읽는다. 삭제/부재면 empty.
+     * 잠금을 잡은 뒤 그 version 으로 조건부 UPDATE 를 돌리면, 잠금이 커밋까지 유지되므로 version 이
+     * 변하지 않아 항상 성공하고 결과 version(=현재+1)이 확정된다. 재조회로 응답 version 을 얻으면
+     * 그새 커밋된 다른 수정 값과 섞일 수 있어(비원자적) 이 방식을 쓴다.
      */
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-            UPDATE FileJpaEntity f
-               SET f.name = :name,
-                   f.version = f.version + 1
+            SELECT f
+              FROM FileJpaEntity f
              WHERE f.fileId = :fileId
                AND f.deletedAt IS NULL
             """)
-    int forceRename(
-            @Param("fileId") Long fileId,
-            @Param("name") String name
-    );
+    Optional<FileJpaEntity> findForUpdate(@Param("fileId") Long fileId);
 }
