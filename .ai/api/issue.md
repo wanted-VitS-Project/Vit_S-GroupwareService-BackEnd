@@ -2,9 +2,9 @@
 
 **상태**: `✅ 확정`
 **담당**: 김용준
+**최종 업데이트**: 2026-08-11 (담당자 응답에 `resignedAt` 추가 및 FE 사용 API 명시 — 사원은 삭제하지 않고 퇴사일을 기록하므로, 과거 이슈의 담당자 이름을 보존하면서 FE가 퇴사 상태를 표시함)
 **최종 업데이트**: 2026-08-11 (상태 변경 요청의 `status`·`version` HTTP 경계 검증 보강 — version 누락·0·음수는 `400 ISS_INVALID_REQUEST`)
 **최종 업데이트**: 2026-08-11 (이슈 수정·상태 변경에 `version` 기반 낙관적 락 적용 — 조회 응답의 `version`을 수정 요청에 필수 전달, 불일치 시 `409 ISSUE_VERSION_CONFLICT`. 프론트 draft 보존·필드 단위 병합 UX는 별도 명세)
-**최종 업데이트**: 2026-08-10 (조회/수정 권한 게이트 분리 — 목록·상세 조회는 project 권한만 확인, 생성·수정·상태변경·삭제만 step EDITOR 확인. 신규 에러코드 없음, `ISS_ACCESS_PERMISSION_REQUIRED` 의미만 변경)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
