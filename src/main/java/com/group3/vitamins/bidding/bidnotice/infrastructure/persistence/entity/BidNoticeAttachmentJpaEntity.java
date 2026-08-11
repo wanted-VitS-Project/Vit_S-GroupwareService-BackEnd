@@ -1,6 +1,7 @@
 package com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.entity;
 
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectedBidNotice;
+import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeAttachment;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -73,6 +74,23 @@ public class BidNoticeAttachmentJpaEntity {
         return entity;
     }
 
+    // 직접 등록 공고의 공개 첨부 링크를 생성합니다.
+    public static BidNoticeAttachmentJpaEntity createManual(
+            Long bidNoticeId,
+            ManualBidNoticeAttachment attachment,
+            LocalDateTime now
+    ) {
+        BidNoticeAttachmentJpaEntity entity =
+                new BidNoticeAttachmentJpaEntity();
+        entity.bidNoticeId = bidNoticeId;
+        entity.attachmentKind = DEFAULT_ATTACHMENT_KIND;
+        entity.attachmentOrder = convertOrder(attachment.attachmentOrder());
+        entity.fileName = attachment.fileName();
+        entity.sourceUrl = attachment.sourceUrl();
+        entity.createdAt = now;
+        return entity;
+    }
+
     // 외부 첨부파일 순서를 DB SMALLINT 범위로 변환합니다.
     private static short convertOrder(int order) {
         if (order <= 0 || order > Short.MAX_VALUE) {
@@ -87,6 +105,17 @@ public class BidNoticeAttachmentJpaEntity {
     // 같은 순서의 첨부파일 정보가 변경되면 최신 원문 정보로 갱신합니다.
     public void updateFrom(
             CollectedBidNotice.Attachment attachment,
+            LocalDateTime now
+    ) {
+        this.fileName = attachment.fileName();
+        this.sourceUrl = attachment.sourceUrl();
+        this.updatedAt = now;
+        this.deletedAt = null;
+    }
+
+    // 같은 순번의 직접 등록 첨부 링크를 최신 요청값으로 갱신합니다.
+    public void updateManual(
+            ManualBidNoticeAttachment attachment,
             LocalDateTime now
     ) {
         this.fileName = attachment.fileName();

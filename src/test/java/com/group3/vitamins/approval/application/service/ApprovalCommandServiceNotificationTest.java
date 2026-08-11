@@ -30,6 +30,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -109,9 +110,10 @@ class ApprovalCommandServiceNotificationTest {
         ApprovalLine current = line(1L, APPROVER_1, 1, ApprovalLineStatus.ACTIVE);
         ApprovalLine next = line(2L, APPROVER_2, 2, ApprovalLineStatus.WAITING);
 
+        when(lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(1L))
+                .thenReturn(approval(ApprovalStatus.IN_PROGRESS));
         when(lineProcessingPolicy.getActiveOwnedLineOrThrow(1L, APPROVER_1)).thenReturn(current);
         when(approvalRepository.findRevisionById(REVISION_ID)).thenReturn(Optional.of(revision()));
-        when(approvalRepository.findApproval(APPROVAL_ID)).thenReturn(Optional.of(approval(ApprovalStatus.IN_PROGRESS)));
         when(approvalRepository.markLineProcessed(1L, ApprovalLineStatus.APPROVED, null))
                 .thenReturn(line(1L, APPROVER_1, 1, ApprovalLineStatus.APPROVED));
         when(approvalRepository.findLineBySequenceNo(REVISION_ID, 2)).thenReturn(Optional.of(next));
@@ -119,6 +121,10 @@ class ApprovalCommandServiceNotificationTest {
                 .thenReturn(line(2L, APPROVER_2, 2, ApprovalLineStatus.ACTIVE));
 
         service.approve(new ApproveApprovalLineCommand(1L, null, APPROVER_1));
+
+        org.mockito.InOrder lockOrder = inOrder(lineProcessingPolicy);
+        lockOrder.verify(lineProcessingPolicy).getApprovalForLineForUpdateOrThrow(1L);
+        lockOrder.verify(lineProcessingPolicy).getActiveOwnedLineOrThrow(1L, APPROVER_1);
 
         List<NotificationRequestedEvent> events = capturedNotifications();
         assertThat(events).singleElement().satisfies(event -> {
@@ -133,9 +139,10 @@ class ApprovalCommandServiceNotificationTest {
     void approveNotifiesDrafterOnCompletion() {
         ApprovalLine current = line(1L, APPROVER_1, 1, ApprovalLineStatus.ACTIVE);
 
+        when(lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(1L))
+                .thenReturn(approval(ApprovalStatus.IN_PROGRESS));
         when(lineProcessingPolicy.getActiveOwnedLineOrThrow(1L, APPROVER_1)).thenReturn(current);
         when(approvalRepository.findRevisionById(REVISION_ID)).thenReturn(Optional.of(revision()));
-        when(approvalRepository.findApproval(APPROVAL_ID)).thenReturn(Optional.of(approval(ApprovalStatus.IN_PROGRESS)));
         when(approvalRepository.markLineProcessed(1L, ApprovalLineStatus.APPROVED, null))
                 .thenReturn(line(1L, APPROVER_1, 1, ApprovalLineStatus.APPROVED));
         when(approvalRepository.findLineBySequenceNo(REVISION_ID, 2)).thenReturn(Optional.empty());
@@ -155,9 +162,10 @@ class ApprovalCommandServiceNotificationTest {
     void rejectNotifiesDrafter() {
         ApprovalLine current = line(1L, APPROVER_1, 1, ApprovalLineStatus.ACTIVE);
 
+        when(lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(1L))
+                .thenReturn(approval(ApprovalStatus.IN_PROGRESS));
         when(lineProcessingPolicy.getActiveOwnedLineOrThrow(1L, APPROVER_1)).thenReturn(current);
         when(approvalRepository.findRevisionById(REVISION_ID)).thenReturn(Optional.of(revision()));
-        when(approvalRepository.findApproval(APPROVAL_ID)).thenReturn(Optional.of(approval(ApprovalStatus.IN_PROGRESS)));
         when(approvalRepository.markLineProcessed(1L, ApprovalLineStatus.REJECTED, "보완 필요"))
                 .thenReturn(line(1L, APPROVER_1, 1, ApprovalLineStatus.REJECTED));
 

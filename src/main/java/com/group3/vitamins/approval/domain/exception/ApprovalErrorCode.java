@@ -35,8 +35,16 @@ public enum ApprovalErrorCode implements ErrorCode {
     APPROVAL_LINE_EMPTY("APPROVAL_LINE_EMPTY", "결재자는 최소 1명이어야 합니다."),
     /** APR-011 — 순서(1부터 연속)가 중복·누락되면 400 */
     APPROVAL_LINE_ORDER_INVALID("APPROVAL_LINE_ORDER_INVALID", "결재 순서는 1부터 중복·누락 없이 연속되어야 합니다."),
-    /** APR-012 — 일반 결재자가 project member 아니면 400. {@code MASTER}·{@code ADMIN}은 제외(인사 계정이라 프로젝트 소속이 없음) */
-    APPROVAL_LINE_APPROVER_NOT_MEMBER("APPROVAL_LINE_APPROVER_NOT_MEMBER", "결재자는 해당 프로젝트의 참여자여야 합니다."),
+    /**
+     * APR-012 — 일반 결재자가 project member 아니면 400. {@code MASTER}·{@code ADMIN}은 제외(인사 계정이라
+     * 프로젝트 소속이 없음).
+     *
+     * <p>결재선 등록(#91)뿐 아니라 <b>상신(#7)</b>에서도 난다 — 결재자가 그 사이 프로젝트에서 제거되면
+     * 재상신이 복사한 결재선에 비멤버가 남기 때문이다. 그때 사용자가 할 일은 결재선 재지정이라
+     * 메시지가 그걸 안내한다(자동 재지정은 만들지 않는다 — `APR-DELETE-DRAFT.md` §10).
+     */
+    APPROVAL_LINE_APPROVER_NOT_MEMBER("APPROVAL_LINE_APPROVER_NOT_MEMBER",
+            "결재자 중 프로젝트 참여자가 아닌 사람이 있습니다. 결재선을 다시 지정해 주세요."),
 
     // --- 8. 재상신 회차 생성 (API 명세 요구사항: SUB-005~009) ---
 
@@ -66,10 +74,9 @@ public enum ApprovalErrorCode implements ErrorCode {
     /** MGT-005 — 차례 안 온 결재자(WAITING)이거나 관련 없는 사용자의 조회 시 403 */
     APPROVAL_LINE_NOT_VIEWABLE("APPROVAL_LINE_NOT_VIEWABLE", "조회 권한이 없습니다."),
 
-    // --- 블록 삭제 잠금 (APR-001-2 · INV-09) — ApprovalBlockDetailAdapter.deleteDetail() 전용 ---
-
-    /** 진행 중(IN_PROGRESS)인 결재가 붙은 블록은 삭제할 수 없다 — 블록팀의 삭제 트랜잭션을 여기서 막는다 */
-    APPROVAL_IN_PROGRESS("APPROVAL_IN_PROGRESS", "진행 중인 결재가 있어 블록을 삭제할 수 없습니다."),
+    // ⛔ APPROVAL_IN_PROGRESS 제거(2026-08-10) — BLK-008 삭제 잠금 폐기로 사용처가 0이 됐다.
+    //    진행 중 결재도 블록과 함께 삭제되며, 종결은 CANCELED 전이로 표현한다(DEL-002).
+    //    회수(WITHDRAWN)가 생겨 409가 다시 필요해지면 그 요구사항 이름으로 새로 만든다.
 
     // --- 9. 결재관리 목록조회 (API 명세 요구사항: MGT-001~004) ---
 

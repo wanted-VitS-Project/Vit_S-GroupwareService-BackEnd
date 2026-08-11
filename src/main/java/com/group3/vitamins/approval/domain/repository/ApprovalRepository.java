@@ -21,6 +21,15 @@ public interface ApprovalRepository {
 
     Optional<Approval> findApproval(Long approvalId);
 
+    /** DEL-006 — 쓰기 진입점이 가장 먼저 잠그는 활성 결재 부모 행 */
+    Optional<Approval> findApprovalForUpdate(Long approvalId);
+
+    /** DEL-013 — 삭제 전파가 이미 삭제된 행까지 잠근 뒤 멱등 종료할 수 있게 하는 조회 */
+    Optional<Approval> findApprovalIncludingDeletedForUpdate(Long approvalId);
+
+    /** 승인·반려가 line 잠금 전에 부모 approval을 찾기 위한 활성 관계 조회 */
+    Optional<Long> findApprovalIdByLineId(Long lineId);
+
     Optional<ApprovalRevision> findRevisionById(Long revisionId);
 
     /** 결재선 전체 치환(APR-009) 직전 상태 재확인용 잠금 조회 — 상신(동시 상태 변경)과의 레이스 방지 */
@@ -99,13 +108,6 @@ public interface ApprovalRepository {
     /** SUB-002 — 1번 결재선은 ACTIVE, 나머지는 WAITING 으로 전환한 뒤 순서대로 다시 읽어 반환한다 */
     List<ApprovalLine> activateLines(Long revisionId);
 
-    /**
-     * 블록 삭제(`ApprovalBlockDetailAdapter.deleteDetail`) 시 호출 — {@code approval}과 그 아래
-     * 모든 {@code approval_revision}·{@code approval_line}을 논리 삭제한다.
-     * ⛔ <b>상태를 가리지 않는다</b> — {@code IN_PROGRESS}도 그냥 지운다 (2026-08-10 · BLK-008 잠금 폐기).
-     * 결재는 블록 종속이라 블록이 사라지면 함께 사라지는 것이 정상이다. {@code approval_document}는 애초에
-     * 하드 삭제 전용(APR-007)이라 {@code deleted_at}이 없다 — 삭제될 회차를 참조하는 문서가 안 남게
-     * 이 메서드가 먼저 하드 삭제까지 함께 처리한다(CodeRabbit 지적 반영).
-     */
+    /** DEL-002~005 — 미종결 상태를 CANCELED로 종결하고 결재 하위 행 전부를 논리 삭제한다. */
     void softDeleteCascade(Long approvalId, LocalDateTime deletedAt);
 }
