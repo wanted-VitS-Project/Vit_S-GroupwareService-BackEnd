@@ -43,15 +43,29 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
         validateListQuery(query);
         biddingAccessPolicy.assertAccess(query.userId(), query.role());
         Long companyId = currentCompanyIdProvider.currentCompanyId();
+        SearchBidNoticesQuery effectiveQuery = withDefaultNoticeStatus(query);
 
-        List<BidNoticeListItemResult> content = queryPort.findAll(companyId, query)
+        List<BidNoticeListItemResult> content = queryPort.findAll(companyId, effectiveQuery)
                 .stream()
                 .map(this::withCalculatedDDay)
                 .toList();
-        long totalElements = queryPort.count(companyId, query);
+        long totalElements = queryPort.count(companyId, effectiveQuery);
         int totalPages = (int) Math.ceil((double) totalElements / query.size());
         return new BidNoticeListResult(
                 content, totalElements, totalPages, query.page(), query.size()
+        );
+    }
+
+    // 상태를 생략한 일반 목록에서는 제외 공고를 숨기고 수집된 공고만 조회합니다.
+    private SearchBidNoticesQuery withDefaultNoticeStatus(SearchBidNoticesQuery query) {
+        if (!isBlank(query.noticeStatus())) {
+            return query;
+        }
+        return new SearchBidNoticesQuery(
+                query.startDate(), query.endDate(), query.noticeAgency(),
+                query.businessCategoryId(), query.region(), query.deadlineSoon(),
+                query.keyword(), "COLLECTED", query.sort(), query.page(), query.size(),
+                query.userId(), query.role()
         );
     }
 

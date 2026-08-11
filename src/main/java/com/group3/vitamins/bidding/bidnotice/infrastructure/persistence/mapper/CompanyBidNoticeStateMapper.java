@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Optional;
 
 @Mapper
 public interface CompanyBidNoticeStateMapper {
@@ -15,5 +16,18 @@ public interface CompanyBidNoticeStateMapper {
             @Param("bidNoticeIds") Collection<Long> bidNoticeIds,
             @Param("runId") Long runId,
             @Param("observedAt") LocalDateTime observedAt
+    );
+
+    Optional<CompanyBidNoticeStateRow> findForUpdate(
+            @Param("companyId") Long companyId,
+            @Param("bidNoticeId") Long bidNoticeId
+    );
+
+    int updateStatus(
+            @Param("companyId") Long companyId,
+            @Param("bidNoticeId") Long bidNoticeId,
+            @Param("noticeStatus") String noticeStatus,
+            @Param("dismissReason") String dismissReason,
+            @Param("updatedAt") LocalDateTime updatedAt
     );
 }

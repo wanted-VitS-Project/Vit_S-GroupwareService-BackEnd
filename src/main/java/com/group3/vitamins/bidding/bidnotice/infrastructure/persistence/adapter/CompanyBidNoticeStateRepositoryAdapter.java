@@ -8,6 +8,10 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.Optional;
+
+import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeCompanyStatus;
+import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
 
 @Repository
 @RequiredArgsConstructor
@@ -33,5 +37,34 @@ public class CompanyBidNoticeStateRepositoryAdapter implements CompanyBidNoticeS
                 runId,
                 observedAt
         );
+    }
+
+    @Override
+    public Optional<CompanyBidNoticeState> findForUpdate(
+            Long companyId,
+            Long bidNoticeId
+    ) {
+        return mapper.findForUpdate(companyId, bidNoticeId)
+                .map(row -> new CompanyBidNoticeState(
+                        row.companyId(),
+                        row.bidNoticeId(),
+                        BidNoticeCompanyStatus.valueOf(row.noticeStatus()),
+                        row.dismissReason(),
+                        row.updatedAt()
+                ));
+    }
+
+    @Override
+    public void update(CompanyBidNoticeState state) {
+        int updated = mapper.updateStatus(
+                state.companyId(),
+                state.noticeId(),
+                state.status().name(),
+                state.dismissReason(),
+                state.updatedAt()
+        );
+        if (updated != 1) {
+            throw new IllegalStateException("회사별 입찰 공고 상태 변경에 실패했습니다.");
+        }
     }
 }
