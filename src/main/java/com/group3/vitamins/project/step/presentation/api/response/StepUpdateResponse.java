@@ -29,7 +29,11 @@ public record StepUpdateResponse(
         StepPersonResponse owner,
 
         @Schema(description = "수정 일시", example = "2026-08-01T13:00:00")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "저장 후의 새 version. 화면 상태를 이 값으로 교체해야 "
+                + "다음 저장이 409 가 되지 않는다", example = "8")
+        int version
 ) {
 
     public static StepUpdateResponse from(StepUpdateResult result) {
@@ -37,7 +41,8 @@ public record StepUpdateResponse(
                 result.startedOn(), result.endedOn(),
                 result.owner() == null
                         ? null
-                        : new StepPersonResponse(result.owner().userId(), result.owner().name()),
-                result.updatedAt());
+                        // 쓰기 응답이라 deleted 는 항상 false — 수정 시점에 살아있는 사원만 책임자가 될 수 있다.
+                        : new StepPersonResponse(result.owner().userId(), result.owner().name(), false),
+                result.updatedAt(), result.version());
     }
 }

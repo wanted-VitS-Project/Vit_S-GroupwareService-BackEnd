@@ -21,4 +21,10 @@ public interface IssueQueryMapper {
     List<IssueRelatedBlockRow> findRelatedBlocks(@Param("issueIds") Collection<Long> issueIds);
 
     List<IssueCalendarRow> findMyCalendarIssues(@Param("userId") String userId);
+
+    Optional<Long> findProjectId(@Param("stepId") Long stepId);
+
+    List<StepSummaryRow> findStepsByProject(@Param("projectId") Long projectId);
+
+    List<IssueRow> findIssuesByProject(@Param("projectId") Long projectId);
 }

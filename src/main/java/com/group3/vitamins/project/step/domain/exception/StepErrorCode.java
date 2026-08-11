@@ -31,7 +31,11 @@ public enum StepErrorCode implements ErrorCode {
     STEP_PERMISSION_INVALID("STEP_PERMISSION_INVALID",
             "허용되지 않은 권한 등급입니다."),
     STEP_PERMISSION_NOT_FOUND("STEP_PERMISSION_NOT_FOUND",
-            "스텝 권한 오버라이드를 찾을 수 없습니다.");
+            "스텝 권한 오버라이드를 찾을 수 없습니다."),
+    STEP_VERSION_REQUIRED("STEP_VERSION_REQUIRED",
+            "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
+    STEP_VERSION_CONFLICT("STEP_VERSION_CONFLICT",
+            "다른 사용자가 먼저 수정했습니다.");
 
     private final String code;
     private final String message;

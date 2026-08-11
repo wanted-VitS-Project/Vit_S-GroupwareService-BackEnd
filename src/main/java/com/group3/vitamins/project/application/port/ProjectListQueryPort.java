@@ -30,6 +30,7 @@ public interface ProjectListQueryPort {
             int myIssueInProgressCount,
             int myApprovalInProgressCount,
             List<BusinessCategorySummary> businessCategories,
-            List<MemberBrief> members
+            List<MemberBrief> members,
+            int version
     ) {}
 }

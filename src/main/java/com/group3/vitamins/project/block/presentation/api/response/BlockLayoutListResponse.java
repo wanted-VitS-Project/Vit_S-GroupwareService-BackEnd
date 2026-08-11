@@ -32,12 +32,16 @@ public record BlockLayoutListResponse(
             int sortOrder,
 
             @Schema(description = "열 병합 수", example = "2")
-            int colSpan
+            int colSpan,
+
+            @Schema(description = "저장 후의 새 version", example = "8")
+            int version
     ) {
 
         static BlockLayoutItemResponse from(BlockLayoutResult result) {
             return new BlockLayoutItemResponse(
-                    result.blockId(), result.rowIndex(), result.sortOrder(), result.colSpan());
+                    result.blockId(), result.rowIndex(), result.sortOrder(), result.colSpan(),
+                    result.version());
         }
     }
 }

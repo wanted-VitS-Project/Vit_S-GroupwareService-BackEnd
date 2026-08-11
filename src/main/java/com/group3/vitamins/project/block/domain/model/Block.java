@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 public class Block {
 
+    private static final int INITIAL_VERSION = 1;
+
     private final Long blockId;
     private Long stepId;
     private String title;
@@ -13,13 +15,15 @@ public class Block {
     private int rowIndex;
     private int colSpan;
     private int sortOrder;
+    private final int version;
     private final String createdBy;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
 
     private Block(Long blockId, Long stepId, String title, BlockType type, Long typeId,
-                  String owner, int rowIndex, int colSpan, int sortOrder, String createdBy,
+                  String owner, int rowIndex, int colSpan, int sortOrder, int version,
+                  String createdBy,
                   LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
         this.blockId = blockId;
         this.stepId = stepId;
@@ -30,6 +34,7 @@ public class Block {
         this.rowIndex = rowIndex;
         this.colSpan = colSpan;
         this.sortOrder = sortOrder;
+        this.version = version;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -44,16 +49,16 @@ public class Block {
                                int rowIndex, int sortOrder, int colSpan,
                                String createdBy, LocalDateTime now) {
         return new Block(null, stepId, title, type, null, owner,
-                rowIndex, colSpan, sortOrder, createdBy, now, now, null);
+                rowIndex, colSpan, sortOrder, INITIAL_VERSION, createdBy, now, now, null);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
     public static Block restore(Long blockId, Long stepId, String title, BlockType type, Long typeId,
                                 String owner, int rowIndex, int colSpan, int sortOrder,
-                                String createdBy, LocalDateTime createdAt,
+                                int version, String createdBy, LocalDateTime createdAt,
                                 LocalDateTime updatedAt, LocalDateTime deletedAt) {
         return new Block(blockId, stepId, title, type, typeId, owner,
-                rowIndex, colSpan, sortOrder, createdBy, createdAt, updatedAt, deletedAt);
+                rowIndex, colSpan, sortOrder, version, createdBy, createdAt, updatedAt, deletedAt);
     }
 
     /** 상세 행 PK 를 연결한다 (3단계 중 ③). 상세 행이 없는 타입은 호출하지 않는다. */
@@ -108,6 +113,16 @@ public class Block {
     public int getRowIndex() { return rowIndex; }
     public int getColSpan() { return colSpan; }
     public int getSortOrder() { return sortOrder; }
+
+    /**
+     * 조회 시점의 낙관적 락 버전이다 (`.ai/docs/global/CONCURRENCY.md`).
+     *
+     * <p>⚠️ 도메인은 이 값을 <b>절대 올리지 않는다.</b> {@code +1} 은 {@code WHERE version = ?} 과
+     * 같은 UPDATE 문장 안에서 DB 가 한다. 여기서 올리면 덮어쓰기 기대값이 DB+1 이 되어
+     * <b>모든 덮어쓰기가 409</b> 가 된다.
+     */
+    public int getVersion() { return version; }
+
     public String getCreatedBy() { return createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

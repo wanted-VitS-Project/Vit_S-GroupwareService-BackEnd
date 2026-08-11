@@ -33,7 +33,7 @@ class BlockCatalogAdapterTest {
     private Block blockOfType(BlockType type) {
         LocalDateTime now = LocalDateTime.now();
         return Block.restore(BLOCK_ID, STEP_ID, "블록", type, null,
-                "EMP001", 0, 12, 0, "EMP001", now, now, null);
+                "EMP001", 0, 12, 0, 1, "EMP001", now, now, null);
     }
 
     @Nested

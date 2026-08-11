@@ -16,8 +16,9 @@ import java.util.List;
 public interface ProjectCategoryLinkQueryMapper {
 
     /** 프로젝트에 연결된 카테고리 ID 전체. 반환 행 수는 카테고리 개수를 넘지 않는다. */
-    List<Long> findLinkedCategoryIds();
+    List<Long> findLinkedCategoryIds(@Param("companyId") Long companyId);
 
-    /** 특정 카테고리에 연결된 프로젝트 수. */
-    long countLinkedProjects(@Param("categoryId") Long categoryId);
+    /** 같은 회사에서 특정 카테고리에 연결된 프로젝트 수. */
+    long countLinkedProjects(@Param("categoryId") Long categoryId,
+                             @Param("companyId") Long companyId);
 }

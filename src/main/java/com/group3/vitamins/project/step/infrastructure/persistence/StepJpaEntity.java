@@ -41,6 +41,16 @@ public class StepJpaEntity {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    /**
+     * 낙관적 락 버전 (`.ai/docs/global/CONCURRENCY.md`).
+     *
+     * <p>⛔ {@code @Version} 을 붙이지 마라. {@code StepMapper.toEntity} 가 매번 {@code new} 로
+     * detached 객체를 만들어 JPA 가 {@code merge} 로 처리하는데, merge 는 DB 의 최신 version 을
+     * 다시 읽어와 검사하므로 <b>항상 통과한다</b> (§6-1).
+     */
+    @Column(name = "version", nullable = false)
+    private int version;
+
     @Column(name = "started_on")
     private LocalDate startedOn;
 

@@ -42,18 +42,22 @@ public class StageController {
 
     @Operation(summary = "스테이지 수정",
             description = "스테이지 이름을 수정한다. 순서 변경은 "
-                    + "PATCH /projects/{projectId}/stages/order 소관이다.")
+                    + "PATCH /projects/{projectId}/stages/order 소관이다. "
+                    + "목록 조회에서 받은 version 을 함께 보내야 하며, 그 사이 남이 먼저 저장했으면 409 다. "
+                    + "409 를 받으면 재조회 / 덮어쓰기(overwrite: true)를 사용자에게 묻는다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "STAGE_NAME_REQUIRED / STAGE_NAME_TOO_LONG"),
+                    description = "STAGE_NAME_REQUIRED / STAGE_NAME_TOO_LONG / STAGE_VERSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "PROJECT_EDIT_DENIED — 프로젝트 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "STAGE_NOT_FOUND — 스테이지가 존재하지 않음")
+                    description = "STAGE_NOT_FOUND — 스테이지가 존재하지 않음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "STAGE_VERSION_CONFLICT — 다른 사용자가 먼저 수정함")
     })
     @PatchMapping("/{stageId}")
     public ResponseEntity<ApiResponse<StageUpdateResponse>> updateStage(

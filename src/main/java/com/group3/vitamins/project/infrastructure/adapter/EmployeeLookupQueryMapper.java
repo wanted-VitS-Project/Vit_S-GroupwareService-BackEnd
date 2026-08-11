@@ -16,7 +16,9 @@ import java.util.Optional;
 @Mapper
 public interface EmployeeLookupQueryMapper {
 
-    Optional<String> findNameByUserId(@Param("userId") String userId);
+    Optional<String> findNameByUserId(@Param("userId") String userId,
+                                      @Param("companyId") Long companyId);
 
-    List<EmployeeNameRow> findNamesByUserIds(@Param("userIds") Collection<String> userIds);
+    List<EmployeeNameRow> findRefsByUserIds(@Param("userIds") Collection<String> userIds,
+                                            @Param("companyId") Long companyId);
 }

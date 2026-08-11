@@ -13,6 +13,9 @@ public record IssueDetailResponse(
         @Schema(description = "이슈 번호", example = "101")
         Long issueId,
 
+        @Schema(description = "동시 수정 검사용 현재 버전", example = "1")
+        int version,
+
         @Schema(description = "소속 Step 번호", example = "12")
         Long stepId,
 
@@ -44,6 +47,7 @@ public record IssueDetailResponse(
     public static IssueDetailResponse from(IssueResult result) {
         return new IssueDetailResponse(
                 result.issueId(),
+                result.version(),
                 result.stepId(),
                 result.title(),
                 result.content(),

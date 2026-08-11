@@ -1,4 +1,4 @@
-package com.group3.vitamins.bidding.presentation;
+package com.group3.vitamins.bidding.legacy.presentation;
 
 import com.group3.vitamins.bidding.collectioncondition.application.result.CollectionConditionResult;
 import com.group3.vitamins.bidding.collectioncondition.application.usecase.CollectionConditionUseCase;

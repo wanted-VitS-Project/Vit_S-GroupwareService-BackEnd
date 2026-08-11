@@ -11,6 +11,7 @@ public class BusinessCategoryMapper {
     public static BusinessCategory toDomain(BusinessCategoryJpaEntity entity) {
         return BusinessCategory.restore(
                 entity.getBusinessCategoryId(),
+                entity.getCompanyId(),
                 entity.getName(),
                 entity.getCode(),
                 entity.getDescription(),
@@ -23,6 +24,7 @@ public class BusinessCategoryMapper {
     public static BusinessCategoryJpaEntity toEntity(BusinessCategory domain) {
         return new BusinessCategoryJpaEntity(
                 domain.getBusinessCategoryId(),
+                domain.getCompanyId(),
                 domain.getName(),
                 domain.getCode(),
                 domain.getDescription(),

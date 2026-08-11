@@ -5,11 +5,14 @@ import java.time.LocalDateTime;
 
 public class Step {
 
+    private static final int INITIAL_VERSION = 1;
+
     private final Long stepId;
     private final Long projectId;
     private Long stageId;
     private String name;
     private int sortOrder;
+    private final int version;
     private LocalDate startedOn;
     private LocalDate endedOn;
     private String ownerUserId;
@@ -20,7 +23,7 @@ public class Step {
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
 
-    private Step(Long stepId, Long projectId, Long stageId, String name, int sortOrder,
+    private Step(Long stepId, Long projectId, Long stageId, String name, int sortOrder, int version,
                  LocalDate startedOn, LocalDate endedOn, String ownerUserId, StepStatus status,
                  LocalDateTime completedAt, String completedBy,
                  LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
@@ -29,6 +32,7 @@ public class Step {
         this.stageId = stageId;
         this.name = name;
         this.sortOrder = sortOrder;
+        this.version = version;
         this.startedOn = startedOn;
         this.endedOn = endedOn;
         this.ownerUserId = ownerUserId;
@@ -47,17 +51,18 @@ public class Step {
     public static Step create(Long projectId, Long stageId, String name, int sortOrder,
                               LocalDate startedOn, LocalDate endedOn, String ownerUserId,
                               LocalDateTime now) {
-        return new Step(null, projectId, stageId, name, sortOrder, startedOn, endedOn,
-                ownerUserId, StepStatus.NOT_STARTED, null, null, now, now, null);
+        return new Step(null, projectId, stageId, name, sortOrder, INITIAL_VERSION,
+                startedOn, endedOn, ownerUserId, StepStatus.NOT_STARTED, null, null, now, now, null);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
     public static Step restore(Long stepId, Long projectId, Long stageId, String name, int sortOrder,
+                               int version,
                                LocalDate startedOn, LocalDate endedOn, String ownerUserId,
                                StepStatus status, LocalDateTime completedAt, String completedBy,
                                LocalDateTime createdAt, LocalDateTime updatedAt,
                                LocalDateTime deletedAt) {
-        return new Step(stepId, projectId, stageId, name, sortOrder, startedOn, endedOn,
+        return new Step(stepId, projectId, stageId, name, sortOrder, version, startedOn, endedOn,
                 ownerUserId, status, completedAt, completedBy, createdAt, updatedAt, deletedAt);
     }
 
@@ -128,6 +133,16 @@ public class Step {
     public Long getStageId() { return stageId; }
     public String getName() { return name; }
     public int getSortOrder() { return sortOrder; }
+
+    /**
+     * 조회 시점의 낙관적 락 버전이다 (`.ai/docs/global/CONCURRENCY.md`).
+     *
+     * <p>⚠️ 도메인은 이 값을 <b>절대 올리지 않는다.</b> {@code +1} 은 {@code WHERE version = ?} 과
+     * 같은 UPDATE 문장 안에서 DB 가 한다. {@code update}·{@code changeStatus}·{@code moveTo} 가
+     * 여기서 올리면 덮어쓰기 기대값이 DB+1 이 되어 <b>모든 덮어쓰기가 409</b> 가 된다.
+     */
+    public int getVersion() { return version; }
+
     public LocalDate getStartedOn() { return startedOn; }
     public LocalDate getEndedOn() { return endedOn; }
     public String getOwnerUserId() { return ownerUserId; }

@@ -74,22 +74,27 @@ public record ProjectListResponse(
             int myIssueInProgressCount,
 
             @Schema(description = "이 프로젝트에서 내가 기안한 진행중 결재 수", example = "1")
-            int myApprovalInProgressCount
+            int myApprovalInProgressCount,
+
+            @Schema(description = "낙관적 락 버전. 목록에서 바로 수정을 시작할 때 이 값을 그대로 실어 보낸다",
+                    example = "7")
+            int version
     ) {
 
         static ProjectItemResponse from(ProjectSummary summary) {
             List<BusinessCategorySummaryResponse> categories = summary.businessCategories().stream()
-                    .map(c -> new BusinessCategorySummaryResponse(c.categoryId(), c.name(), c.code()))
+                    .map(c -> new BusinessCategorySummaryResponse(c.categoryId(), c.name(), c.code(), c.deleted()))
                     .toList();
             List<MemberBriefResponse> members = summary.members().stream()
-                    .map(m -> new MemberBriefResponse(m.userId(), m.name()))
+                    .map(m -> new MemberBriefResponse(m.userId(), m.name(), m.deleted()))
                     .toList();
 
             return new ProjectItemResponse(
                     summary.projectId(), summary.name(), summary.clientName(), summary.status(),
                     summary.startedOn(), summary.endedOn(), summary.contractAmount(),
                     summary.progressRate(), categories, members,
-                    summary.myIssueInProgressCount(), summary.myApprovalInProgressCount());
+                    summary.myIssueInProgressCount(), summary.myApprovalInProgressCount(),
+                    summary.version());
         }
     }
 
@@ -99,8 +104,12 @@ public record ProjectListResponse(
             @Schema(description = "사원 사번. 아바타 클릭 시 참여자 진입 키", example = "E2024001")
             String userId,
 
-            @Schema(description = "이름", example = "김용준")
-            String name
+            @Schema(description = "이름. 사번이 사원 정보에 없으면 null", example = "김용준", nullable = true)
+            String name,
+
+            @Schema(description = "이 사원이 삭제됐는지 (배지 표시용). "
+                    + "true 여도 name 은 그대로 내려간다", example = "false")
+            boolean deleted
     ) {
     }
 }

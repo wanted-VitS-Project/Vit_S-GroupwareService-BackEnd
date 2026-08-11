@@ -27,4 +27,16 @@ public interface StageRepository {
 
     /** 스테이지가 해당 프로젝트에 존재하는지 확인한다. 논리 삭제분은 제외한다. */
     boolean existsInProject(Long stageId, Long projectId);
+
+    /**
+     * 기대 버전과 DB 버전이 같을 때만 이름을 바꾸고 version 을 올린다.
+     * 바뀐 행 수를 돌려준다 — <b>0 이면 그 사이 남이 먼저 저장한 것이다(충돌)</b>.
+     *
+     * <p>⚠️ {@code save()} 로 대체하지 마라. 검사와 저장이 한 문장 안에서 원자적으로 일어나야
+     * 조회~저장 사이의 갱신 유실을 막는다 (`.ai/docs/global/CONCURRENCY.md` §1-3 · §6-4).
+     */
+    int renameIfVersionMatches(Long stageId, String name, int expectedVersion);
+
+    /** 기대 버전이 같을 때만 정렬 순서를 바꾸고 version 을 올린다. 0 이면 충돌이다. */
+    int moveIfVersionMatches(Long stageId, int sortOrder, int expectedVersion);
 }

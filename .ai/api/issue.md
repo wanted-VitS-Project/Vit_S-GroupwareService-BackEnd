@@ -1,9 +1,10 @@
 # 🧩 Issue API
 
 **상태**: `✅ 확정`
-**최종 업데이트**: 2026-08-07 · **담당**: 김용준
-**최종 업데이트**: 2026-08-09 (담당자 지정 알림 정책 추가 — 신규 추가 담당자에게만 `ISSUE_ASSIGNED` 발행, 신규 에러코드 없음)
-**최종 업데이트**: 2026-08-10 (`ISSUE_ASSIGNED`의 `targetContext`를 `null`에서 `{projectId, stepId}`로 변경 — FE 상세 라우팅에 두 값이 필요하다고 확인됨. **프론트 공유 필요**)
+**담당**: 김용준
+**최종 업데이트**: 2026-08-11 (상태 변경 요청의 `status`·`version` HTTP 경계 검증 보강 — version 누락·0·음수는 `400 ISS_INVALID_REQUEST`)
+**최종 업데이트**: 2026-08-11 (이슈 수정·상태 변경에 `version` 기반 낙관적 락 적용 — 조회 응답의 `version`을 수정 요청에 필수 전달, 불일치 시 `409 ISSUE_VERSION_CONFLICT`. 프론트 draft 보존·필드 단위 병합 UX는 별도 명세)
+**최종 업데이트**: 2026-08-10 (조회/수정 권한 게이트 분리 — 목록·상세 조회는 project 권한만 확인, 생성·수정·상태변경·삭제만 step EDITOR 확인. 신규 에러코드 없음, `ISS_ACCESS_PERMISSION_REQUIRED` 의미만 변경)
 **노션**: 반영 · 예정 Domain `프로젝트` · SUB-Domain `Issue`
 **도메인 문서**: `../docs/domain/이슈/ISS-V1.md` · `../docs/domain/이슈/ISS-V1-USECASE.md`
 
@@ -13,9 +14,10 @@
 
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
+| 프로젝트 단위 이슈 목록 조회 | GET | `/api/v1/projects/{projectId}/issues` | 프로젝트 참여자 |
 | 스텝별 이슈 목록 조회 | GET | `/api/v1/steps/{stepId}/issues` | 프로젝트 참여자 |
 | 이슈 생성 | POST | `/api/v1/steps/{stepId}/issues` | 스텝 EDITOR |
-| 이슈 상세 조회 | GET | `/api/v1/issues/{issueId}` | 스텝 접근 권한 |
+| 이슈 상세 조회 | GET | `/api/v1/issues/{issueId}` | 프로젝트 참여자 |
 | 이슈 부분 수정 | PATCH | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
 | 이슈 상태 변경 | PATCH | `/api/v1/issues/{issueId}/status` | 스텝 EDITOR |
 | 이슈 삭제 | DELETE | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
@@ -33,6 +35,14 @@
 
 실패 응답은 `{ httpStatus, message, code }` 형식을 사용한다.
 
+### 동시 수정 방지
+
+- 이슈 조회 응답에는 현재 `version`을 포함한다.
+- `PATCH /api/v1/issues/{issueId}`와 `PATCH /api/v1/issues/{issueId}/status`는 조회에서 받은 `version`을 필수로 받는다.
+- 서버는 `issue_id`와 `version`이 모두 일치할 때만 수정한다. 불일치하면 `409 ISSUE_VERSION_CONFLICT`를 반환하며 데이터는 변경하지 않는다.
+- 수정 성공 응답에는 증가한 `version`을 반환한다.
+- 같은 상태 요청은 기존 멱등 계약대로 200을 반환하고, 현재 `version`을 함께 반환한다.
+
 ## 🔑 공통 원칙
 
 | 원칙 | 내용 |
@@ -47,7 +57,7 @@
 | Activity Log | Issue 생성·수정·상태 변경·삭제는 Activity Log에 기록하지 않는다 |
 | Notification | 이슈 생성·수정으로 신규 담당자가 추가되면 해당 담당자별로 `ISSUE_ASSIGNED` 알림을 발행한다 |
 
-### 권한 판정
+### 권한 판정 (2026-08-10 개정 — 조회/수정 게이트 분리)
 
 ```text
 1) 전역 role
@@ -56,13 +66,17 @@
 
 2) Issue → Step → Project 찾기
 
-3) 스텝 권한
+3) 조회(목록·상세) — project_member 권한만 본다
+     NONE      → 접근 차단
+     VIEWER 이상 → 그 프로젝트에 속한 모든 Step의 이슈 조회 가능
+
+4) 생성·수정·상태 변경·삭제 — 해당 Step의 EDITOR 권한이 필요하다
      step_permission 행 있음 → 해당 권한 사용
      행 없음                 → project_member 권한 상속
-     NONE                    → 접근 차단
-     VIEWER                  → 조회만
-     EDITOR                  → 조회·생성·수정·상태 변경·삭제
+     EDITOR 아니면 차단
 ```
+
+> project 권한이 있으면 step 조회는 항상 허용된다(step 권한은 조회/수정 단계로만 갈리고, project 참여자를 완전히 차단하는 값은 없다는 전제). 이 전제가 아직 `step_permission` 쪽에 반영되지 않았더라도 조회 판정은 project 권한만 보므로 영향받지 않는다.
 
 ### 관계 목록 수정 규칙
 
@@ -134,6 +148,7 @@ GET /api/v1/steps/10/issues?blockId=15
 |---|---|---|
 | `data.issues` | List | 조회된 이슈 목록 |
 | `data.issues[].issueId` | Long | 이슈 ID |
+| `data.issues[].version` | int | 동시 수정 검사용 현재 버전 |
 | `data.issues[].title` | String | 이슈 제목 |
 | `data.issues[].status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
 | `data.issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
@@ -156,6 +171,7 @@ GET /api/v1/steps/10/issues?blockId=15
     "issues": [
       {
         "issueId": 101,
+        "version": 1,
         "title": "경쟁사 제안서 벤치마킹",
         "status": "TODO",
         "priority": "HIGH",
@@ -308,7 +324,7 @@ Step 존재 및 접근 권한 확인
 | 항목 | 내용 |
 |---|---|
 | Method · URL | `GET /api/v1/issues/{issueId}` |
-| 인증 필요 | Y · 스텝 접근 권한 |
+| 인증 필요 | Y · 프로젝트 참여자 |
 | 요구사항 | ISS-007 · STS-006 · USC-ISS-003 |
 
 **Path Parameter** — `issueId` Long Y
@@ -318,6 +334,7 @@ Step 존재 및 접근 권한 확인
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `data.issueId` | Long | 이슈 번호 |
+| `data.version` | int | 동시 수정 검사용 현재 버전 |
 | `data.stepId` | Long | 소속 Step 번호 |
 | `data.title` | String | 제목 |
 | `data.content` | String | 내용. `null` 허용 |
@@ -337,7 +354,7 @@ Step 존재 및 접근 권한 확인
 |---|---|---|
 | 200 | – | 조회 성공 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
-| 403 | `ISS_ACCESS_PERMISSION_REQUIRED` | 소속 Step 열람 권한 없음 |
+| 403 | `ISS_ACCESS_PERMISSION_REQUIRED` | 소속 Step이 속한 프로젝트 참여자가 아님 |
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 논리 삭제됨 |
 
 ---
@@ -358,6 +375,7 @@ Step 존재 및 접근 권한 확인
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
+| `version` | int | Y | 조회 응답에서 받은 현재 버전. 1 이상 정수 |
 | `title` | String | N | 제목. 전달 시 빈 값 불가, 최대 200자 |
 | `content` | String | N | 내용. 명시적 `null`이면 내용 삭제 |
 | `dueDate` | LocalDate | N | 마감일. 명시적 `null`이면 마감일 해제 |
@@ -389,6 +407,7 @@ null   → 400
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 논리 삭제됨 |
 | 404 | `ISS_ASSIGNEE_NOT_FOUND` | 존재하지 않는 사번 포함. 전체 요청 거부 |
 | 404 | `ISS_BLOCK_NOT_FOUND` | 존재하지 않거나 삭제된 Block 포함. 전체 요청 거부 |
+| 409 | `ISSUE_VERSION_CONFLICT` | 다른 사용자가 먼저 수정함 |
 
 ---
 
@@ -405,6 +424,7 @@ null   → 400
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
 | `status` | String | Y | `TODO` · `IN_PROGRESS` · `DONE` |
+| `version` | int | Y | 조회 응답에서 받은 현재 버전. 1 이상 정수 |
 
 ### 완료 시각 규칙
 
@@ -420,6 +440,7 @@ null   → 400
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `data.issueId` | Long | 이슈 번호 |
+| `data.version` | int | 동시 수정 검사용 변경 후 현재 버전 |
 | `data.status` | String | 변경 후 상태 |
 | `data.completedAt` | LocalDateTime | 변경 후 완료 시각. `null` 허용 |
 | `data.updatedAt` | LocalDateTime | 최종 수정 일시 |
@@ -432,6 +453,7 @@ null   → 400
   "message": "이슈 상태 변경 성공",
   "data": {
     "issueId": 101,
+    "version": 2,
     "status": "DONE",
     "completedAt": "2026-08-02T22:46:00",
     "updatedAt": "2026-08-02T22:46:00"
@@ -446,9 +468,11 @@ null   → 400
 | 200 | – | 변경 성공 또는 동일 상태 멱등 처리 |
 | 400 | `ISS_STATUS_REQUIRED` | 상태가 전달되지 않음 |
 | 400 | `ISS_INVALID_STATUS` | 허용하지 않는 상태값 |
+| 400 | `ISS_INVALID_REQUEST` | version 누락 또는 1 미만 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ISS_EDIT_PERMISSION_REQUIRED` | Step 편집 권한 없음 |
 | 404 | `ISS_NOT_FOUND` | Issue 없음 또는 논리 삭제됨 |
+| 409 | `ISSUE_VERSION_CONFLICT` | 다른 사용자가 먼저 수정함 |
 
 ---
 
@@ -564,6 +588,7 @@ GET /api/v1/issues/calendar
 |---|---|---|
 | `data.issues` | List | 조회된 이슈 목록 |
 | `data.issues[].issueId` | Long | 이슈 번호 |
+| `data.issues[].version` | int | 동시 수정 검사용 현재 버전 |
 | `data.issues[].title` | String | 이슈 제목 |
 | `data.issues[].status` | String | `TODO` · `IN_PROGRESS` (`DONE`은 반환하지 않음) |
 | `data.issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
@@ -583,6 +608,7 @@ GET /api/v1/issues/calendar
     "issues": [
       {
         "issueId": 101,
+        "version": 1,
         "title": "제안서 1차 초안 작성",
         "status": "IN_PROGRESS",
         "priority": "HIGH",
@@ -629,6 +655,139 @@ GET /api/v1/issues/{issueId}
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 
 > 확정된 결정: 조회 범위는 "본인 담당(`issue_assign`) + 미완료(`status != DONE`)"이다. 이미 종료된 프로젝트라도 미완료 이슈가 남아있으면 캘린더에 계속 노출된다(프로젝트 상태 기준 필터는 도입하지 않음).
+
+---
+
+## 8. 프로젝트 단위 이슈 목록 조회
+
+| 항목 | 내용 |
+|---|---|
+| Method · URL | `GET /api/v1/projects/{projectId}/issues` |
+| 인증 필요 | Y · 프로젝트 참여자 |
+| 요구사항 | 2026-08-10 프론트 요청 — 이슈를 Step 단위로 열고 닫는 프로젝트 화면용 |
+
+프로젝트에 속한 삭제되지 않은 모든 Step의 이슈를 Step별로 묶어 반환한다. 프론트가 Step 이름으로 아코디언을 열고 닫는 화면에서 쓴다.
+
+**Path Parameter**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `projectId` | Long | Y | 이슈를 조회할 프로젝트 ID |
+
+```bash
+GET /api/v1/projects/3/issues
+```
+
+⛔ 페이징이 없다. 프로젝트에 속한 삭제되지 않은 Step 전체와 그 이슈 전체를 반환한다.
+
+⛔ `deleted_at`이 있는 Step은 응답에서 완전히 제외한다(그 Step의 이슈도 함께 제외).
+
+⛔ 이슈가 하나도 없는 Step도 `issues: []`로 포함한다 — 프론트가 빈 Step도 아코디언에 표시해야 한다.
+
+⛔ Step은 `sortOrder` 오름차순으로 정렬한다. Stage 묶음은 이 API가 하지 않는다 — 프론트가 별도 Step 목록 API 응답으로 조립한다.
+
+⛔ `TODO` 개수는 응답에 없다. `totalIssueCount - doneIssueCount - inProgressIssueCount`로 FE가 계산한다(Step 진척도 응답과 동일 규칙).
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.progress` | Object | 프로젝트 전체 이슈 진척도 |
+| `data.progress.totalIssueCount` | int | 프로젝트 전체 이슈 수 |
+| `data.progress.doneIssueCount` | int | 완료된 이슈 수 |
+| `data.progress.inProgressIssueCount` | int | 진행 중인 이슈 수 |
+| `data.progress.progressRate` | Integer | 완료율(%) = `doneIssueCount * 100 / totalIssueCount`. 이슈가 0개면 `null` |
+| `data.steps` | List | Step별로 묶인 이슈 목록. `sortOrder` 오름차순 |
+| `data.steps[].stepId` | Long | Step ID |
+| `data.steps[].stepName` | String | Step 이름 |
+| `data.steps[].totalIssueCount` | int | 해당 Step의 이슈 수 |
+| `data.steps[].doneIssueCount` | int | 해당 Step의 완료된 이슈 수 |
+| `data.steps[].inProgressIssueCount` | int | 해당 Step의 진행 중인 이슈 수 |
+| `data.steps[].progressRate` | Integer | 해당 Step의 완료율(%). 이슈가 0개면 `null` |
+| `data.steps[].issues` | List | 해당 Step의 이슈 목록. 없으면 빈 배열 |
+| `data.steps[].issues[].issueId` | Long | 이슈 ID |
+| `data.steps[].issues[].version` | int | 동시 수정 검사용 현재 버전 |
+| `data.steps[].issues[].title` | String | 이슈 제목 |
+| `data.steps[].issues[].status` | String | `TODO` · `IN_PROGRESS` · `DONE` |
+| `data.steps[].issues[].priority` | String | `LOW` · `MEDIUM` · `HIGH` |
+| `data.steps[].issues[].dueDate` | LocalDate | 마감일. 미지정 시 `null` |
+| `data.steps[].issues[].assignees` | List | 담당자 목록 |
+| `data.steps[].issues[].assignees[].userId` | String | 담당자 사번 |
+| `data.steps[].issues[].assignees[].name` | String | 담당자 이름 |
+| `data.steps[].issues[].relatedBlocks` | List | 연결된 Block 목록 |
+| `data.steps[].issues[].relatedBlocks[].blockId` | Long | Block ID |
+| `data.steps[].issues[].relatedBlocks[].title` | String | Block 제목 |
+| `data.steps[].issues[].relatedBlocks[].type` | String | Block 유형 |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "프로젝트 이슈 목록 조회 성공",
+  "data": {
+    "progress": {
+      "totalIssueCount": 5,
+      "doneIssueCount": 2,
+      "inProgressIssueCount": 1,
+      "progressRate": 40
+    },
+    "steps": [
+      {
+        "stepId": 10,
+        "stepName": "요구사항 정의",
+        "totalIssueCount": 1,
+        "doneIssueCount": 0,
+        "inProgressIssueCount": 0,
+        "progressRate": 0,
+        "issues": [
+          {
+            "issueId": 101,
+            "version": 1,
+            "title": "경쟁사 제안서 벤치마킹",
+            "status": "TODO",
+            "priority": "HIGH",
+            "dueDate": "2026-07-25",
+            "assignees": [
+              { "userId": "EMP001", "name": "김용준" }
+            ],
+            "relatedBlocks": [
+              { "blockId": 15, "title": "제안서 작성 체크리스트", "type": "CHECKLIST" }
+            ]
+          }
+        ]
+      },
+      {
+        "stepId": 11,
+        "stepName": "설계",
+        "totalIssueCount": 0,
+        "doneIssueCount": 0,
+        "inProgressIssueCount": 0,
+        "progressRate": null,
+        "issues": []
+      }
+    ]
+  }
+}
+```
+
+### BE 처리 흐름
+
+```text
+프로젝트 존재 및 참여자 권한 확인(VIEWER 이상)
+→ 프로젝트의 삭제되지 않은 Step 전체를 sortOrder 순으로 조회
+→ 그 Step들의 삭제되지 않은 이슈 전체를 Step sortOrder, 이슈ID 역순으로 조회
+→ 이슈를 stepId 기준으로 묶어 Step 목록에 매핑(이슈 없는 Step은 빈 배열)
+→ Step별·프로젝트 전체 진척도(전체/완료/진행중 수, 완료율) 계산
+→ 담당자 및 연결 Block과 함께 반환
+```
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 프로젝트 이슈 목록 조회 성공 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `PROJECT_ACCESS_DENIED` | 프로젝트 접근 권한 없음 |
+| 404 | `PROJECT_NOT_FOUND` | 프로젝트가 존재하지 않음 |
 
 ---
 

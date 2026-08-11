@@ -7,6 +7,7 @@ public record ProjectMemberRow(
         String name,
         String department,
         String permission,
-        boolean resigned
+        boolean resigned,
+        boolean deleted
 ) {
 }

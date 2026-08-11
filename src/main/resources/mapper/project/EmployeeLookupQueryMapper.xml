@@ -5,15 +5,36 @@
 
 <mapper namespace="com.group3.vitamins.project.infrastructure.adapter.EmployeeLookupQueryMapper">
 
+    <!--
+      ⚠️ 회사 조건이 참여자 추가(PRJ) 의 사원 존재 판정도 겸한다. 이 조건이 빠지면 타사 사번을
+         프로젝트 참여자로 넣을 수 있고, project_member 를 근거로 접근을 판정하는
+         vitamate·approval 까지 함께 뚫린다. MyBatis 는 XML 이 안 쓰는 파라미터를 조용히 무시하므로
+         companyId 를 넘겨도 여기서 쓰지 않으면 에러 없이 격리만 사라진다.
+
+      ⚠️ 쓰기 검증 전용이라 deleted_at IS NULL 이 맞다 — 삭제된 사원을 새로 담당자·참여자로
+         지정하면 안 된다. 이미 지정된 사람을 보여주는 조회는 아래 findRefsByUserIds 를 쓴다.
+    -->
     <select id="findNameByUserId" resultType="java.lang.String">
-        SELECT name FROM employee WHERE user_id = #{userId} AND deleted_at IS NULL
+        SELECT name
+          FROM employee
+         WHERE user_id = #{userId}
+           AND company_id = #{companyId}
+           AND deleted_at IS NULL
     </select>
 
-    <select id="findNamesByUserIds"
+    <!--
+      ⚠️ deleted_at 을 WHERE 로 거르지 않고 컬럼으로 내린다 (DELETE.md D-6).
+         거르면 삭제된 사원의 이름이 사라져 "삭제됨" 과 "사번이 아예 없음" 을 구분할 수 없다.
+         회사 조건은 그대로 WHERE 다 — 타사 사원은 애초에 보여줄 대상이 아니다.
+    -->
+    <select id="findRefsByUserIds"
             resultType="com.group3.vitamins.project.infrastructure.adapter.EmployeeNameRow">
-        SELECT user_id AS userId, name
+        SELECT user_id                  AS userId,
+               name,
+               (deleted_at IS NOT NULL) AS deleted
           FROM employee
-         WHERE user_id IN
+         WHERE company_id = #{companyId}
+           AND user_id IN
         <foreach item="id" collection="userIds" open="(" separator="," close=")">#{id}</foreach>
     </select>
 

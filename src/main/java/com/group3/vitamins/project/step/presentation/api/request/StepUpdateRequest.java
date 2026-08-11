@@ -3,6 +3,7 @@ package com.group3.vitamins.project.step.presentation.api.request;
 import com.group3.vitamins.project.step.application.command.UpdateStepCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
@@ -29,11 +30,20 @@ public record StepUpdateRequest(
 
         @Schema(description = "책임자 사번. 생략하면 책임자를 해제한다",
                 example = "E2024007", nullable = true)
-        String ownerUserId
+        String ownerUserId,
+
+        @NotNull(message = "STEP_VERSION_REQUIRED|버전 정보가 없습니다. 화면을 새로고침해 주세요.")
+        @Schema(description = "조회에서 받은 version 을 그대로 실어 보낸다. "
+                + "그 사이 남이 먼저 저장했으면 409 다", example = "7")
+        Integer version,
+
+        @Schema(description = "true 면 충돌을 무시하고 덮어쓴다. 생략하면 false", example = "false")
+        Boolean overwrite
 ) {
 
+    /** ⚠️ overwrite 는 선택 필드라 null 이 온다. {@code Boolean.TRUE.equals} 로 받아야 NPE 가 안 난다. */
     public UpdateStepCommand toCommand(Long stepId, String requesterUserId, String role) {
         return new UpdateStepCommand(stepId, name, startedOn, endedOn, ownerUserId,
-                requesterUserId, role);
+                version, Boolean.TRUE.equals(overwrite), requesterUserId, role);
     }
 }
