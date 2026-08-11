@@ -35,6 +35,15 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
                               @Param("caption") String caption, @Param("orderIndex") int orderIndex,
                               @Param("expectedVersion") int expectedVersion);
 
+    // 값은 안 바뀌었지만 version은 검사해야 하는 항목용 — caption/orderIndex/updatedAt은 안 건드리고
+    // version만 검사 후 증가시킨다(2026-08-11, CodeRabbit 지적).
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ImageJpaEntity i SET i.version = i.version + 1 "
+            + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "AND i.version = :expectedVersion")
+    int touchVersionIfMatches(@Param("imgId") Long imgId, @Param("imgBlockId") Long imgBlockId,
+                              @Param("expectedVersion") int expectedVersion);
+
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ImageJpaEntity i SET i.deletedAt = :deletedAt "
             + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
