@@ -74,20 +74,45 @@ public class FileCommandService implements FileCommandUseCase {
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
         requireEditable(command.fileId(), command.requesterUserId(), command.role());
 
-        String before = file.getName();
         String name = validateName(command.name());
-        file.rename(name);
-        File saved = fileRepository.save(file);
 
-        // 활동 로그(문서명 수정 = MODIFY) — 실제로 이름이 바뀐 경우에만 발행한다 (§파일 rename).
-        if (!java.util.Objects.equals(before, saved.getName())) {
-            Long blockId = fileQueryPort.findBlockIdByFileId(command.fileId()).orElse(null);
-            publishActivity(ActivityLogAction.MODIFY, blockId, saved.getFileId(), saved.getName(),
-                    command.requesterUserId(),
-                    List.of(new ActivityFieldChange("fileName", before, saved.getName())));
+        // version 은 overwrite 여부와 무관하게 필수다 — 안 막으면 WHERE version=0 이라 저장이 전부 409 로 샌다(§6-3).
+        if (command.version() < 1) {
+            throw new ValidationException(FileErrorCode.FILE_INVALID_REQUEST);
         }
 
-        return new FileRenameResult(saved.getFileId(), saved.getName());
+        // 낙관락. 조건부 UPDATE 라야 검사와 저장이 한 문장에서 원자적으로 일어난다(§1-2). save() 아님.
+        // before(변경 전 이름)는 브랜치별로 다르다 — overwrite 는 조회 스냅샷이 아니라 잠금 시점 이름을 써야 정확하다.
+        int newVersion;
+        String before;
+        if (command.overwrite()) {
+            // 덮어쓰기(§5)는 충돌을 무시하고 무조건 저장한다. 비관 잠금으로 현재 이름·version 을 함께 고정한 뒤 그 값으로
+            // 조건부 UPDATE 를 돌린다 — 잠금이 커밋까지 유지돼 version 이 안 변하므로 항상 성공하고, 결과 version 을
+            // 재조회 없이 current+1 로 확정한다. 활동 로그 before 도 잠금 시점 이름이라야 초기 조회~잠금 사이
+            // 남이 바꾼 이름을 정확히 기록하고 변경 여부 판정도 어긋나지 않는다.
+            File locked = fileRepository.lockForOverwrite(command.fileId())
+                    .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND)); // 그새 삭제됨
+            before = locked.getName();
+            fileRepository.renameIfVersionMatches(command.fileId(), name, locked.getVersion());
+            newVersion = locked.getVersion() + 1;
+        } else {
+            // 조건부 UPDATE 가 성공하면 조회~저장 사이 version 이 안 변했다는 뜻이라 조회 시점 이름이 정확하다.
+            before = file.getName();
+            if (fileRepository.renameIfVersionMatches(command.fileId(), name, command.version()) == 0) {
+                throw new ConflictException(FileErrorCode.FILE_VERSION_CONFLICT);
+            }
+            newVersion = command.version() + 1;
+        }
+
+        // 활동 로그(문서명 수정 = MODIFY) — 실제로 이름이 바뀐 경우에만 발행한다 (§파일 rename).
+        if (!java.util.Objects.equals(before, name)) {
+            Long blockId = fileQueryPort.findBlockIdByFileId(command.fileId()).orElse(null);
+            publishActivity(ActivityLogAction.MODIFY, blockId, command.fileId(), name,
+                    command.requesterUserId(),
+                    List.of(new ActivityFieldChange("fileName", before, name)));
+        }
+
+        return new FileRenameResult(command.fileId(), name, newVersion);
     }
 
     @Override

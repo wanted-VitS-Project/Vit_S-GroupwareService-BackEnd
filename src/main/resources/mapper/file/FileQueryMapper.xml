@@ -87,7 +87,9 @@
                lv.uploader_department AS uploaderDepartment,
                lv.uploader_position  AS uploaderPosition,
                lv.completed_at       AS updatedAt,
-               f.deleted_at          AS deletedAt
+               f.deleted_at          AS deletedAt,
+               <!-- ⚠️ version 은 맨 끝. BlockFileProjection record 필드 순서와 어긋나면 값이 전부 밀린다(CONCURRENCY.md §6 trap 7). -->
+               f.version             AS version
           FROM block_file bf
           JOIN file f ON f.file_id = bf.file_id
           JOIN (

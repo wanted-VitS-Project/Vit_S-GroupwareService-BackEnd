@@ -42,4 +42,10 @@ public class FileJpaEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    // 낙관적 락 버전. ⛔ @Version 을 붙이지 않는다 — 이 프로젝트는 매퍼가 매번 detached 엔티티를 만들어
+    // JPA 가 merge 로 DB 최신 version 을 다시 읽어와 검사가 항상 통과한다(CONCURRENCY.md §6-1).
+    // 검사는 SpringDataFileRepository 의 조건부 UPDATE(WHERE version = ?)가 담당한다.
+    @Column(name = "version", nullable = false)
+    private int version;
 }
