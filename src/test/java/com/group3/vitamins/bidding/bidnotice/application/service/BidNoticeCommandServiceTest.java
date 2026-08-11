@@ -137,6 +137,52 @@ class BidNoticeCommandServiceTest {
     }
 
     @Test
+    @DisplayName("PATCH에서 첨부를 생략하면 기존 첨부를 유지한다")
+    void keepsAttachmentsWhenOmitted() {
+        ManualBidNotice existing = existingNoticeWithAttachments();
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existing));
+
+        service.update(updateDemandAgencyToNull());
+
+        assertThat(captureSavedNotice().getData().attachments())
+                .containsExactlyElementsOf(existing.getData().attachments());
+    }
+
+    @Test
+    @DisplayName("PATCH에서 빈 첨부 배열을 전달하면 기존 첨부를 모두 제거한다")
+    void removesAttachmentsWhenEmptyArrayProvided() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNoticeWithAttachments()));
+
+        service.update(updateAttachments(List.of()));
+
+        assertThat(captureSavedNotice().getData().attachments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("PATCH에서 첨부 배열을 전달하면 요청 순서로 전체 교체한다")
+    void replacesAttachmentsInRequestOrder() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNoticeWithAttachments()));
+        List<ManualBidNoticeAttachment> replacements = List.of(
+                new ManualBidNoticeAttachment(7, "기술제안서.pdf", "https://example.org/tech.pdf"),
+                new ManualBidNoticeAttachment(8, "가격제안서.pdf", "https://example.org/price.pdf")
+        );
+
+        service.update(updateAttachments(replacements));
+
+        List<ManualBidNoticeAttachment> savedAttachments =
+                captureSavedNotice().getData().attachments();
+        assertThat(savedAttachments)
+                .extracting(ManualBidNoticeAttachment::attachmentOrder)
+                .containsExactly(1, 2);
+        assertThat(savedAttachments)
+                .extracting(ManualBidNoticeAttachment::fileName)
+                .containsExactly("기술제안서.pdf", "가격제안서.pdf");
+    }
+
+    @Test
     @DisplayName("공용 외부 수집 공고는 직접 등록 수정 API로 변경할 수 없다")
     void rejectsEditingExternalNotice() {
         when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
@@ -214,6 +260,18 @@ class BidNoticeCommandServiceTest {
         );
     }
 
+    // 첨부 필드만 전달된 PATCH 명령을 만듭니다.
+    private UpdateManualBidNoticeCommand updateAttachments(
+            List<ManualBidNoticeAttachment> attachments
+    ) {
+        return new UpdateManualBidNoticeCommand(
+                NOTICE_ID,
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null, PatchField.of(attachments), USER_ID, "ADMIN"
+        );
+    }
+
     // 수정 테스트에 사용할 현재 회사 소유 직접 등록 공고를 복원합니다.
     private ManualBidNotice existingNotice() {
         return ManualBidNotice.restore(
@@ -251,6 +309,40 @@ class BidNoticeCommandServiceTest {
                 ANNOUNCED_AT,
                 null
         );
+    }
+
+    private ManualBidNotice existingNoticeWithAttachments() {
+        ManualBidNotice existing = existingNotice();
+        return ManualBidNotice.restore(
+                existing.getNoticeId(), existing.getOwnerCompanyId(),
+                existing.getCrawlSourceId(), existing.getExternalId(),
+                existing.getNoticeOrder(), existing.getManualDedupKey(),
+                new ManualBidNoticeData(
+                        existing.getData().noticeName(), existing.getData().noticeType(),
+                        existing.getData().noticeAgency(), existing.getData().demandAgency(),
+                        existing.getData().internationalBidType(), existing.getData().announcedAt(),
+                        existing.getData().bidStartAt(), existing.getData().bidDeadlineAt(),
+                        existing.getData().openingAt(), existing.getData().baseAmount(),
+                        existing.getData().estimatedAmount(), existing.getData().bidMethod(),
+                        existing.getData().contractMethod(),
+                        existing.getData().participationQualificationText(),
+                        existing.getData().regionLimitText(), existing.getData().businessLimitText(),
+                        existing.getData().jointContractAllowed(), existing.getData().jointContractText(),
+                        existing.getData().evaluationMethod(), existing.getData().sourceUrl(),
+                        List.of(new ManualBidNoticeAttachment(
+                                1, "기존첨부.pdf", "https://example.org/old.pdf"
+                        ))
+                ),
+                existing.getNoticeStatus(), existing.getCreatedBy(),
+                existing.getCreatedAt(), existing.getUpdatedAt()
+        );
+    }
+
+    private ManualBidNotice captureSavedNotice() {
+        ArgumentCaptor<ManualBidNotice> captor =
+                ArgumentCaptor.forClass(ManualBidNotice.class);
+        verify(commandPort).save(captor.capture());
+        return captor.getValue();
     }
 
     // 저장 전 도메인 객체에 DB 생성 ID가 반영된 상황을 모의합니다.

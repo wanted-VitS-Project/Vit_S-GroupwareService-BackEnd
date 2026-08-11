@@ -36,9 +36,9 @@ public record ManualBidNoticeResponse(
     }
 
     public record AttachmentResponse(
-            int attachmentOrder,
-            String fileName,
-            String sourceUrl
+            @Schema(description = "첨부 순번", example = "1") int attachmentOrder,
+            @Schema(description = "첨부파일 표시명", example = "제안요청서.pdf") String fileName,
+            @Schema(description = "첨부파일 공개 원문 URL", example = "https://example.org/notices/2026-001/rfp.pdf") String sourceUrl
     ) {
         private static AttachmentResponse from(
                 ManualBidNoticeResult.Attachment attachment

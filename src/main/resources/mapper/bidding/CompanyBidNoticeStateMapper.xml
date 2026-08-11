@@ -49,6 +49,9 @@
                 company_bid_notice_state.last_seen_at,
                 incoming.last_seen_at
             ),
-            updated_at = incoming.last_seen_at
+            updated_at = GREATEST(
+                company_bid_notice_state.last_seen_at,
+                incoming.last_seen_at
+            )
     </insert>
 </mapper>

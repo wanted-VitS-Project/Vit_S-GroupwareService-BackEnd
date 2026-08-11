@@ -17,6 +17,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Getter
 @Entity
@@ -46,6 +47,24 @@ public class CollectionConditionJpaEntity {
     @Column(name = "enabled", nullable = false)
     private boolean enabled;
 
+    @Column(name = "auto_collection_enabled", nullable = false)
+    private boolean autoCollectionEnabled;
+
+    @Column(name = "schedule_type", length = 20)
+    private String scheduleType;
+
+    @Column(name = "scheduled_time")
+    private LocalTime scheduledTime;
+
+    @Column(name = "timezone", length = 50)
+    private String timezone;
+
+    @Column(name = "next_run_at")
+    private LocalDateTime nextRunAt;
+
+    @Column(name = "last_scheduled_at")
+    private LocalDateTime lastScheduledAt;
+
     @Column(name = "last_success_at")
     private LocalDateTime lastSuccessAt;
 
@@ -72,6 +91,12 @@ public class CollectionConditionJpaEntity {
             String conditionName,
             JsonNode params,
             boolean enabled,
+            boolean autoCollectionEnabled,
+            String scheduleType,
+            LocalTime scheduledTime,
+            String timezone,
+            LocalDateTime nextRunAt,
+            LocalDateTime lastScheduledAt,
             LocalDateTime lastSuccessAt,
             Integer lastCollectedCount,
             String createdBy,
@@ -85,11 +110,31 @@ public class CollectionConditionJpaEntity {
         this.conditionName = conditionName;
         this.params = params;
         this.enabled = enabled;
+        this.autoCollectionEnabled = autoCollectionEnabled;
+        this.scheduleType = scheduleType;
+        this.scheduledTime = scheduledTime;
+        this.timezone = timezone;
+        this.nextRunAt = nextRunAt;
+        this.lastScheduledAt = lastScheduledAt;
         this.lastSuccessAt = lastSuccessAt;
         this.lastCollectedCount = lastCollectedCount;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.deletedAt = deletedAt;
+    }
+
+    public CollectionConditionJpaEntity(
+            Long crawlConditionId, Long companyId,
+            CollectionSourceJpaEntity crawlSource, String conditionName,
+            JsonNode params, boolean enabled, LocalDateTime lastSuccessAt,
+            Integer lastCollectedCount, String createdBy,
+            LocalDateTime createdAt, LocalDateTime updatedAt,
+            LocalDateTime deletedAt
+    ) {
+        this(crawlConditionId, companyId, crawlSource, conditionName, params,
+                enabled, false, null, null, null, null, null,
+                lastSuccessAt, lastCollectedCount, createdBy, createdAt,
+                updatedAt, deletedAt);
     }
 }

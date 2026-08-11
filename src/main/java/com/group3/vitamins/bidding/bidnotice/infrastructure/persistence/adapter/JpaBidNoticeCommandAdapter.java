@@ -90,17 +90,22 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
     @Override
     @Transactional
     public ManualBidNotice save(ManualBidNotice notice) {
+        BidNoticeJpaEntity saved = saveNotice(notice);
+        synchronizeAttachments(
+                saved.getBidNoticeId(),
+                notice.getData().attachments(),
+                resolveChangedAt(notice)
+        );
+        return restore(saved, notice.getData().attachments());
+    }
+
+    // 공고 UNIQUE 위반만 직접 등록 중복 오류로 변환하고 첨부 저장 오류와 구분합니다.
+    private BidNoticeJpaEntity saveNotice(ManualBidNotice notice) {
         try {
             BidNoticeJpaEntity entity = notice.getNoticeId() == null
                     ? BidNoticeJpaEntity.createManual(notice)
                     : loadAndUpdate(notice);
-            BidNoticeJpaEntity saved = noticeRepository.save(entity);
-            synchronizeAttachments(
-                    saved.getBidNoticeId(),
-                    notice.getData().attachments(),
-                    resolveChangedAt(notice)
-            );
-            return restore(saved, notice.getData().attachments());
+            return noticeRepository.saveAndFlush(entity);
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException(
                     BiddingErrorCode.BIDDING_MANUAL_NOTICE_DUPLICATED

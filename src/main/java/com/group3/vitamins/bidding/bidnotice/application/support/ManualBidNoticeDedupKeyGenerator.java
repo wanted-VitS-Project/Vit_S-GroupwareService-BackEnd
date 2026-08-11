@@ -20,12 +20,10 @@ public class ManualBidNoticeDedupKeyGenerator {
             LocalDateTime announcedAt,
             LocalDateTime bidDeadlineAt
     ) {
-        String canonical = String.join("|",
-                normalize(noticeName),
-                normalize(noticeAgency),
-                announcedAt.toString(),
-                bidDeadlineAt.toString()
-        );
+        String canonical = encode(normalize(noticeName))
+                + encode(normalize(noticeAgency))
+                + encode(announcedAt.toString())
+                + encode(bidDeadlineAt.toString());
 
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -42,5 +40,10 @@ public class ManualBidNoticeDedupKeyGenerator {
         return value.trim()
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
+    }
+
+    // 값의 길이와 본문을 함께 기록해 필드 안 구분자가 중복 키 경계를 흐리지 않게 합니다.
+    private String encode(String value) {
+        return value.length() + ":" + value;
     }
 }

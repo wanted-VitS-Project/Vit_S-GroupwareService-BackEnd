@@ -25,6 +25,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 
 import java.time.LocalDate;
@@ -105,7 +106,7 @@ public class BidNoticeController {
     })
     @PostMapping
     public ResponseEntity<ApiResponse<ManualBidNoticeResponse>> create(
-            @RequestBody CreateManualBidNoticeRequest request,
+            @Valid @RequestBody CreateManualBidNoticeRequest request,
             Authentication authentication
     ) {
         ManualBidNoticeResponse response = ManualBidNoticeResponse.from(
@@ -116,7 +117,7 @@ public class BidNoticeController {
         );
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(
+                .body(ApiResponse.created(
                         "입찰 공고 직접 등록 성공",
                         response
                 ));

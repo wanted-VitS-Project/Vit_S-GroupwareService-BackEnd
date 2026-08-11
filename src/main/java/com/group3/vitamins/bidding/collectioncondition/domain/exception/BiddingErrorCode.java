@@ -52,6 +52,11 @@ public enum BiddingErrorCode implements ErrorCode {
             "입찰 공고 수집 실행을 찾을 수 없습니다."
     ),
 
+    BIDDING_INVALID_COLLECTION_SCHEDULE(
+            "BIDDING_INVALID_COLLECTION_SCHEDULE",
+            "자동 수집 일정이 올바르지 않습니다."
+    ),
+
     BIDDING_INVALID_NOTICE_QUERY(
             "BIDDING_INVALID_NOTICE_QUERY",
             "입찰 공고 조회 조건이 올바르지 않습니다."
