@@ -5,6 +5,9 @@ import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeTyp
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
+import java.time.LocalTime;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
+import jakarta.validation.constraints.NotNull;
 
 public record CreateCollectionConditionRequest(
 
@@ -24,7 +27,20 @@ public record CreateCollectionConditionRequest(
         CollectionConditionFilterRequest filters,
 
         @Schema(description = "수집 조건 활성화 여부", example = "true")
-        Boolean isActive
+        Boolean isActive,
+
+        @Schema(description = "자동 수집 사용 여부", example = "true")
+        @NotNull(message = "BIDDING_INVALID_COLLECTION_SCHEDULE|자동 수집 사용 여부는 필수입니다.")
+        Boolean autoCollectionEnabled,
+
+        @Schema(description = "자동 수집 주기", example = "WEEKDAYS")
+        CollectionScheduleType scheduleType,
+
+        @Schema(description = "자동 수집 실행 시각", example = "09:00")
+        LocalTime scheduledTime,
+
+        @Schema(description = "자동 수집 기준 시간대", example = "Asia/Seoul")
+        String timezone
 ) {
 
     // HTTP 요청과 현재 인증 사용자를 등록 Command로 변환합니다.
@@ -35,6 +51,10 @@ public record CreateCollectionConditionRequest(
                 noticeTypes,
                 filters == null ? null : filters.toDomain(),
                 isActive,
+                autoCollectionEnabled,
+                scheduleType,
+                scheduledTime,
+                timezone,
                 userId,
                 role
         );
