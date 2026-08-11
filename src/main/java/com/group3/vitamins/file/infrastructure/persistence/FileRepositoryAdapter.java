@@ -32,8 +32,8 @@ public class FileRepositoryAdapter implements FileRepository {
     }
 
     @Override
-    public Optional<Integer> lockCurrentVersion(Long fileId) {
-        return springDataRepository.findForUpdate(fileId).map(FileJpaEntity::getVersion);
+    public Optional<File> lockForOverwrite(Long fileId) {
+        return springDataRepository.findForUpdate(fileId).map(FilePersistenceMapper::toDomain);
     }
 
     @Override

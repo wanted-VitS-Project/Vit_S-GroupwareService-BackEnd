@@ -235,19 +235,27 @@ class FileCommandServiceTest {
         }
 
         @Test
-        @DisplayName("덮어쓰기는 비관 잠금으로 현재 버전을 고정해 무조건 저장하고, current+1 을 돌려준다")
-        void overwriteForcesUnconditional() {
-            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+        @DisplayName("덮어쓰기는 잠금 시점 이름·버전을 쓴다 — 초기 조회 이후 남이 바꾼 이름을 before 로 기록하고 current+1 을 돌려준다")
+        void overwriteUsesLockedNameAndVersion() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile())); // 초기 조회 이름 "제안서"·version 3
             stubEditable();
-            // 클라는 낡은 1 을 보냈지만, 잠금으로 읽은 DB 현재값은 7 이다
-            when(fileRepository.lockCurrentVersion(FILE_ID)).thenReturn(Optional.of(7));
+            // 초기 조회~잠금 사이 남이 "제안서_B" 로 바꿔 version 이 7 이 됐다
+            when(fileRepository.lockForOverwrite(FILE_ID))
+                    .thenReturn(Optional.of(File.restore(FILE_ID, PROJECT_ID, "제안서_B", USER, null, 7)));
             when(fileRepository.renameIfVersionMatches(FILE_ID, "강제", 7)).thenReturn(1);
 
+            // 클라가 낡은 1 을 보냈어도 잠근 현재값 7 로 저장, 응답은 8
             FileRenameResult result = service.rename(cmd("강제", 1, true));
 
-            assertThat(result.version()).isEqualTo(8); // 잠근 현재값(7) + 1 — 클라값(1)과 무관
-            // 클라가 보낸 1 이 아니라 잠근 현재값 7 로 저장한다
-            verify(fileRepository).renameIfVersionMatches(FILE_ID, "강제", 7);
+            assertThat(result.version()).isEqualTo(8);
+            verify(fileRepository).renameIfVersionMatches(FILE_ID, "강제", 7); // 클라값(1) 아님
+
+            // 활동 로그 before 는 초기 조회("제안서")가 아니라 잠금 시점("제안서_B")
+            ActivityOccurredEvent event = captureEvent();
+            assertThat(event.changes()).singleElement().satisfies(c -> {
+                assertThat(c.beforeValue()).isEqualTo("제안서_B");
+                assertThat(c.afterValue()).isEqualTo("강제");
+            });
         }
 
         @Test
@@ -255,7 +263,7 @@ class FileCommandServiceTest {
         void overwriteGoneWhileLocking() {
             when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
             stubEditable();
-            when(fileRepository.lockCurrentVersion(FILE_ID)).thenReturn(Optional.empty());
+            when(fileRepository.lockForOverwrite(FILE_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.rename(cmd("강제", 1, true)))
                     .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
@@ -271,7 +279,7 @@ class FileCommandServiceTest {
                     .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
             assertThatThrownBy(() -> service.rename(cmd("새이름", 0, true)))
                     .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
-            verify(fileRepository, never()).lockCurrentVersion(any());
+            verify(fileRepository, never()).lockForOverwrite(any());
             verify(fileRepository, never()).renameIfVersionMatches(any(), any(), anyInt());
         }
     }

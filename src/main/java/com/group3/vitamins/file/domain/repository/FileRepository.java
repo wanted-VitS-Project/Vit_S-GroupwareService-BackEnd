@@ -22,10 +22,11 @@ public interface FileRepository {
     int renameIfVersionMatches(Long fileId, String name, int expectedVersion);
 
     /**
-     * 덮어쓰기(§5)용 — 문서 행을 비관 잠금하고 현재 version 을 돌려준다(삭제/부재면 empty).
-     * 호출자는 이 version 으로 조건부 UPDATE 를 돌리고 결과 version 을 {@code 현재+1} 로 확정한다.
+     * 덮어쓰기(§5)용 — 문서 행을 비관 잠금하고 잠금 시점의 문서(현재 이름·version)를 돌려준다(삭제/부재면 empty).
+     * 호출자는 이 version 으로 조건부 UPDATE 를 돌려 결과 version 을 {@code 현재+1} 로 확정하고,
+     * 활동 로그의 변경 전 이름도 조회 스냅샷이 아니라 이 잠금 시점 이름을 쓴다(초기 조회~잠금 사이 이름이 바뀌었을 수 있다).
      */
-    Optional<Integer> lockCurrentVersion(Long fileId);
+    Optional<File> lockForOverwrite(Long fileId);
 
     /** 삭제 여부와 무관하게 문서를 찾는다(복구·상태 판정은 서비스가 deletedAt 으로 한다). */
     Optional<File> findById(Long fileId);
