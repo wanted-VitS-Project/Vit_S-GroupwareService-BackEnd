@@ -36,9 +36,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * upload → presignViewUrl → 그 URL 로 HTTP GET → 바이트가 실제로 서빙되는지까지.
  *
  * <p>CI 처럼 MinIO 가 없는 환경에서는 자동으로 건너뛴다({@code MINIO_ENDPOINT} 환경변수가 있을 때만 실행).
+ * 엔드포인트·자격증명은 <b>전부 환경변수로만</b> 주입한다 — PUBLIC 레포라 실제 값·기본 자격증명을 코드/문서에 두지 않는다(§6).
  * 실행 예:
  * <pre>
- *   MINIO_ENDPOINT=http://127.0.0.1:19000 S3_BUCKET_NAME=vitamins-verify \
+ *   MINIO_ENDPOINT=&lt;minio-url&gt; MINIO_ACCESS_KEY=&lt;key&gt; MINIO_SECRET_KEY=&lt;secret&gt; S3_BUCKET_NAME=&lt;bucket&gt; \
  *   ./gradlew test --tests '*S3ProfileImageStorageAdapterIT' -x jacocoTestReport
  * </pre>
  */
@@ -50,13 +51,15 @@ class S3ProfileImageStorageAdapterIT {
 
     private S3Client s3Client;
     private S3ProfileImageStorageAdapter adapter;
+    private String bucket;
 
     @BeforeEach
     void setUp() {
-        String endpoint = System.getenv("MINIO_ENDPOINT");
-        String bucket = envOr("S3_BUCKET_NAME", "vitamins-verify");
-        String accessKey = envOr("MINIO_ACCESS_KEY", "minioadmin");
-        String secretKey = envOr("MINIO_SECRET_KEY", "minioadmin123");
+        // 엔드포인트·자격증명은 환경변수 필수 — 기본값(특히 자격증명)을 코드에 두지 않는다(PUBLIC 레포 §6).
+        String endpoint = requireEnv("MINIO_ENDPOINT");
+        String accessKey = requireEnv("MINIO_ACCESS_KEY");
+        String secretKey = requireEnv("MINIO_SECRET_KEY");
+        bucket = envOr("S3_BUCKET_NAME", "vitamins-it");
 
         StaticCredentialsProvider creds = StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(accessKey, secretKey));
@@ -113,7 +116,7 @@ class S3ProfileImageStorageAdapterIT {
         String key = adapter.upload(USER_ID, file, "png");
 
         byte[] stored = s3Client.getObjectAsBytes(
-                GetObjectRequest.builder().bucket(envOr("S3_BUCKET_NAME", "vitamins-verify")).key(key).build())
+                GetObjectRequest.builder().bucket(bucket).key(key).build())
                 .asByteArray();
         BufferedImage image = read(stored);
         assertThat(image.getWidth()).isLessThanOrEqualTo(512);
@@ -159,5 +162,13 @@ class S3ProfileImageStorageAdapterIT {
     private static String envOr(String key, String fallback) {
         String v = System.getenv(key);
         return v == null || v.isBlank() ? fallback : v;
+    }
+
+    private static String requireEnv(String key) {
+        String v = System.getenv(key);
+        if (v == null || v.isBlank()) {
+            throw new IllegalStateException("이 통합 테스트는 환경변수 " + key + " 가 필요합니다 (PUBLIC 레포라 기본값을 두지 않음).");
+        }
+        return v;
     }
 }

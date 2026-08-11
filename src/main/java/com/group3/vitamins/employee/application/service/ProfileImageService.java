@@ -32,7 +32,18 @@ public class ProfileImageService implements ProfileImageUseCase {
         String extension = profileImageValidator.validate(file);
         // 교체여도 이전 S3 객체는 지우지 않는다(소프트 정책, 이미지 도메인과 통일 — 하드삭제 정책 대기).
         String key = profileImageStoragePort.upload(userId, file, extension);
-        employeeRepository.updateProfileImageKey(userId, key);
+        try {
+            employeeRepository.updateProfileImageKey(userId, key);
+        } catch (RuntimeException e) {
+            // 업로드는 됐는데 DB 반영(saveAndFlush)이 실패하면 방금 올린 새 객체는 참조가 없어 고아가 된다 →
+            // 보상 삭제. (기존 사진을 안 지우는 소프트 정책과는 무관한 '실패 경로'다.) 삭제가 또 실패해도 원인 예외를 던진다.
+            try {
+                profileImageStoragePort.delete(key);
+            } catch (RuntimeException cleanupFailure) {
+                log.error("프로필 사진 DB 반영 실패 후 S3 보상 삭제도 실패 - userId={}, key={}", userId, key, cleanupFailure);
+            }
+            throw e;
+        }
         log.info("프로필 사진 등록/변경 - userId={}", userId);
         return ProfileImagePath.of(userId);
     }

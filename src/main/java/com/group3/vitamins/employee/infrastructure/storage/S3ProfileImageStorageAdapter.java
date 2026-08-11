@@ -83,6 +83,12 @@ public class S3ProfileImageStorageAdapter implements ProfileImageStoragePort {
     }
 
     @Override
+    public void delete(String storageKey) {
+        s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(storageKey).build());
+        log.info("프로필 사진 S3 객체 삭제 - key={}", storageKey);
+    }
+
+    @Override
     public String presignViewUrl(String storageKey) {
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
                 .signatureDuration(VIEW_URL_DURATION)

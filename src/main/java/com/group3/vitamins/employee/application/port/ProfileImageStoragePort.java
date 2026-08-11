@@ -22,4 +22,10 @@ public interface ProfileImageStoragePort {
 
     /** 저장된 키로 한시적으로 열리는 조회용 URL 을 발급한다(서빙 API 의 302 redirect 대상). */
     String presignViewUrl(String storageKey);
+
+    /**
+     * 저장소에서 객체를 지운다. <b>실패 경로 보상용</b> — 업로드는 됐는데 DB 키 반영이 실패해
+     * 참조가 없어진 새 객체(고아)를 정리할 때 쓴다. 교체 시 이전 사진을 지우는 용도가 아니다(소프트 정책).
+     */
+    void delete(String storageKey);
 }

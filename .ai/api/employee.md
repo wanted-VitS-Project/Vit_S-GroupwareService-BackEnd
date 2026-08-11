@@ -393,7 +393,7 @@ Cache-Control: no-store, private
 
 | 코드 | code | 설명 |
 |---|---|---|
-| 200 | – | 이미지 응답 (또는 302 redirect) |
+| 302 | – | presigned URL 로 redirect (`Location` 헤더, 성공) |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 404 | `EMP_PROFILE_IMAGE_NOT_FOUND` | 해당 사원의 프로필 사진이 없음 |
 | 404 | `EMP_NOT_FOUND` | 사원 없음 |

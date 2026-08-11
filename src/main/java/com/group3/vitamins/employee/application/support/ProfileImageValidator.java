@@ -7,10 +7,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Set;
 
 /**
@@ -26,6 +29,9 @@ public class ProfileImageValidator {
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
     private static final long MAX_SIZE_BYTES = 5L * 1024 * 1024;
+    // 디코딩 폭탄 방어 — 바이트 상한(5MB)은 압축 해제 후 픽셀 메모리를 못 막는다(작은 파일이 수억 픽셀로 팽창 가능).
+    // 실제 디코딩 전에 헤더의 가로×세로만 읽어 픽셀 수를 제한한다. 50MP 는 고화소 휴대폰 사진(48MP)까지는 통과.
+    private static final long MAX_PIXELS = 50_000_000L;
 
     /**
      * 업로드 파일을 검증한다. 업로드를 시작하기 <b>전에</b> 전부 확인한다.
@@ -74,10 +80,33 @@ public class ProfileImageValidator {
         }
     }
 
+    /**
+     * 실제 디코딩까지 확인하되, <b>디코딩 전에</b> 헤더의 가로×세로로 픽셀 수를 먼저 검사해 디코딩 폭탄을 막는다.
+     * {@code ImageIO.read} 를 바로 부르면 헤더가 주장하는 크기대로 전체를 메모리에 펼쳐 OOM 을 유발할 수 있다.
+     */
     private boolean isDecodableImage(byte[] content) {
-        try {
-            return ImageIO.read(new ByteArrayInputStream(content)) != null;
-        } catch (IOException e) {
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(content))) {
+            if (iis == null) {
+                return false;
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                return false;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(iis);
+                long pixels = (long) reader.getWidth(0) * reader.getHeight(0);
+                if (pixels > MAX_PIXELS) {
+                    log.warn("프로필 사진 픽셀 수 상한 초과(디코딩 폭탄 의심) - pixels={}", pixels);
+                    return false;
+                }
+                return reader.read(0) != null;
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException | RuntimeException e) {
+            // getWidth/read 가 던지는 IOException·손상 이미지의 런타임 예외 모두 '디코딩 불가'로 본다.
             return false;
         }
     }
