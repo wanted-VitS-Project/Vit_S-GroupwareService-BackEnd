@@ -36,7 +36,7 @@ class ApprovalFileCatalogAdapterTest {
     void marksTrashedFileButKeepsMetadata() {
         given(fileVersionRepository.findById(FILE_VERSION_ID)).willReturn(Optional.of(fileVersion()));
         given(fileRepository.findById(FILE_ID)).willReturn(Optional.of(
-                File.restore(FILE_ID, 5L, "제안서", "EMP001", LocalDateTime.of(2026, 8, 10, 18, 0))));
+                File.restore(FILE_ID, 5L, "제안서", "EMP001", LocalDateTime.of(2026, 8, 10, 18, 0), 0)));
 
         FileVersionSummary summary = adapter.findFileVersion(FILE_VERSION_ID).orElseThrow();
 
@@ -52,7 +52,7 @@ class ApprovalFileCatalogAdapterTest {
     void marksAliveFileAsNotDeleted() {
         given(fileVersionRepository.findById(FILE_VERSION_ID)).willReturn(Optional.of(fileVersion()));
         given(fileRepository.findById(FILE_ID)).willReturn(Optional.of(
-                File.restore(FILE_ID, 5L, "제안서", "EMP001", null)));
+                File.restore(FILE_ID, 5L, "제안서", "EMP001", null, 0)));
 
         assertThat(adapter.findFileVersion(FILE_VERSION_ID).orElseThrow().fileDeleted()).isFalse();
     }

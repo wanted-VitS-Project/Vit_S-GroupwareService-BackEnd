@@ -52,7 +52,7 @@ class BlockApprovalDeletionPropagationTest {
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 1, 9, 0);
         Block block = Block.restore(
                 10L, 20L, "구매 품의", BlockType.APPROVAL, 100L,
-                null, 0, 1, 0, "EMP001", createdAt, createdAt, null);
+                null, 0, 1, 0, 0, "EMP001", createdAt, createdAt, null);
         when(blockRepository.findById(10L)).thenReturn(Optional.of(block));
         when(stepAccessUseCase.requireEditable(20L, "EMP001", "USER"))
                 .thenReturn(new StepAccessUseCase.StepAccessView(20L, 30L, MemberPermission.EDITOR));

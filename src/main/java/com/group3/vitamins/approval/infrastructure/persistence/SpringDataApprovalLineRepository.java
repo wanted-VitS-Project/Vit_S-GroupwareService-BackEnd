@@ -61,7 +61,7 @@ public interface SpringDataApprovalLineRepository extends JpaRepository<Approval
      * <p>하드 삭제였다가 전환했다. {@code approval_line}은 하드 대상인 「연결 행 7종」이 아니고
      * 의견·처리시각이 담긴 실물이라 D-1이 적용된다. 치환된 이전 결재선은 행으로 남고, 활성 조회는
      * {@code deletedAt IS NULL}로 새 결재선만 본다. 같은 순번을 다시 넣을 수 있게 UNIQUE 를 낮춘
-     * 마이그레이션(`V20260810220000`)이 선행 조건이다.
+     * 마이그레이션(`V20260811161000`)이 선행 조건이다.
      */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ApprovalLineJpaEntity l SET l.deletedAt = CURRENT_TIMESTAMP "

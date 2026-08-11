@@ -105,7 +105,7 @@ class ApprovalDeletionPersistenceTest {
                 ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP002", 1));
 
         lineRepository.softDeleteAllByApprovalRevisionId(revision.getApprovalRevisionId());
-        // 같은 sequence_no 로 다시 넣는다 — UNIQUE 를 낮췄으니 통과해야 한다(V20260810220000)
+        // 같은 sequence_no 로 다시 넣는다 — UNIQUE 를 낮췄으니 통과해야 한다(V20260811161000)
         ApprovalLineJpaEntity after = lineRepository.saveAndFlush(
                 ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP003", 1));
         entityManager.clear();
