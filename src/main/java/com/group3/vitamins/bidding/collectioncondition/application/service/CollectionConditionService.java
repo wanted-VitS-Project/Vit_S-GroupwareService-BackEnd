@@ -14,18 +14,23 @@ import com.group3.vitamins.bidding.collectioncondition.domain.repository.Collect
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.DayOfWeek;
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
 
 @Service
 @Transactional
-@RequiredArgsConstructor
 public class CollectionConditionService implements CollectionConditionUseCase {
 
     private static final int MAX_SOURCE_CODE_LENGTH = 30;
@@ -34,11 +39,43 @@ public class CollectionConditionService implements CollectionConditionUseCase {
     private static final int MAX_KEYWORD_LENGTH = 100;
     private static final int MAX_REGION_CODE_LENGTH = 20;
     private static final int MAX_INDUSTRY_CODE_LENGTH = 30;
+    private static final String SUPPORTED_TIMEZONE = "Asia/Seoul";
+    private static final ZoneId SEOUL_ZONE = ZoneId.of(SUPPORTED_TIMEZONE);
+    private static final Set<LocalTime> SUPPORTED_SCHEDULE_TIMES = Set.of(
+            LocalTime.of(9, 0), LocalTime.of(13, 0), LocalTime.of(18, 0)
+    );
 
     private final CollectionConditionRepository conditionRepository;
     private final CollectionSourceRepository sourceRepository;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final BiddingAccessPolicy biddingAccessPolicy;
+    private final Clock clock;
+
+    @Autowired
+    public CollectionConditionService(
+            CollectionConditionRepository conditionRepository,
+            CollectionSourceRepository sourceRepository,
+            CurrentCompanyIdProvider currentCompanyIdProvider,
+            BiddingAccessPolicy biddingAccessPolicy
+    ) {
+        this(conditionRepository, sourceRepository, currentCompanyIdProvider,
+                biddingAccessPolicy, Clock.system(SEOUL_ZONE));
+    }
+
+    // 고정 Clock으로 시간대 경계 조건을 재현할 수 있게 테스트 진입점을 제공합니다.
+    CollectionConditionService(
+            CollectionConditionRepository conditionRepository,
+            CollectionSourceRepository sourceRepository,
+            CurrentCompanyIdProvider currentCompanyIdProvider,
+            BiddingAccessPolicy biddingAccessPolicy,
+            Clock clock
+    ) {
+        this.conditionRepository = conditionRepository;
+        this.sourceRepository = sourceRepository;
+        this.currentCompanyIdProvider = currentCompanyIdProvider;
+        this.biddingAccessPolicy = biddingAccessPolicy;
+        this.clock = clock;
+    }
 
     // 현재 회사가 소유한 수집 조건 목록만 조회합니다.
     @Override
@@ -73,6 +110,7 @@ public class CollectionConditionService implements CollectionConditionUseCase {
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         CollectionSource source = getAvailableSource(command.sourceCode());
 
+        LocalDateTime now = LocalDateTime.now(clock.withZone(SEOUL_ZONE));
         CollectionCondition condition = CollectionCondition.create(
                 companyId,
                 source.sourceCode(),
@@ -80,8 +118,14 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                 command.noticeTypes(),
                 command.filters(),
                 command.active(),
+                command.autoCollectionEnabled(),
+                command.scheduleType(),
+                command.scheduledTime(),
+                command.timezone(),
+                calculateNextRunAt(command.active(), command.autoCollectionEnabled(),
+                        command.scheduleType(), command.scheduledTime(), now),
                 command.userId(),
-                LocalDateTime.now()
+                now
         );
 
         CollectionCondition saved = conditionRepository.save(condition);
@@ -104,12 +148,19 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                         BiddingErrorCode.BIDDING_COLLECTION_CONDITION_NOT_FOUND
                 ));
 
+        LocalDateTime now = LocalDateTime.now(clock.withZone(SEOUL_ZONE));
         condition.update(
                 command.conditionName().trim(),
                 command.noticeTypes(),
                 command.filters(),
                 command.active(),
-                LocalDateTime.now()
+                command.autoCollectionEnabled(),
+                command.scheduleType(),
+                command.scheduledTime(),
+                command.timezone(),
+                calculateNextRunAt(command.active(), command.autoCollectionEnabled(),
+                        command.scheduleType(), command.scheduledTime(), now),
+                now
         );
 
         CollectionCondition saved = conditionRepository.save(condition);
@@ -137,6 +188,8 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                 command.noticeTypes(),
                 command.filters()
         );
+        validateSchedule(command.active(), command.autoCollectionEnabled(),
+                command.scheduleType(), command.scheduledTime(), command.timezone());
     }
 
     // 수정 요청의 식별자와 수집 조건을 검증합니다.
@@ -155,6 +208,61 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                 command.conditionName(),
                 command.noticeTypes(),
                 command.filters()
+        );
+        validateSchedule(command.active(), command.autoCollectionEnabled(),
+                command.scheduleType(), command.scheduledTime(), command.timezone());
+    }
+
+    // 자동 수집 활성 여부와 주기·시각·시간대 조합을 계약대로 검증합니다.
+    private void validateSchedule(
+            Boolean active, Boolean autoEnabled,
+            CollectionScheduleType scheduleType, LocalTime scheduledTime,
+            String timezone
+    ) {
+        if (autoEnabled == null) {
+            throw invalidSchedule();
+        }
+        boolean scheduleValuesMissing = scheduleType == null
+                && scheduledTime == null && timezone == null;
+        if (!autoEnabled) {
+            if (!scheduleValuesMissing) {
+                throw invalidSchedule();
+            }
+            return;
+        }
+        if (!Boolean.TRUE.equals(active)
+                || scheduleType == null
+                || !SUPPORTED_SCHEDULE_TIMES.contains(scheduledTime)
+                || !SUPPORTED_TIMEZONE.equals(timezone)) {
+            throw invalidSchedule();
+        }
+    }
+
+    // 등록·수정 시점 이후의 첫 자동 실행 시각을 계산합니다.
+    private LocalDateTime calculateNextRunAt(
+            Boolean active, Boolean autoEnabled,
+            CollectionScheduleType scheduleType, LocalTime scheduledTime,
+            LocalDateTime now
+    ) {
+        if (!Boolean.TRUE.equals(active) || !Boolean.TRUE.equals(autoEnabled)) {
+            return null;
+        }
+        LocalDateTime candidate = now.toLocalDate().atTime(scheduledTime);
+        if (!candidate.isAfter(now)) {
+            candidate = candidate.plusDays(1);
+        }
+        if (scheduleType == CollectionScheduleType.WEEKDAYS) {
+            while (candidate.getDayOfWeek() == DayOfWeek.SATURDAY
+                    || candidate.getDayOfWeek() == DayOfWeek.SUNDAY) {
+                candidate = candidate.plusDays(1);
+            }
+        }
+        return candidate;
+    }
+
+    private ValidationException invalidSchedule() {
+        return new ValidationException(
+                BiddingErrorCode.BIDDING_INVALID_COLLECTION_SCHEDULE
         );
     }
 

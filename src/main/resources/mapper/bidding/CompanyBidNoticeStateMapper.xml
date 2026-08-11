@@ -32,17 +32,26 @@
         AS incoming
         ON DUPLICATE KEY UPDATE
             first_seen_run_id = IF(
-                incoming.first_seen_at &lt; first_seen_at,
+                incoming.first_seen_at &lt; company_bid_notice_state.first_seen_at,
                 incoming.first_seen_run_id,
-                first_seen_run_id
+                company_bid_notice_state.first_seen_run_id
             ),
-            first_seen_at = LEAST(first_seen_at, incoming.first_seen_at),
+            first_seen_at = LEAST(
+                company_bid_notice_state.first_seen_at,
+                incoming.first_seen_at
+            ),
             last_seen_run_id = IF(
-                incoming.last_seen_at > last_seen_at,
+                incoming.last_seen_at > company_bid_notice_state.last_seen_at,
                 incoming.last_seen_run_id,
-                last_seen_run_id
+                company_bid_notice_state.last_seen_run_id
             ),
-            last_seen_at = GREATEST(last_seen_at, incoming.last_seen_at),
-            updated_at = GREATEST(last_seen_at, incoming.last_seen_at)
+            last_seen_at = GREATEST(
+                company_bid_notice_state.last_seen_at,
+                incoming.last_seen_at
+            ),
+            updated_at = GREATEST(
+                company_bid_notice_state.last_seen_at,
+                incoming.last_seen_at
+            )
     </insert>
 </mapper>

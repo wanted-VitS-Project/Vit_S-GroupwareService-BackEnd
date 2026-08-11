@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
 
 @Tag(
         name = "Bidding - 입찰 공고 수집 조건",
@@ -98,7 +99,7 @@ public class CollectionConditionController {
     })
     @PostMapping
     public ResponseEntity<ApiResponse<CollectionConditionResponse>> create(
-            @RequestBody CreateCollectionConditionRequest request,
+            @Valid @RequestBody CreateCollectionConditionRequest request,
             Authentication authentication
     ) {
         CollectionConditionResult result =
@@ -146,7 +147,7 @@ public class CollectionConditionController {
     public ResponseEntity<ApiResponse<CollectionConditionResponse>> update(
             @Parameter(description = "수정할 수집 조건 ID")
             @PathVariable Long conditionId,
-            @RequestBody UpdateCollectionConditionRequest request,
+            @Valid @RequestBody UpdateCollectionConditionRequest request,
             Authentication authentication
     ) {
         CollectionConditionResult result =
