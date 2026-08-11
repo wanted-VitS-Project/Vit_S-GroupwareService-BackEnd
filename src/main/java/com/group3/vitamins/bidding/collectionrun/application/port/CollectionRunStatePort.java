@@ -29,6 +29,7 @@ public interface CollectionRunStatePort {
     // 현재 처리 시도와 일치할 때만 실행을 완료합니다.
     boolean complete(
             Long runId,
+            Long conditionId,
             String attemptId,
             CollectionRunStatus finalStatus,
             int collectedCount,

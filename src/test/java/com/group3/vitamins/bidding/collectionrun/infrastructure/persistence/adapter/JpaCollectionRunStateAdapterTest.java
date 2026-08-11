@@ -6,6 +6,7 @@ import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatu
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.entity.CollectionRunJpaEntity;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.mapper.CollectionRunConditionSnapshotJsonMapper;
 import com.group3.vitamins.bidding.collectionrun.infrastructure.persistence.repository.SpringDataCollectionRunRepository;
+import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.repository.SpringDataCollectionConditionRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,11 +27,14 @@ class JpaCollectionRunStateAdapterTest {
 
     private static final Long RUN_ID = 1L;
     private static final Long COMPANY_ID = 10L;
+    private static final Long CONDITION_ID = 20L;
     private static final String ATTEMPT_ID = "attempt-001";
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 10, 12, 0);
 
     @Mock
     private SpringDataCollectionRunRepository repository;
+    @Mock
+    private SpringDataCollectionConditionRepository conditionRepository;
     @Mock
     private CollectionRunConditionSnapshotJsonMapper snapshotMapper;
     @InjectMocks
@@ -82,15 +86,33 @@ class JpaCollectionRunStateAdapterTest {
                 RUN_ID, ATTEMPT_ID, CollectionRunStatus.COMPLETED,
                 10, 6, 3, 1, NOW, CollectionRunStatus.PROCESSING
         )).thenReturn(1);
+        when(conditionRepository.recordCollectionSuccess(CONDITION_ID, NOW, 10))
+                .thenReturn(1);
 
         assertThat(adapter.complete(
-                RUN_ID, ATTEMPT_ID, CollectionRunStatus.COMPLETED,
+                RUN_ID, CONDITION_ID, ATTEMPT_ID, CollectionRunStatus.COMPLETED,
                 10, 6, 3, 1, NOW
         )).isTrue();
         assertThatThrownBy(() -> adapter.complete(
-                RUN_ID, ATTEMPT_ID, CollectionRunStatus.FAILED,
+                RUN_ID, CONDITION_ID, ATTEMPT_ID, CollectionRunStatus.FAILED,
                 0, 0, 0, 0, NOW
         )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("조건 성공 기록이 실패하면 완료 처리도 실패한다")
+    void failsCompletionWhenConditionResultCannotBeRecorded() {
+        when(repository.completeRun(
+                RUN_ID, ATTEMPT_ID, CollectionRunStatus.COMPLETED,
+                10, 6, 3, 1, NOW, CollectionRunStatus.PROCESSING
+        )).thenReturn(1);
+        when(conditionRepository.recordCollectionSuccess(CONDITION_ID, NOW, 10))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> adapter.complete(
+                RUN_ID, CONDITION_ID, ATTEMPT_ID, CollectionRunStatus.COMPLETED,
+                10, 6, 3, 1, NOW
+        )).isInstanceOf(IllegalStateException.class);
     }
 
     @Test

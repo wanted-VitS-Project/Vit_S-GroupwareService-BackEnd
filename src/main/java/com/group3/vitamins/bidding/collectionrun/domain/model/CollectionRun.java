@@ -27,38 +27,7 @@ public record CollectionRun(
         LocalDateTime deletedAt
 ) {
 
-    // 사용자의 수동 수집 요청을 처리 대기 상태로 생성합니다.
-    public static CollectionRun createPending(
-            Long conditionId,
-            CollectionRunConditionSnapshot conditionSnapshot,
-            String requestedBy,
-            LocalDateTime now
-    ) {
-        Objects.requireNonNull(conditionSnapshot, "수집 조건 스냅샷은 필수입니다.");
-        return new CollectionRun(
-                null,
-                conditionId,
-                conditionSnapshot,
-                CollectionRunTriggerType.MANUAL,
-                CollectionRunStatus.PENDING,
-                null,
-                0,
-                null,
-                null,
-                now,
-                null,
-                0,
-                0,
-                0,
-                0,
-                null,
-                null,
-                requestedBy,
-                now,
-                now,
-                null
-        );
-    }
+
 
     // Worker가 실행을 점유하면 처리 시도와 lease 정보를 함께 고정합니다.
     public CollectionRun startProcessing(
@@ -86,7 +55,59 @@ public record CollectionRun(
                 processingStartedAt
         );
     }
+    // 수동 수집 실행을 대기 상태로 생성합니다.
+    public static CollectionRun createPending(
+            Long conditionId,
+            CollectionRunConditionSnapshot conditionSnapshot,
+            String requestedBy,
+            LocalDateTime now
+    ) {
+        return createPending(
+                conditionId,
+                conditionSnapshot,
+                CollectionRunTriggerType.MANUAL,
+                requestedBy,
+                now
+        );
+    }
 
+    // 지정한 실행 유형으로 수집 실행을 대기 상태로 생성합니다.
+    public static CollectionRun createPending(
+            Long conditionId,
+            CollectionRunConditionSnapshot conditionSnapshot,
+            CollectionRunTriggerType triggerType,
+            String requestedBy,
+            LocalDateTime now
+    ) {
+        Objects.requireNonNull(conditionId, "수집 조건 ID는 필수입니다.");
+        Objects.requireNonNull(conditionSnapshot, "수집 조건 스냅샷은 필수입니다.");
+        Objects.requireNonNull(triggerType, "수집 실행 유형은 필수입니다.");
+        Objects.requireNonNull(now, "수집 실행 생성 시각은 필수입니다.");
+
+        return new CollectionRun(
+                null,
+                conditionId,
+                conditionSnapshot,
+                triggerType,
+                CollectionRunStatus.PENDING,
+                null,
+                0,
+                null,
+                null,
+                now,
+                null,
+                0,
+                0,
+                0,
+                0,
+                null,
+                null,
+                requestedBy,
+                now,
+                now,
+                null
+        );
+    }
     // 수집 결과 집계와 최종 상태를 한 번에 완료 처리합니다.
     public CollectionRun complete(
             CollectionRunStatus finalStatus,
