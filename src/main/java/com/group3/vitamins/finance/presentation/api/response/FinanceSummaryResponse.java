@@ -4,8 +4,11 @@ import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.Finan
 import io.swagger.v3.oas.annotations.media.Schema;
 
 public record FinanceSummaryResponse(
+        @Schema(description = "입출금 내역 요약")
         CashFlowSummary cashFlow,
+        @Schema(description = "세금계산서 요약")
         TaxInvoiceSummary taxInvoice,
+        @Schema(description = "정산 현황 요약")
         SettlementSummary settlement
 ) {
 

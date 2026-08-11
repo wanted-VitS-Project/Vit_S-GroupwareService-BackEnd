@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record CashFlowMatchCandidatesResponse(
+        @Schema(description = "매칭 추천 후보 목록(최대 5건, 매칭 개수 많은 순)")
         List<MatchCandidateItem> candidates
 ) {
 

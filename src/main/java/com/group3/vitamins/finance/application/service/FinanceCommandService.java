@@ -36,6 +36,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -167,9 +168,38 @@ public class FinanceCommandService implements FinanceCommandUseCase {
 
         int savedCount = toInsert.isEmpty()
                 ? 0
-                : cashFlowCommandMapper.insertAll(companyId, command.bankName(), toInsert);
+                : insertWithConcurrentDuplicateRetry(companyId, command.bankName(), toInsert, duplicateRows);
 
         return new CashFlowCsvUploadView(table.rows().size(), savedCount, duplicateRows.size(), duplicateRows);
+    }
+
+    /**
+     * insertAll은 여러 행을 한 INSERT문으로 묶어 넣는다 — 그중 단 한 행이라도 uk_cash_flow_dedup에
+     * 걸리면 배치 전체가 실패한다. 조회(findExistingDedupKeys) 시점엔 없었지만 그 사이 동시에 들어온
+     * 다른 요청이 같은 조합을 먼저 커밋한 경우가 여기 해당한다(2026-08-11, CodeRabbit 지적 — 이전엔
+     * DuplicateKeyException이 그대로 올라가 500이 노출됐다). 최신 상태로 한 번만 다시 걸러서 재시도한다
+     * — 이번엔 지금 이 배치 안에서 조회~삽입 사이 텀이 방금 전보다 훨씬 좁아 재충돌 가능성이 낮고,
+     * 그래도 또 걸리면(극히 드묾) 예외를 그대로 던져 무한 재시도를 하지 않는다.
+     */
+    private int insertWithConcurrentDuplicateRetry(
+            Long companyId, String bankName, List<ParsedCashFlowRow> toInsert, List<DuplicateRowView> duplicateRows) {
+        try {
+            return cashFlowCommandMapper.insertAll(companyId, bankName, toInsert);
+        } catch (DuplicateKeyException e) {
+            Set<String> latestKeys = new HashSet<>();
+            cashFlowCommandMapper.findExistingDedupKeys(companyId, bankName, toInsert)
+                    .forEach(row -> latestKeys.add(dedupKey(row.type(), row.tradedAt(), row.amount(), row.balanceAfter())));
+
+            List<ParsedCashFlowRow> retryInsert = new ArrayList<>();
+            for (ParsedCashFlowRow row : toInsert) {
+                if (latestKeys.contains(dedupKey(row.type(), row.tradedAt(), row.amount(), row.balanceAfter()))) {
+                    duplicateRows.add(new DuplicateRowView(row.tradedAt(), row.amount(), "이미 등록된 거래입니다."));
+                } else {
+                    retryInsert.add(row);
+                }
+            }
+            return retryInsert.isEmpty() ? 0 : cashFlowCommandMapper.insertAll(companyId, bankName, retryInsert);
+        }
     }
 
     /**
@@ -280,7 +310,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         cashFlowCommandMapper.updateSettlementBlockMatchResult(
                 command.settleId(), status, cashFlow.amount(), cashFlow.tradedAt());
 
-        CashFlowMatchResultRow result = cashFlowMapper.findMatchResultById(command.cashFlowId());
+        CashFlowMatchResultRow result = cashFlowMapper.findMatchResultById(command.cashFlowId(), companyId);
         return new CashFlowMatchView(
                 command.cashFlowId(), result.settleId(), result.roundName(), result.projectName(),
                 result.linkedBy(), result.linkedByName(), result.linkedAt());
@@ -320,7 +350,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         String type = validateType(command.type());
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
-        if (cashFlowMapper.existsDuplicate(companyId, command.bankName(), command.tradedAt(), command.amount())) {
+        if (cashFlowMapper.existsDuplicate(companyId, command.bankName(), type, command.tradedAt(), command.amount())) {
             throw new ConflictException(FinanceErrorCode.FINANCE_CASH_FLOW_DUPLICATE);
         }
 
@@ -363,12 +393,14 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             String depositorName = command.depositorName() != null ? command.depositorName() : current.depositorName();
             String memo = command.memo() != null ? command.memo() : current.memo();
 
-            // 식별 필드(은행명·거래일시·금액)가 바뀌는 경우에만 중복 재검사한다 — 메모만 바뀌는 흔한
-            // 경우까지 매번 검사하지 않기 위함.
-            boolean identityChanged =
-                    command.bankName() != null || command.tradedAt() != null || command.amount() != null;
+            // 식별 필드(은행명·구분·거래일시·금액)가 바뀌는 경우에만 중복 재검사한다 — 메모만 바뀌는
+            // 흔한 경우까지 매번 검사하지 않기 위함. ⚠️ type도 포함해야 한다(2026-08-11, CodeRabbit
+            // 지적) — type만 바꿔서 다른 기존 거래와 (은행+거래일시+금액)이 겹쳐도 이 조건에 없으면
+            // 재검사를 안 타서 중복이 그대로 저장됐다.
+            boolean identityChanged = command.bankName() != null || command.type() != null
+                    || command.tradedAt() != null || command.amount() != null;
             if (identityChanged
-                    && cashFlowMapper.existsDuplicateExcluding(command.cashFlowId(), companyId, bankName, tradedAt, amount)) {
+                    && cashFlowMapper.existsDuplicateExcluding(command.cashFlowId(), companyId, bankName, type, tradedAt, amount)) {
                 throw new ConflictException(FinanceErrorCode.FINANCE_CASH_FLOW_DUPLICATE);
             }
 
@@ -390,19 +422,22 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (command.cashFlowIds() == null || command.cashFlowIds().isEmpty()) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING, "삭제할 항목을 선택해주세요.");
         }
+        // 같은 ID를 두 번 보내면 SQL IN절은 한 행만 지우는데 deletedCount는 두 번 세게 된다
+        // (2026-08-11, CodeRabbit 지적) — 중복 제거 후 처리한다.
+        List<Long> requestedIds = command.cashFlowIds().stream().distinct().toList();
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         // Collectors.toMap은 내부적으로 Map.merge를 써서 값이 null이면(미매칭 = settleBlockId null인
         // 정상 케이스) NullPointerException을 던진다(2026-08-10, 실제 테스트로 500 발견) — HashMap.put은
         // null 값을 허용하므로 직접 채운다.
         Map<Long, Long> settleBlockByCashFlowId = new HashMap<>();
-        for (CashFlowDeleteCandidateRow row : cashFlowMapper.findDeleteCandidates(command.cashFlowIds(), companyId)) {
+        for (CashFlowDeleteCandidateRow row : cashFlowMapper.findDeleteCandidates(requestedIds, companyId)) {
             settleBlockByCashFlowId.put(row.cashFlowId(), row.settleBlockId());
         }
 
         List<Long> deletable = new ArrayList<>();
         List<SkippedCashFlowView> skipped = new ArrayList<>();
-        for (Long cashFlowId : command.cashFlowIds()) {
+        for (Long cashFlowId : requestedIds) {
             if (!settleBlockByCashFlowId.containsKey(cashFlowId)) {
                 skipped.add(new SkippedCashFlowView(cashFlowId, FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND.getMessage()));
             } else if (settleBlockByCashFlowId.get(cashFlowId) != null) {
@@ -431,16 +466,18 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (command.cashFlowIds() == null || command.cashFlowIds().isEmpty() || command.isExcluded() == null) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING);
         }
+        // 같은 ID 중복 입력 시 updatedCount가 부풀려지는 문제(2026-08-11, CodeRabbit 지적) — 중복 제거.
+        List<Long> requestedIds = command.cashFlowIds().stream().distinct().toList();
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         Map<Long, Long> settleBlockByCashFlowId = new HashMap<>();
-        for (CashFlowDeleteCandidateRow row : cashFlowMapper.findDeleteCandidates(command.cashFlowIds(), companyId)) {
+        for (CashFlowDeleteCandidateRow row : cashFlowMapper.findDeleteCandidates(requestedIds, companyId)) {
             settleBlockByCashFlowId.put(row.cashFlowId(), row.settleBlockId());
         }
 
         List<Long> updatable = new ArrayList<>();
         List<SkippedCashFlowView> skipped = new ArrayList<>();
-        for (Long cashFlowId : command.cashFlowIds()) {
+        for (Long cashFlowId : requestedIds) {
             if (!settleBlockByCashFlowId.containsKey(cashFlowId)) {
                 skipped.add(new SkippedCashFlowView(cashFlowId, FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND.getMessage()));
             } else if (command.isExcluded() && settleBlockByCashFlowId.get(cashFlowId) != null) {

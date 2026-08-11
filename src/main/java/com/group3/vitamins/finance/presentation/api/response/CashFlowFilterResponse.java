@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 public record CashFlowFilterResponse(
+        @Schema(description = "필터용 프로젝트 목록 — cash_flow가 하나라도 연결된 정산 블록을 가진 프로젝트만")
         List<ProjectOption> projects
 ) {
 

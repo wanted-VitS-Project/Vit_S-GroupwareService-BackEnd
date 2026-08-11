@@ -33,7 +33,9 @@ public class CashFlowCsvParser {
             throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
         }
 
-        try (Reader reader = new InputStreamReader(new java.io.ByteArrayInputStream(fileBytes), resolveCharset(fileBytes));
+        try (Reader reader = new InputStreamReader(
+                new java.io.ByteArrayInputStream(fileBytes, bomLength(fileBytes), fileBytes.length - bomLength(fileBytes)),
+                resolveCharset(fileBytes));
              CSVParser parser = CSVFormat.DEFAULT.builder()
                      .setTrim(true)
                      .setIgnoreEmptyLines(true)
@@ -97,8 +99,7 @@ public class CashFlowCsvParser {
      * 없으면 EUC-KR로 가정한다 — 완벽한 감지는 아니라 실제 은행 CSV 샘플로 나중에 검증이 필요하다.
      */
     private java.nio.charset.Charset resolveCharset(byte[] fileBytes) {
-        if (fileBytes.length >= 3
-                && (fileBytes[0] & 0xFF) == 0xEF && (fileBytes[1] & 0xFF) == 0xBB && (fileBytes[2] & 0xFF) == 0xBF) {
+        if (hasUtf8Bom(fileBytes)) {
             return StandardCharsets.UTF_8;
         }
         try {
@@ -106,5 +107,19 @@ public class CashFlowCsvParser {
         } catch (Exception e) {
             return StandardCharsets.UTF_8;
         }
+    }
+
+    /**
+     * ⚠️ BOM이 있으면 UTF-8로 판정만 하고 실제로 건너뛰지는 않아서, 그 3바이트가 그대로 디코딩돼
+     * 첫 헤더 앞에 U+FEFF가 붙어버렸다(2026-08-11, CodeRabbit 지적 — "﻿거래일시"처럼 헤더가
+     * 오염돼 컬럼 매핑이 깨짐). BOM 길이만큼 스트림 시작 위치를 건너뛰도록 고쳤다.
+     */
+    private int bomLength(byte[] fileBytes) {
+        return hasUtf8Bom(fileBytes) ? 3 : 0;
+    }
+
+    private boolean hasUtf8Bom(byte[] fileBytes) {
+        return fileBytes.length >= 3
+                && (fileBytes[0] & 0xFF) == 0xEF && (fileBytes[1] & 0xFF) == 0xBB && (fileBytes[2] & 0xFF) == 0xBF;
     }
 }

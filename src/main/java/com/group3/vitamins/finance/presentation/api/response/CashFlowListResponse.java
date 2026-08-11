@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record CashFlowListResponse(
+        @Schema(description = "입출금 내역 목록")
         List<CashFlowItem> cashFlows
 ) {
 

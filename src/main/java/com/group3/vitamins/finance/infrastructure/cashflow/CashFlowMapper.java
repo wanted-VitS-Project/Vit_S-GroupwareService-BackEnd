@@ -45,15 +45,16 @@ public interface CashFlowMapper {
             @Param("settleId") Long settleId, @Param("companyId") Long companyId);
 
     /** 매칭 UPDATE 직후 응답 조립용. */
-    CashFlowMatchResultRow findMatchResultById(@Param("cashFlowId") Long cashFlowId);
+    CashFlowMatchResultRow findMatchResultById(@Param("cashFlowId") Long cashFlowId, @Param("companyId") Long companyId);
 
     /** 등록/수정 응답 조립 + 수정 병합용 — 존재하지 않거나(삭제 포함) 다른 회사 소속이면 null. */
     CashFlowDetailRow findDetailById(@Param("cashFlowId") Long cashFlowId, @Param("companyId") Long companyId);
 
-    /** 등록 시 중복 판정 — 같은 회사·은행·거래일시·금액(잔액은 항상 null인 직접 등록/API 항목 기준)이 이미 있는지. */
+    /** 등록 시 중복 판정 — 같은 회사·은행·구분·거래일시·금액(잔액은 항상 null인 직접 등록/API 항목 기준)이 이미 있는지. */
     boolean existsDuplicate(
             @Param("companyId") Long companyId,
             @Param("bankName") String bankName,
+            @Param("type") String type,
             @Param("tradedAt") LocalDateTime tradedAt,
             @Param("amount") BigDecimal amount);
 
@@ -62,6 +63,7 @@ public interface CashFlowMapper {
             @Param("cashFlowId") Long cashFlowId,
             @Param("companyId") Long companyId,
             @Param("bankName") String bankName,
+            @Param("type") String type,
             @Param("tradedAt") LocalDateTime tradedAt,
             @Param("amount") BigDecimal amount);
 
