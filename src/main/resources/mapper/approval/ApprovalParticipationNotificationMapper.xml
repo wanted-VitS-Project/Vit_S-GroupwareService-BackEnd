@@ -87,6 +87,7 @@
             #{blockId}
         </foreach>
           AND b.deleted_at IS NULL
+          AND pm.permission &lt;&gt; 'NONE'
           AND COALESCE(sp.permission, pm.permission) = 'EDITOR'
         ORDER BY b.block_id, pm.user_id
     </select>

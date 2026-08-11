@@ -18,6 +18,9 @@ public interface BlockCatalogPort {
      */
     boolean isProjectMember(Long projectId, String userId);
 
+    /** 결재가 연결된 블록의 프로젝트가 요청 회사 소속인지 확인한다. */
+    boolean isBlockInCompany(Long blockId, Long companyId);
+
     /** 원 기안자 참여 불가 시 대행 기안자를 선점할 수 있는 유효 스텝 EDITOR인지 확인한다. */
     boolean isStepEditor(Long blockId, String userId, String role);
 }

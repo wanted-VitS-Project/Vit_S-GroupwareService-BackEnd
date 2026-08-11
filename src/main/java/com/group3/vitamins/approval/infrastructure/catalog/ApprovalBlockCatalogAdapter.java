@@ -3,6 +3,7 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.application.port.BlockSummary;
 import com.group3.vitamins.project.block.domain.repository.BlockRepository;
+import com.group3.vitamins.project.domain.repository.ProjectRepository;
 import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
 import com.group3.vitamins.project.domain.model.MemberPermission;
 import com.group3.vitamins.project.step.domain.repository.StepPermissionRepository;
@@ -23,6 +24,7 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
 
     private final BlockRepository blockRepository;
     private final StepRepository stepRepository;
+    private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final StepPermissionRepository stepPermissionRepository;
 
@@ -40,6 +42,13 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
     @Override
     public boolean isProjectMember(Long projectId, String userId) {
         return projectMemberRepository.findPermission(projectId, userId).isPresent();
+    }
+
+    @Override
+    public boolean isBlockInCompany(Long blockId, Long companyId) {
+        return findBlock(blockId)
+                .flatMap(block -> projectRepository.findById(block.projectId(), companyId))
+                .isPresent();
     }
 
     @Override

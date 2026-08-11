@@ -153,6 +153,37 @@ class ApprovalUnavailableApproverReplacementTest {
     }
 
     @Test
+    void exclusionUsesOrderValuesEvenWhenRequestArrayIsUnsorted() {
+        Approval approval = approval();
+        ApprovalRevision revision = revision();
+        ApprovalLine firstApproved = line(1L, "EMP_1", 1, ApprovalLineStatus.APPROVED);
+        ApprovalLine unavailableWaiting = line(2L, "EMP_OLD", 2, ApprovalLineStatus.WAITING);
+        ApprovalLine thirdWaiting = line(3L, "EMP_3", 3, ApprovalLineStatus.WAITING);
+        ApprovalLine resequencedWaiting = line(3L, "EMP_3", 2, ApprovalLineStatus.WAITING);
+        UpdateApprovalLinesCommand command = new UpdateApprovalLinesCommand(1L, 2L, "EMP_DRAFTER",
+                List.of(
+                        new UpdateApprovalLinesCommand.LineInput("EMP_3", 2),
+                        new UpdateApprovalLinesCommand.LineInput("EMP_1", 1)));
+
+        when(revisionEligibilityPolicy.getApprovalForUpdateOrThrow(1L)).thenReturn(approval);
+        when(revisionEligibilityPolicy.getRevisionForUpdateOrThrow(1L, 2L)).thenReturn(revision);
+        when(revisionEligibilityPolicy.claimActingDrafterOrThrow(approval, "EMP_DRAFTER")).thenReturn(approval);
+        when(approvalRepository.findLinesByRevisionId(2L))
+                .thenReturn(List.of(firstApproved, unavailableWaiting, thirdWaiting));
+        when(lineEligibilityPolicy.isParticipationUnavailable("EMP_OLD")).thenReturn(true);
+        when(approvalRepository.excludeUnavailableLines(2L, List.of(2L)))
+                .thenReturn(List.of(firstApproved, resequencedWaiting));
+        when(employeeCatalogPort.findEmployee("EMP_1")).thenReturn(Optional.of(activeEmployee("EMP_1")));
+        when(employeeCatalogPort.findEmployee("EMP_3")).thenReturn(Optional.of(activeEmployee("EMP_3")));
+
+        var result = service.updateLines(command);
+
+        assertThat(result).extracting(line -> line.approverId() + ":" + line.order())
+                .containsExactly("EMP_1:1", "EMP_3:2");
+        verify(approvalRepository).excludeUnavailableLines(2L, List.of(2L));
+    }
+
+    @Test
     void excludingLastActiveApproverCompletesWhenEarlierLinesAreApproved() {
         Approval approval = approval();
         ApprovalLine firstApproved = line(1L, "EMP_1", 1, ApprovalLineStatus.APPROVED);

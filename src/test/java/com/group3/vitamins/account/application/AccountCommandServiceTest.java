@@ -25,6 +25,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -163,6 +164,7 @@ class AccountCommandServiceTest {
             assertThatThrownBy(() -> accountCommandService.changeStatus(
                     new ChangeStatusCommand("ADMIN", TARGET_ID, "ACTIVE")))
                     .satisfies(hasCode(AccountErrorCode.ACC_STATUS_UNCHANGED));
+            verify(domainEventPublisher, never()).publish(any(EmployeeParticipationUnavailableEvent.class));
             verify(sessionTerminator, never()).terminateAll(anyString());
         }
 
@@ -172,6 +174,7 @@ class AccountCommandServiceTest {
             assertThatThrownBy(() -> accountCommandService.changeStatus(
                     new ChangeStatusCommand("ADMIN", TARGET_ID, "PAUSED")))
                     .satisfies(hasCode(AccountErrorCode.ACC_INVALID_STATUS));
+            verify(domainEventPublisher, never()).publish(any(EmployeeParticipationUnavailableEvent.class));
         }
 
         @Test
@@ -180,6 +183,7 @@ class AccountCommandServiceTest {
             assertThatThrownBy(() -> accountCommandService.changeStatus(
                     new ChangeStatusCommand("MEMBER", TARGET_ID, "INACTIVE")))
                     .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
+            verify(domainEventPublisher, never()).publish(any(EmployeeParticipationUnavailableEvent.class));
         }
     }
 

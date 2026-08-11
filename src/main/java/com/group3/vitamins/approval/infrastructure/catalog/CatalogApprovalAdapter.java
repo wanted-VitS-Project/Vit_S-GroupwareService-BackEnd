@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * {@code approval}·{@code approval_revision} 영속성 어댑터 (`text.infrastructure.catalog.CatalogTextAdapter`와 동일 구조).
@@ -41,6 +42,9 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineDetailPort {
+
+    private static final Set<ApprovalLineStatus> REPLACEABLE_LINE_STATUSES =
+            Set.of(ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
 
     private final SpringDataApprovalRepository springDataApprovalRepository;
     private final SpringDataApprovalRevisionRepository springDataApprovalRevisionRepository;
@@ -245,8 +249,11 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public ApprovalLine replaceUnavailableLine(ApprovalLine previousLine, String newApproverId) {
-        springDataApprovalLineRepository.cancelAndSoftDelete(
-                previousLine.getLineId(), ApprovalLineStatus.CANCELED);
+        int updated = springDataApprovalLineRepository.cancelAndSoftDelete(
+                previousLine.getLineId(), ApprovalLineStatus.CANCELED, REPLACEABLE_LINE_STATUSES);
+        if (updated != 1) {
+            throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+        }
         ApprovalLineJpaEntity saved = springDataApprovalLineRepository.save(
                 ApprovalLineJpaEntity.createReplacement(
                         previousLine.getRevisionId(), newApproverId,
@@ -257,8 +264,13 @@ public class CatalogApprovalAdapter implements ApprovalRepository, ApprovalLineD
     @Override
     @Transactional
     public List<ApprovalLine> excludeUnavailableLines(Long revisionId, List<Long> excludedLineIds) {
-        excludedLineIds.forEach(lineId -> springDataApprovalLineRepository.cancelAndSoftDelete(
-                lineId, ApprovalLineStatus.CANCELED));
+        int updated = excludedLineIds.stream()
+                .mapToInt(lineId -> springDataApprovalLineRepository.cancelAndSoftDelete(
+                        lineId, ApprovalLineStatus.CANCELED, REPLACEABLE_LINE_STATUSES))
+                .sum();
+        if (updated != excludedLineIds.size()) {
+            throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+        }
 
         List<ApprovalLineJpaEntity> remaining =
                 springDataApprovalLineRepository

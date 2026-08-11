@@ -2,8 +2,10 @@ package com.group3.vitamins.approval.infrastructure.persistence;
 
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.model.ApprovalStatus;
+import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.infrastructure.catalog.CatalogApprovalAdapter;
 import com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalQueryMapper;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.mock;
 
@@ -132,6 +135,8 @@ class ApprovalDeletionPersistenceTest {
                 ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP002", 1),
                 ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP003", 2),
                 ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP004", 3)));
+        lineRepository.activateFirstAndWaitRest(
+                revision.getApprovalRevisionId(), ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
 
         CatalogApprovalAdapter adapter = new CatalogApprovalAdapter(
                 approvalRepository, revisionRepository, lineRepository, documentRepository,
@@ -149,6 +154,36 @@ class ApprovalDeletionPersistenceTest {
                 revision.getApprovalRevisionId()))
                 .extracting(ApprovalLineJpaEntity::getApproverId, ApprovalLineJpaEntity::getSequenceNo)
                 .containsExactly(tuple("EMP002", 1), tuple("EMP004", 2));
+    }
+
+    @Test
+    @DisplayName("처리 완료 결재선은 교체·제외용 취소 쿼리가 덮어쓰지 않는다")
+    void unavailableReplacementCannotCancelProcessedLine() {
+        ApprovalJpaEntity approval = approvalRepository.saveAndFlush(
+                ApprovalJpaEntity.createDraft(36L, "EMP001"));
+        ApprovalRevisionJpaEntity revision = revisionRepository.saveAndFlush(
+                ApprovalRevisionJpaEntity.createDraft(approval.getApprovalId(), 1, "완료선 보호", null));
+        ApprovalLineJpaEntity line = lineRepository.saveAndFlush(
+                ApprovalLineJpaEntity.createDraft(revision.getApprovalRevisionId(), "EMP002", 1));
+        lineRepository.activateFirstAndWaitRest(
+                revision.getApprovalRevisionId(), ApprovalLineStatus.ACTIVE, ApprovalLineStatus.WAITING);
+        lineRepository.markProcessed(line.getApprovalLineId(), ApprovalLineStatus.APPROVED, "승인 완료");
+
+        CatalogApprovalAdapter adapter = new CatalogApprovalAdapter(
+                approvalRepository, revisionRepository, lineRepository, documentRepository,
+                mock(ApprovalQueryMapper.class));
+
+        assertThatThrownBy(() -> adapter.excludeUnavailableLines(
+                revision.getApprovalRevisionId(), List.of(line.getApprovalLineId())))
+                .isInstanceOf(ConflictException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+        entityManager.clear();
+
+        ApprovalLineJpaEntity preserved = lineRepository.findById(line.getApprovalLineId()).orElseThrow();
+        assertThat(preserved.getStatus()).isEqualTo(ApprovalLineStatus.APPROVED);
+        assertThat(preserved.getDeletedAt()).isNull();
+        assertThat(preserved.getOpinion()).isEqualTo("승인 완료");
     }
 
     @Test

@@ -106,6 +106,32 @@ class ApprovalParticipationNotificationServiceTest {
         verify(domainEventPublisher, never()).publish(Mockito.any());
     }
 
+    @Test
+    @DisplayName("현재 기안자가 참여 불가이면 결재자 이탈 알림 수신자에서 제외한다")
+    void skipsUnavailableCurrentDrafter() {
+        Target target = target(DRAFTER, null);
+        when(notificationPort.findPendingApproverTargets(UNAVAILABLE, COMPANY_ID)).thenReturn(List.of(target));
+        when(notificationPort.findDrafterTargets(UNAVAILABLE, COMPANY_ID)).thenReturn(List.of());
+        when(employeeCatalogPort.findEmployee(DRAFTER)).thenReturn(Optional.of(inactive(DRAFTER, "MEMBER")));
+
+        service.notifyParticipationUnavailable(event());
+
+        verify(domainEventPublisher, never()).publish(Mockito.any());
+    }
+
+    @Test
+    @DisplayName("현재 기안자가 ADMIN이면 결재자 이탈 알림 수신자에서 제외한다")
+    void skipsAdminCurrentDrafter() {
+        Target target = target(DRAFTER, null);
+        when(notificationPort.findPendingApproverTargets(UNAVAILABLE, COMPANY_ID)).thenReturn(List.of(target));
+        when(notificationPort.findDrafterTargets(UNAVAILABLE, COMPANY_ID)).thenReturn(List.of());
+        when(employeeCatalogPort.findEmployee(DRAFTER)).thenReturn(Optional.of(active(DRAFTER, "ADMIN")));
+
+        service.notifyParticipationUnavailable(event());
+
+        verify(domainEventPublisher, never()).publish(Mockito.any());
+    }
+
     private NotificationRequestedEvent capturedSingleNotification() {
         ArgumentCaptor<com.group3.vitamins.global.domain.event.DomainEvent> captor =
                 ArgumentCaptor.forClass(com.group3.vitamins.global.domain.event.DomainEvent.class);
@@ -122,7 +148,16 @@ class ApprovalParticipationNotificationServiceTest {
     }
 
     private EmployeeSummary active(String userId) {
-        return new EmployeeSummary(userId, "사용자", null, null, "MEMBER", COMPANY_ID,
+        return active(userId, "MEMBER");
+    }
+
+    private EmployeeSummary active(String userId, String role) {
+        return new EmployeeSummary(userId, "사용자", null, null, role, COMPANY_ID,
                 "ACTIVE", null, null);
+    }
+
+    private EmployeeSummary inactive(String userId, String role) {
+        return new EmployeeSummary(userId, "사용자", null, null, role, COMPANY_ID,
+                "INACTIVE", null, null);
     }
 }

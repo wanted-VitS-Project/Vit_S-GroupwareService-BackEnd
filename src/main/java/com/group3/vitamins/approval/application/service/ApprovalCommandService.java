@@ -286,7 +286,11 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
     private Optional<List<ApprovalLine>> findExclusionPlan(
             List<ApprovalLine> previousLines,
             List<UpdateApprovalLinesCommand.LineInput> requestedLines) {
-        return findExclusionPlan(previousLines, requestedLines, 0, 0, new HashMap<>(), new HashMap<>());
+        List<UpdateApprovalLinesCommand.LineInput> orderedRequestedLines = requestedLines.stream()
+                .sorted(Comparator.comparingInt(UpdateApprovalLinesCommand.LineInput::order))
+                .toList();
+        return findExclusionPlan(
+                previousLines, orderedRequestedLines, 0, 0, new HashMap<>(), new HashMap<>());
     }
 
     private Optional<List<ApprovalLine>> findExclusionPlan(

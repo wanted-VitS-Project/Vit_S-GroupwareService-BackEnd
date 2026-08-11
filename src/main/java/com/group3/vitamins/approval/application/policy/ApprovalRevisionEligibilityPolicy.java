@@ -16,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.Objects;
 import java.util.function.Function;
 
 /** 회차(revision)를 다루는 여러 엔드포인트(APR-002·MGT-005 등)가 공용으로 쓰는 존재·기안자·DRAFT 검증 */
@@ -68,6 +67,10 @@ public class ApprovalRevisionEligibilityPolicy {
                 .filter(employee -> !"ADMIN".equals(employee.role()))
                 .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER));
 
+        if (!blockCatalogPort.isBlockInCompany(approval.getBlockId(), requester.companyId())) {
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
+        }
+
         String currentActing = approval.getActingDrafterId();
         boolean actingUnavailable = currentActing == null || isUnavailable(currentActing);
         if (!actingUnavailable) {
@@ -77,13 +80,7 @@ public class ApprovalRevisionEligibilityPolicy {
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
         }
 
-        EmployeeSummary original = employeeCatalogPort.findEmployee(approval.getDrafterId())
-                .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER));
-        if (!Objects.equals(original.companyId(), requester.companyId())) {
-            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
-        }
-        boolean originalUnavailable = original.participationUnavailable();
-        if (!originalUnavailable) {
+        if (!isUnavailable(approval.getDrafterId())) {
             if (approval.getDrafterId().equals(requesterId)) {
                 return approval;
             }
@@ -97,7 +94,8 @@ public class ApprovalRevisionEligibilityPolicy {
 
     public boolean isUnavailable(String userId) {
         return employeeCatalogPort.findEmployee(userId)
-                .map(EmployeeSummary::participationUnavailable)
+                .map(employee -> employee.participationUnavailable()
+                        || "ADMIN".equals(employee.role()))
                 .orElse(true);
     }
 

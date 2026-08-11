@@ -42,8 +42,9 @@ public class ApprovalLineProcessingPolicy {
      * {@code APPROVAL_LINE_FORBIDDEN}(403)으로 흡수한다(리소스 존재 여부 비노출, API 명세 확인 필요 표시됨).
      */
     public ApprovalLine getActiveOwnedLineOrThrow(Long lineId, String requesterId) {
-        String role = employeeCatalogPort.findEmployee(requesterId).map(EmployeeSummary::role).orElse(null);
-        if ("ADMIN".equals(role)) {
+        EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId)
+                .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN));
+        if (requester.participationUnavailable() || "ADMIN".equals(requester.role())) {
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN);
         }
         ApprovalLine line = approvalRepository.findLineByIdForUpdate(lineId)

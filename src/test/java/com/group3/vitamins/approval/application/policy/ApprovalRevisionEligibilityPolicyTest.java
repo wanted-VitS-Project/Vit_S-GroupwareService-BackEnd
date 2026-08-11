@@ -44,6 +44,7 @@ class ApprovalRevisionEligibilityPolicyTest {
         Approval approval = approval(null);
         Approval claimed = approval(EDITOR);
         when(employeeCatalogPort.findEmployee(EDITOR)).thenReturn(Optional.of(active(EDITOR, "MEMBER")));
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, 1L)).thenReturn(true);
         when(employeeCatalogPort.findEmployee(ORIGINAL)).thenReturn(Optional.of(inactive(ORIGINAL)));
         when(blockCatalogPort.isStepEditor(BLOCK_ID, EDITOR, "MEMBER")).thenReturn(true);
         when(approvalRepository.assignActingDrafter(APPROVAL_ID, EDITOR)).thenReturn(claimed);
@@ -57,6 +58,7 @@ class ApprovalRevisionEligibilityPolicyTest {
     void editorCannotClaimWhileOriginalDrafterIsAvailable() {
         Approval approval = approval(null);
         when(employeeCatalogPort.findEmployee(EDITOR)).thenReturn(Optional.of(active(EDITOR, "MEMBER")));
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, 1L)).thenReturn(true);
         when(employeeCatalogPort.findEmployee(ORIGINAL)).thenReturn(Optional.of(active(ORIGINAL, "MEMBER")));
 
         assertThatThrownBy(() -> policy.claimActingDrafterOrThrow(approval, EDITOR))
@@ -68,6 +70,7 @@ class ApprovalRevisionEligibilityPolicyTest {
     void anotherEditorCannotTakeOverFromAvailableActingDrafter() {
         Approval approval = approval("EMP003");
         when(employeeCatalogPort.findEmployee(EDITOR)).thenReturn(Optional.of(active(EDITOR, "MEMBER")));
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, 1L)).thenReturn(true);
         when(employeeCatalogPort.findEmployee("EMP003")).thenReturn(Optional.of(active("EMP003", "MEMBER")));
 
         assertThatThrownBy(() -> policy.claimActingDrafterOrThrow(approval, EDITOR))
@@ -83,6 +86,37 @@ class ApprovalRevisionEligibilityPolicyTest {
         assertThatThrownBy(() -> policy.claimActingDrafterOrThrow(approval, EDITOR))
                 .isInstanceOf(ForbiddenException.class);
         verify(approvalRepository, never()).assignActingDrafter(APPROVAL_ID, EDITOR);
+    }
+
+    @Test
+    void editorCanClaimWhenOriginalDrafterWasDeleted() {
+        Approval approval = approval(null);
+        Approval claimed = approval(EDITOR);
+        when(employeeCatalogPort.findEmployee(EDITOR)).thenReturn(Optional.of(active(EDITOR, "MEMBER")));
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, 1L)).thenReturn(true);
+        when(employeeCatalogPort.findEmployee(ORIGINAL)).thenReturn(Optional.empty());
+        when(blockCatalogPort.isStepEditor(BLOCK_ID, EDITOR, "MEMBER")).thenReturn(true);
+        when(approvalRepository.assignActingDrafter(APPROVAL_ID, EDITOR)).thenReturn(claimed);
+
+        Approval result = policy.claimActingDrafterOrThrow(approval, EDITOR);
+
+        assertThat(result.getActingDrafterId()).isEqualTo(EDITOR);
+    }
+
+    @Test
+    void editorCanReplaceAdminActingDrafter() {
+        Approval approval = approval("EMP003");
+        Approval claimed = approval(EDITOR);
+        when(employeeCatalogPort.findEmployee(EDITOR)).thenReturn(Optional.of(active(EDITOR, "MEMBER")));
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, 1L)).thenReturn(true);
+        when(employeeCatalogPort.findEmployee("EMP003")).thenReturn(Optional.of(active("EMP003", "ADMIN")));
+        when(employeeCatalogPort.findEmployee(ORIGINAL)).thenReturn(Optional.of(inactive(ORIGINAL)));
+        when(blockCatalogPort.isStepEditor(BLOCK_ID, EDITOR, "MEMBER")).thenReturn(true);
+        when(approvalRepository.assignActingDrafter(APPROVAL_ID, EDITOR)).thenReturn(claimed);
+
+        Approval result = policy.claimActingDrafterOrThrow(approval, EDITOR);
+
+        assertThat(result.getActingDrafterId()).isEqualTo(EDITOR);
     }
 
     private Approval approval(String actingDrafterId) {
