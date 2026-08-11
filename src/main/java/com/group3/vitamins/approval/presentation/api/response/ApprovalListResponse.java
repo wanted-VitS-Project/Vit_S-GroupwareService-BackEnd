@@ -21,6 +21,7 @@ public record ApprovalListResponse(
         int totalPages
 ) {
 
+    @Schema(name = "ApprovalListResponseItem")
     public record Item(
             @Schema(description = "결재 구분 번호", example = "55")
             Long approvalId,

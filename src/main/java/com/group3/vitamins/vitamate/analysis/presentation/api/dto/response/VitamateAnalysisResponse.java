@@ -91,6 +91,7 @@ public record VitamateAnalysisResponse(
         }
     }
 
+    @Schema(name = "VitamateAnalysisResponseDocument")
     public record Document(
             @Schema(description = "파일 버전 ID", example = "101")
             Long fileVersionId,
@@ -111,6 +112,7 @@ public record VitamateAnalysisResponse(
         }
     }
 
+    @Schema(name = "VitamateAnalysisResponseCitation")
     public record Citation(
             @Schema(description = "근거 순서", example = "1")
             Integer rankOrder,

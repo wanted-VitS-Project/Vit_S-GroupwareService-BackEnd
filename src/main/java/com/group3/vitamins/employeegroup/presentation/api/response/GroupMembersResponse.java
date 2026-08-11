@@ -15,7 +15,7 @@ public record GroupMembersResponse(
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    @Schema(description = "구성원 항목")
+    @Schema(name = "GroupMembersResponseItem", description = "구성원 항목")
     public record Item(
             @Schema(description = "사번") String userId,
             @Schema(description = "이름") String name,
