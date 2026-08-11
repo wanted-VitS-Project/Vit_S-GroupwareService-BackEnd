@@ -55,10 +55,10 @@ public class IssueStepAccessAdapter implements IssueStepAccessPort {
     /** 수정·생성·삭제는 여전히 해당 스텝의 EDITOR 권한이 필요하다 — 스텝 오버라이드 경로를 그대로 쓴다. */
     @Override
     public StepAccessView requireEditable(Long stepId, String requesterUserId, String role) {
+        Long projectId = findProjectId(stepId, IssueErrorCode.ISS_STEP_NOT_FOUND);
         try {
-            StepAccessUseCase.StepAccessView step =
-                    stepAccessUseCase.requireEditable(stepId, requesterUserId, role);
-            return new StepAccessView(step.stepId(), step.projectId());
+            stepAccessUseCase.requireEditable(stepId, requesterUserId, role);
+            return new StepAccessView(stepId, projectId);
         } catch (NotFoundException e) {
             throw new NotFoundException(IssueErrorCode.ISS_STEP_NOT_FOUND, e);
         } catch (ForbiddenException e) {

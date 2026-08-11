@@ -27,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("IssueQueryMapper")
 class IssueQueryMapperTest {
 
+    private static final long COMPANY_ID = 1L;
+
     private SqlSessionFactory sqlSessionFactory;
 
     @BeforeEach
@@ -65,11 +67,13 @@ class IssueQueryMapperTest {
         LocalDateTime completedAt = LocalDateTime.of(2026, 8, 4, 16, 30);
 
         try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertProject(session, 3L, "기본 프로젝트", null);
+            insertStep(session, 10L, 3L, "기본 스텝", null);
             insertIssue(session, 101L, 10L, "제안서 1차 초안 작성", "공고 요구사항에 맞춰 작성",
                     "TO_DO", "HIGH", dueDate, completedAt, null);
             session.commit();
 
-            Optional<IssueRow> result = session.getMapper(IssueQueryMapper.class).findIssue(101L);
+            Optional<IssueRow> result = session.getMapper(IssueQueryMapper.class).findIssue(101L, COMPANY_ID);
 
             assertThat(result).isPresent();
             IssueRow issue = result.orElseThrow();
@@ -89,12 +93,14 @@ class IssueQueryMapperTest {
     @DisplayName("논리 삭제된 이슈는 조회하지 않는다")
     void findIssue_deletedIssue() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertProject(session, 3L, "기본 프로젝트", null);
+            insertStep(session, 10L, 3L, "기본 스텝", null);
             insertIssue(session, 102L, 10L, "삭제된 이슈", null,
                     "IN_PROGRESS", "MEDIUM", null, null,
                     LocalDateTime.of(2026, 8, 6, 12, 0));
             session.commit();
 
-            Optional<IssueRow> result = session.getMapper(IssueQueryMapper.class).findIssue(102L);
+            Optional<IssueRow> result = session.getMapper(IssueQueryMapper.class).findIssue(102L, COMPANY_ID);
 
             assertThat(result).isEmpty();
         }
@@ -106,12 +112,16 @@ class IssueQueryMapperTest {
         LocalDate resignedAt = LocalDate.of(2026, 8, 1);
 
         try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertProject(session, 3L, "기본 프로젝트", null);
+            insertStep(session, 10L, 3L, "기본 스텝", null);
             insertEmployee(session, "EMP001", "김용준", resignedAt);
+            insertIssue(session, 101L, 10L, "담당자 연결 이슈", null,
+                    "TO_DO", "HIGH", null, null, null);
             insertAssignee(session, 1L, 101L, "EMP001");
             session.commit();
 
             List<IssueAssigneeRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findAssignees(List.of(101L));
+                    .findAssignees(List.of(101L), COMPANY_ID);
 
             assertThat(rows).containsExactly(
                     new IssueAssigneeRow(101L, "EMP001", "김용준", resignedAt));
@@ -128,10 +138,42 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueAssigneeCandidateRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findAssigneeCandidates(List.of("EMP001"));
+                    .findAssigneeCandidates(List.of("EMP001"), COMPANY_ID);
 
             assertThat(rows).containsExactly(
                     new IssueAssigneeCandidateRow("EMP001", "김용준", resignedAt));
+        }
+    }
+
+    @Test
+    @DisplayName("다른 회사 Project에 속한 Issue와 Block은 현재 회사 조회에서 제외한다")
+    void excludesIssueAndBlockFromAnotherCompany() throws Exception {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            insertProject(session, 4L, "타사 프로젝트", null, 2L);
+            insertStep(session, 11L, 4L, "타사 스텝", null);
+            insertIssue(session, 201L, 11L, "타사 이슈", null,
+                    "TO_DO", "HIGH", null, null, null);
+            insertBlock(session, 21L, 11L, "타사 블록", "TEXT");
+            try (Statement statement = session.getConnection().createStatement()) {
+                statement.execute("INSERT INTO employee (user_id, company_id, name) VALUES ('EMP002', 2, '타사 사용자')");
+                statement.execute("INSERT INTO issue_assign (issue_assign_id, issue_id, user_id) VALUES (2, 201, 'EMP002')");
+                statement.execute("INSERT INTO issue_block (issue_block_id, issue_id, block_id) VALUES (2, 201, 21)");
+            }
+            session.commit();
+
+            IssueQueryMapper mapper = session.getMapper(IssueQueryMapper.class);
+
+            assertThat(mapper.findProjectId(11L, COMPANY_ID)).isEmpty();
+            assertThat(mapper.findStepsByProject(4L, COMPANY_ID)).isEmpty();
+            assertThat(mapper.findIssuesByProject(4L, COMPANY_ID)).isEmpty();
+            assertThat(mapper.findIssue(201L, COMPANY_ID)).isEmpty();
+            assertThat(mapper.findIssues(11L, null, COMPANY_ID)).isEmpty();
+            assertThat(mapper.findAssignees(List.of(201L), COMPANY_ID)).isEmpty();
+            assertThat(mapper.findAssigneeCandidates(List.of("EMP002"), COMPANY_ID)).isEmpty();
+            assertThat(mapper.findRelatedBlocks(List.of(201L), COMPANY_ID)).isEmpty();
+            assertThat(mapper.findBlockStep(21L, COMPANY_ID)).isEmpty();
+            assertThat(mapper.findLinkableBlocks(List.of(21L), COMPANY_ID)).isEmpty();
+            assertThat(mapper.findMyCalendarIssues("EMP002", COMPANY_ID)).isEmpty();
         }
     }
 
@@ -149,7 +191,7 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findMyCalendarIssues("EMP001");
+                    .findMyCalendarIssues("EMP001", COMPANY_ID);
 
             assertThat(rows).hasSize(1);
             IssueCalendarRow row = rows.get(0);
@@ -178,7 +220,7 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findMyCalendarIssues("EMP001");
+                    .findMyCalendarIssues("EMP001", COMPANY_ID);
 
             assertThat(rows).isEmpty();
         }
@@ -196,7 +238,7 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findMyCalendarIssues("EMP001");
+                    .findMyCalendarIssues("EMP001", COMPANY_ID);
 
             assertThat(rows).isEmpty();
         }
@@ -214,7 +256,7 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findMyCalendarIssues("EMP001");
+                    .findMyCalendarIssues("EMP001", COMPANY_ID);
 
             assertThat(rows).isEmpty();
         }
@@ -232,7 +274,7 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findMyCalendarIssues("EMP001");
+                    .findMyCalendarIssues("EMP001", COMPANY_ID);
 
             assertThat(rows).isEmpty();
         }
@@ -250,7 +292,7 @@ class IssueQueryMapperTest {
             session.commit();
 
             List<IssueCalendarRow> rows = session.getMapper(IssueQueryMapper.class)
-                    .findMyCalendarIssues("EMP001");
+                    .findMyCalendarIssues("EMP001", COMPANY_ID);
 
             assertThat(rows).isEmpty();
         }
@@ -261,6 +303,8 @@ class IssueQueryMapperTest {
              Connection connection = session.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("DROP TABLE IF EXISTS issue_assign");
+            statement.execute("DROP TABLE IF EXISTS issue_block");
+            statement.execute("DROP TABLE IF EXISTS block");
             statement.execute("DROP TABLE IF EXISTS employee");
             statement.execute("DROP TABLE IF EXISTS issue");
             statement.execute("DROP TABLE IF EXISTS step");
@@ -287,8 +331,25 @@ class IssueQueryMapperTest {
                     )
                     """);
             statement.execute("""
+                    CREATE TABLE issue_block (
+                        issue_block_id BIGINT PRIMARY KEY,
+                        issue_id BIGINT NOT NULL,
+                        block_id BIGINT NOT NULL
+                    )
+                    """);
+            statement.execute("""
+                    CREATE TABLE block (
+                        block_id BIGINT PRIMARY KEY,
+                        step_id BIGINT NOT NULL,
+                        title VARCHAR(200) NOT NULL,
+                        type VARCHAR(30) NOT NULL,
+                        deleted_at DATETIME NULL
+                    )
+                    """);
+            statement.execute("""
                     CREATE TABLE employee (
                         user_id VARCHAR(20) PRIMARY KEY,
+                        company_id BIGINT NOT NULL,
                         name VARCHAR(100) NOT NULL,
                         resigned_at DATE NULL
                     )
@@ -298,12 +359,14 @@ class IssueQueryMapperTest {
                         step_id BIGINT PRIMARY KEY,
                         project_id BIGINT NOT NULL,
                         name VARCHAR(200) NOT NULL,
+                        sort_order INT NOT NULL DEFAULT 0,
                         deleted_at DATETIME NULL
                     )
                     """);
             statement.execute("""
                     CREATE TABLE project (
                         project_id BIGINT PRIMARY KEY,
+                        company_id BIGINT NOT NULL,
                         name VARCHAR(300) NOT NULL,
                         deleted_at DATETIME NULL
                     )
@@ -327,12 +390,13 @@ class IssueQueryMapperTest {
     private void insertEmployee(SqlSession session, String userId, String name, LocalDate resignedAt)
             throws Exception {
         try (PreparedStatement statement = session.getConnection().prepareStatement("""
-                INSERT INTO employee (user_id, name, resigned_at)
-                VALUES (?, ?, ?)
+                INSERT INTO employee (user_id, company_id, name, resigned_at)
+                VALUES (?, ?, ?, ?)
                 """)) {
             statement.setString(1, userId);
-            statement.setString(2, name);
-            statement.setObject(3, resignedAt);
+            statement.setLong(2, COMPANY_ID);
+            statement.setString(3, name);
+            statement.setObject(4, resignedAt);
             statement.executeUpdate();
         }
     }
@@ -353,13 +417,38 @@ class IssueQueryMapperTest {
 
     private void insertProject(SqlSession session, Long projectId, String name, LocalDateTime deletedAt)
             throws Exception {
+        insertProject(session, projectId, name, deletedAt, COMPANY_ID);
+    }
+
+    private void insertProject(
+            SqlSession session,
+            Long projectId,
+            String name,
+            LocalDateTime deletedAt,
+            Long companyId
+    ) throws Exception {
         try (PreparedStatement statement = session.getConnection().prepareStatement("""
-                INSERT INTO project (project_id, name, deleted_at)
-                VALUES (?, ?, ?)
+                INSERT INTO project (project_id, company_id, name, deleted_at)
+                VALUES (?, ?, ?, ?)
                 """)) {
             statement.setLong(1, projectId);
-            statement.setString(2, name);
-            statement.setTimestamp(3, toTimestamp(deletedAt));
+            statement.setLong(2, companyId);
+            statement.setString(3, name);
+            statement.setTimestamp(4, toTimestamp(deletedAt));
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertBlock(SqlSession session, Long blockId, Long stepId, String title, String type)
+            throws Exception {
+        try (PreparedStatement statement = session.getConnection().prepareStatement("""
+                INSERT INTO block (block_id, step_id, title, type)
+                VALUES (?, ?, ?, ?)
+                """)) {
+            statement.setLong(1, blockId);
+            statement.setLong(2, stepId);
+            statement.setString(3, title);
+            statement.setString(4, type);
             statement.executeUpdate();
         }
     }

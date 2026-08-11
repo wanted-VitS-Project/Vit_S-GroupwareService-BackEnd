@@ -38,11 +38,12 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
         validateCursor(query.cursor());
         Long companyId = currentCompanyIdProvider.currentCompanyId();
 
-        var step = activityLogQueryPort.findStepAccess(query.stepId(), query.requesterUserId())
+        var step = activityLogQueryPort.findStepAccess(
+                        query.stepId(), query.requesterUserId(), companyId)
                 .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
 
         assertProjectAccess(query.role(), step.permission());
-        validateBlockFilter(query.stepId(), query.blockId());
+        validateBlockFilter(query.stepId(), query.blockId(), companyId);
 
         List<ActivityLogLookupResult> rows = activityLogQueryPort.findActivityLogs(
                 query.stepId(), query.blockId(), query.cursor(), size + 1, companyId);
@@ -85,12 +86,12 @@ public class ActivityLogQueryService implements ActivityLogQueryUseCase {
         }
     }
 
-    private void validateBlockFilter(Long stepId, Long blockId) {
+    private void validateBlockFilter(Long stepId, Long blockId, Long companyId) {
         if (blockId == null) {
             return;
         }
 
-        var block = activityLogQueryPort.findBlockStep(blockId)
+        var block = activityLogQueryPort.findBlockStep(blockId, companyId)
                 .orElseThrow(() -> new NotFoundException(ActivityLogErrorCode.BLOCK_NOT_FOUND));
 
         if (!stepId.equals(block.stepId())) {
