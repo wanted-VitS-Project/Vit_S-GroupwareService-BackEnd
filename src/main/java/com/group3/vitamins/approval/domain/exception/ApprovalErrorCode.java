@@ -35,8 +35,16 @@ public enum ApprovalErrorCode implements ErrorCode {
     APPROVAL_LINE_EMPTY("APPROVAL_LINE_EMPTY", "결재자는 최소 1명이어야 합니다."),
     /** APR-011 — 순서(1부터 연속)가 중복·누락되면 400 */
     APPROVAL_LINE_ORDER_INVALID("APPROVAL_LINE_ORDER_INVALID", "결재 순서는 1부터 중복·누락 없이 연속되어야 합니다."),
-    /** APR-012 — 일반 결재자가 project member 아니면 400. {@code MASTER}·{@code ADMIN}은 제외(인사 계정이라 프로젝트 소속이 없음) */
-    APPROVAL_LINE_APPROVER_NOT_MEMBER("APPROVAL_LINE_APPROVER_NOT_MEMBER", "결재자는 해당 프로젝트의 참여자여야 합니다."),
+    /**
+     * APR-012 — 일반 결재자가 project member 아니면 400. {@code MASTER}·{@code ADMIN}은 제외(인사 계정이라
+     * 프로젝트 소속이 없음).
+     *
+     * <p>결재선 등록(#91)뿐 아니라 <b>상신(#7)</b>에서도 난다 — 결재자가 그 사이 프로젝트에서 제거되면
+     * 재상신이 복사한 결재선에 비멤버가 남기 때문이다. 그때 사용자가 할 일은 결재선 재지정이라
+     * 메시지가 그걸 안내한다(자동 재지정은 만들지 않는다 — `APR-DELETE-DRAFT.md` §10).
+     */
+    APPROVAL_LINE_APPROVER_NOT_MEMBER("APPROVAL_LINE_APPROVER_NOT_MEMBER",
+            "결재자 중 프로젝트 참여자가 아닌 사람이 있습니다. 결재선을 다시 지정해 주세요."),
 
     // --- 8. 재상신 회차 생성 (API 명세 요구사항: SUB-005~009) ---
 
