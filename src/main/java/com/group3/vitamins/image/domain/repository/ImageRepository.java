@@ -23,8 +23,14 @@ public interface ImageRepository {
     /** 단건 삭제 API용 — imgId 하나로 활성 항목을 찾는다(속한 imgBlockId 확인·권한 판정에 씀). */
     Optional<ImageItem> findActiveByImgId(Long imgId);
 
-    /** @return 실제로 갱신된 행 수(0 또는 1) — 대상이 이미 삭제돼 있으면 0 */
-    int updateCaptionAndOrder(Long imgId, Long imgBlockId, String caption, int orderIndex);
+    /**
+     * 기대 버전과 DB 버전이 같을 때만 캡션·순서를 바꾼다(CONCURRENCY.md §4 — 목록 통째 전송 API는
+     * 항목별 version + 전체 롤백). 바뀐 행 수를 돌려준다.
+     *
+     * @return 실제로 갱신된 행 수(0 또는 1) — 대상이 이미 삭제됐거나 그 사이 남이 먼저 저장했으면 0
+     */
+    int updateCaptionAndOrderIfVersionMatches(Long imgId, Long imgBlockId, String caption, int orderIndex,
+                                               int expectedVersion);
 
     /**
      * 수정 요청 배열에서 빠진 이미지 = 삭제로 간주한다 (2026-08-04 결정). 소프트 삭제만 한다 —

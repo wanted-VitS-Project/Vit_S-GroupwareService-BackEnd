@@ -24,11 +24,16 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
 
     // @UpdateTimestamp 는 벌크 JPQL UPDATE 에는 적용되지 않는다(Hibernate 특성 — 엔티티 생명주기를
     // 안 타고 SQL로 바로 나감) — 체크리스트 도메인과 동일한 이유로 updatedAt 을 쿼리에서 직접 찍는다.
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE ImageJpaEntity i SET i.caption = :caption, i.orderIndex = :orderIndex, i.updatedAt = CURRENT_TIMESTAMP "
-            + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL")
-    int updateCaptionAndOrder(@Param("imgId") Long imgId, @Param("imgBlockId") Long imgBlockId,
-                              @Param("caption") String caption, @Param("orderIndex") int orderIndex);
+    // clearAutomatically·flushAutomatically 를 빼면 같은 트랜잭션의 영속성 컨텍스트가 옛 값을 들고
+    // 있어 UPDATE 후 재조회에서도 낡은 값이 나온다(CONCURRENCY.md §6-2).
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ImageJpaEntity i SET i.caption = :caption, i.orderIndex = :orderIndex, "
+            + "i.updatedAt = CURRENT_TIMESTAMP, i.version = i.version + 1 "
+            + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NULL "
+            + "AND i.version = :expectedVersion")
+    int updateCaptionAndOrderIfVersionMatches(@Param("imgId") Long imgId, @Param("imgBlockId") Long imgBlockId,
+                              @Param("caption") String caption, @Param("orderIndex") int orderIndex,
+                              @Param("expectedVersion") int expectedVersion);
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ImageJpaEntity i SET i.deletedAt = :deletedAt "

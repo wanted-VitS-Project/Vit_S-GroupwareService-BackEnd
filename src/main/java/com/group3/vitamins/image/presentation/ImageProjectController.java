@@ -87,7 +87,8 @@ public class ImageProjectController {
 
         List<ImageTrashItemResponse> images = views.stream()
                 .map(view -> new ImageTrashItemResponse(
-                        view.imgId(), view.originalName(), view.imageUrl(), view.caption(), view.deletedAt()))
+                        view.imgId(), view.originalName(), view.imageUrl(), view.caption(),
+                        view.deletedAt(), view.blockDeleted()))
                 .toList();
 
         return ResponseEntity.ok(ApiResponse.success("이미지 휴지통 조회 성공", new ImageTrashResponse(images)));

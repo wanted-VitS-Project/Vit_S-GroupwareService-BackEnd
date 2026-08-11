@@ -57,6 +57,15 @@ public class ImageJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // ⚠️ @Version(JPA)을 붙이지 않는다 — CatalogImageAdapter가 매번 new로 detached 객체를 만들어
+    // merge되므로 JPA 낙관락은 DB 최신값을 다시 읽어 항상 통과해버린다(CONCURRENCY.md §6-1).
+    @Column(name = "version", nullable = false)
+    private int version;
+
+    /**
+     * ⚠️ version을 명시적으로 1로 채운다 — Java int 필드 기본값 0을 그대로 두면 컬럼의
+     * {@code DEFAULT 1}과 무관하게 INSERT 문에 0이 실린다(CONCURRENCY.md §3-1).
+     */
     public ImageJpaEntity(Long imgBlockId, String originalName, String imageUrl, String extension,
                            long size, String caption, int orderIndex) {
         this.imgBlockId = imgBlockId;
@@ -66,5 +75,6 @@ public class ImageJpaEntity {
         this.size = size;
         this.caption = caption;
         this.orderIndex = orderIndex;
+        this.version = 1;
     }
 }

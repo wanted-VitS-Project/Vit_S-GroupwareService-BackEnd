@@ -8,6 +8,6 @@ public record UpdateImageItemsCommand(
         List<Entry> images,
         String role
 ) {
-    public record Entry(Long imgId, String caption) {
+    public record Entry(Long imgId, String caption, int version) {
     }
 }

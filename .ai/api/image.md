@@ -711,7 +711,7 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 
 | 항목 | 값 | 근거 |
 |---|---|---|
-| 저장소 키 | `images/{imgBlockId}/{UUID}.{ext}` | "회사별 접두사" 요청 검토 중 — 현재 도메인 모델엔 회사/고객사 개념이 없어(`PRODUCT.md` 단일 회사 내부 시스템) 보류. 대신 `imgBlockId`를 키에 포함해 나중에 블록↔회사/부서 매핑이 생기면 그 기준으로 묶을 수 있게 함 |
+| 저장소 키 | `companies/{companyId}/images/{imgBlockId}/{UUID}.{ext}` | 2026-08-11 멀티테넌시 반영 — file 도메인의 `companies/{companyId}/...` 키 규칙과 통일. `imgBlockId`도 계속 포함해 블록 기준으로도 묶을 수 있게 유지 |
 | 리사이즈 | 원본이 임계값(가로/세로 1920px 또는 5MB) 초과 시 축소 후 업로드 | 원본 훼손 없이 저장 용량 절약 |
 | 원본 파일명 | DB `image.original_name` 에 그대로 보존 | 리사이즈와 무관하게 사용자가 올린 파일명 유지 |
 | 허용 확장자 | `jpg`·`jpeg`·`png`·`gif`·`webp` (화이트리스트) | 명세에 없어 구현 시 임의 결정 — 확장 필요하면 사용자 확인 후 추가 |
@@ -720,6 +720,26 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 > ⚠️ **이미지 목록/다음 이미지 조회 API를 나중에 추가할 때 주의** — 위 presigned 방식 때문에, 그 API도 저장된 URL을 그대로 내려주면 안 되고 매 요청마다 새로 서명해야 한다. 1시간 지난 URL은 403이 난다.
 >
 > **프론트 캐싱 관련 (2026-08-05 논의)**: "다음" 버튼으로 이미지를 한 장씩 순차 조회하는 화면에서, "마지막 이미지 도달"만 프론트가 로컬로 캐싱해 그 이후 "다음" 클릭 시 API 호출을 생략하는 방식은 **권장하지 않는다** — presigned URL이 1시간마다 만료돼서 어차피 이미지를 보여줄 때마다 백엔드를 거쳐 새로 서명받아야 하고(캐싱해서 아낄 수 있는 API 호출 자체가 없음), 캐싱해두면 그 사이 새로 추가된 이미지를 프론트가 알 방법이 없어진다. **"다음" 버튼은 항상 API를 호출하는 쪽으로 구현할 것.** 이 API 응답엔 매번 최신 `totalCount`(또는 `hasNext`)를 같이 내려서, 프론트가 별도 캐싱 없이 매 응답 기준으로 "다음 버튼 비활성화 여부"를 판단하게 한다.
+
+## 구현 메모 — 낙관적 락 및 blockDeleted (2026-08-11)
+
+`.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `image` 테이블(⚠️ `image_block`이 아니다)에
+`version` 컬럼 추가(`V20260811140000__add_version_image.sql`).
+
+- **이미지 항목 전체 조회**(`GET /blocks/images/{imgBlockId}/items`) 응답의 각 이미지 항목에 `version` 추가 —
+  이 화면이 목록을 통째로 그려 그대로 수정 API로 되돌려 보내는 구조라, 목록에 값이 없으면 프론트가
+  보낼 값이 없다.
+- **이미지 항목 생성**(`POST .../items`) 응답에도 `version`(항상 1) 추가.
+- **이미지 항목 수정**(`PATCH /blocks/images/items/{imgBlockId}`)은 CONCURRENCY.md §4의 "목록 통째 전송"
+  패턴 — 요청 `images[]` 각 항목에 `version` 필수(`IMAGE_VERSION_REQUIRED`, 400), 그 안 하나라도
+  그 사이 변경됐으면 요청 전체가 `409 IMAGE_VERSION_CONFLICT`로 롤백된다(별도 묶음 버전 컬럼 없음).
+  응답의 각 항목에도 갱신된 `version` 포함.
+- `@Version`(JPA) 대신 수동 `WHERE version = ?` 조건부 UPDATE로 검사한다(§6-1).
+
+**이미지 휴지통 조회**(`GET /projects/{projectId}/images/trash`) 응답 각 항목에 `blockDeleted`(boolean)
+추가 — 상위 블록까지 삭제됐으면 true. 이 값이 없으면 프론트가 복구를 시도해서 `IMG-009` 실패를
+받아야만 알 수 있었다. 삭제 정책 Pattern D(`b.deleted_at`을 JOIN 조건에서 필터링하지 않고 그대로
+노출만 함)로 구현.
 
 ## 미확정
 
