@@ -29,7 +29,8 @@ public record BlockFileListResponse(
             String uploaderDepartment,
             String uploaderPosition,
             String updatedAt,
-            @Schema(description = "휴지통 진입 시각. deleted=false 면 항상 null") String deletedAt
+            @Schema(description = "휴지통 진입 시각. deleted=false 면 항상 null") String deletedAt,
+            @Schema(description = "낙관락 버전. 문서명 수정 시 이 값을 그대로 보낸다.", example = "3") int version
     ) {
     }
 
@@ -40,7 +41,8 @@ public record BlockFileListResponse(
                         i.originalFileName(), i.extension(), i.sizeBytes(), i.previewable(),
                         i.uploaderName(), i.uploaderDepartment(), i.uploaderPosition(),
                         i.updatedAt() == null ? null : i.updatedAt().format(FMT),
-                        i.deletedAt() == null ? null : i.deletedAt().format(FMT)))
+                        i.deletedAt() == null ? null : i.deletedAt().format(FMT),
+                        i.version()))
                 .toList();
         return new BlockFileListResponse(r.blockId(), r.canEdit(), items);
     }
