@@ -306,12 +306,24 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
         }
 
+        // 위 두 확인(조회)과 아래 저장 사이에 남이 먼저 매칭할 수 있다 — 정산 블록 쪽을
+        // status = 'PENDING' 조건부 UPDATE로 먼저 확정해서 "1건당 1매칭" 규칙을 원자적으로 지키고,
+        // 성공했을 때만 cash_flow 쪽을 settle_block_id IS NULL 조건부로 확정한다(2026-08-11,
+        // CodeRabbit 지적 — 기존엔 두 UPDATE 모두 조건·영향행 확인이 없어 동시 매칭 시 정산 블록에
+        // 두 건이 겹쳐 연결될 수 있었다).
         LocalDateTime linkedAt = LocalDateTime.now();
-        cashFlowCommandMapper.updateCashFlowMatch(command.cashFlowId(), command.settleId(), command.userId(), linkedAt);
-
         String status = cashFlow.amount().compareTo(settlementBlock.plannedAmount()) >= 0 ? "COMPLETED" : "PARTIAL";
-        cashFlowCommandMapper.updateSettlementBlockMatchResult(
+        int blockUpdated = cashFlowCommandMapper.updateSettlementBlockMatchResult(
                 command.settleId(), status, cashFlow.amount(), cashFlow.tradedAt());
+        if (blockUpdated == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
+        }
+
+        int cashFlowUpdated = cashFlowCommandMapper.updateCashFlowMatch(
+                command.cashFlowId(), command.settleId(), command.userId(), linkedAt);
+        if (cashFlowUpdated == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_ALREADY_MATCHED);
+        }
 
         CashFlowMatchResultRow result = cashFlowMapper.findMatchResultById(command.cashFlowId(), companyId);
         return new CashFlowMatchView(
@@ -349,6 +361,11 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (!StringUtils.hasText(command.bankName()) || command.tradedAt() == null
                 || command.amount() == null || !StringUtils.hasText(command.depositorName())) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING);
+        }
+        // 방향은 type이 전담한다 — amount에 0 이하 값이 섞이면 중복 판정·매칭 시 실적 비교(§matchCashFlow)가
+        // 어긋난다(2026-08-11, CodeRabbit 지적).
+        if (command.amount().signum() <= 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_AMOUNT_INVALID);
         }
         String type = validateType(command.type());
 
@@ -395,6 +412,10 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             BigDecimal amount = command.amount() != null ? command.amount() : current.amount();
             String depositorName = command.depositorName() != null ? command.depositorName() : current.depositorName();
             String memo = command.memo() != null ? command.memo() : current.memo();
+
+            if (amount.signum() <= 0) {
+                throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_AMOUNT_INVALID);
+            }
 
             // 식별 필드(은행명·구분·거래일시·금액)가 바뀌는 경우에만 중복 재검사한다 — 메모만 바뀌는
             // 흔한 경우까지 매번 검사하지 않기 위함. ⚠️ type도 포함해야 한다(2026-08-11, CodeRabbit

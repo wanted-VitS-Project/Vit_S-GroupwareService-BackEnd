@@ -279,7 +279,8 @@ public class FinanceController {
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "입출금 내역 등록 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "필수 항목이 누락되었습니다. (FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING)"),
+                    description = "필수 항목이 누락되었습니다. (FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING) / "
+                            + "금액은 0보다 커야 합니다. (FINANCE_CASH_FLOW_AMOUNT_INVALID)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
@@ -302,7 +303,8 @@ public class FinanceController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "필수 항목이 누락되었습니다. (FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING) / "
-                            + "메모만 수정할 수 있습니다. (FINANCE_CASH_FLOW_FIELD_EDIT_NOT_ALLOWED)"),
+                            + "메모만 수정할 수 있습니다. (FINANCE_CASH_FLOW_FIELD_EDIT_NOT_ALLOWED) / "
+                            + "금액은 0보다 커야 합니다. (FINANCE_CASH_FLOW_AMOUNT_INVALID)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
