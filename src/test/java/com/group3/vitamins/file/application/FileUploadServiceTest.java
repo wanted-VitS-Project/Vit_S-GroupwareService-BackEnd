@@ -134,7 +134,7 @@ class FileUploadServiceTest {
             stubBlockAndEditable();
             stubUploader();
             when(fileQueryPort.existsActiveNameInBlock(BLOCK_ID, "제안서")).thenReturn(false);
-            when(fileRepository.save(any())).thenReturn(File.restore(31L, PROJECT_ID, "제안서", USER, null));
+            when(fileRepository.save(any())).thenReturn(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1));
             when(fileVersionRepository.save(any())).thenReturn(uploadingVersion(74L, 31L, 1, "pdf"));
             when(fileStoragePort.presignUpload(anyString(), anyString(), anyLong()))
                     .thenReturn(new FileStoragePort.PresignedUrl("https://s3/put", Instant.now()));
@@ -154,7 +154,7 @@ class FileUploadServiceTest {
         void startsNewVersion() {
             stubBlockAndEditable();
             stubUploader();
-            when(fileRepository.findById(31L)).thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null)));
+            when(fileRepository.findById(31L)).thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1)));
             when(fileVersionRepository.findMaxVersionNo(31L)).thenReturn(1);
             when(fileVersionRepository.save(any())).thenReturn(uploadingVersion(75L, 31L, 2, "pdf"));
             when(fileStoragePort.presignUpload(anyString(), anyString(), anyLong()))
@@ -244,7 +244,7 @@ class FileUploadServiceTest {
             when(fileStoragePort.getObject(anyString())).thenReturn(new byte[]{1, 2, 3});
             when(pdfPageCounterPort.countPages(any())).thenReturn(Optional.of(42));
             when(fileVersionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            when(fileRepository.findById(31L)).thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null)));
+            when(fileRepository.findById(31L)).thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1)));
 
             FileVersionDetailResult result = service.completeUpload(completeCmd());
 

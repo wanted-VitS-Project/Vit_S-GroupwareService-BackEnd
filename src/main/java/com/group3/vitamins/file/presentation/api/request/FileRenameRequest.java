@@ -11,10 +11,23 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record FileRenameRequest(
         @Schema(description = "새 문서 표시명(최대 255자)", example = "제안서_최종",
                 requiredMode = Schema.RequiredMode.REQUIRED)
-        String name
+        String name,
+
+        @Schema(description = "조회에서 받은 낙관락 버전. 저장 조건으로 건다.", example = "3",
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        Integer version,
+
+        @Schema(description = "true 면 충돌을 무시하고 덮어쓴다. 생략 시 false", example = "false",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        Boolean overwrite
 ) {
 
     public RenameFileCommand toCommand(Long fileId, String requesterUserId, String role) {
-        return new RenameFileCommand(fileId, name, requesterUserId, role);
+        // version 누락(null)은 0 으로 넘겨 서비스가 400 으로 막는다(§6-3: WHERE version=0 → 전부 409 방지).
+        return new RenameFileCommand(
+                fileId, name,
+                version == null ? 0 : version,
+                overwrite != null && overwrite,
+                requesterUserId, role);
     }
 }

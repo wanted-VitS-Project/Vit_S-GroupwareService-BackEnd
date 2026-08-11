@@ -56,6 +56,10 @@ public enum FileErrorCode implements ErrorCode {
     FILE_NAME_DUPLICATED("FILE_NAME_DUPLICATED",
             "같은 이름의 문서가 이미 존재합니다."),
 
+    // --- 동시수정 충돌 (낙관락 · §4) ---
+    FILE_VERSION_CONFLICT("FILE_VERSION_CONFLICT",
+            "다른 사용자가 먼저 수정했습니다."),
+
     // --- 삭제 (휴지통 이동) ---
     FILE_ALREADY_DELETED("FILE_ALREADY_DELETED",
             "이미 휴지통에 있는 문서입니다."),

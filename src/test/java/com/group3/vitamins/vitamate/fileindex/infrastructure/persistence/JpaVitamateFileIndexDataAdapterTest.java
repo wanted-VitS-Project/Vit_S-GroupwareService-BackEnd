@@ -280,9 +280,9 @@ class JpaVitamateFileIndexDataAdapterTest {
     private void insertFile(Long fileId, Long projectId, LocalDateTime deletedAt) {
         jdbcTemplate.update("""
                 INSERT INTO `file` (
-                    file_id, project_id, name, created_by, deleted_at
+                    file_id, project_id, name, created_by, version, deleted_at
                 )
-                VALUES (?, ?, '제안요청서', 'EMP001', ?)
+                VALUES (?, ?, '제안요청서', 'EMP001', 1, ?)
                 """,
                 fileId,
                 projectId,

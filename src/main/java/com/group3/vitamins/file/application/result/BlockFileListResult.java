@@ -24,7 +24,8 @@ public record BlockFileListResult(
             String uploaderDepartment,
             String uploaderPosition,
             LocalDateTime updatedAt,
-            LocalDateTime deletedAt
+            LocalDateTime deletedAt,
+            int version
     ) {
     }
 }
