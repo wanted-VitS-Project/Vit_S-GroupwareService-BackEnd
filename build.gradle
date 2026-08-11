@@ -79,6 +79,11 @@ dependencies {
     // ⚠️ 5.3.0 은 CVE-2025-31672(OOXML 중복 ZIP 항목 검증) 영향 범위 → 5.5.1 이상 유지(CodeRabbit 반영).
     implementation 'org.apache.poi:poi-ooxml:5.5.1'
 
+    // --- CSV (재무 입출금 내역 업로드: 은행 CSV 파싱, finance.md) ---
+    // Spring Boot BOM 이 관리하지 않아 버전을 명시한다. 직접 split 파싱은 따옴표로 감싼 필드 안의
+    // 콤마·개행을 못 다뤄서 은행마다 다른 CSV 포맷에 취약하다 — 검증된 라이브러리로 대체한다.
+    implementation 'org.apache.commons:commons-csv:1.12.0'
+
     // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
 

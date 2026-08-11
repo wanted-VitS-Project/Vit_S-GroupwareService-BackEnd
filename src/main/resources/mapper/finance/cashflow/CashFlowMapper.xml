@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMapper">
+
+    <!--
+        입출금 내역 조회 — cash_flow가 연결된 정산 블록을 타고 project/round까지 채운다.
+        projectName/roundName은 linkedBy 등 나머지 미연결 필드와 동일하게 null을 그대로 내려준다
+        (Notion Success Example의 "미연결" 문자열은 프론트 렌더링 표시값이었을 뿐 API 계약이 아니었음, 2026-08-10 정정).
+
+        ⚠️ settlement_block/block 조인엔 deleted_at 필터를 걸지 않는다(2026-08-10) — "연결됐던 블록이
+        삭제된 것"과 "애초에 미연결"을 구분해 보여줘야 해서, 블록이 삭제돼도 roundName/settleId는 계속
+        보여준다(뭐에 연결돼 있었는지는 알아야 함, 요청사항). project 조인만 기존처럼 deleted_at IS NULL을
+        유지한다 — 프로젝트 자체가 삭제되면 프로젝트명은 안 보이는 게 맞다는 요청사항이라 그대로 둔다.
+        linkStatus로 세 상태를 구분한다: settle_block_id가 없으면 UNLINKED, 있는데 연결된 블록/정산
+        블록이 삭제됐으면 LINK_BLOCK_DELETED, 그 외엔 LINKED.
+    -->
+    <select id="findCashFlows" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowRow">
+        SELECT
+        cf.cash_flow_id AS cashFlowId,
+        cf.traded_at AS tradedAt,
+        cf.bank_txn_id AS bankTxnId,
+        cf.type AS type,
+        cf.amount AS amount,
+        cf.depositor_name AS depositorName,
+        cf.bank_memo AS bankMemo,
+        cf.source_type AS sourceType,
+        p.project_id AS projectId,
+        p.name AS projectName,
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        cf.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        cf.linked_at AS linkedAt,
+        cf.is_excluded AS isExcluded,
+        CASE
+        WHEN cf.settle_block_id IS NULL THEN 'UNLINKED'
+        WHEN sb.deleted_at IS NOT NULL OR b.deleted_at IS NOT NULL THEN 'LINK_BLOCK_DELETED'
+        ELSE 'LINKED'
+        END AS linkStatus
+        FROM cash_flow cf
+        LEFT JOIN settlement_block sb ON sb.settle_id = cf.settle_block_id
+        LEFT JOIN block b ON b.block_id = sb.block_id
+        LEFT JOIN step st ON st.step_id = b.step_id
+        LEFT JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        LEFT JOIN employee e ON e.user_id = cf.linked_by
+        WHERE cf.deleted_at IS NULL
+        AND cf.company_id = #{companyId}
+        <if test="startDate != null">AND DATE(cf.traded_at) &gt;= #{startDate}</if>
+        <if test="endDate != null">AND DATE(cf.traded_at) &lt;= #{endDate}</if>
+        <if test="unlinked != null and unlinked == true">AND cf.settle_block_id IS NULL</if>
+        <if test="projectId != null">AND p.project_id = #{projectId}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (cf.bank_memo LIKE CONCAT('%', #{keyword}, '%') OR cf.depositor_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY cf.traded_at DESC
+    </select>
+
+    <!--
+        필터 옵션 — cash_flow가 하나라도 연결된 정산 블록을 가진 프로젝트만(정산현황 필터 옵션 조회와
+        동일한 사고방식). project 자체엔 아직 company_id가 없어 cash_flow.company_id로 간접적으로
+        회사를 좁힌다.
+    -->
+    <select id="findFilterProjects"
+            resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowFilterProjectRow">
+        SELECT DISTINCT p.project_id AS projectId, p.name AS projectName
+        FROM project p
+        WHERE p.deleted_at IS NULL
+        AND EXISTS (
+        SELECT 1 FROM cash_flow cf
+        JOIN settlement_block sb ON sb.settle_id = cf.settle_block_id
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE st.project_id = p.project_id
+        AND cf.deleted_at IS NULL
+        AND sb.deleted_at IS NULL
+        AND b.deleted_at IS NULL
+        AND cf.company_id = #{companyId}
+        )
+        ORDER BY p.name ASC
+    </select>
+
+    <!-- 매칭 추천 조회의 기준값(type/amount/tradedAt/depositorName)만 뽑는다. -->
+    <select id="findBasicById" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowBasicRow">
+        SELECT type AS type, amount AS amount, traded_at AS tradedAt, depositor_name AS depositorName
+        FROM cash_flow
+        WHERE cash_flow_id = #{cashFlowId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <!--
+        매칭 추천 후보 — "회사 단위"로 스코프해야 하는데(요청사항) project에 아직 company_id가 없어
+        지금은 스코프 없이 전체 프로젝트 대상으로 조회한다(2026-08-10, 백로그 — project에 company_id
+        생기면 여기 WHERE에 필터 추가할 것).
+
+        같은 타입(INCOME/OUTCOME)의 PENDING(미연결) 정산 블록만 대상으로, 금액/일자/거래처명 세
+        기준을 각각 EXACT(정확히 일치)/SIMILAR(유사)/NULL(불일치)로 판정한다 —
+        금액: 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
+        일자: 같은 날짜면 EXACT, ±7일 이내면 SIMILAR.
+        거래처명: 완전 동일이면 EXACT, 한쪽이 다른 쪽을 포함하면(양방향 LIKE, 예: "신한"↔"신한은행") SIMILAR.
+        세 기준 다 NULL(전부 불일치)인 행은 바깥 WHERE에서 제외한다 — 안 그러면 회사 전체 PENDING
+        블록이 다 후보로 잡힌다. 정렬은 매칭 개수(EXACT/SIMILAR 상관없이 걸린 기준 수) 많은 순 →
+        일자 가까운 순, 최대 5건(페이지네이션 없음, 필요해지면 추가).
+    -->
+    <select id="findMatchCandidates" resultType="com.group3.vitamins.finance.infrastructure.cashflow.MatchCandidateRow">
+        SELECT settleId, roundName, projectName, plannedAmount, plannedDate, traderName,
+        amountMatchType, dateMatchType, traderMatchType
+        FROM (
+        SELECT
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        p.name AS projectName,
+        sb.planned_amount AS plannedAmount,
+        sb.planned_date AS plannedDate,
+        sb.trader_name AS traderName,
+        CASE
+        WHEN sb.planned_amount = #{amount} THEN 'EXACT'
+        WHEN sb.planned_amount BETWEEN #{amount} * 0.95 AND #{amount} * 1.05 THEN 'SIMILAR'
+        ELSE NULL
+        END AS amountMatchType,
+        CASE
+        WHEN sb.planned_date = #{tradedDate} THEN 'EXACT'
+        WHEN ABS(DATEDIFF(sb.planned_date, #{tradedDate})) &lt;= 7 THEN 'SIMILAR'
+        ELSE NULL
+        END AS dateMatchType,
+        CASE
+        WHEN sb.trader_name = #{depositorName} THEN 'EXACT'
+        WHEN sb.trader_name LIKE CONCAT('%', #{depositorName}, '%')
+        OR #{depositorName} LIKE CONCAT('%', sb.trader_name, '%') THEN 'SIMILAR'
+        ELSE NULL
+        END AS traderMatchType
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        WHERE sb.deleted_at IS NULL
+        AND sb.status = 'PENDING'
+        AND sb.type = #{type}
+        ) candidates
+        WHERE amountMatchType IS NOT NULL OR dateMatchType IS NOT NULL OR traderMatchType IS NOT NULL
+        ORDER BY
+        (CASE WHEN amountMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN dateMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN traderMatchType IS NOT NULL THEN 1 ELSE 0 END) DESC,
+        ABS(DATEDIFF(plannedDate, #{tradedDate})) ASC
+        LIMIT 5
+    </select>
+
+    <!-- 매칭/매칭 해제 검증용 — settleBlockId(현재 연결된 정산 블록)로 "이미 매칭됨" 여부를 판정한다. -->
+    <select id="findMatchLookup" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMatchLookupRow">
+        SELECT type AS type, amount AS amount, traded_at AS tradedAt, settle_block_id AS settleBlockId
+        FROM cash_flow
+        WHERE cash_flow_id = #{cashFlowId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <!-- 매칭 대상 정산 블록 검증용 — 정산 블록·공용 블록 둘 다 살아있어야 한다. -->
+    <select id="findSettlementBlockForMatch" resultType="com.group3.vitamins.finance.infrastructure.cashflow.SettlementBlockMatchRow">
+        SELECT sb.type AS type, sb.status AS status, sb.planned_amount AS plannedAmount
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        WHERE sb.settle_id = #{settleId} AND sb.deleted_at IS NULL
+    </select>
+
+    <!-- 매칭 UPDATE 직후 같은 트랜잭션 안에서 응답 조립용으로 다시 조회한다(커밋 전에도 같은 커넥션이라 보임). -->
+    <select id="findMatchResultById" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMatchResultRow">
+        SELECT
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        p.name AS projectName,
+        cf.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        cf.linked_at AS linkedAt
+        FROM cash_flow cf
+        JOIN settlement_block sb ON sb.settle_id = cf.settle_block_id
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id
+        JOIN employee e ON e.user_id = cf.linked_by
+        WHERE cf.cash_flow_id = #{cashFlowId}
+    </select>
+
+    <!-- 등록/수정 응답 조립 + 수정 병합용. memo는 이 API들의 필드명(bank_memo가 아니라 memo)에 맞춰 별칭한다. -->
+    <select id="findDetailById" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowDetailRow">
+        SELECT
+        cash_flow_id AS cashFlowId,
+        bank_txn_id AS bankTxnId,
+        bank_name AS bankName,
+        traded_at AS tradedAt,
+        type AS type,
+        amount AS amount,
+        depositor_name AS depositorName,
+        bank_memo AS memo,
+        source_type AS sourceType,
+        settle_block_id AS settleBlockId,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+        FROM cash_flow
+        WHERE cash_flow_id = #{cashFlowId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <select id="existsDuplicate" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM cash_flow
+        WHERE company_id = #{companyId} AND bank_name = #{bankName} AND traded_at = #{tradedAt}
+        AND amount = #{amount} AND balance_after IS NULL AND deleted_at IS NULL
+        )
+    </select>
+
+    <select id="existsDuplicateExcluding" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM cash_flow
+        WHERE company_id = #{companyId} AND bank_name = #{bankName} AND traded_at = #{tradedAt}
+        AND amount = #{amount} AND balance_after IS NULL AND deleted_at IS NULL
+        AND cash_flow_id != #{cashFlowId}
+        )
+    </select>
+
+    <select id="findDeleteCandidates" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowDeleteCandidateRow">
+        SELECT cash_flow_id AS cashFlowId, settle_block_id AS settleBlockId
+        FROM cash_flow
+        WHERE company_id = #{companyId} AND deleted_at IS NULL
+        AND cash_flow_id IN
+        <foreach collection="cashFlowIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>

@@ -1,0 +1,477 @@
+package com.group3.vitamins.finance.application.service;
+
+import com.group3.vitamins.finance.application.command.CashFlowCsvPreviewCommand;
+import com.group3.vitamins.finance.application.command.CashFlowCsvUploadCommand;
+import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
+import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
+import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UpdateCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
+import com.group3.vitamins.finance.application.port.PagePermissionPort;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase;
+import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowCommandMapper;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowDedupKeyRow;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowDeleteCandidateRow;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowDetailRow;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMapper;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMatchLookupRow;
+import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMatchResultRow;
+import com.group3.vitamins.finance.infrastructure.cashflow.SettlementBlockMatchRow;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowAmountMode;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowBankCatalog;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvColumnRecommender;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvMapping;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvRecommendation;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvRowParser;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvTable;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowDateTimeMode;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowUploadFileReader;
+import com.group3.vitamins.finance.infrastructure.cashflow.csv.ParsedCashFlowRow;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class FinanceCommandService implements FinanceCommandUseCase {
+
+    private static final String FINANCE_PAGE_CODE = "FINANCE";
+    private static final int SAMPLE_ROW_LIMIT = 5;
+
+    private final PagePermissionPort pagePermissionPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final CashFlowUploadFileReader cashFlowUploadFileReader;
+    private final CashFlowCsvColumnRecommender cashFlowCsvColumnRecommender;
+    private final CashFlowCsvRowParser cashFlowCsvRowParser;
+    private final CashFlowCommandMapper cashFlowCommandMapper;
+    private final CashFlowMapper cashFlowMapper;
+
+    @Override
+    @Transactional(readOnly = true)
+    public CashFlowCsvPreviewView previewCashFlowCsv(CashFlowCsvPreviewCommand command) {
+        log.info("입출금 내역 CSV 컬럼 추천 조회 요청 - userId={}", command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        CashFlowCsvTable table =
+                cashFlowUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
+        CashFlowCsvRecommendation recommendation = cashFlowCsvColumnRecommender.recommend(table.headers());
+
+        List<Map<String, String>> sampleRows = table.rows().stream()
+                .limit(SAMPLE_ROW_LIMIT)
+                .map(row -> toDisplayRow(table.headers(), row))
+                .toList();
+
+        return new CashFlowCsvPreviewView(
+                table.headers(),
+                CashFlowBankCatalog.BANK_OPTIONS,
+                sampleRows,
+                recommendation.dateTimeMode().name(),
+                recommendation.amountMode().name(),
+                toMappingView(recommendation.mapping())
+        );
+    }
+
+    private Map<String, String> toDisplayRow(List<String> headers, Map<String, String> row) {
+        // 파싱 단계에서 빈 셀은 null로 정규화해뒀지만(매핑 필수값 체크용), 미리보기 화면에는
+        // 원본 CSV처럼 빈 문자열로 보여준다(명세 Success Example의 "출금금액": "" 그대로).
+        Map<String, String> displayRow = new LinkedHashMap<>();
+        for (String header : headers) {
+            String value = row.get(header);
+            displayRow.put(header, value == null ? "" : value);
+        }
+        return displayRow;
+    }
+
+    private CashFlowCsvMappingView toMappingView(CashFlowCsvMapping mapping) {
+        return new CashFlowCsvMappingView(
+                mapping.tradedDateTimeColumn(), mapping.tradedDateColumn(), mapping.tradedTimeColumn(),
+                mapping.amountColumn(), mapping.typeColumn(),
+                mapping.incomeAmountColumn(), mapping.outcomeAmountColumn(),
+                mapping.memoColumn(), mapping.depositorColumn(), mapping.balanceColumn()
+        );
+    }
+
+    @Override
+    @Transactional
+    public CashFlowCsvUploadView uploadCashFlowCsv(CashFlowCsvUploadCommand command) {
+        log.info("입출금 내역(CSV 기반) 업로드 요청 - userId={}, bankName={}", command.userId(), command.bankName());
+
+        assertEditAccess(command.userId(), command.role());
+
+        if (!StringUtils.hasText(command.bankName())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "은행명이 필요합니다.");
+        }
+        CashFlowDateTimeMode dateTimeMode = parseDateTimeMode(command.dateTimeMode());
+        CashFlowAmountMode amountMode = parseAmountMode(command.amountMode());
+        CashFlowCsvMapping mapping = new CashFlowCsvMapping(
+                command.tradedDateTimeColumn(), command.tradedDateColumn(), command.tradedTimeColumn(),
+                command.amountColumn(), command.typeColumn(),
+                command.incomeAmountColumn(), command.outcomeAmountColumn(),
+                command.memoColumn(), command.depositorColumn(), command.balanceColumn()
+        );
+
+        CashFlowCsvTable table =
+                cashFlowUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
+        validateMapping(table.headers(), dateTimeMode, amountMode, mapping);
+
+        List<ParsedCashFlowRow> parsedRows =
+                cashFlowCsvRowParser.parseRows(table, command.bankName(), dateTimeMode, amountMode, mapping);
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        Set<String> seenKeys = new HashSet<>();
+        if (!parsedRows.isEmpty()) {
+            List<CashFlowDedupKeyRow> existing =
+                    cashFlowCommandMapper.findExistingDedupKeys(companyId, command.bankName(), parsedRows);
+            existing.forEach(row -> seenKeys.add(dedupKey(row.tradedAt(), row.amount(), row.balanceAfter())));
+        }
+
+        List<ParsedCashFlowRow> toInsert = new ArrayList<>();
+        List<DuplicateRowView> duplicateRows = new ArrayList<>();
+        for (ParsedCashFlowRow row : parsedRows) {
+            // seenKeys에는 DB에 이미 있는 조합뿐 아니라, 같은 파일 안에서 먼저 처리된 행의 조합도 함께
+            // 쌓인다 — 파일 내부 중복도 같은 로직으로 걸러진다.
+            if (!seenKeys.add(dedupKey(row.tradedAt(), row.amount(), row.balanceAfter()))) {
+                duplicateRows.add(new DuplicateRowView(row.tradedAt(), row.amount(), "이미 등록된 거래입니다."));
+            } else {
+                toInsert.add(row);
+            }
+        }
+
+        int savedCount = toInsert.isEmpty()
+                ? 0
+                : cashFlowCommandMapper.insertAll(companyId, command.bankName(), toInsert);
+
+        return new CashFlowCsvUploadView(table.rows().size(), savedCount, duplicateRows.size(), duplicateRows);
+    }
+
+    /**
+     * 은행명·거래일시·금액만으론 "같은 초·같은 금액의 서로 다른 거래"를 구분 못 해서(2026-08-10, 실제
+     * 카카오뱅크 CSV로 확인) 잔액도 키에 포함한다. 잔액 컬럼이 없는 CSV는 balanceAfter가 항상 null이라
+     * 문자열 "null"로 통일되고, 그 경우 기존과 동일하게 은행명+거래일시+금액만으로 판정된다.
+     */
+    private String dedupKey(java.time.LocalDateTime tradedAt, java.math.BigDecimal amount, java.math.BigDecimal balanceAfter) {
+        String balancePart = balanceAfter == null ? "null" : balanceAfter.stripTrailingZeros().toPlainString();
+        return tradedAt + "|" + amount.stripTrailingZeros().toPlainString() + "|" + balancePart;
+    }
+
+    private CashFlowDateTimeMode parseDateTimeMode(String raw) {
+        try {
+            return CashFlowDateTimeMode.valueOf(raw);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "dateTimeMode 값이 올바르지 않습니다.");
+        }
+    }
+
+    private CashFlowAmountMode parseAmountMode(String raw) {
+        try {
+            return CashFlowAmountMode.valueOf(raw);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "amountMode 값이 올바르지 않습니다.");
+        }
+    }
+
+    private void validateMapping(List<String> headers, CashFlowDateTimeMode dateTimeMode,
+                                  CashFlowAmountMode amountMode, CashFlowCsvMapping mapping) {
+        if (dateTimeMode == CashFlowDateTimeMode.SINGLE) {
+            requireColumn(headers, mapping.tradedDateTimeColumn(), "tradedDateTimeColumn");
+        } else {
+            requireColumn(headers, mapping.tradedDateColumn(), "tradedDateColumn");
+            requireColumn(headers, mapping.tradedTimeColumn(), "tradedTimeColumn");
+        }
+
+        if (amountMode == CashFlowAmountMode.SINGLE_WITH_TYPE) {
+            requireColumn(headers, mapping.amountColumn(), "amountColumn");
+            requireColumn(headers, mapping.typeColumn(), "typeColumn");
+        } else {
+            requireColumn(headers, mapping.incomeAmountColumn(), "incomeAmountColumn");
+            requireColumn(headers, mapping.outcomeAmountColumn(), "outcomeAmountColumn");
+        }
+
+        // 거래처(depositorColumn)는 모드와 무관하게 항상 필수다 — cash_flow.depositor_name이 NOT NULL이고,
+        // 업로드 화면에서도 필수 입력으로 확정됐다(2026-08-10, 원 명세 표는 선택(N)이었으나 정정).
+        requireColumn(headers, mapping.depositorColumn(), "depositorColumn");
+
+        // 잔액(balanceColumn)은 선택이다 — CSV에 잔액 컬럼이 없는 은행도 있어서 필수로 두지 않는다.
+        // 다만 매핑값을 보냈는데 그 컬럼이 실제 CSV에 없으면(오타 등) 다른 필수 컬럼과 동일하게 막는다.
+        if (StringUtils.hasText(mapping.balanceColumn())) {
+            requireColumn(headers, mapping.balanceColumn(), "balanceColumn");
+        }
+    }
+
+    private void requireColumn(List<String> headers, String column, String fieldName) {
+        if (!StringUtils.hasText(column)) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, fieldName + "이(가) 필요합니다.");
+        }
+        if (!headers.contains(column)) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
+                    fieldName + "(" + column + ")이(가) CSV에 없는 컬럼입니다.");
+        }
+    }
+
+    @Override
+    @Transactional
+    public CashFlowMatchView matchCashFlow(MatchCashFlowCommand command) {
+        log.info("입출금 내역 블록 매칭 요청 - cashFlowId={}, settleId={}, userId={}",
+                command.cashFlowId(), command.settleId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        CashFlowMatchLookupRow cashFlow =
+                cashFlowMapper.findMatchLookup(command.cashFlowId(), currentCompanyIdProvider.currentCompanyId());
+        if (cashFlow == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_MATCH_TARGET_NOT_FOUND);
+        }
+        if (cashFlow.settleBlockId() != null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_ALREADY_MATCHED);
+        }
+
+        SettlementBlockMatchRow settlementBlock = cashFlowMapper.findSettlementBlockForMatch(command.settleId());
+        if (settlementBlock == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_MATCH_TARGET_NOT_FOUND);
+        }
+        // settlementBlock.type()은 아직 항목이 작성된 적 없는 빈 블록이면 null이다(정산 블록 자체는
+        // 존재하지만 PATCH로 내용을 넣기 전까진 type이 정해지지 않음) — Objects.equals로 null도
+        // 안전하게 "불일치"로 처리한다(2026-08-10, 실제 테스트로 NPE→500 발견).
+        if (!Objects.equals(settlementBlock.type(), cashFlow.type())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_MATCH_TYPE_MISMATCH);
+        }
+        // 정산 블록 1건당 매칭은 1번뿐이다(2026-08-10 확정) — 부족분은 실무팀이 새 회차를 만들어 매칭한다.
+        if (!"PENDING".equals(settlementBlock.status())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
+        }
+
+        LocalDateTime linkedAt = LocalDateTime.now();
+        cashFlowCommandMapper.updateCashFlowMatch(command.cashFlowId(), command.settleId(), command.userId(), linkedAt);
+
+        String status = cashFlow.amount().compareTo(settlementBlock.plannedAmount()) >= 0 ? "COMPLETED" : "PARTIAL";
+        cashFlowCommandMapper.updateSettlementBlockMatchResult(
+                command.settleId(), status, cashFlow.amount(), cashFlow.tradedAt());
+
+        CashFlowMatchResultRow result = cashFlowMapper.findMatchResultById(command.cashFlowId());
+        return new CashFlowMatchView(
+                command.cashFlowId(), result.settleId(), result.roundName(), result.projectName(),
+                result.linkedBy(), result.linkedByName(), result.linkedAt());
+    }
+
+    @Override
+    @Transactional
+    public void unmatchCashFlow(UnmatchCashFlowCommand command) {
+        log.info("입출금 내역 블록 매칭 해제 요청 - cashFlowId={}, userId={}", command.cashFlowId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        CashFlowMatchLookupRow cashFlow =
+                cashFlowMapper.findMatchLookup(command.cashFlowId(), currentCompanyIdProvider.currentCompanyId());
+        if (cashFlow == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND);
+        }
+        if (cashFlow.settleBlockId() == null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_MATCHED);
+        }
+
+        cashFlowCommandMapper.clearCashFlowMatch(command.cashFlowId());
+        cashFlowCommandMapper.resetSettlementBlockMatch(cashFlow.settleBlockId());
+    }
+
+    @Override
+    @Transactional
+    public CashFlowDetailView createCashFlow(CreateCashFlowCommand command) {
+        log.info("입출금 내역 직접 등록 요청 - userId={}, bankName={}", command.userId(), command.bankName());
+
+        assertEditAccess(command.userId(), command.role());
+
+        if (!StringUtils.hasText(command.bankName()) || command.tradedAt() == null
+                || command.amount() == null || !StringUtils.hasText(command.depositorName())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING);
+        }
+        String type = validateType(command.type());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        if (cashFlowMapper.existsDuplicate(companyId, command.bankName(), command.tradedAt(), command.amount())) {
+            throw new ConflictException(FinanceErrorCode.FINANCE_CASH_FLOW_DUPLICATE);
+        }
+
+        String bankTxnId = generateBankTxnId(command.bankName(), command.tradedAt());
+        cashFlowCommandMapper.insertManual(companyId, command.bankName(), type, command.tradedAt(),
+                command.amount(), command.depositorName(), command.memo(), bankTxnId);
+        Long cashFlowId = cashFlowCommandMapper.lastInsertedId();
+
+        return toDetailView(cashFlowMapper.findDetailById(cashFlowId, companyId));
+    }
+
+    @Override
+    @Transactional
+    public CashFlowDetailView updateCashFlow(UpdateCashFlowCommand command) {
+        log.info("입출금 내역 수정 요청 - cashFlowId={}, userId={}", command.cashFlowId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CashFlowDetailRow current = cashFlowMapper.findDetailById(command.cashFlowId(), companyId);
+        if (current == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND);
+        }
+
+        // CSV/API 출처이거나 이미 정산 블록에 매칭된 직접 등록 항목은 메모만 수정 가능(요청사항).
+        boolean memoOnly = !"MANUAL".equals(current.sourceType()) || current.settleBlockId() != null;
+        boolean hasOtherFields = command.bankName() != null || command.tradedAt() != null
+                || command.type() != null || command.amount() != null || command.depositorName() != null;
+
+        if (memoOnly) {
+            if (hasOtherFields) {
+                throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_FIELD_EDIT_NOT_ALLOWED);
+            }
+            cashFlowCommandMapper.updateCashFlowMemo(command.cashFlowId(), command.memo());
+        } else {
+            String type = command.type() != null ? validateType(command.type()) : current.type();
+            String bankName = command.bankName() != null ? command.bankName() : current.bankName();
+            LocalDateTime tradedAt = command.tradedAt() != null ? command.tradedAt() : current.tradedAt();
+            BigDecimal amount = command.amount() != null ? command.amount() : current.amount();
+            String depositorName = command.depositorName() != null ? command.depositorName() : current.depositorName();
+            String memo = command.memo() != null ? command.memo() : current.memo();
+
+            // 식별 필드(은행명·거래일시·금액)가 바뀌는 경우에만 중복 재검사한다 — 메모만 바뀌는 흔한
+            // 경우까지 매번 검사하지 않기 위함.
+            boolean identityChanged =
+                    command.bankName() != null || command.tradedAt() != null || command.amount() != null;
+            if (identityChanged
+                    && cashFlowMapper.existsDuplicateExcluding(command.cashFlowId(), companyId, bankName, tradedAt, amount)) {
+                throw new ConflictException(FinanceErrorCode.FINANCE_CASH_FLOW_DUPLICATE);
+            }
+
+            cashFlowCommandMapper.updateCashFlowManual(
+                    command.cashFlowId(), bankName, tradedAt, type, amount, depositorName, memo);
+        }
+
+        return toDetailView(cashFlowMapper.findDetailById(command.cashFlowId(), companyId));
+    }
+
+    @Override
+    @Transactional
+    public CashFlowDeleteResultView deleteCashFlows(DeleteCashFlowsCommand command) {
+        log.info("입출금 내역 배치 삭제 요청 - userId={}, count={}",
+                command.userId(), command.cashFlowIds() == null ? 0 : command.cashFlowIds().size());
+
+        assertEditAccess(command.userId(), command.role());
+
+        if (command.cashFlowIds() == null || command.cashFlowIds().isEmpty()) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING, "삭제할 항목을 선택해주세요.");
+        }
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        // Collectors.toMap은 내부적으로 Map.merge를 써서 값이 null이면(미매칭 = settleBlockId null인
+        // 정상 케이스) NullPointerException을 던진다(2026-08-10, 실제 테스트로 500 발견) — HashMap.put은
+        // null 값을 허용하므로 직접 채운다.
+        Map<Long, Long> settleBlockByCashFlowId = new HashMap<>();
+        for (CashFlowDeleteCandidateRow row : cashFlowMapper.findDeleteCandidates(command.cashFlowIds(), companyId)) {
+            settleBlockByCashFlowId.put(row.cashFlowId(), row.settleBlockId());
+        }
+
+        List<Long> deletable = new ArrayList<>();
+        List<SkippedCashFlowView> skipped = new ArrayList<>();
+        for (Long cashFlowId : command.cashFlowIds()) {
+            if (!settleBlockByCashFlowId.containsKey(cashFlowId)) {
+                skipped.add(new SkippedCashFlowView(cashFlowId, FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND.getMessage()));
+            } else if (settleBlockByCashFlowId.get(cashFlowId) != null) {
+                skipped.add(new SkippedCashFlowView(cashFlowId, FinanceErrorCode.FINANCE_CASH_FLOW_LINKED_CANNOT_DELETE.getMessage()));
+            } else {
+                deletable.add(cashFlowId);
+            }
+        }
+
+        if (!deletable.isEmpty()) {
+            cashFlowCommandMapper.softDeleteBatch(deletable);
+        }
+
+        return new CashFlowDeleteResultView(deletable.size(), skipped);
+    }
+
+    @Override
+    @Transactional
+    public CashFlowExclusionResultView updateCashFlowExclusion(UpdateCashFlowExclusionCommand command) {
+        log.info("입출금 내역 연결 제외 처리 요청 - userId={}, isExcluded={}, count={}",
+                command.userId(), command.isExcluded(),
+                command.cashFlowIds() == null ? 0 : command.cashFlowIds().size());
+
+        assertEditAccess(command.userId(), command.role());
+
+        if (command.cashFlowIds() == null || command.cashFlowIds().isEmpty() || command.isExcluded() == null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING);
+        }
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        Map<Long, Long> settleBlockByCashFlowId = new HashMap<>();
+        for (CashFlowDeleteCandidateRow row : cashFlowMapper.findDeleteCandidates(command.cashFlowIds(), companyId)) {
+            settleBlockByCashFlowId.put(row.cashFlowId(), row.settleBlockId());
+        }
+
+        List<Long> updatable = new ArrayList<>();
+        List<SkippedCashFlowView> skipped = new ArrayList<>();
+        for (Long cashFlowId : command.cashFlowIds()) {
+            if (!settleBlockByCashFlowId.containsKey(cashFlowId)) {
+                skipped.add(new SkippedCashFlowView(cashFlowId, FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND.getMessage()));
+            } else if (command.isExcluded() && settleBlockByCashFlowId.get(cashFlowId) != null) {
+                // 제외 취소(false)는 매칭 여부와 무관하게 항상 허용 — "이미 매칭됨"은 제외(true)할 때만 막는다.
+                skipped.add(new SkippedCashFlowView(
+                        cashFlowId, FinanceErrorCode.FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE.getMessage()));
+            } else {
+                updatable.add(cashFlowId);
+            }
+        }
+
+        if (!updatable.isEmpty()) {
+            cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded());
+        }
+
+        return new CashFlowExclusionResultView(updatable.size(), skipped);
+    }
+
+    private String validateType(String raw) {
+        if (!"INCOME".equals(raw) && !"OUTCOME".equals(raw)) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_REQUIRED_FIELD_MISSING, "type 값이 올바르지 않습니다.");
+        }
+        return raw;
+    }
+
+    private String generateBankTxnId(String bankName, LocalDateTime tradedAt) {
+        String prefix = bankName.substring(0, Math.min(4, bankName.length()));
+        return prefix + "-" + tradedAt.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+    }
+
+    private CashFlowDetailView toDetailView(CashFlowDetailRow row) {
+        return new CashFlowDetailView(
+                row.cashFlowId(), row.bankTxnId(), row.bankName(), row.tradedAt(), row.type(), row.amount(),
+                row.depositorName(), row.memo(), row.sourceType(), row.createdAt(), row.updatedAt()
+        );
+    }
+
+    private void assertEditAccess(String userId, String role) {
+        if (!pagePermissionPort.hasEditAccess(FINANCE_PAGE_CODE, userId, role)) {
+            log.warn("재무 관리 페이지 편집 권한 없음 - userId={}", userId);
+            throw new ForbiddenException(FinanceErrorCode.FINANCE_EDIT_ACCESS_DENIED);
+        }
+    }
+}
