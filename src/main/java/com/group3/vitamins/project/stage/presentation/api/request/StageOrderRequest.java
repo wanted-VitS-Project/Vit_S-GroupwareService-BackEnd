@@ -22,7 +22,7 @@ public record StageOrderRequest(
         List<@NotNull(message = "STAGE_ORDER_INVALID|순서 항목이 비어 있습니다.") Item> orders
 ) {
 
-    @Schema(description = "스테이지 하나의 새 순서")
+    @Schema(name = "StageOrderRequestItem", description = "스테이지 하나의 새 순서")
     public record Item(
 
             @NotNull(message = "STAGE_ORDER_INVALID|스테이지 ID 가 없습니다.")

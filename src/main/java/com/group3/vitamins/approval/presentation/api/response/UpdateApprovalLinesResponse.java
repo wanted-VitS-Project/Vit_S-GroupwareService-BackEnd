@@ -10,6 +10,7 @@ public record UpdateApprovalLinesResponse(
         List<LineItem> lines
 ) {
 
+    @Schema(name = "UpdateApprovalLinesResponseLineItem")
     public record LineItem(
             @Schema(description = "결재선 구분 번호", example = "1")
             Long lineId,

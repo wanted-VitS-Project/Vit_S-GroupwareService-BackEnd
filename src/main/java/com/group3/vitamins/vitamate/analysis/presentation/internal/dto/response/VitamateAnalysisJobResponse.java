@@ -99,6 +99,7 @@ public record VitamateAnalysisJobResponse(
         }
     }
 
+    @Schema(name = "VitamateAnalysisJobResponseDocument")
     public record Document(
             @Schema(description = "파일 버전 ID", example = "101")
             Long fileVersionId,

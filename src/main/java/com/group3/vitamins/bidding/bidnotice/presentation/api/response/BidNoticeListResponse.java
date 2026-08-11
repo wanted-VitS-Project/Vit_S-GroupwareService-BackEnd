@@ -16,6 +16,7 @@ public record BidNoticeListResponse(
         int page,
         int size
 ) {
+    @Schema(name = "BidNoticeListResponseItem")
     public record Item(
             Long noticeId, String noticeName, String sourceCode, String sourceName,
             String sourceUrl, String noticeAgency, Long businessCategoryId,

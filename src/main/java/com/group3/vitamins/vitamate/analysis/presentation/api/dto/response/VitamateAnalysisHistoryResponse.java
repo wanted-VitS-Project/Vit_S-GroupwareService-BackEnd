@@ -27,6 +27,7 @@ public record VitamateAnalysisHistoryResponse(
         );
     }
 
+    @Schema(name = "VitamateAnalysisHistoryResponseItem")
     public record Item(
             @Schema(description = "분석 ID", example = "501")
             Long analysisId,

@@ -15,6 +15,7 @@ public record BlockFileListResponse(
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    @Schema(name = "BlockFileListResponseItem")
     public record Item(
             Long fileId,
             String name,
