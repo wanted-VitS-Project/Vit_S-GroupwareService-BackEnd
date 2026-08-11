@@ -67,8 +67,8 @@ class IssueCommandServiceTest {
                 .thenReturn(new IssueStepAccessPort.StepAccessView(10L, 20L));
         when(issueAssigneePort.validateAssignable(20L, List.of("EMP003", "EMP005")))
                 .thenReturn(List.of(
-                        new IssueAssigneePort.AssigneeView("EMP003", "김용준"),
-                        new IssueAssigneePort.AssigneeView("EMP005", "김동훈")
+                        new IssueAssigneePort.AssigneeView("EMP003", "김용준", null),
+                        new IssueAssigneePort.AssigneeView("EMP005", "김동훈", null)
                 ));
         when(issueBlockPort.validateLinkable(10L, List.of()))
                 .thenReturn(List.of());
@@ -113,8 +113,8 @@ class IssueCommandServiceTest {
                 .thenReturn(new IssueStepAccessPort.StepAccessView(10L, 20L));
         when(issueAssigneePort.validateAssignable(20L, List.of("EMP003", "EMP005")))
                 .thenReturn(List.of(
-                        new IssueAssigneePort.AssigneeView("EMP003", "김용준"),
-                        new IssueAssigneePort.AssigneeView("EMP005", "김동훈")
+                        new IssueAssigneePort.AssigneeView("EMP003", "김용준", null),
+                        new IssueAssigneePort.AssigneeView("EMP005", "김동훈", null)
                 ));
         when(issueBlockPort.validateLinkable(10L, List.of(15L)))
                 .thenReturn(List.of(new IssueBlockPort.BlockView(15L, "제안서 작성 체크리스트", "CHECKLIST")));
@@ -497,7 +497,7 @@ class IssueCommandServiceTest {
                 List.of()
         )));
         when(issueQueryPort.findAssignees(List.of(101L))).thenReturn(List.of(
-                new IssueQueryPort.AssigneeResult(101L, "EMP003", "김용준")
+                new IssueQueryPort.AssigneeResult(101L, "EMP003", "김용준", null)
         ));
         when(issueQueryPort.findRelatedBlocks(List.of(101L))).thenReturn(List.of(
                 new IssueQueryPort.RelatedBlockResult(101L, 15L, "제안서 작성 체크리스트", "CHECKLIST")

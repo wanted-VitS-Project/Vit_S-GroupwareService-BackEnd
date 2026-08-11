@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,7 +56,10 @@ class ActivityLogQueryMapperTest {
     void findActivityLogs_filtersByCompany() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession();
              Statement statement = session.getConnection().createStatement()) {
-            statement.execute("INSERT INTO employee (user_id, name) VALUES ('EMP001', '김용준')");
+            statement.execute("""
+                    INSERT INTO employee (user_id, name, resigned_at)
+                    VALUES ('EMP001', '김용준', DATE '2026-08-01')
+                    """);
             statement.execute("INSERT INTO block (block_id, step_id, title, type) VALUES (10, 5, '제안서 작성', 'TEXT')");
             statement.execute("""
                     INSERT INTO activity_log (
@@ -71,6 +75,8 @@ class ActivityLogQueryMapperTest {
                     .findActivityLogs(5L, null, null, 21, 1L);
 
             assertThat(rows).extracting(ActivityLogRow::activityLogId).containsExactly(101L);
+            assertThat(rows.get(0).actorName()).isEqualTo("김용준");
+            assertThat(rows.get(0).actorResignedAt()).isEqualTo(LocalDate.of(2026, 8, 1));
         }
     }
 
@@ -84,7 +90,8 @@ class ActivityLogQueryMapperTest {
             statement.execute("""
                     CREATE TABLE employee (
                         user_id VARCHAR(20) PRIMARY KEY,
-                        name VARCHAR(100) NOT NULL
+                        name VARCHAR(100) NOT NULL,
+                        resigned_at DATE NULL
                     )
                     """);
             statement.execute("""

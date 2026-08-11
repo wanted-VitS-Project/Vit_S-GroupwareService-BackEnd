@@ -1,5 +1,6 @@
 package com.group3.vitamins.activitylog.application.result;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public record ActivityLogResult(
@@ -29,7 +30,7 @@ public record ActivityLogResult(
                 result.beforeValue(),
                 result.afterValue(),
                 new Resource(result.resourceId(), result.resourceName()),
-                new Actor(result.actorUserId(), result.actorName()),
+                new Actor(result.actorUserId(), result.actorName(), result.actorResignedAt()),
                 new Block(result.blockId(), result.blockTitle(), result.blockType()),
                 result.createdAt()
         );
@@ -43,7 +44,8 @@ public record ActivityLogResult(
 
     public record Actor(
             String userId,
-            String name
+            String name,
+            LocalDate resignedAt
     ) {
     }
 
