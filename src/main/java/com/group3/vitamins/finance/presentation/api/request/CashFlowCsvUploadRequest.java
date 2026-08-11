@@ -29,7 +29,8 @@ public record CashFlowCsvUploadRequest(
         @Schema(description = "적요 컬럼명", example = "적요", nullable = true)
         String memoColumn,
         @Schema(description = "잔액(거래 후 잔액) 컬럼명 — 선택. 같은 은행·시각·금액인데 실제로는 다른 거래인 "
-                + "경우를 구분하는 중복 판정 보강용. CSV에 잔액 컬럼이 없으면 생략 가능(원 명세엔 없던 필드, 2026-08-10 추가)",
+                + "경우를 구분하는 중복 판정 보강용. 매핑 화면에 이 항목이 없으면 생략 가능(원 명세엔 없던 필드, "
+                + "2026-08-10 추가)",
                 example = "잔액", nullable = true)
         String balanceColumn,
         @Schema(description = "파일이 비밀번호로 보호돼 있으면 그 비밀번호(엑셀만 해당, CSV는 무시됨). "

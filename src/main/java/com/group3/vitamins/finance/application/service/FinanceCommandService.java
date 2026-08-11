@@ -253,8 +253,11 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         // 업로드 화면에서도 필수 입력으로 확정됐다(2026-08-10, 원 명세 표는 선택(N)이었으나 정정).
         requireColumn(headers, mapping.depositorColumn(), "depositorColumn");
 
-        // 잔액(balanceColumn)은 선택이다 — CSV에 잔액 컬럼이 없는 은행도 있어서 필수로 두지 않는다.
-        // 다만 매핑값을 보냈는데 그 컬럼이 실제 CSV에 없으면(오타 등) 다른 필수 컬럼과 동일하게 막는다.
+        // 잔액(balanceColumn)은 선택이다 — 프론트 매핑 화면 설계(날짜/금액/적요/입금자명/은행명만 있고
+        // 잔액 드롭다운 자체가 없음, 2026-08-11 확인)상 사용자가 매핑할 방법이 없다. 응답에도 노출 안
+        // 되는 순수 DB 내부 중복판정 보강용 값이라, balance_after_present 생성 컬럼으로 NULL이어도
+        // 안전하게 처리되는 지금 상태면 필수로 강제할 이유가 없다. 매핑값을 보냈는데 그 컬럼이 실제
+        // CSV에 없으면(오타 등) 다른 필수 컬럼과 동일하게 막는다.
         if (StringUtils.hasText(mapping.balanceColumn())) {
             requireColumn(headers, mapping.balanceColumn(), "balanceColumn");
         }
