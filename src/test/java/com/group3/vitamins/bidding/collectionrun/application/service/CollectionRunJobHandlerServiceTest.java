@@ -19,6 +19,8 @@ import com.group3.vitamins.bidding.collectionrun.application.port.CollectionSour
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunConditionSnapshot;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunStatus;
 import com.group3.vitamins.bidding.collectionrun.domain.model.CollectionRunTaskStatus;
+import com.group3.vitamins.bidding.bidnotice.domain.event.BidNoticeListChangedEvent;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -79,6 +81,9 @@ class CollectionRunJobHandlerServiceTest {
     @Mock
     private CollectedBidNoticeStorePort noticeStorePort;
 
+    @Mock
+    private DomainEventPublisher eventPublisher;
+
     private CollectionRunJobHandlerService service;
     private CollectionRunConditionSnapshot snapshot;
     private CollectionRunJob job;
@@ -111,6 +116,7 @@ class CollectionRunJobHandlerServiceTest {
                 taskFailureService,
                 List.of(collector),
                 noticeStorePort,
+                eventPublisher,
                 clock
         );
     }
@@ -154,6 +160,7 @@ class CollectionRunJobHandlerServiceTest {
                 eq(RUN_ID), eq(CONDITION_ID), eq(ATTEMPT_ID), eq(CollectionRunStatus.COMPLETED),
                 eq(1), eq(1), eq(0), eq(0), any()
         );
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
     }
 
     @Test

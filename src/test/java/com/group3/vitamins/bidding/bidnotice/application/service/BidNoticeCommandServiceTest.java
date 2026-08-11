@@ -15,11 +15,13 @@ import com.group3.vitamins.bidding.bidnotice.domain.model.BidNoticeStatusHistory
 import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeAttachment;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeData;
+import com.group3.vitamins.bidding.bidnotice.domain.event.BidNoticeListChangedEvent;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.InternationalBidType;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,6 +54,7 @@ class BidNoticeCommandServiceTest {
     private BidNoticeStatusHistoryPort statusHistoryPort;
     private CurrentCompanyIdProvider companyIdProvider;
     private BiddingAccessPolicy biddingAccessPolicy;
+    private DomainEventPublisher eventPublisher;
     private BidNoticeCommandService service;
 
     @BeforeEach
@@ -61,6 +64,7 @@ class BidNoticeCommandServiceTest {
         statusHistoryPort = mock(BidNoticeStatusHistoryPort.class);
         companyIdProvider = mock(CurrentCompanyIdProvider.class);
         biddingAccessPolicy = mock(BiddingAccessPolicy.class);
+        eventPublisher = mock(DomainEventPublisher.class);
 
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
         when(commandPort.findManualSourceId()).thenReturn(Optional.of(3L));
@@ -73,7 +77,8 @@ class BidNoticeCommandServiceTest {
                 statusHistoryPort,
                 companyIdProvider,
                 biddingAccessPolicy,
-                new ManualBidNoticeDedupKeyGenerator()
+                new ManualBidNoticeDedupKeyGenerator(),
+                eventPublisher
         );
     }
 
@@ -96,6 +101,7 @@ class BidNoticeCommandServiceTest {
                 eq(NOTICE_ID),
                 any(LocalDateTime.class)
         );
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
     }
 
     @Test
@@ -143,6 +149,7 @@ class BidNoticeCommandServiceTest {
                 anyString(),
                 eq(NOTICE_ID)
         );
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
     }
 
     @Test
@@ -231,6 +238,7 @@ class BidNoticeCommandServiceTest {
         assertThat(historyCaptor.getValue().changedStatus()).isEqualTo(BidNoticeCompanyStatus.DISMISSED);
         assertThat(historyCaptor.getValue().changedBy()).isEqualTo(USER_ID);
         assertThat(result.noticeStatus()).isEqualTo("DISMISSED");
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
     }
 
     @Test
@@ -251,6 +259,7 @@ class BidNoticeCommandServiceTest {
         assertThat(result.noticeStatus()).isEqualTo("COLLECTED");
         assertThat(result.dismissReason()).isNull();
         verify(statusHistoryPort).save(any(BidNoticeStatusHistory.class));
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
     }
 
     @Test
