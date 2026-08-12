@@ -35,7 +35,9 @@ public interface SettlementQueryUseCase {
     record SettlementFilterView(List<String> clients) {
     }
 
-    record SettlementProjectListView(List<SettlementProjectView> projects) {
+    record SettlementProjectListView(
+            List<SettlementProjectView> projects, int page, int size, long totalElements, int totalPages
+    ) {
     }
 
     record SettlementProjectView(
