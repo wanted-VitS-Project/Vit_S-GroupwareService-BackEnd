@@ -68,9 +68,15 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 : accountNumberCipher.encrypt(command.accountNumber());
 
         // 진입 시 검사(assertModifiable)는 편의일 뿐 방어가 아니다 — 본체는 아래 조건부 UPDATE의
-        // WHERE version = ? 다(CONCURRENCY.md §1-5). overwrite면 방금 읽은 DB 현재 버전을 기대값으로
-        // 써서 반드시 통과시킨다.
-        int expectedVersion = command.overwrite() ? before.getVersion() : command.version();
+        // WHERE version = ? 다(CONCURRENCY.md §1-5). overwrite면 위 lockSiblingSettlementBlocksForUpdate로
+        // 이미 잠근 이 행의 "지금" 버전을 다시 읽어서 기대값으로 쓴다 — before.getVersion()(잠금 이전 값)을
+        // 쓰면 그 사이 다른 트랜잭션이 먼저 저장했을 때도 충돌로 오판할 수 있다(CodeRabbit, 2026-08-12).
+        Integer currentVersion = command.overwrite()
+                ? settlementSiblingLookupPort.findCurrentVersionForUpdate(command.settleId())
+                : null;
+        int expectedVersion = command.overwrite()
+                ? (currentVersion != null ? currentVersion : before.getVersion())
+                : command.version();
 
         Settlement saved = settlementRepository.updateItem(
                 command.settleId(), type, command.roundNo(), command.totalAmount(),

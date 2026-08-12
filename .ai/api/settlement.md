@@ -540,6 +540,25 @@ issue 도메인과 충돌해서 150000 → 170000 → 170100 → 110000/0812까�
 `SETTLEMENT_VERSION_CONFLICT` 409. 블록 목록 조회(프로젝트 상세의 블록 카드)의 `SETTLEMENT` 상세에도
 `version`이 함께 내려간다(§5-1 "목록도" 규칙).
 
+**CodeRabbit 리뷰 반영 (2026-08-12, 낙관적 락 PR)**:
+
+1. **`overwrite=true`가 잠금 이전 버전을 기대값으로 쓰던 문제 — 반영.** `SettlementCommandService.upsertItem`이
+   `lockSiblingSettlementBlocksForUpdate`로 잠그기 **전에** 읽은 `before.getVersion()`을 그대로 `expectedVersion`으로
+   썼다 — 그 사이 다른 PATCH가 먼저 커밋되면 overwrite인데도 `SETTLEMENT_VERSION_CONFLICT`가 잘못 날 수 있었다
+   (overwrite의 "무조건 덮어쓰기" 보장이 깨짐). `SettlementSiblingLookupPort.findCurrentVersionForUpdate` 신설
+   (`SettlementSiblingMapper` `FOR UPDATE` 단건 조회, `findEstablishedTotalAmount`와 같은 이유·같은 패턴) —
+   이미 걸린 잠금을 재확인만 해서 대기 없이 즉시 현재 버전을 반환한다. overwrite=true일 때 이 값을 우선 사용하고,
+   null(레이스로 그 사이 삭제된 극단적 케이스)이면 `before.getVersion()`으로 폴백한다.
+2. **0행 갱신 시 원인 분류(`SettlementRepositoryAdapter.updateItem`)가 REPEATABLE READ 스냅샷 때문에 부정확할 수
+   있다는 지적 — 반영 안 함.** 이론적으로는 맞다(위 1번과 같은 종류). 하지만 영향이 **에러 메시지 정확도뿐**이다 —
+   실제로 갱신이 실패해서 409/404가 나가는 결과는 어차피 동일하고, "버전 충돌"이라고 나오는데 실제로는 "이미
+   연결됨"이었어도 사용자 입장에서 재조회 후 재시도하는 대응은 같다. 제대로 고치려면 순수 JPA인 이 어댑터에
+   MyBatis 락 쿼리(또는 JPA 엔티티 캐시까지 우회하는 락 조회)를 새로 끌어와야 해서, 이 레이어 경계를 깨는
+   비용 대비 체감 이득이 낮다고 판단.
+
+⚠️ 위 1번 수정은 **overwrite=true 경로에서만** 동작이 바뀐다. overwrite=false(일반 저장)는 여전히 클라이언트가
+보낸 `version`을 그대로 검증하므로 영향 없다.
+
 ## 구현 메모 (사람이 확인할 것)
 
 - **원 명세와 다르게 처리한 것 — 반드시 확인**:

@@ -34,6 +34,12 @@ public interface SettlementSiblingMapper {
     List<Long> lockSiblingSettlementBlocksForUpdate(@Param("settleId") Long settleId);
 
     /**
+     * overwrite=true 저장 직전, lockSiblingSettlementBlocksForUpdate로 이미 잠근 이 settleId 행의
+     * 현재 version을 다시 읽는다. FOR UPDATE라 같은 트랜잭션의 기존 잠금을 재확인할 뿐 대기하지 않는다.
+     */
+    Integer findCurrentVersionForUpdate(@Param("settleId") Long settleId);
+
+    /**
      * 정산 항목 수정 화면 진입 시(GET .../items?type=...) 추천 회차 번호·추천 총 금액을 계산하기 위한 조회.
      * "타입 변경 탭"에서 호출하는 것으로 확정되어 타입을 항상 알고 있으므로, 같은 프로젝트·같은 타입으로 좁힌다.
      * 추천 회차 번호는 삭제된 회차도 포함한 이력상 최댓값+1(호출부에서 계산) — 회차 번호는 재사용하지 않는다.

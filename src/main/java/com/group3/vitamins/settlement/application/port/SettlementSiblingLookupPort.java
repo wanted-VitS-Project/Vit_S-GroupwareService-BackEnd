@@ -27,6 +27,15 @@ public interface SettlementSiblingLookupPort {
      */
     void lockSiblingSettlementBlocksForUpdate(Long settleId);
 
+    /**
+     * overwrite=true 저장 직전에 호출한다 — {@code lockSiblingSettlementBlocksForUpdate}로 이미 잠근
+     * 이 settleId 행의 **현재(최신 커밋)** version을 다시 읽는다. 잠금 이전에 읽은 값을 그대로 쓰면
+     * 그 사이 다른 트랜잭션이 먼저 저장해 version이 바뀌었을 수 있어(CodeRabbit, 2026-08-12),
+     * overwrite의 "무조건 덮어쓰기" 보장이 깨진다. FOR UPDATE라 이미 걸린 잠금을 재확인만 할 뿐
+     * 대기 없이 즉시 반환된다.
+     */
+    Integer findCurrentVersionForUpdate(Long settleId);
+
     /** 추천 회차 번호·추천 총 금액 계산용 조회. 대상이 없으면 null. */
     SiblingRecommendation findSiblingRecommendation(Long settleId, SettlementType type);
 

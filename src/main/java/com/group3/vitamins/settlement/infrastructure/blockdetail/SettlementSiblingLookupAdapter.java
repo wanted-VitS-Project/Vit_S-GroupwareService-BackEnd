@@ -27,6 +27,11 @@ public class SettlementSiblingLookupAdapter implements SettlementSiblingLookupPo
     }
 
     @Override
+    public Integer findCurrentVersionForUpdate(Long settleId) {
+        return settlementSiblingMapper.findCurrentVersionForUpdate(settleId);
+    }
+
+    @Override
     public SiblingRecommendation findSiblingRecommendation(Long settleId, SettlementType type) {
         SettlementRecommendationRow row = settlementSiblingMapper.findRecommendation(settleId, type.name());
         return row == null ? null : new SiblingRecommendation(row.maxRoundNo(), row.recommendedTotalAmount());
