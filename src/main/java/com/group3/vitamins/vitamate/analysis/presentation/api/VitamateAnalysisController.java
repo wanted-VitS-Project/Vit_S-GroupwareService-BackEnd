@@ -106,8 +106,7 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "분석 조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "VITAMATE_INVALID_REQUEST — 잘못된 요청"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "STEP_ACCESS_DENIED — 스텝 접근 권한 없음"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_ANALYSIS_NOT_FOUND — 분석 이력 없음 또는 접근 불가")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "STEP_ACCESS_DENIED — 스텝 접근 권한 없음")
     })
     @GetMapping("/vitamate/analyses/{analysisId}")
     // 분석 ID와 요청자 정보를 query로 변환하고 분석 조회 유스케이스를 호출합니다.
