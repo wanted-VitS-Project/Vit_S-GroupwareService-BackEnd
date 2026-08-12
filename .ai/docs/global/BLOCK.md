@@ -1,6 +1,7 @@
 # 🧩 블록 정보 — 카탈로그 (**enum 10값 / 실사용 8종**)
 
 **최종 업데이트**
+- 2026-08-12 — §8 예외 1건 등재: 결재 **상신 이후 직접 삭제 차단**(`DEL-016`). 스텝 삭제 cascade 는 현행 유지 — 잠금 부활이 아니다
 - 2026-08-10 — 결재 삭제 경계 정합화·1차 구현: 상태 무관 동기 전파 후 미종결 상태 `CANCELED`, 결재 4테이블 soft delete, 삭제분 명령/조회 차단
 - 2026-08-10 — ⭐ **정산 재설계 반영 + 등록표 전수 재확인.** `SETTLEMENT` 등재(`settlement_block`) · `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **상세 테이블 DROP** 으로 빈 껍데기가 됐다 · `IMAGE`·`APPROVAL` 어댑터 실재 확인
 - 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · DB 는 `V20260805170000` 로 ALTER
@@ -496,6 +497,24 @@ public Long create(Long blockId) {
 
 ⛔ **`BlockDeleteLockPort` · `BlockDeleteLockRegistry` 도 함께 철거했다.** 어댑터는 하나도 만들어지지 않은 상태였다.
 **잠금을 다시 만들지 마라.** 막는 대신 **옮길 수단**을 준다는 것이 이 도메인의 결론이다.
+
+> 📌 **예외 1건 — 결재 상신 이후 직접 삭제 차단 (2026-08-12 · `DEL-016`).**
+> 위 결론의 **핵심은 유지된다** — 폐기 이유가 "진행 중인 것을 막는 게 나쁘다"가 아니라
+> **"막힌 사람에게 탈출구가 없었다"** 였기 때문이다. 그래서 이 예외는 범위를 좁혀 적용한다.
+>
+> | 경로 | 잠금 |
+> |---|:---:|
+> | 블록 **직접** 삭제 (`DELETE /api/v1/blocks/{blockId}`) | ✅ 상신된 결재는 409 |
+> | **스텝 삭제 cascade** (STP-013) | ⛔ **적용 안 함** — 상태 무관 삭제 현행 유지 |
+>
+> 즉 스텝·프로젝트 삭제가 결재 때문에 롤백되는 일은 **없다.** 폐기된 잠금과 결정적으로 다른 점이다.
+> `BlockDeleteLockPort` 를 되살리지도 않는다 — 판정은 기존 `BlockDetailPort` 확장점에 붙인다.
+>
+> ⚠️ 구현 시 함정: 직접 삭제와 cascade 가 `BlockCommandService` 의 private `deleteBlock(block, userId)`
+> **본체를 공유한다.** 판정을 그 본체에 넣으면 cascade 도 막혀 스텝 삭제가 죽는다 — 반드시 public
+> `deleteBlock(DeleteBlockCommand)` 쪽에만 넣는다.
+>
+> 근거·상태별 판정: [`../domain/결재·알림/APR-DELETE-DRAFT.md`](../domain/결재·알림/APR-DELETE-DRAFT.md) §11
 
 ### 8-1. ⭐ 블록 계열 삭제 방식 — soft 가 전부는 아니다
 
