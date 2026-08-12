@@ -31,12 +31,15 @@ public class FileVersion {
     private final String uploaderPosition;
     private LocalDateTime completedAt;
     private LocalDateTime deletedAt;
+    /** 입찰 검토 파일 귀속(§2-G)의 멱등키. 일반 업로드는 null. UNIQUE 라 재시도 중복을 막는다(PROMOTE-007). */
+    private final String idempotencyKey;
 
     private FileVersion(Long fileVersionId, Long fileId, int versionNo, UploadStatus uploadStatus,
                         String storageKey, String originalFileName, String extension, String mimeType,
                         long sizeBytes, String checksum, Integer pageCount, String comment,
                         String uploadedBy, String uploaderName, String uploaderDepartment,
-                        String uploaderPosition, LocalDateTime completedAt, LocalDateTime deletedAt) {
+                        String uploaderPosition, LocalDateTime completedAt, LocalDateTime deletedAt,
+                        String idempotencyKey) {
         this.fileVersionId = fileVersionId;
         this.fileId = fileId;
         this.versionNo = versionNo;
@@ -55,6 +58,7 @@ public class FileVersion {
         this.uploaderPosition = uploaderPosition;
         this.completedAt = completedAt;
         this.deletedAt = deletedAt;
+        this.idempotencyKey = idempotencyKey;
     }
 
     /**
@@ -65,10 +69,12 @@ public class FileVersion {
                                           String originalFileName, String extension, String mimeType,
                                           long sizeBytes, String comment,
                                           String uploadedBy, String uploaderName,
-                                          String uploaderDepartment, String uploaderPosition) {
+                                          String uploaderDepartment, String uploaderPosition,
+                                          String idempotencyKey) {
         return new FileVersion(null, fileId, versionNo, UploadStatus.UPLOADING, storageKey,
                 originalFileName, extension, mimeType, sizeBytes, null, null, comment,
-                uploadedBy, uploaderName, uploaderDepartment, uploaderPosition, null, null);
+                uploadedBy, uploaderName, uploaderDepartment, uploaderPosition, null, null,
+                idempotencyKey);
     }
 
     /** 저장된 데이터를 도메인 객체로 복원한다. */
@@ -76,10 +82,11 @@ public class FileVersion {
                                       String storageKey, String originalFileName, String extension, String mimeType,
                                       long sizeBytes, String checksum, Integer pageCount, String comment,
                                       String uploadedBy, String uploaderName, String uploaderDepartment,
-                                      String uploaderPosition, LocalDateTime completedAt, LocalDateTime deletedAt) {
+                                      String uploaderPosition, LocalDateTime completedAt, LocalDateTime deletedAt,
+                                      String idempotencyKey) {
         return new FileVersion(fileVersionId, fileId, versionNo, uploadStatus, storageKey, originalFileName,
                 extension, mimeType, sizeBytes, checksum, pageCount, comment, uploadedBy, uploaderName,
-                uploaderDepartment, uploaderPosition, completedAt, deletedAt);
+                uploaderDepartment, uploaderPosition, completedAt, deletedAt, idempotencyKey);
     }
 
     /** 완료 통보(§2) — S3 HEAD 검증 후 COMPLETED 로 확정한다. PDF 페이지 수는 실패해도 null 로 둔다(VER-008). */
@@ -175,5 +182,9 @@ public class FileVersion {
 
     public LocalDateTime getDeletedAt() {
         return deletedAt;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
     }
 }

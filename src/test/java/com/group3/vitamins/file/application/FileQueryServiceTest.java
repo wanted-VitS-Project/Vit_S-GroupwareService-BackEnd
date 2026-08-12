@@ -102,7 +102,7 @@ class FileQueryServiceTest {
         return FileVersion.restore(FILE_VERSION_ID, FILE_ID, versionNo, status,
                 "projects/100/files/31/versions/" + versionNo + "/uuid." + ext,
                 "제안서_v" + versionNo + "." + ext, ext, "application/pdf", 5000L, null, 42, "초안",
-                USER, "이영희", "제안팀", "선임연구원", LocalDateTime.now(), null);
+                USER, "이영희", "제안팀", "선임연구원", LocalDateTime.now(), null, null);
     }
 
     /** 버전 → 문서 → 블록 → 스텝 접근 경로 스텁 (VIEWER 이상). */
