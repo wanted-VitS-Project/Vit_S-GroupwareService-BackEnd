@@ -25,6 +25,7 @@ public record SettlementDetail(
         Long actualAmount,
         LocalDateTime actualDate,
         Double paidAmountRatio,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        int version
 ) implements BlockDetail {
 }
