@@ -5,7 +5,7 @@
 -- 결정(COMPANY-DOC-V1 §6): 카테고리=고정 enum(§6-1) · 권한 ADMIN(§6-3) · soft delete(§6-4) · 업로더 스냅샷 nullable(§6-6).
 --     업로더 스냅샷을 nullable 로 둔 이유: 사내 문서는 ADMIN 이 올리는데 ADMIN 은 employee 행이 없어 조회가 빈다.
 -- 회사 스코프: file 과 달리 company_document 가 직접 company_id 를 가진다(프로젝트를 안 타므로).
--- 번호: develop 최신 V20260812150000 위 170000. 귀속 PR=160000 과 안 겹침. ⚠️ 머지 직전 최신 번호 재확인(develop 재번호 전례).
+-- 번호: develop 최대 V20260813020100 위 030000 으로 재번호(CI 마이그레이션 순서 검사 — 신규는 기준 최대보다 커야 함).
 
 CREATE TABLE company_document (
     company_document_id BIGINT       NOT NULL AUTO_INCREMENT,
