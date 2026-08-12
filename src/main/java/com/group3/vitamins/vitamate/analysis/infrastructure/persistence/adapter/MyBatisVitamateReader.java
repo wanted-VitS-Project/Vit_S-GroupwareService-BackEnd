@@ -25,10 +25,10 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
     private final VitamateAnalysisMapper mapper;
     private final VitamateReviewTemplateMapper templateMapper;
 
-    // 요청자가 접근할 수 있는 AI 블록인지 확인하고 프로젝트 컨텍스트를 조회한다.
+    // 공통 blockId에 연결된 AI 블록과 프로젝트 컨텍스트를 조회한다.
     @Override
-    public Optional<VitamateBlockContext> findAccessibleVitamateBlock(Long blockId, String userId) {
-        return Optional.ofNullable(mapper.findAccessibleVitamateBlock(blockId, userId))
+    public Optional<VitamateBlockContext> findVitamateBlock(Long blockId) {
+        return Optional.ofNullable(mapper.findVitamateBlock(blockId))
                 .map(this::toContext);
     }
 
@@ -44,10 +44,10 @@ public class MyBatisVitamateReader implements VitamateBlockReaderPort, VitamateF
         return matchedCount == distinctRequestCount;
     }
 
-    // 요청자가 접근할 수 있는 분석 상세를 문서와 citation까지 함께 조회한다.
+    // 분석 상세를 문서와 citation까지 함께 조회한다.
     @Override
-    public Optional<VitamateAnalysisDetail> findAccessibleAnalysis(Long analysisId, String userId) {
-        return Optional.ofNullable(mapper.findAccessibleAnalysis(analysisId, userId))
+    public Optional<VitamateAnalysisDetail> findAnalysis(Long analysisId) {
+        return Optional.ofNullable(mapper.findAnalysis(analysisId))
                 .map(analysis -> toAnalysisDetail(
                         analysis,
                         templateMapper.findAnalysisTemplateSnapshots(analysisId),
