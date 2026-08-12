@@ -527,3 +527,83 @@ Content-Type: application/json
     "cashFlowIds": [199],
     "isExcluded": true
 }
+
+### ========================================================================
+### 10단계 — 세금계산서 조회 (2026-08-12 신규)
+### 등록 API가 아직 없어(cash_flow 3단계와 동일 사유) SQL로 직접 넣어야 한다. 아래 세 가지 조합을 넣고 비교할 것:
+###   A. 미연결·비제외                 → unlinked=true 목록에 나옴, linkStatus=UNLINKED
+###   B. is_excluded = TRUE            → unlinked=true 목록엔 안 나오지만 전체 조회엔 나옴
+###   C. settle_block_id 로 정산 블록에 연결됨 → linkStatus=LINKED
+### C는 0-4(정산 블록 settleId 확인)에서 만든 실제 settleId로 바꿔서 실행할 것(아래는 1로 가정).
+### ⚠️ tax_invoice.company_id는 DEFAULT가 없다 — INSERT에 반드시 명시할 것. 회사가 하나뿐이니 전부 1.
+### ⚠️ approval_no는 UNIQUE(uk_tax_invoice_approval_no) — 재실행 시 값을 바꿔야 한다.
+### ========================================================================
+
+### [DB 직접 조작] tax_invoice A — 미연결·비제외
+### INSERT INTO tax_invoice (company_id, type, approval_no, issued_no, supply_amount, tax_amount, total_amount, buyer_name, buyer_biz_no, source_type)
+### VALUES (1, 'INCOME', 'APV-TEST-A-001', '2026-08-01', 40909090, 4090910, 45000000, '환경부', '1234567890', 'HOMETAX_API');
+
+### [DB 직접 조작] tax_invoice B — is_excluded = TRUE
+### INSERT INTO tax_invoice (company_id, type, approval_no, issued_no, supply_amount, tax_amount, total_amount, buyer_name, buyer_biz_no, source_type, is_excluded)
+### VALUES (1, 'INCOME', 'APV-TEST-B-001', '2026-08-02', 20000000, 2000000, 22000000, '환경부', '1234567890', 'CSV', TRUE);
+
+### [DB 직접 조작] tax_invoice C — settle_block_id 연결됨 (아래 1을 실제 settleId로 교체)
+### INSERT INTO tax_invoice (company_id, settle_block_id, type, approval_no, issued_no, supply_amount, tax_amount, total_amount, buyer_name, buyer_biz_no, source_type, linked_by, linked_at)
+### VALUES (1, 1, 'INCOME', 'APV-TEST-C-001', '2026-08-03', 90000000, 9000000, 99000000, '환경부', '1234567890', 'HOMETAX_API', 'vitas-EMP006', NOW());
+
+### 기본 조회 — page/size 생략 시 기본값(0/20). A·B·C 전부 issuedNo 내림차순(C→B→A)으로 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices
+
+### unlinked=true — A·B 둘 다 나와야 한다(둘 다 settle_block_id가 NULL). is_excluded 여부는 이 필터와
+### 무관하다 — B는 is_excluded=TRUE지만 미연결이라 여기 포함된다(재무 관리 요약의 unlinkedCount와는 판정
+### 기준이 다르다 — 거긴 is_excluded=FALSE까지 같이 봄. cash_flow의 unlinked 필터와 동일 규칙)
+GET localhost:8080/api/v1/finance/tax-invoices?unlinked=true
+
+### projectId 필터 — C가 연결된 프로젝트의 projectId로 교체. C 하나만 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?projectId=1
+
+### keyword 필터 — approvalNo("APV-TEST-A-001")로 검색하면 A만 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?keyword=APV-TEST-A-001
+
+### startDate/endDate 필터 — A·B·C가 2026-08-01~03에 걸쳐 있으므로 그 범위로 지정하면 셋 다 나오고,
+### 범위를 벗어나면(예: 8월 10일부터) 전부 빠져야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?startDate=2026-08-01&endDate=2026-08-03
+###
+GET localhost:8080/api/v1/finance/tax-invoices?startDate=2026-08-10&endDate=2026-08-20
+
+### size=1 — 페이지 나뉘는지 확인. totalElements=3, totalPages=3, taxInvoices엔 1건만(가장 최신인 C)
+GET localhost:8080/api/v1/finance/tax-invoices?size=1
+
+### sort=ISSUED_NO_ASC — 가장 오래된 것부터(A→B→C) 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?sort=ISSUED_NO_ASC
+
+### sort=AMOUNT_DESC — 합계(totalAmount) 큰 순으로 나와야 한다(C→A→B)
+GET localhost:8080/api/v1/finance/tax-invoices?sort=AMOUNT_DESC
+
+### page 음수 → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?page=-1
+
+### size 101(최대 초과) → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?size=101
+
+### sort 허용값 아님 → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?sort=INVALID_SORT
+
+### startDate > endDate(날짜 역전) → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?startDate=2026-08-10&endDate=2026-08-01
+
+### 접근 권한 없음 → 403 FINANCE_ACCESS_DENIED 확인용 — FINANCE 페이지 권한 없는 MEMBER 계정으로 로그인 후 호출
+GET localhost:8080/api/v1/finance/tax-invoices
+###
+GET localhost:8080/api/v1/finance/tax-invoices/filters
+
+### [DB 직접 조작] 연결됐던 정산 블록이 삭제된 경우 → linkStatus=LINK_BLOCK_DELETED 확인용
+### C가 연결된 settle_id(위에서 1로 가정)의 block을 소프트 삭제한 뒤 재조회하면 C의 linkStatus가
+### LINK_BLOCK_DELETED로 바뀌어야 한다(settleId/roundName 값 자체는 유지됨).
+### 예: UPDATE block SET deleted_at = NOW() WHERE block_id = (SELECT block_id FROM settlement_block WHERE settle_id = 1);
+GET localhost:8080/api/v1/finance/tax-invoices
+
+### 확인 후 되돌리려면: UPDATE block SET deleted_at = NULL WHERE block_id = (SELECT block_id FROM settlement_block WHERE settle_id = 1);
+
+### 세금계산서 필터 옵션 조회 — C가 연결된 프로젝트 하나가 나와야 한다(A·B는 미연결이라 안 잡힘)
+GET localhost:8080/api/v1/finance/tax-invoices/filters

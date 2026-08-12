@@ -6,6 +6,8 @@ import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
 import com.group3.vitamins.finance.application.command.CashFlowCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
@@ -24,6 +26,8 @@ import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashF
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowListView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.FinanceSummaryView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.MatchCandidatesView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceFilterView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceListView;
 import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
 import com.group3.vitamins.finance.presentation.api.request.CashFlowCsvUploadRequest;
 import com.group3.vitamins.finance.presentation.api.response.CashFlowCsvPreviewResponse;
@@ -42,6 +46,8 @@ import com.group3.vitamins.finance.presentation.api.response.CashFlowMatchRespon
 import com.group3.vitamins.finance.presentation.api.response.CashFlowUpdateResponse;
 import com.group3.vitamins.finance.presentation.api.request.MatchCashFlowRequest;
 import com.group3.vitamins.finance.presentation.api.response.FinanceSummaryResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceFilterResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceListResponse;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -137,6 +143,62 @@ public class FinanceController {
                 new CashFlowFilterQuery(authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("입출금 내역 필터 옵션 조회 성공", CashFlowFilterResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 조회",
+            description = "재무 관리 페이지의 세금계산서 목록을 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "페이지 조회 조건이 올바르지 않습니다. (FINANCE_PAGE_QUERY_INVALID)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)")
+    })
+    @GetMapping("/tax-invoices")
+    public ResponseEntity<ApiResponse<TaxInvoiceListResponse>> getTaxInvoices(
+            @Parameter(description = "조회 시작일(issuedNo 날짜 기준)", example = "2026-07-01")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @Parameter(description = "조회 종료일(issuedNo 날짜 기준)", example = "2026-07-31")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "미연결 항목만 조회(true: 미매칭, 없으면 전체)", example = "true")
+            @RequestParam(required = false) Boolean unlinked,
+            @Parameter(description = "매칭 프로젝트 필터", example = "1")
+            @RequestParam(required = false) Long projectId,
+            @Parameter(description = "승인번호 또는 공급받는자 상호명 검색 키워드", example = "환경부")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "0-base 페이지 번호. 생략하면 0", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지당 개수(최대 100). 생략하면 20", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "정렬 기준. 생략하면 ISSUED_NO_DESC",
+                    example = "ISSUED_NO_DESC",
+                    schema = @io.swagger.v3.oas.annotations.media.Schema(
+                            allowableValues = {"ISSUED_NO_DESC", "ISSUED_NO_ASC", "AMOUNT_DESC"}))
+            @RequestParam(defaultValue = "ISSUED_NO_DESC") String sort,
+            Authentication authentication
+    ) {
+        TaxInvoiceListView view = financeQueryUseCase.getTaxInvoices(new TaxInvoiceListQuery(
+                startDate, endDate, unlinked, projectId, keyword, page, size, sort,
+                authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 조회 성공", TaxInvoiceListResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 필터 옵션 조회",
+            description = "세금계산서 조회 화면의 프로젝트 필터 옵션을 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 필터 옵션 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)")
+    })
+    @GetMapping("/tax-invoices/filters")
+    public ResponseEntity<ApiResponse<TaxInvoiceFilterResponse>> getTaxInvoiceFilters(Authentication authentication) {
+        TaxInvoiceFilterView view = financeQueryUseCase.getTaxInvoiceFilters(
+                new TaxInvoiceFilterQuery(authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 필터 옵션 조회 성공", TaxInvoiceFilterResponse.from(view)));
     }
 
     @Operation(summary = "입출금 내역 CSV 컬럼 추천 조회",

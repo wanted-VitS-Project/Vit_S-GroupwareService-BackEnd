@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMapper">
+
+    <!--
+        세금계산서 조회 — cash_flow의 findCashFlows와 동일한 사고방식.
+        settlement_block/block 조인엔 deleted_at 필터를 걸지 않는다 — "연결됐던 블록이 삭제된 것"과
+        "애초에 미연결"을 구분해서 보여줘야 하므로(cash_flow와 동일 요청사항), linkStatus로 셋을 구분한다:
+        settle_block_id가 없으면 UNLINKED, 있는데 연결된 블록/정산 블록이 삭제됐으면 LINK_BLOCK_DELETED,
+        그 외엔 LINKED. project 조인만 deleted_at IS NULL을 유지한다(프로젝트 자체가 삭제되면 프로젝트명은
+        안 보이는 게 맞음).
+    -->
+    <sql id="taxInvoiceJoinsAndFilters">
+        FROM tax_invoice ti
+        LEFT JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        LEFT JOIN block b ON b.block_id = sb.block_id
+        LEFT JOIN step st ON st.step_id = b.step_id
+        LEFT JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        LEFT JOIN employee e ON e.user_id = ti.linked_by
+        WHERE ti.deleted_at IS NULL
+        AND ti.company_id = #{companyId}
+        <if test="startDate != null">AND ti.issued_no &gt;= #{startDate}</if>
+        <if test="endDate != null">AND ti.issued_no &lt;= #{endDate}</if>
+        <if test="unlinked != null and unlinked == true">AND ti.settle_block_id IS NULL</if>
+        <if test="projectId != null">AND p.project_id = #{projectId}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (ti.approval_no LIKE CONCAT('%', #{keyword}, '%') OR ti.buyer_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <select id="findTaxInvoices" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceRow">
+        SELECT
+        ti.tax_id AS taxId,
+        ti.issued_no AS issuedNo,
+        ti.approval_no AS approvalNo,
+        ti.type AS type,
+        ti.buyer_name AS buyerName,
+        ti.buyer_biz_no AS buyerBizNo,
+        ti.supplier_biz_no AS supplierBizNo,
+        ti.sub_biz_no AS subBizNo,
+        ti.ceo_name AS ceoName,
+        ti.item_name AS itemName,
+        ti.supply_amount AS supplyAmount,
+        ti.tax_amount AS taxAmount,
+        ti.total_amount AS totalAmount,
+        ti.memo AS memo,
+        ti.source_type AS sourceType,
+        p.project_id AS projectId,
+        p.name AS projectName,
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        ti.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        ti.linked_at AS linkedAt,
+        ti.is_excluded AS isExcluded,
+        CASE
+        WHEN ti.settle_block_id IS NULL THEN 'UNLINKED'
+        WHEN sb.deleted_at IS NOT NULL OR b.deleted_at IS NOT NULL THEN 'LINK_BLOCK_DELETED'
+        ELSE 'LINKED'
+        END AS linkStatus
+        <include refid="taxInvoiceJoinsAndFilters"/>
+        <choose>
+            <when test="sort == 'ISSUED_NO_ASC'">ORDER BY ti.issued_no ASC, ti.tax_id ASC</when>
+            <when test="sort == 'AMOUNT_DESC'">ORDER BY ti.total_amount DESC, ti.tax_id DESC</when>
+            <otherwise>ORDER BY ti.issued_no DESC, ti.tax_id DESC</otherwise>
+        </choose>
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countTaxInvoices" resultType="long">
+        SELECT COUNT(*)
+        <include refid="taxInvoiceJoinsAndFilters"/>
+    </select>
+
+    <!--
+        필터 옵션 — tax_invoice가 하나라도 연결된 정산 블록을 가진 프로젝트만(cash_flow의 findFilterProjects와
+        동일한 사고방식). company_id는 project·tax_invoice 양쪽 다 방어적으로 건다.
+    -->
+    <select id="findFilterProjects"
+            resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceFilterProjectRow">
+        SELECT DISTINCT p.project_id AS projectId, p.name AS projectName
+        FROM project p
+        WHERE p.deleted_at IS NULL
+        AND p.company_id = #{companyId}
+        AND EXISTS (
+        SELECT 1 FROM tax_invoice ti
+        JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE st.project_id = p.project_id
+        AND ti.deleted_at IS NULL
+        AND sb.deleted_at IS NULL
+        AND b.deleted_at IS NULL
+        AND ti.company_id = #{companyId}
+        )
+        ORDER BY p.name ASC
+    </select>
+
+</mapper>

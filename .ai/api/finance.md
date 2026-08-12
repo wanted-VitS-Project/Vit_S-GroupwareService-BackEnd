@@ -308,6 +308,179 @@
 
 ---
 
+## 세금계산서 조회 `GET /api/v1/finance/tax-invoices`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y
+
+재무 관리 페이지의 세금계산서 목록. 권한은 입출금 내역 조회와 동일하게 `PagePermissionPort`(`FINANCE` 페이지)로
+판정한다. **구조는 입출금 내역 조회와 완전히 동일한 컨벤션으로 맞췄다**(2026-08-12, 원 명세가 그 사이 바뀐
+입출금 내역 조회 규칙을 못 따라가고 있어서 사용자 확인 후 통일) — 아래 "원 명세와 다르게 처리한 것" 참고.
+
+**Request Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `startDate` | LocalDate | N | 조회 시작일 (`issuedNo` 날짜 기준) |
+| `endDate` | LocalDate | N | 조회 종료일 (`issuedNo` 날짜 기준) |
+| `unlinked` | Boolean | N | 미연결 항목만 조회 (true: 미매칭, 없으면 전체) |
+| `projectId` | Long | N | 매칭 프로젝트 필터 |
+| `keyword` | String | N | 승인번호(`approvalNo`) 또는 공급받는자 상호명(`buyerName`) 검색 키워드 |
+| `page` | Int | N | 0-base 페이지 번호. 생략하면 0 |
+| `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
+| `sort` | String | N | 정렬 기준. `ISSUED_NO_DESC`(발행일 최신순, 기본값) \| `ISSUED_NO_ASC`(발행일 오래된순) \| `AMOUNT_DESC`(합계 큰순) |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.page` | Int | 현재 페이지 번호 (0-base) |
+| `data.size` | Int | 페이지당 개수 |
+| `data.totalElements` | Long | 전체 항목 수 |
+| `data.totalPages` | Int | 전체 페이지 수 |
+| `data.taxInvoices[].taxId` | Long | 세금계산서 ID |
+| `data.taxInvoices[].issuedNo` | LocalDate | 발행일 (컬럼명은 `issuedNo`지만 실제 값은 날짜다 — DB 컬럼명 그대로) |
+| `data.taxInvoices[].approvalNo` | String | 승인번호 |
+| `data.taxInvoices[].type` | String | 구분 (INCOME/OUTCOME) |
+| `data.taxInvoices[].buyerName` | String | 공급받는자 상호명 |
+| `data.taxInvoices[].buyerBizNo` | String | 공급받는자 사업자번호 |
+| `data.taxInvoices[].supplierBizNo` | String | 공급자 사업자번호 (nullable) |
+| `data.taxInvoices[].subBizNo` | String | 종사업장번호 (nullable) |
+| `data.taxInvoices[].ceoName` | String | 대표자명 (nullable) |
+| `data.taxInvoices[].itemName` | String | 품목명 (nullable) |
+| `data.taxInvoices[].supplyAmount` | BigDecimal | 공급가액 |
+| `data.taxInvoices[].taxAmount` | BigDecimal | 세액 |
+| `data.taxInvoices[].totalAmount` | BigDecimal | 합계 |
+| `data.taxInvoices[].memo` | String | 비고/메모 (nullable) |
+| `data.taxInvoices[].sourceType` | String | 수집 출처 (CSV/HOMETAX_API) |
+| `data.taxInvoices[].projectId` | Long | 연결된 프로젝트 ID (미연결이거나 프로젝트 자체가 삭제됐으면 null) |
+| `data.taxInvoices[].projectName` | String | 연결 프로젝트명 (미연결이거나 프로젝트 자체가 삭제됐으면 null) |
+| `data.taxInvoices[].settleId` | Long | 연결 정산 블록 ID (미연결이면 null — 블록이 삭제돼도 값은 유지됨, `linkStatus` 참고) |
+| `data.taxInvoices[].roundName` | String | 연결 정산 블록명 (미연결이면 null — 블록이 삭제돼도 값은 유지됨, `linkStatus` 참고) |
+| `data.taxInvoices[].linkedBy` | String | 매칭 처리자 사번 (미연결이면 null) |
+| `data.taxInvoices[].linkedByName` | String | 매칭 처리자 이름 (미연결이면 null) |
+| `data.taxInvoices[].linkedAt` | LocalDateTime | 매칭 일시 (미연결이면 null) |
+| `data.taxInvoices[].isExcluded` | Boolean | 연결 제외 여부 |
+| `data.taxInvoices[].linkStatus` | String | 정산 블록 연결 상태 — `UNLINKED`(미연결) / `LINKED`(연결됨) / `LINK_BLOCK_DELETED`(연결됐던 정산 블록이 삭제됨). 원 명세엔 없던 필드 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 조회 성공",
+  "data": {
+    "page": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
+    "taxInvoices": [
+      {
+        "taxId": 1,
+        "issuedNo": "2026-07-20",
+        "approvalNo": "20260720-12345678",
+        "type": "INCOME",
+        "buyerName": "환경부",
+        "buyerBizNo": "1234567890",
+        "supplierBizNo": "9876543210",
+        "subBizNo": null,
+        "ceoName": "홍길동",
+        "itemName": "환경개선 컨설팅 용역",
+        "supplyAmount": 40909090,
+        "taxAmount": 4090910,
+        "totalAmount": 45000000,
+        "memo": null,
+        "sourceType": "HOMETAX_API",
+        "projectId": null,
+        "projectName": null,
+        "settleId": null,
+        "roundName": null,
+        "linkedBy": null,
+        "linkedByName": null,
+        "linkedAt": null,
+        "isExcluded": true,
+        "linkStatus": "UNLINKED"
+      }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 조회 성공" |
+| 400 | Bad Request | `FINANCE_PAGE_QUERY_INVALID` | "페이지 조회 조건이 올바르지 않습니다." — `page`<0 · `size`≤0 또는 >100 · `sort` 허용값 아님 · `startDate`>`endDate` |
+| 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모** (2026-08-12, 사용자 확인 — "입출금 내역 양식에 맞춰서"):
+- **페이징 추가** — 원 명세엔 없었지만 입출금 내역 조회가 먼저 페이징됐고, 세금계산서도 같은 화면 패턴(공고·
+  프로젝트 목록과 동일 컨벤션)을 따라야 해서 `page`/`size`/`sort` + `{page,size,totalElements,totalPages}`를
+  같이 추가했다. `taxInvoices` 키 이름은 유지.
+- **`isExcluded` 필드명** — 원 명세 Success Example엔 `excluded`로 오타가 있었다(Response Parameter 표엔
+  `isExcluded`로 이미 맞게 적혀 있었음). 입출금 내역 조회에서 이미 겪은 같은 오타라 그대로 `isExcluded`로
+  통일.
+- **`projectName`/`roundName` 미연결 시 `null`** — 원 명세 Success Example엔 문자열 `"미연결"`이 박혀
+  있었으나, 입출금 내역 조회와 동일하게 이건 프론트 렌더링 표시값이지 API가 그 문자열을 직접 내려줘야
+  한다는 뜻이 아니다. `null`로 통일.
+- **`linkStatus` 신규 추가** — 원 명세에 없던 필드. 입출금 내역 조회와 동일하게 연결됐던 정산 블록이
+  삭제된 경우("한때 연결됐었다"는 이력)를 구분해서 보여준다. `settlement_block`/`block` 조인에서
+  `deleted_at IS NULL` 필터를 뺐다(입출금 내역 조회와 동일 패턴).
+- **403 `code` 값 — 원 명세엔 빈칸이었다.** 입출금 내역 조회와 같은 권한 판정(`PagePermissionPort`, `FINANCE`
+  페이지)이라 `FINANCE_ACCESS_DENIED`를 그대로 재사용했다.
+- **`keyword` 검색** — `approvalNo` 또는 `buyerName`에 부분 일치(`LIKE %keyword%`)로 구현했다(입출금 내역의
+  `bankMemo`/`depositorName` 검색과 같은 방식).
+
+---
+
+## 세금계산서 필터 옵션 조회 `GET /api/v1/finance/tax-invoices/filters`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y
+
+세금계산서 조회 화면의 `projectId` 필터 드롭다운을 채운다. 권한은 위 조회와 동일.
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.projects[].projectId` | Long | 프로젝트 ID |
+| `data.projects[].projectName` | String | 프로젝트명 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 필터 옵션 조회 성공",
+  "data": {
+    "projects": [
+      { "projectId": 1, "projectName": "한강 생태교육 환경개선사업" }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 필터 옵션 조회 성공" |
+| 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **"매칭된 프로젝트 목록"의 범위** — `tax_invoice`가 하나라도 연결된 정산 블록을 가진 프로젝트만 대상으로
+  했다(입출금 내역 필터 옵션 조회와 동일한 사고방식).
+- **정렬 순서** — 명세에 없어 `projectName` 오름차순으로 뒀다(입출금 내역 필터 옵션 조회와 동일).
+- **403 `code` 값 — 원 명세엔 빈칸이었다.** `FINANCE_ACCESS_DENIED` 재사용.
+
+---
+
 ## 입출금 내역 CSV 컬럼 추천 조회 `POST /api/v1/finance/cash-flows/csv/preview`
 
 **상태**: ✅ 확정

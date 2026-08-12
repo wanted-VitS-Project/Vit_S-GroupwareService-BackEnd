@@ -1,0 +1,17 @@
+package com.group3.vitamins.finance.application.query;
+
+import java.time.LocalDate;
+
+public record TaxInvoiceListQuery(
+        LocalDate startDate,
+        LocalDate endDate,
+        Boolean unlinked,
+        Long projectId,
+        String keyword,
+        int page,
+        int size,
+        String sort,
+        String userId,
+        String role
+) {
+}

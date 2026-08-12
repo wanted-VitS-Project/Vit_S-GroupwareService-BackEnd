@@ -4,6 +4,8 @@ import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -23,6 +25,12 @@ public interface FinanceQueryUseCase {
 
     //입출금 내역 매칭 추천 조회
     MatchCandidatesView getMatchCandidates(MatchCandidatesQuery query);
+
+    //세금계산서 목록 조회
+    TaxInvoiceListView getTaxInvoices(TaxInvoiceListQuery query);
+
+    //세금계산서 필터 옵션(매칭된 프로젝트 목록) 조회
+    TaxInvoiceFilterView getTaxInvoiceFilters(TaxInvoiceFilterQuery query);
 
     record FinanceSummaryView(
             long cashFlowUnlinkedCount,
@@ -65,6 +73,45 @@ public interface FinanceQueryUseCase {
     }
 
     record MatchCandidatesView(List<MatchCandidateView> candidates) {
+    }
+
+    record TaxInvoiceListView(
+            List<TaxInvoiceView> taxInvoices, int page, int size, long totalElements, int totalPages
+    ) {
+    }
+
+    record TaxInvoiceView(
+            Long taxId,
+            LocalDate issuedNo,
+            String approvalNo,
+            String type,
+            String buyerName,
+            String buyerBizNo,
+            String supplierBizNo,
+            String subBizNo,
+            String ceoName,
+            String itemName,
+            BigDecimal supplyAmount,
+            BigDecimal taxAmount,
+            BigDecimal totalAmount,
+            String memo,
+            String sourceType,
+            Long projectId,
+            String projectName,
+            Long settleId,
+            String roundName,
+            String linkedBy,
+            String linkedByName,
+            LocalDateTime linkedAt,
+            boolean isExcluded,
+            String linkStatus
+    ) {
+    }
+
+    record TaxInvoiceFilterView(List<TaxInvoiceProjectOptionView> projects) {
+    }
+
+    record TaxInvoiceProjectOptionView(Long projectId, String projectName) {
     }
 
     record MatchCandidateView(

@@ -5,6 +5,8 @@ import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
 import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowBasicRow;
@@ -14,9 +16,13 @@ import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowRow;
 import com.group3.vitamins.finance.infrastructure.cashflow.MatchCandidateRow;
 import com.group3.vitamins.finance.infrastructure.status.FinanceSummaryMapper;
 import com.group3.vitamins.finance.infrastructure.status.FinanceSummaryRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceFilterProjectRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceRow;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -32,10 +39,14 @@ import java.util.List;
 public class FinanceQueryService implements FinanceQueryUseCase {
 
     private static final String FINANCE_PAGE_CODE = "FINANCE";
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> ALLOWED_TAX_INVOICE_SORTS =
+            Set.of("ISSUED_NO_DESC", "ISSUED_NO_ASC", "AMOUNT_DESC");
 
     private final PagePermissionPort pagePermissionPort;
     private final FinanceSummaryMapper financeSummaryMapper;
     private final CashFlowMapper cashFlowMapper;
+    private final TaxInvoiceMapper taxInvoiceMapper;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
@@ -142,6 +153,81 @@ public class FinanceQueryService implements FinanceQueryUseCase {
         } else if ("SIMILAR".equals(matchType)) {
             matchTags.add(label + " 유사");
         }
+    }
+
+    @Override
+    public TaxInvoiceListView getTaxInvoices(TaxInvoiceListQuery query) {
+        log.info("세금계산서 조회 요청 - userId={}", query.userId());
+
+        validateTaxInvoiceListQuery(query);
+        assertFinanceAccess(query.userId(), query.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        List<TaxInvoiceRow> rows = taxInvoiceMapper.findTaxInvoices(
+                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword(),
+                query.sort(), query.size(), query.page() * query.size());
+        long totalElements = taxInvoiceMapper.countTaxInvoices(
+                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword());
+        int totalPages = (int) Math.ceil((double) totalElements / query.size());
+
+        return new TaxInvoiceListView(
+                rows.stream().map(this::toTaxInvoiceView).toList(),
+                query.page(), query.size(), totalElements, totalPages
+        );
+    }
+
+    private TaxInvoiceView toTaxInvoiceView(TaxInvoiceRow row) {
+        return new TaxInvoiceView(
+                row.taxId(),
+                row.issuedNo(),
+                row.approvalNo(),
+                row.type(),
+                row.buyerName(),
+                row.buyerBizNo(),
+                row.supplierBizNo(),
+                row.subBizNo(),
+                row.ceoName(),
+                row.itemName(),
+                row.supplyAmount(),
+                row.taxAmount(),
+                row.totalAmount(),
+                row.memo(),
+                row.sourceType(),
+                row.projectId(),
+                row.projectName(),
+                row.settleId(),
+                row.roundName(),
+                row.linkedBy(),
+                row.linkedByName(),
+                row.linkedAt(),
+                row.isExcluded(),
+                row.linkStatus()
+        );
+    }
+
+    // bidnotice 목록과 동일 컨벤션 — 잘못된 page/size/sort는 클램프 대신 400으로 던진다.
+    private void validateTaxInvoiceListQuery(TaxInvoiceListQuery query) {
+        if (query.page() < 0 || query.size() <= 0 || query.size() > MAX_PAGE_SIZE
+                || query.page() > Integer.MAX_VALUE / query.size()
+                || (query.startDate() != null && query.endDate() != null
+                && query.startDate().isAfter(query.endDate()))
+                || (query.sort() != null && !ALLOWED_TAX_INVOICE_SORTS.contains(query.sort()))) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_PAGE_QUERY_INVALID);
+        }
+    }
+
+    @Override
+    public TaxInvoiceFilterView getTaxInvoiceFilters(TaxInvoiceFilterQuery query) {
+        log.info("세금계산서 필터 옵션 조회 요청 - userId={}", query.userId());
+
+        assertFinanceAccess(query.userId(), query.role());
+
+        List<TaxInvoiceFilterProjectRow> rows =
+                taxInvoiceMapper.findFilterProjects(currentCompanyIdProvider.currentCompanyId());
+
+        return new TaxInvoiceFilterView(rows.stream()
+                .map(row -> new TaxInvoiceProjectOptionView(row.projectId(), row.projectName()))
+                .toList());
     }
 
     private void assertFinanceAccess(String userId, String role) {
