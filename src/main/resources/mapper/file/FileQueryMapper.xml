@@ -230,4 +230,109 @@
          ORDER BY f.deleted_at DESC, f.file_id ASC
     </select>
 
+    <!--
+      ═══ 파일 관리 화면(FILE-Q · FILE-V1 §2-H) ═══
+      §12 findProjectFiles 의 "문서→최신 완료 버전→블록→스텝" 조인을 여러 프로젝트로 확장한다.
+      회사 스코프는 project.company_id 로만 얻는다(file 에 company_id 없음) — JOIN project 로 테넌트 경계.
+      block_file 1:1(파일 1개=블록 1개)·vc/lv 1:1 이라 파일당 1행, LIMIT 을 끝에 둬도 페이지가 안 무너진다.
+      ⚠️ SELECT alias 순서 = FileViewProjection 필드 순서(위치 기반 매핑).
+    -->
+    <sql id="fileViewColumns">
+        b.step_id                                         AS stepId,
+        s.name                                            AS stepName,
+        CASE WHEN b.deleted_at IS NULL THEN b.block_id END AS blockId,
+        CASE WHEN b.deleted_at IS NULL THEN b.title END    AS blockTitle,
+        (b.deleted_at IS NOT NULL)                        AS blockDeleted,
+        f.project_id                                      AS projectId,
+        p.name                                            AS projectName,
+        f.file_id                                         AS fileId,
+        f.name                                            AS name,
+        lv.file_version_id                                AS latestVersionId,
+        lv.version_no                                     AS latestVersionNo,
+        vc.cnt                                            AS versionCount,
+        lv.original_file_name                             AS originalFileName,
+        lv.extension                                      AS extension,
+        lv.size_bytes                                     AS sizeBytes,
+        lv.uploader_name                                  AS uploaderName,
+        lv.uploader_department                            AS uploaderDepartment,
+        lv.uploader_position                              AS uploaderPosition,
+        lv.completed_at                                   AS updatedAt
+    </sql>
+
+    <!-- 문서→최신 완료 버전(vc/lv)→블록→스텝, 회사 스코프. 완료 버전 0개 문서는 INNER JOIN 으로 자동 제외. -->
+    <sql id="fileViewJoins">
+        FROM file f
+        JOIN project p ON p.project_id = f.project_id AND p.company_id = #{companyId} AND p.deleted_at IS NULL
+        JOIN block_file bf ON bf.file_id = f.file_id
+        JOIN block b ON b.block_id = bf.block_id
+        JOIN step s ON s.step_id = b.step_id
+        JOIN (
+              SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
+                FROM file_version fv
+               WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
+               GROUP BY fv.file_id
+             ) vc ON vc.file_id = f.file_id
+        JOIN file_version lv
+              ON lv.file_id = f.file_id
+             AND lv.version_no = vc.mx
+             AND lv.upload_status = 'COMPLETED'
+             AND lv.deleted_at IS NULL
+    </sql>
+
+    <sql id="fileViewFilters">
+        <if test="projectId != null">AND f.project_id = #{projectId}</if>
+        <if test="extension != null">AND lv.extension = #{extension}</if>
+        <if test="keyword != null">
+            AND (f.name LIKE CONCAT('%', #{keyword}, '%')
+                 OR lv.original_file_name LIKE CONCAT('%', #{keyword}, '%')
+                 OR lv.uploader_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <!-- FILE-Q-01 전사 파일 관리 총 건수. 파일당 1행이라 COUNT(*) = 문서 수. -->
+    <select id="countCompanyFiles" resultType="long">
+        SELECT COUNT(*)
+        <include refid="fileViewJoins"/>
+        WHERE f.deleted_at IS NULL
+        <include refid="fileViewFilters"/>
+    </select>
+
+    <!-- FILE-Q-01 전사 파일 관리 한 페이지. 최신 업로드순. -->
+    <select id="findCompanyFiles"
+            resultType="com.group3.vitamins.file.application.result.FileViewProjection">
+        SELECT
+        <include refid="fileViewColumns"/>
+        <include refid="fileViewJoins"/>
+        WHERE f.deleted_at IS NULL
+        <include refid="fileViewFilters"/>
+        ORDER BY lv.completed_at DESC, f.file_id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!--
+      FILE-Q-03 내 프로젝트 파일 모아보기(스텝 VIEWER 이상 · B안).
+      멤버십(project_member)은 항상 JOIN — "내 프로젝트" 정의. permission &lt;&gt; 'NONE' 로 2번 규칙(프로젝트 NONE 제외).
+      스텝 override(step_permission)는 LEFT JOIN 후 COALESCE(override, project) &lt;&gt; 'NONE' 로 3번 규칙.
+      adminAll(전역 ADMIN/MASTER)이면 스텝 필터 스킵(정책상 EDITOR). 프로젝트별 그룹 정렬.
+    -->
+    <select id="findMyProjectFiles"
+            resultType="com.group3.vitamins.file.application.result.FileViewProjection">
+        SELECT
+        <include refid="fileViewColumns"/>
+        <include refid="fileViewJoins"/>
+        JOIN project_member pm
+              ON pm.project_id = f.project_id
+             AND pm.user_id = #{requesterUserId}
+             AND pm.permission &lt;&gt; 'NONE'
+        <if test="adminAll == false">
+            LEFT JOIN step_permission sp ON sp.step_id = b.step_id AND sp.user_id = #{requesterUserId}
+        </if>
+        WHERE f.deleted_at IS NULL
+        <if test="adminAll == false">
+            AND COALESCE(sp.permission, pm.permission) &lt;&gt; 'NONE'
+        </if>
+        <include refid="fileViewFilters"/>
+        ORDER BY f.project_id ASC, b.step_id ASC, b.block_id ASC, f.file_id ASC
+    </select>
+
 </mapper>
