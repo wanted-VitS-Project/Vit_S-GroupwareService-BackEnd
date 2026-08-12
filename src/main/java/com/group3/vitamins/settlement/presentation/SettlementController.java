@@ -152,6 +152,8 @@ public class SettlementController {
             description = "재무팀 쪽에서 보일 전체 프로젝트에 대한 프로젝트 단위 정산 현황을 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "정산 현황 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "페이지 조회 조건이 올바르지 않습니다. (SETL-012)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "접근 권한이 없습니다. (SETL-009)")
     })
     @GetMapping("/api/v1/projects/settlements")
@@ -166,10 +168,19 @@ public class SettlementController {
             @RequestParam(required = false) String client,
             @Parameter(description = "종결(완료) 프로젝트 포함 여부. 생략하면 false(제외)", example = "false")
             @RequestParam(required = false) Boolean includeCompleted,
+            @Parameter(description = "0-base 페이지 번호. 생략하면 0", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지당 개수(최대 100). 생략하면 20", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "정렬 기준. 생략하면 NEXT_PLANNED_DATE_ASC",
+                    example = "NEXT_PLANNED_DATE_ASC",
+                    schema = @io.swagger.v3.oas.annotations.media.Schema(
+                            allowableValues = {"NEXT_PLANNED_DATE_ASC", "TOTAL_AMOUNT_DESC"}))
+            @RequestParam(defaultValue = "NEXT_PLANNED_DATE_ASC") String sort,
             Authentication authentication
     ) {
         SettlementProjectListView view = settlementQueryUseCase.getProjectSettlements(
-                new SettlementProjectListQuery(startDate, endDate, client, includeCompleted,
+                new SettlementProjectListQuery(startDate, endDate, client, includeCompleted, page, size, sort,
                         authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("정산 현황 조회 성공",

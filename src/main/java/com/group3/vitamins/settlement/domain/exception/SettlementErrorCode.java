@@ -20,6 +20,7 @@ public enum SettlementErrorCode implements ErrorCode {
     FINANCE_ACCESS_DENIED("SETL-009", "접근 권한이 없습니다."),
     PROJECT_NOT_FOUND("SETL-010", "존재하지 않는 프로젝트입니다."),
     ROUND_NO_INVALID("SETL-011", "회차 번호는 1 이상이어야 합니다."),
+    PAGE_QUERY_INVALID("SETL-012", "페이지 조회 조건이 올바르지 않습니다."),
     // 낙관적 락(CONCURRENCY.md) — 코드명은 문서 §5-3 네이밍 규칙(`{도메인}_VERSION_CONFLICT`)을 그대로 따른다.
     SETTLEMENT_VERSION_REQUIRED("SETTLEMENT_VERSION_REQUIRED", "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
     SETTLEMENT_VERSION_CONFLICT("SETTLEMENT_VERSION_CONFLICT", "다른 사용자가 먼저 수정했습니다.");
