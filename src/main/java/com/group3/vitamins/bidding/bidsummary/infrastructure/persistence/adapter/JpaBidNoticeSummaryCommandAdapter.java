@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -50,6 +51,28 @@ public class JpaBidNoticeSummaryCommandAdapter
                         requestedBy,
                         IN_PROGRESS_STATUSES
                 );
+    }
+
+    @Override
+    @Transactional
+    public Optional<ImprovementBase> findImprovementBaseForUpdate(
+            Long companyId,
+            Long noticeId,
+            String requestedBy,
+            Long summaryId
+    ) {
+        return summaryRepository.findImprovementBaseForUpdate(
+                        companyId,
+                        noticeId,
+                        requestedBy,
+                        summaryId
+                )
+                .map(entity -> new ImprovementBase(
+                        entity.getSummaryId(),
+                        entity.getRevisionNo(),
+                        entity.getSummaryStatus(),
+                        entity.isConfirmed()
+                ));
     }
 
     // 요약 요청과 Redis 발행 Outbox를 하나의 트랜잭션으로 저장합니다.

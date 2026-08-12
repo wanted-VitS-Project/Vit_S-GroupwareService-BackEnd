@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.bidding.bidsummary.application.port.BidNoticeSummaryNoticePort.BidNoticeSnapshot;
 import com.group3.vitamins.bidding.bidsummary.application.port.BidNoticeSummaryWorkerPort;
+import com.group3.vitamins.bidding.bidsummary.application.port.BidNoticeSummaryWorkerPort.PreviousSummary;
 import com.group3.vitamins.bidding.bidsummary.infrastructure.persistence.entity.BidNoticeSummaryJpaEntity;
 import com.group3.vitamins.bidding.bidsummary.infrastructure.persistence.entity.BidNoticeSummaryOutboxJpaEntity;
 import com.group3.vitamins.bidding.bidsummary.infrastructure.persistence.repository.BidNoticeSummaryJpaRepository;
@@ -48,15 +49,42 @@ public class JpaBidNoticeSummaryWorkerAdapter
                             entity.getNoticeSnapshot(),
                             BidNoticeSnapshot.class
                     );
+                    PreviousSummary previousSummary = loadPreviousSummary(entity);
 
                     return new JobData(
                             entity.getSummaryId(),
                             entity.getCompanyId(),
                             entity.getProcessingAttemptId(),
                             entity.getPrompt(),
+                            previousSummary,
                             notice
                     );
                 });
+    }
+
+    private PreviousSummary loadPreviousSummary(
+            BidNoticeSummaryJpaEntity entity
+    ) {
+        if (entity.getParentSummaryId() == null) {
+            return null;
+        }
+
+        return repository.findBySummaryIdAndDeletedAtIsNull(
+                        entity.getParentSummaryId()
+                )
+                .map(parent -> new PreviousSummary(
+                        parent.getSummaryId(),
+                        parent.getRevisionNo(),
+                        parent.getOverviewSummary(),
+                        parent.getAmountSummary(),
+                        parent.getScheduleSummary(),
+                        parent.getQualificationSummary(),
+                        parent.getTaskSummary(),
+                        parent.getRiskSummary()
+                ))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Previous bidding summary is missing"
+                ));
     }
 
     @Override

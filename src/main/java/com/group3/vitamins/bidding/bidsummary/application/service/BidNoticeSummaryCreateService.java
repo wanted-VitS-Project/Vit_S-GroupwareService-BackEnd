@@ -6,6 +6,7 @@ import com.group3.vitamins.bidding.bidsummary.application.port.BidNoticeSummaryN
 import com.group3.vitamins.bidding.bidsummary.application.result.CreateBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.CreateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.domain.model.BidNoticeSummary;
+import com.group3.vitamins.bidding.bidsummary.domain.model.BidNoticeSummaryStatus;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
@@ -27,6 +28,7 @@ public class BidNoticeSummaryCreateService
         implements CreateBidNoticeSummaryUseCase {
 
     private static final int MAX_PROMPT_LENGTH = 3000;
+    private static final int MAX_REVISION_NO = 20;
 
     private final BidNoticeSummaryNoticePort noticePort;
     private final BidNoticeSummaryCommandPort commandPort;
@@ -61,11 +63,16 @@ public class BidNoticeSummaryCreateService
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
+        BidNoticeSummaryCommandPort.ImprovementBase base =
+                findAndValidateBase(command, companyId);
+
         BidNoticeSummary summary = BidNoticeSummary.createPending(
                 companyId,
                 command.noticeId(),
                 command.userId(),
                 command.prompt(),
+                base == null ? null : base.summaryId(),
+                base == null ? 1 : base.revisionNo() + 1,
                 UUID.randomUUID().toString(),
                 now
         );
@@ -80,11 +87,43 @@ public class BidNoticeSummaryCreateService
         );
     }
 
+    private BidNoticeSummaryCommandPort.ImprovementBase findAndValidateBase(
+            CreateBidNoticeSummaryCommand command,
+            Long companyId
+    ) {
+        if (command.baseSummaryId() == null) {
+            return null;
+        }
+
+        BidNoticeSummaryCommandPort.ImprovementBase base = commandPort
+                .findImprovementBaseForUpdate(
+                        companyId,
+                        command.noticeId(),
+                        command.userId(),
+                        command.baseSummaryId()
+                )
+                .orElseThrow(() -> new NotFoundException(
+                        BiddingErrorCode.BIDDING_SUMMARY_NOT_FOUND
+                ));
+
+        if (base.summaryStatus() != BidNoticeSummaryStatus.COMPLETED
+                || base.confirmed()
+                || base.revisionNo() >= MAX_REVISION_NO) {
+            throw new ConflictException(
+                    BiddingErrorCode.BIDDING_SUMMARY_NOT_EDITABLE
+            );
+        }
+
+        return base;
+    }
+
     // 공고 ID와 사용자 프롬프트 형식을 저장소 접근 전에 검증합니다.
     private void validateCommand(CreateBidNoticeSummaryCommand command) {
         if (command == null
                 || command.noticeId() == null
                 || command.noticeId() <= 0
+                || (command.baseSummaryId() != null
+                && command.baseSummaryId() <= 0)
                 || command.userId() == null
                 || command.userId().isBlank()
                 || command.prompt() == null

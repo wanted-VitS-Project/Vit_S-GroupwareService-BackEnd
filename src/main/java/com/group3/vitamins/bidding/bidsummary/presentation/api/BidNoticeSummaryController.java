@@ -3,16 +3,19 @@ package com.group3.vitamins.bidding.bidsummary.presentation.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.bidding.bidsummary.application.command.ConfirmBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryQuery;
+import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryHistoryQuery;
 import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.CreateBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.ConfirmBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.ConfirmBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.CreateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSummaryUseCase;
+import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSummaryHistoryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.UpdateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.request.CreateBidNoticeSummaryRequest;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.request.UpdateBidNoticeSummaryRequest;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.response.BidNoticeSummaryResponse;
+import com.group3.vitamins.bidding.bidsummary.presentation.api.response.BidNoticeSummaryHistoryResponse;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.response.ConfirmBidNoticeSummaryResponse;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.response.CreateBidNoticeSummaryResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -40,6 +43,7 @@ import org.springframework.web.bind.annotation.*;
 public class BidNoticeSummaryController {
 
     private final CreateBidNoticeSummaryUseCase createUseCase;
+    private final GetBidNoticeSummaryHistoryUseCase getHistoryUseCase;
     private final GetBidNoticeSummaryUseCase getUseCase;
     private final UpdateBidNoticeSummaryUseCase updateUseCase;
     private final ConfirmBidNoticeSummaryUseCase confirmUseCase;
@@ -98,6 +102,35 @@ public class BidNoticeSummaryController {
                         "입찰 공고 AI 요약 요청이 접수되었습니다.",
                         response
                 ));
+    }
+
+    @Operation(
+            summary = "공고별 입찰 AI 요약 이력 조회",
+            description = "현재 사용자의 요약과 같은 회사에서 확정된 요약을 최신순으로 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "요약 이력 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "BIDDING_INVALID_SUMMARY_REQUEST"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "BIDDING_ACCESS_PERMISSION_REQUIRED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "BIDDING_NOTICE_NOT_FOUND")
+    })
+    @GetMapping("/notices/{noticeId}/summaries")
+    public ResponseEntity<ApiResponse<BidNoticeSummaryHistoryResponse>> getHistory(
+            @Parameter(description = "입찰 공고 ID") @PathVariable Long noticeId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication
+    ) {
+        var result = getHistoryUseCase.get(new GetBidNoticeSummaryHistoryQuery(
+                noticeId, page, size, authentication.getName(),
+                RequesterRole.from(authentication)
+        ));
+        return ResponseEntity.ok(ApiResponse.of(
+                HttpStatus.OK.value(),
+                "입찰 공고 AI 요약 이력 조회 성공",
+                BidNoticeSummaryHistoryResponse.from(result)
+        ));
     }
 
     @Operation(summary = "입찰 AI 요약 조회", description = "입찰 공고 AI 요약의 처리 상태와 구조화 결과를 조회합니다.")

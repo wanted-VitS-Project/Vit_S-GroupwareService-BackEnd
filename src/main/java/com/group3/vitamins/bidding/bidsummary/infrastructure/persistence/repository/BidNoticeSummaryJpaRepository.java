@@ -61,4 +61,25 @@ public interface BidNoticeSummaryJpaRepository
             @Param("summaryId") Long summaryId,
             @Param("userId") String userId
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select summary
+        from BidNoticeSummaryJpaEntity summary
+        where summary.summaryId = :summaryId
+          and summary.companyId = :companyId
+          and summary.noticeId = :noticeId
+          and summary.requestedBy = :requestedBy
+          and summary.deletedAt is null
+        """)
+    Optional<BidNoticeSummaryJpaEntity> findImprovementBaseForUpdate(
+            @Param("companyId") Long companyId,
+            @Param("noticeId") Long noticeId,
+            @Param("requestedBy") String requestedBy,
+            @Param("summaryId") Long summaryId
+    );
+
+    Optional<BidNoticeSummaryJpaEntity> findBySummaryIdAndDeletedAtIsNull(
+            Long summaryId
+    );
 }

@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 public record BidNoticeSummaryResult(
         Long summaryId,
         Long noticeId,
+        Long parentSummaryId,
+        int revisionNo,
         String prompt,
         String summaryStatus,
         String overviewSummary,
@@ -26,7 +28,8 @@ public record BidNoticeSummaryResult(
 ) {
     public static BidNoticeSummaryResult from(BidNoticeSummaryDetails details) {
         return new BidNoticeSummaryResult(
-                details.summaryId(), details.noticeId(), details.prompt(),
+                details.summaryId(), details.noticeId(), details.parentSummaryId(),
+                details.revisionNo(), details.prompt(),
                 details.summaryStatus().name(), details.overviewSummary(),
                 details.amountSummary(), details.scheduleSummary(),
                 details.qualificationSummary(), details.taskSummary(),

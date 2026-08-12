@@ -4,11 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidsummary.application.command.ConfirmBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.command.UpdateBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryQuery;
+import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryHistoryQuery;
+import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryHistoryItemResult;
+import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryHistoryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.ConfirmBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.ConfirmBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.CreateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSummaryUseCase;
+import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSummaryHistoryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.UpdateBidNoticeSummaryUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +36,7 @@ class BidNoticeSummaryControllerTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 12, 9, 0);
 
     private GetBidNoticeSummaryUseCase getUseCase;
+    private GetBidNoticeSummaryHistoryUseCase historyUseCase;
     private UpdateBidNoticeSummaryUseCase updateUseCase;
     private ConfirmBidNoticeSummaryUseCase confirmUseCase;
     private BidNoticeSummaryController controller;
@@ -40,15 +45,40 @@ class BidNoticeSummaryControllerTest {
     @BeforeEach
     void setUp() {
         getUseCase = mock(GetBidNoticeSummaryUseCase.class);
+        historyUseCase = mock(GetBidNoticeSummaryHistoryUseCase.class);
         updateUseCase = mock(UpdateBidNoticeSummaryUseCase.class);
         confirmUseCase = mock(ConfirmBidNoticeSummaryUseCase.class);
         controller = new BidNoticeSummaryController(
                 mock(CreateBidNoticeSummaryUseCase.class),
+                historyUseCase,
                 getUseCase, updateUseCase, confirmUseCase
         );
         authentication = new UsernamePasswordAuthenticationToken(
                 USER_ID, null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
         );
+    }
+
+    @Test
+    @DisplayName("공고별 요약 이력은 최신 내 요약 ID와 개정 계보를 반환한다")
+    void getsSummaryHistory() {
+        var item = new BidNoticeSummaryHistoryItemResult(
+                32L, 31L, 2, "COMPLETED", "위험을 보강해줘",
+                false, true, null, NOW, null
+        );
+        when(historyUseCase.get(new GetBidNoticeSummaryHistoryQuery(
+                317L, 0, 20, USER_ID, "ADMIN"
+        ))).thenReturn(new BidNoticeSummaryHistoryResult(
+                32L, List.of(item), 1, 1, 0, 20
+        ));
+
+        var response = controller.getHistory(317L, 0, 20, authentication);
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().data().latestMySummaryId()).isEqualTo(32L);
+        assertThat(response.getBody().data().content().get(0).parentSummaryId())
+                .isEqualTo(31L);
+        assertThat(response.getBody().data().content().get(0).revisionNo())
+                .isEqualTo(2);
     }
 
     @Test
@@ -101,7 +131,7 @@ class BidNoticeSummaryControllerTest {
 
     private BidNoticeSummaryResult summaryResult(boolean confirmed) {
         return new BidNoticeSummaryResult(
-                SUMMARY_ID, 317L, "검토해줘", "COMPLETED",
+                SUMMARY_ID, 317L, null, 1, "검토해줘", "COMPLETED",
                 "개요", "금액", "일정", "자격", "과업", "위험",
                 confirmed, confirmed ? USER_ID : null,
                 confirmed ? NOW : null, null, null, NOW, NOW, NOW

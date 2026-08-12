@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-12 (입찰 AI 요약 실패 callback 재시도 계약 확정)
+**최종 동기화**: 2026-08-12 (입찰 AI 요약 개정 요청과 이전 요약 Worker 전달 계약 구현)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -24,12 +24,12 @@
 | ✅ 확정 | 직접 등록 공고 수정 | PATCH | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
 | ✅ 확정 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
 | ✅ 확정 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
-| ✅ 확정 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
-| ✅ 확정 | 공고별 입찰 AI 요약 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
+| ✔️ 완료 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
+| ✔️ 완료 | 공고별 입찰 AI 요약 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
 | ✅ 확정 | 입찰 AI 요약 조회 | GET | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
 | ✅ 확정 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
 | ✅ 확정 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
-| ✅ 확정 | Python 입찰 요약 작업 조회 | GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | 내부 서버 |
+| ✔️ 완료 | Python 입찰 요약 작업 조회 | GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | 내부 서버 |
 | ✅ 확정 | Python 입찰 요약 결과 callback | POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | 내부 서버 |
 | ✅ 확정 | 공고 프로젝트 전환 | POST | `/api/v1/bidding/notices/{noticeId}/projects` | `BIDDING` |
 
@@ -980,6 +980,9 @@ Request Body는 없다.
 | 안전 정책 | 인증, 회사 격리, 입력 데이터 경계, 민감 정보 차단과 출력 형식 검증은 사용자 프롬프트와 분리된 실행 정책으로 적용한다 |
 | 처리 방식 | Spring Boot가 DB Outbox와 Redis Stream으로 작업을 발행하고 Python worker가 Gemini 호출 후 callback한다 |
 | 이력 | 요약 요청마다 새 `summaryId`를 생성하며 이전 완료 이력을 덮어쓰지 않는다 |
+| 개선 요청 | 본인이 만든 같은 공고의 미확정 `COMPLETED` 요약을 `baseSummaryId`로 선택해 새 개선 요약을 요청할 수 있다 |
+| 개정 계보 | 최초 요청은 `parentSummaryId = null`, `revisionNo = 1`이며 개선 요청은 기준 요약을 부모로 연결하고 개정 번호를 1 증가시킨다 |
+| 개정 상한 | 하나의 개선 계보는 최대 20차까지 허용한다 |
 | 중복 실행 | 같은 회사·공고·요청자에 `PENDING` 또는 `PROCESSING` 요약이 있으면 그 요청자의 새 요청을 거부한다 |
 | 확정 | `COMPLETED`인 본인 미확정 요약만 확정할 수 있다. 확정 후에는 변경하지 않고 재분석 시 새 요약을 생성한다 |
 | 프로젝트 전환 | 확정과 프로젝트 생성은 분리한다. 확정된 요약을 선택해 프로젝트 생성 API를 명시적으로 호출한다 |
@@ -1015,10 +1018,12 @@ Request Body는 없다.
 | 필드 | 타입 | 필수 | 규칙 |
 |------|------|------|------|
 | `prompt` | String | Y | 사용자가 직접 입력하는 분석 요청. 공백 불가, 최대 3,000자 |
+| `baseSummaryId` | Long | N | 개선 기준이 되는 본인의 같은 공고 미확정 `COMPLETED` 요약 ID |
 
 ```json
 {
-  "prompt": "이 공고의 금액, 일정, 참가 자격과 수행 위험을 실무 검토용으로 정리해줘."
+  "prompt": "기존 요약을 유지하되 보안 인증과 일정 위험을 더 구체적으로 정리해줘.",
+  "baseSummaryId": 31
 }
 ```
 
@@ -1041,8 +1046,9 @@ Request Body는 없다.
 1. 인증 사용자의 회사와 `BIDDING` 권한을 확인한다.
 2. 현재 회사가 조회할 수 있는 공고인지 확인한다.
 3. 같은 회사·공고·요청자에 진행 중인 요약이 있는지 확인한다.
-4. `bid_notice_summary(PENDING)`과 요약 요청 Outbox를 같은 DB 트랜잭션에서 저장한다.
-5. 커밋 이후 Outbox Dispatcher가 Redis Stream에 작업을 발행한다.
+4. `baseSummaryId`가 있으면 본인의 같은 공고 미확정 `COMPLETED` 요약인지 확인하고 최대 20차 제한을 검증한다.
+5. `bid_notice_summary(PENDING)`과 요약 요청 Outbox를 같은 DB 트랜잭션에서 저장한다.
+6. 커밋 이후 Outbox Dispatcher가 Redis Stream에 작업을 발행한다.
 
 ### Status Code
 
@@ -1053,7 +1059,9 @@ Request Body는 없다.
 | 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
 | 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 기준 요약이 없거나 다른 회사·공고·요청자의 요약임 |
 | 409 | `BIDDING_SUMMARY_ALREADY_PROCESSING` | 같은 회사·공고·요청자에 진행 중인 요약이 있음 |
+| 409 | `BIDDING_SUMMARY_NOT_EDITABLE` | 기준 요약이 미완료·확정 상태이거나 이미 20차임 |
 
 ---
 
@@ -1076,6 +1084,8 @@ Request Body는 없다.
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `content[].summaryId` | Long | AI 요약 ID |
+| `content[].parentSummaryId` | Long | 개선 기준 요약 ID. 최초 요청이면 `null` |
+| `content[].revisionNo` | Integer | 개선 계보의 개정 번호. 최초 요청은 `1` |
 | `content[].summaryStatus` | String | 처리 상태 |
 | `content[].prompt` | String | 요청 당시 프롬프트 |
 | `content[].confirmed` | Boolean | 확정 여부 |
@@ -1083,6 +1093,7 @@ Request Body는 없다.
 | `content[].projectId` | Long | 이 확정 요약으로 생성한 프로젝트 ID. 미전환이면 `null` |
 | `content[].requestedAt` | String | 요청 시각 |
 | `content[].confirmedAt` | String | 확정 시각. 미확정이면 `null` |
+| `latestMySummaryId` | Long | 현재 사용자가 요청한 요약 중 가장 최신 ID. 없으면 `null` |
 | `totalElements` | Long | 조회 가능한 전체 요약 수 |
 | `totalPages` | Integer | 전체 페이지 수 |
 | `page` | Integer | 현재 페이지 |
@@ -1114,6 +1125,8 @@ Request Body는 없다.
 |------|------|-----------|------|
 | `summaryId` | Long | N | AI 요약 ID |
 | `noticeId` | Long | N | 입찰 공고 ID |
+| `parentSummaryId` | Long | Y | 개선 기준 요약 ID. 최초 요청이면 `null` |
+| `revisionNo` | Integer | N | 개선 계보의 개정 번호. 최초 요청은 `1` |
 | `prompt` | String | N | 요청 당시 사용자가 입력한 프롬프트 원문 |
 | `summaryStatus` | String | N | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
 | `overviewSummary` | String | Y | 공고 개요. 완료 전 또는 근거 부족 시 `null` |
@@ -1268,6 +1281,15 @@ Python worker가 Redis 작업을 받은 뒤 현재 시도와 분석 입력을 Sp
 | `companyId` | Long | 회사 ID. worker 로그에는 노출하지 않는다 |
 | `attemptId` | String | 현재 작업 시도 ID |
 | `prompt` | String | 사용자가 입력한 프롬프트 원문 |
+| `previousSummary` | Object | 개선 기준 요약의 구조화 결과. 최초 요청이면 `null` |
+| `previousSummary.summaryId` | Long | 개선 기준 요약 ID |
+| `previousSummary.revisionNo` | Integer | 개선 기준 요약의 개정 번호 |
+| `previousSummary.overviewSummary` | String | 이전 공고 개요 |
+| `previousSummary.amountSummary` | String | 이전 금액 요약 |
+| `previousSummary.scheduleSummary` | String | 이전 일정 요약 |
+| `previousSummary.qualificationSummary` | String | 이전 참가 자격 요약 |
+| `previousSummary.taskSummary` | String | 이전 주요 과업 요약 |
+| `previousSummary.riskSummary` | String | 이전 위험 요소 요약 |
 | `notice` | Object | 요청 시점의 입찰 공고 구조화 스냅샷 |
 | `notice.attachments` | List&lt;Object&gt; | 파일명과 원문 URL 등 첨부 메타데이터. 본문은 포함하지 않는다 |
 

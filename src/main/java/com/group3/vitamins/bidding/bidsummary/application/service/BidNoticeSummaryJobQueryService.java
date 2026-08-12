@@ -41,6 +41,7 @@ public class BidNoticeSummaryJobQueryService
                 job.companyId(),
                 job.attemptId(),
                 job.prompt(),
+                job.previousSummary(),
                 job.notice()
         );
     }

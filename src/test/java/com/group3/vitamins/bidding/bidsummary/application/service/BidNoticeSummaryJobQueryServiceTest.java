@@ -46,7 +46,7 @@ class BidNoticeSummaryJobQueryServiceTest {
         BidNoticeSnapshot notice = mock(BidNoticeSnapshot.class);
         when(workerPort.claimJob(SUMMARY_ID, ATTEMPT_ID, NOW))
                 .thenReturn(Optional.of(new BidNoticeSummaryWorkerPort.JobData(
-                        SUMMARY_ID, 10L, ATTEMPT_ID, "위험 요소를 요약해줘.", notice
+                        SUMMARY_ID, 10L, ATTEMPT_ID, "위험 요소를 요약해줘.", null, notice
                 )));
 
         var result = service.handle(new GetBidNoticeSummaryJobQuery(SUMMARY_ID, ATTEMPT_ID));
@@ -54,6 +54,7 @@ class BidNoticeSummaryJobQueryServiceTest {
         assertThat(result.summaryId()).isEqualTo(SUMMARY_ID);
         assertThat(result.companyId()).isEqualTo(10L);
         assertThat(result.attemptId()).isEqualTo(ATTEMPT_ID);
+        assertThat(result.previousSummary()).isNull();
         assertThat(result.notice()).isSameAs(notice);
     }
 

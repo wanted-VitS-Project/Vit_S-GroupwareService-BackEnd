@@ -38,7 +38,20 @@ public interface BidNoticeSummaryWorkerPort {
             Long companyId,
             String attemptId,
             String prompt,
+            PreviousSummary previousSummary,
             BidNoticeSnapshot notice
+    ) {
+    }
+
+    record PreviousSummary(
+            Long summaryId,
+            int revisionNo,
+            String overviewSummary,
+            String amountSummary,
+            String scheduleSummary,
+            String qualificationSummary,
+            String taskSummary,
+            String riskSummary
     ) {
     }
 

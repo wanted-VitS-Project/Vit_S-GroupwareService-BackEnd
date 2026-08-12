@@ -153,7 +153,7 @@ class BidNoticeSummaryReviewServiceTest {
             BidNoticeSummaryStatus status, boolean confirmed
     ) {
         return new BidNoticeSummaryDetails(
-                SUMMARY_ID, COMPANY_ID, 317L, USER_ID, "검토해줘", status,
+                SUMMARY_ID, COMPANY_ID, 317L, null, 1, USER_ID, "검토해줘", status,
                 "개요", "금액", "일정", "자격", "과업", "위험",
                 confirmed, confirmed ? USER_ID : null,
                 confirmed ? NOW : null, null, null, NOW, NOW, NOW
@@ -177,6 +177,7 @@ class BidNoticeSummaryReviewServiceTest {
     ) {
         return new BidNoticeSummaryDetails(
                 current.summaryId(), current.companyId(), current.noticeId(),
+                current.parentSummaryId(), current.revisionNo(),
                 current.requestedBy(), current.prompt(), current.summaryStatus(),
                 values.overviewSummary(), values.amountSummary(),
                 values.scheduleSummary(), values.qualificationSummary(),

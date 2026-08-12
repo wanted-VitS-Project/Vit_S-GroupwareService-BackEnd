@@ -4,6 +4,7 @@ public record CreateBidNoticeSummaryCommand(
         Long noticeId,
         String userId,
         String role,
-        String prompt
+        String prompt,
+        Long baseSummaryId
 ) {
 }

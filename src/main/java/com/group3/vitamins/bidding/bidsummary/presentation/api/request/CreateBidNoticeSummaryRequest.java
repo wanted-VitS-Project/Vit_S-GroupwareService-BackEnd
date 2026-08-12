@@ -3,6 +3,7 @@ package com.group3.vitamins.bidding.bidsummary.presentation.api.request;
 import com.group3.vitamins.bidding.bidsummary.application.command.CreateBidNoticeSummaryCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record CreateBidNoticeSummaryRequest(
@@ -13,7 +14,15 @@ public record CreateBidNoticeSummaryRequest(
         )
         @NotBlank
         @Size(max = 3000)
-        String prompt
+        String prompt,
+
+        @Schema(
+                description = "개선 기준이 되는 본인의 같은 공고 미확정 완료 요약 ID",
+                example = "31",
+                nullable = true
+        )
+        @Positive
+        Long baseSummaryId
 ) {
 
     public CreateBidNoticeSummaryCommand toCommand(
@@ -25,7 +34,8 @@ public record CreateBidNoticeSummaryRequest(
                 noticeId,
                 userId,
                 role,
-                prompt
+                prompt,
+                baseSummaryId
         );
     }
 }

@@ -88,7 +88,7 @@ class BidNoticeSummaryQueryServiceTest {
     private BidNoticeSummaryDetails details(boolean confirmed) {
         LocalDateTime now = LocalDateTime.of(2026, 8, 12, 9, 0);
         return new BidNoticeSummaryDetails(
-                SUMMARY_ID, COMPANY_ID, 317L, USER_ID, "검토해줘",
+                SUMMARY_ID, COMPANY_ID, 317L, null, 1, USER_ID, "검토해줘",
                 BidNoticeSummaryStatus.COMPLETED,
                 "개요", "금액", "일정", "자격", "과업", "위험",
                 confirmed, confirmed ? USER_ID : null,

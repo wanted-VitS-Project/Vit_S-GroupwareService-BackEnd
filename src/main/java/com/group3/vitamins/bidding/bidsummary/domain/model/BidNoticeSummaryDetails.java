@@ -7,6 +7,8 @@ public record BidNoticeSummaryDetails(
         Long summaryId,
         Long companyId,
         Long noticeId,
+        Long parentSummaryId,
+        int revisionNo,
         String requestedBy,
         String prompt,
         BidNoticeSummaryStatus summaryStatus,

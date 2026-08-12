@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 public record BidNoticeSummaryResponse(
         @Schema(description = "AI 요약 ID", example = "31") Long summaryId,
         @Schema(description = "입찰 공고 ID", example = "317") Long noticeId,
+        @Schema(description = "개선 기준 AI 요약 ID", nullable = true) Long parentSummaryId,
+        @Schema(description = "요약 개정 번호", example = "1") int revisionNo,
         @Schema(description = "사용자 입력 프롬프트") String prompt,
         @Schema(description = "요약 처리 상태", example = "COMPLETED") String summaryStatus,
         @Schema(description = "공고 개요", nullable = true) String overviewSummary,
@@ -27,7 +29,8 @@ public record BidNoticeSummaryResponse(
 ) {
     public static BidNoticeSummaryResponse from(BidNoticeSummaryResult result) {
         return new BidNoticeSummaryResponse(
-                result.summaryId(), result.noticeId(), result.prompt(),
+                result.summaryId(), result.noticeId(), result.parentSummaryId(),
+                result.revisionNo(), result.prompt(),
                 result.summaryStatus(), result.overviewSummary(),
                 result.amountSummary(), result.scheduleSummary(),
                 result.qualificationSummary(), result.taskSummary(),

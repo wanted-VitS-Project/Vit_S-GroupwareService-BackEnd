@@ -61,6 +61,41 @@ class JpaBidNoticeSummaryWorkerAdapterTest {
     }
 
     @Test
+    @DisplayName("개선 작업은 이전 완료 요약의 구조화 결과를 함께 반환한다")
+    void claimsImprovementJobWithPreviousSummary() {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        BidNoticeSummaryJpaEntity parent = pendingEntity(objectMapper);
+        parent.startProcessing(NOW.minusMinutes(3));
+        parent.complete(
+                "기존 개요", "기존 금액", "기존 일정",
+                "기존 자격", "기존 과업", "기존 위험",
+                NOW.minusMinutes(2)
+        );
+
+        BidNoticeSummary childSummary = BidNoticeSummary.createPending(
+                10L, 20L, "EMP001", "위험을 더 구체화해줘",
+                SUMMARY_ID, 2, ATTEMPT_ID, NOW.minusMinutes(1)
+        );
+        BidNoticeSummaryJpaEntity child = BidNoticeSummaryJpaEntity.pending(
+                childSummary,
+                objectMapper.valueToTree(testSnapshot())
+        );
+        ReflectionTestUtils.setField(child, "summaryId", 32L);
+
+        when(repository.findForWorkerUpdate(32L)).thenReturn(Optional.of(child));
+        when(repository.findBySummaryIdAndDeletedAtIsNull(SUMMARY_ID))
+                .thenReturn(Optional.of(parent));
+
+        var result = adapter.claimJob(32L, ATTEMPT_ID, NOW).orElseThrow();
+
+        assertThat(result.previousSummary()).isNotNull();
+        assertThat(result.previousSummary().summaryId()).isEqualTo(SUMMARY_ID);
+        assertThat(result.previousSummary().revisionNo()).isEqualTo(1);
+        assertThat(result.previousSummary().overviewSummary()).isEqualTo("기존 개요");
+        assertThat(result.previousSummary().riskSummary()).isEqualTo("기존 위험");
+    }
+
+    @Test
     @DisplayName("같은 attemptId의 PROCESSING 작업은 재조회할 수 있다")
     void returnsAlreadyClaimedJobForSameAttempt() {
         entity.startProcessing(NOW.minusSeconds(10));
@@ -196,16 +231,20 @@ class JpaBidNoticeSummaryWorkerAdapterTest {
         BidNoticeSummary summary = BidNoticeSummary.createPending(
                 10L, 20L, "EMP001", "요약해줘", ATTEMPT_ID, NOW.minusMinutes(1)
         );
-        BidNoticeSnapshot snapshot = new BidNoticeSnapshot(
-                20L, "테스트 공고", "SERVICE", "공고기관", "수요기관",
-                null, null, NOW, null, NOW.plusDays(7), null,
-                "참가 자격", "지역 제한", "업종 제한", "계약 방식", "평가 방식",
-                "https://example.org/notice", List.of()
-        );
+        BidNoticeSnapshot snapshot = testSnapshot();
         BidNoticeSummaryJpaEntity result = BidNoticeSummaryJpaEntity.pending(
                 summary, objectMapper.valueToTree(snapshot)
         );
         ReflectionTestUtils.setField(result, "summaryId", SUMMARY_ID);
         return result;
+    }
+
+    private BidNoticeSnapshot testSnapshot() {
+        return new BidNoticeSnapshot(
+                20L, "테스트 공고", "SERVICE", "공고기관", "수요기관",
+                null, null, NOW, null, NOW.plusDays(7), null,
+                "참가 자격", "지역 제한", "업종 제한", "계약 방식", "평가 방식",
+                "https://example.org/notice", List.of()
+        );
     }
 }

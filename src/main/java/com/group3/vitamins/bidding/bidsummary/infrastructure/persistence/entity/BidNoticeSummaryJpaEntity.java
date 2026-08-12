@@ -33,6 +33,12 @@ public class BidNoticeSummaryJpaEntity {
     @Column(name = "bid_notice_id", nullable = false)
     private Long noticeId;
 
+    @Column(name = "parent_summary_id")
+    private Long parentSummaryId;
+
+    @Column(name = "revision_no", nullable = false)
+    private int revisionNo;
+
     @Column(name = "requested_by", nullable = false, length = 20)
     private String requestedBy;
 
@@ -116,6 +122,8 @@ public class BidNoticeSummaryJpaEntity {
 
         entity.companyId = summary.companyId();
         entity.noticeId = summary.noticeId();
+        entity.parentSummaryId = summary.parentSummaryId();
+        entity.revisionNo = summary.revisionNo();
         entity.requestedBy = summary.requestedBy();
         entity.prompt = summary.prompt();
         entity.noticeSnapshot = noticeSnapshot;
@@ -134,6 +142,8 @@ public class BidNoticeSummaryJpaEntity {
                 summaryId,
                 companyId,
                 noticeId,
+                parentSummaryId,
+                revisionNo,
                 requestedBy,
                 prompt,
                 summaryStatus,
@@ -203,7 +213,8 @@ public class BidNoticeSummaryJpaEntity {
 
     public BidNoticeSummaryDetails toDetails() {
         return new BidNoticeSummaryDetails(
-                summaryId, companyId, noticeId, requestedBy, prompt,
+                summaryId, companyId, noticeId, parentSummaryId, revisionNo,
+                requestedBy, prompt,
                 summaryStatus, overviewSummary, amountSummary,
                 scheduleSummary, qualificationSummary, taskSummary,
                 riskSummary, confirmed, confirmedBy, confirmedAt,
