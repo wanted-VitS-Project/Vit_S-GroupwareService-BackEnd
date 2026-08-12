@@ -23,6 +23,10 @@ public interface NotificationStreamPort {
      * RT-001 — 인자로 받은 사번의 알림만 흘려보내는 연결을 연다. 호출자가 세션에서 꺼낸 사번을 넘긴다.
      *
      * <p>RT-003 — 같은 사번으로 여러 번 호출해도 된다(탭마다 한 연결). 기존 연결을 끊지 않는다.
+     *
+     * <p>RT-007 — {@code sessionId} 를 함께 받는 이유는 <b>그 세션이 죽으면 이 연결도 끊어야</b>
+     * 하기 때문이다. 로그아웃은 세션만 무효화하므로, 이걸 들고 있지 않으면 로그아웃한 뒤에도
+     * 최대 30분(emitter timeout)간 알림이 계속 흘러간다.
      */
-    SseEmitter subscribe(String userId);
+    SseEmitter subscribe(String userId, String sessionId);
 }

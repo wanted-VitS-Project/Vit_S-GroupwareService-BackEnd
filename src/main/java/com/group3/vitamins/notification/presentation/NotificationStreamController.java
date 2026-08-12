@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -52,9 +53,13 @@ public class NotificationStreamController {
                     description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다")
     })
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@AuthenticationPrincipal String userId, HttpServletResponse response) {
+    public SseEmitter stream(@AuthenticationPrincipal String userId,
+                             HttpSession session,
+                             HttpServletResponse response) {
         response.setHeader("X-Accel-Buffering", "no");
 
-        return notificationStreamPort.subscribe(userId);
+        // RT-007 — 세션 ID 를 넘겨야 로그아웃·잠금 시 이 연결을 끊을 수 있다.
+        // 인증을 통과한 요청이므로 세션은 이미 존재한다(여기서 새로 만들어지지 않는다).
+        return notificationStreamPort.subscribe(userId, session.getId());
     }
 }
