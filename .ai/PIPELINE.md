@@ -1,5 +1,6 @@
 # ⚙️ CI/CD 파이프라인
 
+**최종 업데이트**: 2026-08-12 (migration.yml 에 스키마 스모크 스텝 추가 — 엔티티↔스키마 드리프트 검증)
 **최종 업데이트**: 2026-08-11 (Merge Queue 필수 체크용 `merge_group` 트리거 추가)
 **최종 업데이트**: 2026-07-28 (CI · Gitleaks · CodeRabbit 도입)
 **관리**: 김동현 (DevOps)
@@ -29,7 +30,7 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 |------|--------|---------|------|
 | `ci.yml` | PR·Merge Queue·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 + 테스트 결과 발행 | ✅ |
 | `gitleaks.yml` | PR·Merge Queue·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
-| `migration.yml` | PR·Merge Queue·push → `develop`/`main` | 실제 MySQL 에 Flyway 적용 검증 | ✅ |
+| `migration.yml` | PR·Merge Queue·push → `develop`/`main` | 실제 MySQL 에 Flyway 적용 검증 + 스키마 스모크(엔티티↔스키마 드리프트) | ✅ |
 | `dependabot.yml` | **매월** 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
 | CodeQL | GitHub 관리 (Default setup) | 코드 취약점 정적 분석 | ✅ |
 | 배포 | — | — | ⬜ 미구축 |
@@ -113,8 +114,8 @@ SHA 는 불변이라 이 위험이 사라진다.
 | 항목 | 내용 |
 |------|------|
 | 트리거 | PR·push → `develop`/`main` (**paths 필터 없음**) |
-| DB | MySQL 8.0 서비스 컨테이너 (CI 전용, 실행 후 폐기, digest 고정) |
-| 검사 | ① 버전 중복 ② 실제 적용 ③ 생성 테이블·이력 출력 |
+| DB | MySQL 8.0 + Redis 7 서비스 컨테이너 (CI 전용, 실행 후 폐기, digest 고정) |
+| 검사 | ① 파일명 형식 ② 버전 중복 ③ 신규 버전 순서 ④ 실제 적용 ⑤ 생성 테이블·이력 출력 ⑥ **스키마 스모크(엔티티↔스키마 드리프트)** |
 
 > 🚨 **paths 필터를 추가하지 말 것.**
 > 이 잡은 브랜치 보호의 **필수 상태 체크**다. paths 로 걸러져 실행되지 않으면
@@ -129,6 +130,30 @@ SHA 는 불변이라 이 위험이 사라진다.
 > `build.gradle` 에는 `flyway-core` **라이브러리만** 있고 Flyway **Gradle 플러그인**은 없어서
 > `./gradlew flywayMigrate` 태스크가 존재하지 않는다.
 > CLI 방식은 앱 빌드가 필요 없어 더 빠르고, 빌드 상태와 무관하게 마이그레이션만 검증한다.
+
+**🔬 스키마 스모크 (엔티티 ↔ 스키마 드리프트 검증)**
+
+Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인된다 — 엔티티 매핑이 실제 컬럼과
+어긋나도(예: 컬럼 추가 마이그레이션이 **빈 파일**이라 컬럼이 안 생겼는데 엔티티는 그 컬럼을
+기대) 드러나지 않고 **배포 시점에 크래시**한다. 그래서 마이그레이션이 끝난 이 DB 를 상대로
+앱을 `ddl-auto: validate` 로 **실제 기동**한다. Hibernate 가 `EntityManagerFactory` 초기화 시
+엔티티↔스키마를 대조하므로, 드리프트가 있으면 컨텍스트 기동이 실패해 이 잡이 빨간불이 된다.
+
+| 항목 | 내용 |
+|------|------|
+| 빌드 | `./gradlew bootJar` (실행 가능한 부트 jar. devtools 는 `developmentOnly` 라 미포함) |
+| 기동 | 방금 마이그레이션한 CI MySQL + Redis 컨테이너를 바라보게 하고 `java -jar` |
+| 판정 | 로그에 `Started VitaminSApplication` 이면 통과, 컨텍스트 기동 실패면 실패 |
+| 더미 env | `MAIL_*`·`S3_BUCKET_NAME` 은 기동 시 연결하지 않으므로 더미로 충분. `SETTLEMENT_ACCOUNT_ENC_KEY` 는 생성자가 **Base64 32바이트**를 검증하므로 `openssl rand -base64 32` 로 만든다 |
+
+> ⚠️ **Redis 컨테이너가 필요하다.** 세션 저장소가 `repository-type: indexed` 라 기동 시
+> `RedisMessageListenerContainer` 가 실제로 연결한다. 없으면 validate 에 도달하기 전에 실패한다.
+>
+> ⚠️ **콜레이션을 `utf8mb4_0900_ai_ci` 로 고정**한다(Flyway 전 `ALTER DATABASE`). migration SQL 은
+> `DEFAULT CHARSET=utf8mb4` 만 지정하고 콜레이션은 DB 기본값을 상속하므로, 운영 RDS(MySQL 8.0)와
+> 동일 콜레이션으로 못박아 문자열 비교·정렬·FK 콜레이션이 CI 와 운영에서 다르게 동작하지 않게 한다.
+>
+> ⚠️ **lazy-init 을 켜지 말 것.** 켜면 JPA 초기화가 지연돼 validate 가 아예 돌지 않는다.
 
 ### `gitleaks.yml` — 시크릿 스캔
 
@@ -267,5 +292,6 @@ CI 가 아직 없었기 때문이다.
 
 | 날짜 | 변경 내용 | 담당 |
 |------|----------|------|
+| 2026-08-12 | migration.yml 에 스키마 스모크 스텝 추가 (Redis 컨테이너·콜레이션 고정·`validate` 기동) | 김동현 |
 | 2026-07-28 | CI · Gitleaks 워크플로우, CodeRabbit 설정, GitHub 보안 기능 활성화 | 김동현 |
 | 2026-07-28 | 문서 골격 생성 | 김동현 |

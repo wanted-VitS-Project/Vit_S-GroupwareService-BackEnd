@@ -1,6 +1,7 @@
 package com.group3.vitamins.approval.application.service;
 
 import com.group3.vitamins.approval.application.port.BlockCatalogPort;
+import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
@@ -36,6 +37,7 @@ class ApprovalHandlerServiceDeletionTest {
 
     @Mock private ApprovalRepository approvalRepository;
     @Mock private BlockCatalogPort blockCatalogPort;
+    @Mock private EmployeeCatalogPort employeeCatalogPort;
     @Mock private DomainEventPublisher domainEventPublisher;
     @InjectMocks private ApprovalHandlerService service;
 
@@ -158,7 +160,7 @@ class ApprovalHandlerServiceDeletionTest {
     }
 
     private Approval approval(ApprovalStatus status, LocalDateTime deletedAt) {
-        return Approval.reconstruct(100L, 10L, "EMP001", status, 1, null, null, null, deletedAt);
+        return Approval.reconstruct(100L, 10L, "EMP001", null, status, 1, null, null, null, deletedAt);
     }
 
     private ApprovalLine line(Long lineId, String approverId, int sequenceNo, ApprovalLineStatus status) {

@@ -100,6 +100,35 @@ class ApprovalLineEligibilityPolicyTest {
     }
 
     @Test
+    @DisplayName("같은 회사 ADMIN도 결재자로 지정할 수 없다")
+    void adminCannotBeApprover() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(MEMBER, "ADMIN", MY_COMPANY);
+
+        assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER)))
+                .isInstanceOf(ValidationException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, MEMBER);
+    }
+
+    @Test
+    @DisplayName("계정이 비활성인 사원은 프로젝트 참여자여도 결재자로 지정할 수 없다")
+    void inactiveEmployeeCannotBeApprover() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(MEMBER)).thenReturn(Optional.of(new EmployeeSummary(
+                MEMBER, "홍길동", null, null, "MEMBER", MY_COMPANY, "INACTIVE", null, null)));
+
+        assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER)))
+                .isInstanceOf(ValidationException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, MEMBER);
+    }
+
+    @Test
     @DisplayName("같은 회사 일반 사원은 project member 여야 통과한다 (기존 동작 유지)")
     void sameCompanyMemberPassesWhenProjectMember() {
         givenBlock();
@@ -152,6 +181,7 @@ class ApprovalLineEligibilityPolicyTest {
 
     private void givenEmployee(String userId, String role, Long companyId) {
         when(employeeCatalogPort.findEmployee(userId))
-                .thenReturn(Optional.of(new EmployeeSummary(userId, "홍길동", null, null, role, companyId)));
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        userId, "홍길동", null, null, role, companyId, "ACTIVE", null, null)));
     }
 }

@@ -45,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -111,14 +112,26 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                 command.approvalId(), command.revisionId(), command.requesterId(), command.lines().size());
 
         Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
-        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
-        // 잠금 조회 — 상신(#7)이 이 트랜잭션 커밋 전까지 같은 회차의 상태를 못 바꾸게 막는다(CodeRabbit 지적 반영)
         ApprovalRevision revision =
-                revisionEligibilityPolicy.getDraftRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
+                revisionEligibilityPolicy.getRevisionForUpdateOrThrow(command.approvalId(), command.revisionId());
 
         lineEligibilityPolicy.assertNotEmpty(command.lines());
         lineEligibilityPolicy.assertOrderValid(
                 command.lines().stream().map(UpdateApprovalLinesCommand.LineInput::order).toList());
+
+        if (revision.getStatus() == ApprovalStatus.IN_PROGRESS) {
+            String previousActingDrafterId = approval.getActingDrafterId();
+            approval = revisionEligibilityPolicy.claimActingDrafterOrThrow(approval, command.requesterId());
+            publishActingDrafterChangeIfNeeded(
+                    approval, revision, previousActingDrafterId, command.requesterId());
+            revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
+            return replaceUnavailableInProgressLines(command, approval, revision);
+        }
+        if (revision.getStatus() != ApprovalStatus.DRAFT) {
+            throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+        }
+
+        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
 
         List<String> approverIds = command.lines().stream()
                 .map(UpdateApprovalLinesCommand.LineInput::approverId)
@@ -157,12 +170,189 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         return result;
     }
 
+    private List<ApprovalLineView> replaceUnavailableInProgressLines(UpdateApprovalLinesCommand command,
+                                                                      Approval approval,
+                                                                      ApprovalRevision revision) {
+        List<ApprovalLine> previousLines = approvalRepository.findLinesByRevisionId(command.revisionId()).stream()
+                .sorted(Comparator.comparingInt(ApprovalLine::getSequenceNo))
+                .toList();
+        if (command.lines().size() > previousLines.size()) {
+            throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+        }
+
+        if (command.lines().size() < previousLines.size()) {
+            return excludeUnavailableInProgressLines(command, approval, revision, previousLines);
+        }
+
+        Map<Integer, ApprovalLine> previousByOrder = previousLines.stream()
+                .collect(Collectors.toMap(ApprovalLine::getSequenceNo, line -> line));
+        List<LineReplacement> replacements = new ArrayList<>();
+        for (UpdateApprovalLinesCommand.LineInput input : command.lines()) {
+            ApprovalLine previous = previousByOrder.get(input.order());
+            if (previous == null) {
+                throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+            }
+            if (previous.getApproverId().equals(input.approverId())) {
+                continue;
+            }
+            boolean replaceableStatus = previous.getStatus() == ApprovalLineStatus.ACTIVE
+                    || previous.getStatus() == ApprovalLineStatus.WAITING;
+            if (!replaceableStatus
+                    || !lineEligibilityPolicy.isParticipationUnavailable(previous.getApproverId())) {
+                throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+            }
+            replacements.add(new LineReplacement(previous, input.approverId()));
+        }
+
+        if (replacements.isEmpty()) {
+            return zipLinesWithEmployees(previousLines, findEmployeesForLines(previousLines));
+        }
+
+        lineEligibilityPolicy.assertApproversEligible(
+                approval.getBlockId(), replacements.stream().map(LineReplacement::newApproverId).toList());
+
+        for (LineReplacement replacement : replacements) {
+            ApprovalLine saved = approvalRepository.replaceUnavailableLine(
+                    replacement.previousLine(), replacement.newApproverId());
+            publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), saved.getLineId(),
+                    resourceName(revision.getTitle()), command.requesterId(),
+                    List.of(new ActivityFieldChange("approverId",
+                            replacement.previousLine().getApproverId(), replacement.newApproverId())));
+            if (saved.getStatus() == ApprovalLineStatus.ACTIVE) {
+                publishApprovalNotification(saved.getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
+                        revision.getTitle() + " 결재 요청이 도착했습니다.",
+                        approval.getApprovalId(), revision.getRevisionId());
+            }
+        }
+
+        List<ApprovalLine> savedLines = approvalRepository.findLinesByRevisionId(command.revisionId());
+        return zipLinesWithEmployees(savedLines, findEmployeesForLines(savedLines));
+    }
+
+    private List<ApprovalLineView> excludeUnavailableInProgressLines(UpdateApprovalLinesCommand command,
+                                                                      Approval approval,
+                                                                      ApprovalRevision revision,
+                                                                      List<ApprovalLine> previousLines) {
+        List<ApprovalLine> excludedLines = findExclusionPlan(previousLines, command.lines())
+                .orElseThrow(() -> new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT));
+
+        List<ApprovalLine> remainingLines = approvalRepository.excludeUnavailableLines(
+                revision.getRevisionId(), excludedLines.stream().map(ApprovalLine::getLineId).toList());
+
+        boolean activeExcluded = excludedLines.stream()
+                .anyMatch(line -> line.getStatus() == ApprovalLineStatus.ACTIVE);
+        if (activeExcluded) {
+            Optional<ApprovalLine> nextWaiting = remainingLines.stream()
+                    .filter(line -> line.getStatus() == ApprovalLineStatus.WAITING)
+                    .min(Comparator.comparingInt(ApprovalLine::getSequenceNo));
+            if (nextWaiting.isPresent()) {
+                if (lineEligibilityPolicy.isParticipationUnavailable(nextWaiting.get().getApproverId())) {
+                    throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+                }
+                ApprovalLine activated = approvalRepository.activateLine(nextWaiting.get().getLineId());
+                remainingLines = replaceLine(remainingLines, activated);
+                publishApprovalNotification(activated.getApproverId(), "APPROVAL_REQUESTED", "결재 요청",
+                        revision.getTitle() + " 결재 요청이 도착했습니다.",
+                        approval.getApprovalId(), revision.getRevisionId());
+            } else {
+                boolean allApproved = !remainingLines.isEmpty() && remainingLines.stream()
+                        .allMatch(line -> line.getStatus() == ApprovalLineStatus.APPROVED);
+                if (!allApproved) {
+                    throw new ConflictException(ApprovalErrorCode.APPROVAL_REVISION_NOT_DRAFT);
+                }
+                approvalRepository.finalizeApproval(
+                        approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.COMPLETED);
+                publishApprovalNotification(effectiveDrafterId(approval),
+                        "APPROVAL_COMPLETED", "결재 완료",
+                        revision.getTitle() + " 결재가 완료되었습니다.",
+                        approval.getApprovalId(), revision.getRevisionId());
+            }
+        }
+
+        for (ApprovalLine excluded : excludedLines) {
+            publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), excluded.getLineId(),
+                    resourceName(revision.getTitle()), command.requesterId(),
+                    List.of(new ActivityFieldChange("approverId", excluded.getApproverId(), null)));
+        }
+
+        return zipLinesWithEmployees(remainingLines, findEmployeesForLines(remainingLines));
+    }
+
+    /**
+     * 요청 결재선이 기존 결재선의 부분수열인지 확인한다. 빠진 행은 참여 불가 ACTIVE/WAITING이어야 한다.
+     * 동일 결재자가 중복 지정된 경우도 가능한 기존 계약이라, 단순 투 포인터 대신 백트래킹+메모이제이션으로
+     * 감사 이력을 보존할 수 있는 유효한 제외 조합을 찾는다.
+     */
+    private Optional<List<ApprovalLine>> findExclusionPlan(
+            List<ApprovalLine> previousLines,
+            List<UpdateApprovalLinesCommand.LineInput> requestedLines) {
+        List<UpdateApprovalLinesCommand.LineInput> orderedRequestedLines = requestedLines.stream()
+                .sorted(Comparator.comparingInt(UpdateApprovalLinesCommand.LineInput::order))
+                .toList();
+        return findExclusionPlan(
+                previousLines, orderedRequestedLines, 0, 0, new HashMap<>(), new HashMap<>());
+    }
+
+    private Optional<List<ApprovalLine>> findExclusionPlan(
+            List<ApprovalLine> previousLines,
+            List<UpdateApprovalLinesCommand.LineInput> requestedLines,
+            int previousIndex,
+            int requestedIndex,
+            Map<ExclusionMatchKey, Optional<List<ApprovalLine>>> memo,
+            Map<Long, Boolean> excludableCache) {
+        ExclusionMatchKey key = new ExclusionMatchKey(previousIndex, requestedIndex);
+        if (memo.containsKey(key)) {
+            return memo.get(key);
+        }
+
+        Optional<List<ApprovalLine>> result;
+        if (previousIndex == previousLines.size()) {
+            result = requestedIndex == requestedLines.size()
+                    ? Optional.of(List.of()) : Optional.empty();
+        } else {
+            ApprovalLine previous = previousLines.get(previousIndex);
+            result = Optional.empty();
+
+            if (requestedIndex < requestedLines.size()
+                    && previous.getApproverId().equals(requestedLines.get(requestedIndex).approverId())) {
+                result = findExclusionPlan(previousLines, requestedLines,
+                        previousIndex + 1, requestedIndex + 1, memo, excludableCache);
+            }
+
+            if (result.isEmpty() && isExcludable(previous, excludableCache)) {
+                result = findExclusionPlan(previousLines, requestedLines,
+                        previousIndex + 1, requestedIndex, memo, excludableCache)
+                        .map(excluded -> {
+                            List<ApprovalLine> withCurrent = new ArrayList<>(excluded.size() + 1);
+                            withCurrent.add(previous);
+                            withCurrent.addAll(excluded);
+                            return List.copyOf(withCurrent);
+                        });
+            }
+        }
+
+        memo.put(key, result);
+        return result;
+    }
+
+    private boolean isExcludable(ApprovalLine line, Map<Long, Boolean> excludableCache) {
+        boolean unprocessed = line.getStatus() == ApprovalLineStatus.ACTIVE
+                || line.getStatus() == ApprovalLineStatus.WAITING;
+        return unprocessed && excludableCache.computeIfAbsent(
+                line.getLineId(), ignored -> lineEligibilityPolicy.isParticipationUnavailable(line.getApproverId()));
+    }
+
+    private List<ApprovalLine> replaceLine(List<ApprovalLine> lines, ApprovalLine replacement) {
+        return lines.stream()
+                .map(line -> line.getLineId().equals(replacement.getLineId()) ? replacement : line)
+                .toList();
+    }
+
     @Override
     public ApprovalResubmissionResult resubmit(ResubmitApprovalCommand command) {
         log.info("재상신 회차 생성 요청 - approvalId={}, requesterId={}", command.approvalId(), command.requesterId());
 
         Approval approval = revisionEligibilityPolicy.getApprovalForUpdateOrThrow(command.approvalId());
-        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
 
         if (approval.getStatus() != ApprovalStatus.REJECTED) {
             log.warn("재상신 회차 생성 - REJECTED 아님 approvalId={}, status={}", command.approvalId(), approval.getStatus());
@@ -171,6 +361,12 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
 
         ApprovalRevision latestRevision = approvalRepository.findLatestRevision(command.approvalId())
                 .orElseThrow(() -> new IllegalStateException("no revision for approval " + command.approvalId()));
+
+        String previousActingDrafterId = approval.getActingDrafterId();
+        approval = revisionEligibilityPolicy.claimActingDrafterOrThrow(approval, command.requesterId());
+        publishActingDrafterChangeIfNeeded(
+                approval, latestRevision, previousActingDrafterId, command.requesterId());
+        revisionEligibilityPolicy.assertDrafter(approval, command.requesterId());
 
         if (latestRevision.getStatus() == ApprovalStatus.DRAFT) {
             // SUB-008 — 이미 준비된 DRAFT 회차가 있으면 새로 안 만들고 그대로 반환(멱등)
@@ -212,7 +408,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         List<ApprovalLine> newLines = approvalRepository.replaceLines(newRevision.getRevisionId(), resumedLineInputs);
         List<EmployeeSummary> employees = resumedFrom.stream()
                 .map(line -> employeeCatalogPort.findEmployee(line.getApproverId())
-                        .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null, null)))
+                        .orElse(unavailableEmployee(line.getApproverId())))
                 .toList();
 
         log.info("재상신 회차 생성 완료 - approvalId={}, newRevisionId={}, revisionNo={}",
@@ -229,7 +425,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         List<ApprovalLine> lines = approvalRepository.findLinesByRevisionId(draftRevision.getRevisionId());
         List<EmployeeSummary> employees = lines.stream()
                 .map(line -> employeeCatalogPort.findEmployee(line.getApproverId())
-                        .orElse(new EmployeeSummary(line.getApproverId(), null, null, null, null, null)))
+                        .orElse(unavailableEmployee(line.getApproverId())))
                 .toList();
 
         return new ApprovalResubmissionResult(draftRevision, documents,
@@ -372,7 +568,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
             // PRC-002 — 마지막 순번 승인 → 회차·결재 모두 COMPLETED 종료 + 기안자에게 완료 알림
             approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.COMPLETED);
             approvalCompleted = true;
-            publishApprovalNotification(approval.getDrafterId(), "APPROVAL_COMPLETED", "결재 완료",
+            publishApprovalNotification(effectiveDrafterId(approval), "APPROVAL_COMPLETED", "결재 완료",
                     revision.getTitle() + " 결재가 완료되었습니다.", approval.getApprovalId(), revision.getRevisionId());
         }
 
@@ -410,7 +606,7 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         approvalRepository.finalizeApproval(approval.getApprovalId(), revision.getRevisionId(), ApprovalStatus.REJECTED);
 
         // PRC-008 — 기안자에게만 반려 알림
-        publishApprovalNotification(approval.getDrafterId(), "APPROVAL_REJECTED", "결재 반려",
+        publishApprovalNotification(effectiveDrafterId(approval), "APPROVAL_REJECTED", "결재 반려",
                 revision.getTitle() + " 결재가 반려되었습니다.", approval.getApprovalId(), revision.getRevisionId());
 
         log.info("결재 반려 완료 - lineId={}", command.lineId());
@@ -464,6 +660,33 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
         }
     }
 
+    private List<EmployeeSummary> findEmployeesForLines(List<ApprovalLine> lines) {
+        return lines.stream()
+                .map(line -> employeeCatalogPort.findEmployee(line.getApproverId())
+                        .orElse(unavailableEmployee(line.getApproverId())))
+                .toList();
+    }
+
+    private EmployeeSummary unavailableEmployee(String userId) {
+        return new EmployeeSummary(userId, null, null, null, null, null,
+                null, null, null);
+    }
+
+    private String effectiveDrafterId(Approval approval) {
+        return approval.getActingDrafterId() != null
+                ? approval.getActingDrafterId() : approval.getDrafterId();
+    }
+
+    private void publishActingDrafterChangeIfNeeded(Approval approval, ApprovalRevision revision,
+                                                     String previousActingDrafterId, String requesterId) {
+        if (!Objects.equals(previousActingDrafterId, approval.getActingDrafterId())) {
+            publishActivity(ActivityLogAction.MODIFY, approval.getBlockId(), approval.getApprovalId(),
+                    resourceName(revision.getTitle()), requesterId,
+                    List.of(new ActivityFieldChange(
+                            "actingDrafterId", previousActingDrafterId, approval.getActingDrafterId())));
+        }
+    }
+
     private List<ApprovalLineView> zipLinesWithEmployees(List<ApprovalLine> lines, List<EmployeeSummary> employees) {
         List<ApprovalLineView> result = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
@@ -473,5 +696,11 @@ public class ApprovalCommandService implements ApprovalCommandUseCase {
                     employee.name(), employee.position(), employee.department()));
         }
         return result;
+    }
+
+    private record LineReplacement(ApprovalLine previousLine, String newApproverId) {
+    }
+
+    private record ExclusionMatchKey(int previousIndex, int requestedIndex) {
     }
 }

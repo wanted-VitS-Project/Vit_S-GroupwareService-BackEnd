@@ -3,7 +3,10 @@ package com.group3.vitamins.approval.infrastructure.catalog;
 import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.application.port.BlockSummary;
 import com.group3.vitamins.project.block.domain.repository.BlockRepository;
+import com.group3.vitamins.project.domain.repository.ProjectRepository;
 import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
+import com.group3.vitamins.project.domain.model.MemberPermission;
+import com.group3.vitamins.project.step.domain.repository.StepPermissionRepository;
 import com.group3.vitamins.project.step.domain.repository.StepRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -21,7 +24,9 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
 
     private final BlockRepository blockRepository;
     private final StepRepository stepRepository;
+    private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final StepPermissionRepository stepPermissionRepository;
 
     /** {@code block.project_id} 컬럼이 없어(폐기됨) {@code step}을 거쳐야 projectId를 얻는다 */
     @Override
@@ -37,5 +42,37 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
     @Override
     public boolean isProjectMember(Long projectId, String userId) {
         return projectMemberRepository.findPermission(projectId, userId).isPresent();
+    }
+
+    @Override
+    public boolean isBlockInCompany(Long blockId, Long companyId) {
+        return findBlock(blockId)
+                .flatMap(block -> projectRepository.findById(block.projectId(), companyId))
+                .isPresent();
+    }
+
+    @Override
+    public boolean isStepEditor(Long blockId, String userId, String role) {
+        if ("ADMIN".equals(role)) {
+            return false;
+        }
+        if ("MASTER".equals(role)) {
+            return true;
+        }
+
+        return findBlock(blockId)
+                .map(block -> {
+                    MemberPermission projectPermission = projectMemberRepository
+                            .findPermission(block.projectId(), userId)
+                            .orElse(MemberPermission.NONE);
+                    if (projectPermission == MemberPermission.NONE) {
+                        return false;
+                    }
+                    MemberPermission effective = stepPermissionRepository
+                            .findOverride(block.stepId(), userId)
+                            .orElse(projectPermission);
+                    return effective == MemberPermission.EDITOR;
+                })
+                .orElse(false);
     }
 }
