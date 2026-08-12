@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 정산 항목 수정 화면의 "타입 변경 탭" 클릭 시 호출되는 조회 전용 API.
@@ -108,20 +109,44 @@ public class SettlementQueryService implements SettlementQueryUseCase {
                 settlementStatusMapper.findDistinctClientNames(currentCompanyIdProvider.currentCompanyId()));
     }
 
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> ALLOWED_PROJECT_SORTS =
+            Set.of("NEXT_PLANNED_DATE_ASC", "TOTAL_AMOUNT_DESC");
+
     @Override
     public SettlementProjectListView getProjectSettlements(SettlementProjectListQuery query) {
         log.info("정산 현황 프로젝트 조회 요청 - userId={}", query.userId());
+
+        validateProjectListQuery(query);
 
         if (!pagePermissionPort.hasAccess(FINANCE_PAGE_CODE, query.userId(), query.role())) {
             log.warn("재무 관리 페이지 접근 권한 없음 - userId={}", query.userId());
             throw new ForbiddenException(SettlementErrorCode.FINANCE_ACCESS_DENIED);
         }
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<SettlementProjectRow> rows = settlementStatusMapper.findProjectSettlements(
                 query.startDate(), query.endDate(), query.client(), query.includeCompleted(),
-                currentCompanyIdProvider.currentCompanyId());
+                query.sort(), query.size(), query.page() * query.size(), companyId);
+        long totalElements = settlementStatusMapper.countProjectSettlements(
+                query.startDate(), query.endDate(), query.client(), query.includeCompleted(), companyId);
+        int totalPages = (int) Math.ceil((double) totalElements / query.size());
 
-        return new SettlementProjectListView(rows.stream().map(this::toProjectView).toList());
+        return new SettlementProjectListView(
+                rows.stream().map(this::toProjectView).toList(),
+                query.page(), query.size(), totalElements, totalPages
+        );
+    }
+
+    // bidnotice 목록과 동일 컨벤션 — 잘못된 page/size/sort는 클램프 대신 400으로 던진다(silent clamp 아님).
+    private void validateProjectListQuery(SettlementProjectListQuery query) {
+        if (query.page() < 0 || query.size() <= 0 || query.size() > MAX_PAGE_SIZE
+                || query.page() > Integer.MAX_VALUE / query.size()
+                || (query.startDate() != null && query.endDate() != null
+                && query.startDate().isAfter(query.endDate()))
+                || (query.sort() != null && !ALLOWED_PROJECT_SORTS.contains(query.sort()))) {
+            throw new ValidationException(SettlementErrorCode.PAGE_QUERY_INVALID);
+        }
     }
 
     private SettlementProjectView toProjectView(SettlementProjectRow row) {

@@ -102,7 +102,50 @@
         <if test="includeCompleted == null or includeCompleted == false">AND p.status NOT IN ('COMPLETED', 'CLOSED')</if>
         <if test="startDate != null">AND nxt.planned_date &gt;= #{startDate}</if>
         <if test="endDate != null">AND nxt.planned_date &lt;= #{endDate}</if>
-        ORDER BY p.project_id ASC
+        <!-- 2026-08-12 페이징 추가 — nullable 컬럼 정렬은 NULL을 항상 뒤로 보낸다(IS NULL을 먼저 정렬키로
+             써서 0/1 오름차순 → false(0)가 앞). project_id를 마지막 tie-break로 둬서 정렬 결과를 결정적으로
+             만든다(같은 값이 여러 행이어도 페이지 경계에서 순서가 안 흔들리게). -->
+        <choose>
+            <when test="sort == 'TOTAL_AMOUNT_DESC'">
+                ORDER BY (COALESCE(agg.total_income, 0) - COALESCE(agg.total_outcome, 0)) DESC, p.project_id DESC
+            </when>
+            <otherwise>
+                ORDER BY nxt.planned_date IS NULL, nxt.planned_date ASC, p.project_id ASC
+            </otherwise>
+        </choose>
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!-- 위 findProjectSettlements와 같은 필터(WHERE)만 재사용 — sort/limit/offset은 개수와 무관해서 뺐고,
+         필터가 agg(집계)를 안 쓰고 nxt(다음 예정일)만 참조하므로 agg/employee 조인은 필요 없다. -->
+    <select id="countProjectSettlements" resultType="long">
+        SELECT COUNT(*)
+        FROM project p
+        LEFT JOIN (
+        SELECT nb.project_id AS project_id, MIN(nb.planned_date) AS planned_date
+        FROM (
+        SELECT st.project_id AS project_id, sb.round_no AS round_no, sb.planned_date AS planned_date
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE sb.deleted_at IS NULL AND sb.status != 'COMPLETED'
+        ) nb
+        JOIN (
+        SELECT st2.project_id AS project_id, MIN(sb2.round_no) AS min_round_no
+        FROM settlement_block sb2
+        JOIN block b2 ON b2.block_id = sb2.block_id
+        JOIN step st2 ON st2.step_id = b2.step_id
+        WHERE sb2.deleted_at IS NULL AND sb2.status != 'COMPLETED'
+        GROUP BY st2.project_id
+        ) mr ON mr.project_id = nb.project_id AND mr.min_round_no = nb.round_no
+        GROUP BY nb.project_id
+        ) nxt ON nxt.project_id = p.project_id
+        WHERE p.deleted_at IS NULL
+        AND p.company_id = #{companyId}
+        <if test="client != null">AND p.client_name = #{client}</if>
+        <if test="includeCompleted == null or includeCompleted == false">AND p.status NOT IN ('COMPLETED', 'CLOSED')</if>
+        <if test="startDate != null">AND nxt.planned_date &gt;= #{startDate}</if>
+        <if test="endDate != null">AND nxt.planned_date &lt;= #{endDate}</if>
     </select>
 
     <!--
