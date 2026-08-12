@@ -17,6 +17,7 @@ import com.group3.vitamins.file.application.result.FileUploadStartResult;
 import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.service.FileUploadService;
 import com.group3.vitamins.file.application.service.FileVersionFailureRecorder;
+import com.group3.vitamins.file.application.service.StorageKeyBuilder;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
 import com.group3.vitamins.file.domain.model.File;
 import com.group3.vitamins.file.domain.model.FileVersion;
@@ -91,7 +92,8 @@ class FileUploadServiceTest {
         service = new FileUploadService(
                 blockCatalogPort, stepAccessUseCase, fileRepository, fileVersionRepository,
                 blockFileRepository, fileQueryPort, uploaderLookupPort, fileStoragePort, pdfPageCounterPort,
-                failureRecorder, fileIndexTriggerPort, currentCompanyIdProvider, domainEventPublisher);
+                failureRecorder, fileIndexTriggerPort, currentCompanyIdProvider, domainEventPublisher,
+                new StorageKeyBuilder());
     }
 
     private void stubBlockAndEditable() {
