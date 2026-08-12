@@ -23,6 +23,18 @@ public interface BlockDetailPort {
      */
     Long createDetail(Long blockId);
 
+    /**
+     * 이 상세를 <b>블록 직접 삭제</b>로 없앨 수 있는지 판정한다. 막아야 하면 예외를 던진다 (DEL-016·DEL-018).
+     *
+     * <p>기본은 no-op — 대부분의 타입은 상태 개념이 없어 언제든 삭제할 수 있다. 상태에 따라 막아야 하는
+     * 타입만 오버라이드한다(현재 APPROVAL 뿐).
+     *
+     * <p>⛔ <b>cascade 경로(스텝 삭제)는 이 메서드를 부르지 않는다</b> (DEL-017). 거기서 막으면 결재 1건
+     * 때문에 스텝 삭제 전체가 롤백돼, 폐기된 BLK-008 잠금과 같은 실패로 돌아간다.
+     */
+    default void assertDeletable(Long typeId) {
+    }
+
     /** 상세 행을 논리 삭제한다. 블록 삭제와 같은 트랜잭션에서 호출된다. */
     void deleteDetail(Long typeId, String userId, String blockTitle, LocalDateTime deletedAt);
 

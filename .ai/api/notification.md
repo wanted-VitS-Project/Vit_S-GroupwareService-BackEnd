@@ -1,8 +1,8 @@
 # 🔔 Notification API — 알림
 
 **상태**: `✅ 확정` — 이 문서가 **단일 계약**이다. 이탈 금지 규칙 전면 적용(`../API.md` §0)
+**최종 업데이트**: 2026-08-12 (**실시간 수신(SSE) 엔드포인트 신설** — 새로고침 없이 알림이 도착한다 · §5)
 **최종 업데이트**: 2026-08-11 (결재 참여 불가 알림 2종 추가 — API 구조 변경 없음)
-**최종 업데이트**: 2026-08-10 (알림 유형 `APPROVAL_CANCELED` 신설 — 상위 삭제로 진행 중 결재가 종결될 때 발행 · `DEL-011`)
 **최종 업데이트**: 2026-08-07 (화면이 개별 처리 방식으로 바뀜 — **개별 삭제 부활 · 개별 읽음 신설 · 전체 읽음 제거**) · 2026-08-07 (이동 대상 판정 방식 변경 — block 경유 → 발행 도메인이 직접 지정, 목록에서 `blockId` 제거) · **담당**: 이강욱
 **프론트 공유**: 필요 — 아래 변경은 기존 계약을 바꾸므로 프론트에 알려야 한다
 
@@ -17,7 +17,11 @@
 > |---|---|---|
 > | `APPROVAL_APPROVER_UNAVAILABLE` | 현재 유효한 기안자/대행 기안자 | 결재 상세(`type=APPROVAL`, `extra.revisionId`) |
 > | `APPROVAL_DRAFTER_UNAVAILABLE` | 유효 스텝 EDITOR 전원 | 결재 상세(`type=APPROVAL`, `extra.revisionId`) |
-**범위**: 알림 REST API 4개(목록조회·개별삭제·이동대상조회·개별읽음). 생성 이벤트 인프라(`#27`)는 REST 엔드포인트가 없어 여기 없음(맨 아래 "참고" 절)
+> ✅ **2026-08-12 신설 — 실시간 수신(SSE, §5).** 지금까지는 알림이 생겨도 목록을 다시 조회(새로고침)해야 보였다.
+> `GET /api/v1/notifications/stream` 을 구독하면 알림이 생기는 즉시 서버가 밀어준다.
+> **기존 4개 API 의 경로·필드·응답은 하나도 바뀌지 않았다** — 추가만 됐다.
+
+**범위**: 알림 REST API 4개(목록조회·개별삭제·이동대상조회·개별읽음) + 실시간 수신 SSE 1개(§5). 생성 이벤트 인프라(`#27`)는 REST 엔드포인트가 없어 여기 없음(맨 아래 "참고" 절)
 
 > ✅ **경로·필드명·타입·상태코드·에러코드를 한 글자도 바꾸지 않는다** (`../API.md` §0).
 > ⚠️ **2026-08-07 변경(2차)**: 화면이 일괄 처리에서 **개별 처리**로 바뀌었다.
@@ -36,6 +40,7 @@
 | 2 | 알림 삭제 | DELETE | `/api/v1/notifications/{notificationId}` | 인증 사용자(본인 알림만) |
 | 3 | 알림 이동 대상 조회 | GET | `/api/v1/notifications/{notificationId}/target` | 인증 사용자(본인 알림만) |
 | 4 | 알림 읽음 처리 | PATCH | `/api/v1/notifications/{notificationId}/read` | 인증 사용자(본인 알림만) |
+| 5 | 실시간 알림 수신(SSE) | GET | `/api/v1/notifications/stream` | 인증 사용자(본인 알림만) |
 
 ⭐ **알림 생성 공개 API는 없다**(`INV-01`) — `#27`(이벤트 인프라)이 내부적으로만 생성한다.
 ⭐ **읽음 처리 경로는 두 가지다** — 이동 대상 조회(#3) 시 자동(`ACT-004`), 또는 명시 호출(#4, `ACT-006`). 이동 없이 읽음만 표시할 때 #4를 쓴다.
@@ -213,6 +218,82 @@
 
 ---
 
+## 5. 실시간 알림 수신 (SSE)
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/notifications/stream` |
+| 인증 필요 | Y · 본인 알림만 (세션 쿠키) |
+| 응답 Content-Type | `text/event-stream` |
+| 요구사항 | RT-001~006 (신설) |
+
+**Request** — 파라미터 없음. 인증은 기존 세션 쿠키(`SESSION`)를 그대로 쓴다.
+
+> ⚠️ 프론트는 `withCredentials` 를 **반드시** 켜야 한다. 안 켜면 쿠키가 실리지 않아 401 이다.
+> ```js
+> const es = new EventSource('/api/v1/notifications/stream', { withCredentials: true });
+> ```
+
+**서버가 보내는 이벤트 3종**
+
+| event 이름 | 시점 | data |
+|---|---|---|
+| `connected` | 구독 직후 1회 | `{"userId":"EMP001"}` — 연결 확인용. 프론트는 이때 **목록을 한 번 재조회**한다(아래 RT-005) |
+| `notification` | 알림이 생성될 때마다 | **§1 목록 항목과 완전히 같은 구조** (`notificationId`/`notificationType`/`title`/`message`/`readAt`/`createdAt`) |
+| (주석) | 15초마다 | `:ping` — SSE 주석 줄이라 `EventSource` 이벤트로 올라오지 않는다. 프론트가 처리할 것 없음 |
+
+**Stream Example** (실제 와이어 형식)
+
+```
+event: connected
+data: {"userId":"EMP001"}
+
+:ping
+
+event: notification
+data: {"notificationId":301,"notificationType":"APPROVAL_REQUESTED","title":"결재 요청","message":"출장비 정산 결재 요청이 도착했습니다.","readAt":null,"createdAt":"2026-08-12T09:00:00"}
+```
+
+**프론트 처리**
+
+```js
+es.addEventListener('notification', (e) => {
+  const n = JSON.parse(e.data);
+  prependToList(n);          // 목록 맨 위에 추가 (항상 최신순 — VIW-002)
+  increaseUnreadBadge();     // readAt 이 항상 null 이라 무조건 안 읽음 1건 증가
+});
+es.addEventListener('connected', () => refetchNotificationList());  // RT-005
+```
+
+| 코드 | 상태 | code | 설명 |
+|---|---|---|---|
+| 200 | OK | – | 구독 성공(스트림 시작) |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 로그인이 필요합니다 |
+
+**비즈니스 규칙**
+
+| # | 규칙 | 상세 |
+|---|---|---|
+| RT-001 | 본인 알림만 받는다 | 세션의 사번으로만 구독한다. 구독 대상을 파라미터로 지정할 수 없다(타인 알림 도청 불가) |
+| RT-002 | **저장이 커밋된 뒤에 보낸다** | 알림 row 가 커밋된 후에만 전송한다. 받는 즉시 목록을 조회해도 그 알림이 반드시 보인다 |
+| RT-003 | 탭이 여러 개면 전부 받는다 | 같은 사용자의 연결 N 개에 동일하게 보낸다. 브라우저 탭마다 별도 연결이다 |
+| RT-004 | 전송 실패는 알림을 지우지 않는다 | 연결이 끊겨 전송이 실패해도 **알림 row 는 이미 저장돼 있다.** 다음 목록 조회에서 정상적으로 보인다 — 실시간은 **보조 경로**이고 목록 API 가 정본이다 |
+| RT-005 | 재연결 공백은 프론트가 메운다 | `EventSource` 는 끊기면 자동 재연결하지만 **끊긴 사이 발행된 알림은 스트림으로 오지 않는다.** 그래서 `connected` 를 받을 때마다 목록을 재조회한다 |
+| RT-006 | 30분마다 재연결된다 | 서버가 연결을 30분에 한 번 정상 종료한다(좀비 커넥션 회수). 브라우저가 자동으로 다시 붙고 `connected` 가 다시 오므로 사용자에게 보이는 영향은 없다 |
+
+> 🚨 **실시간은 정본이 아니다.** 읽음 여부·목록·개수의 기준은 항상 §1 목록 API 다.
+> SSE 는 "지금 하나 생겼다"는 신호일 뿐이며, 유실돼도 데이터는 DB 에 남아 있다(RT-004).
+
+> ⚠️ **배포 시 필수 — nginx 버퍼링을 꺼야 한다.** 켜져 있으면 이벤트가 nginx 에 고여서
+> **로컬에서는 실시간인데 배포하면 여전히 새로고침이 필요한** 증상이 난다.
+> 서버가 `X-Accel-Buffering: no` 를 응답에 실어 보내지만, nginx 설정에서 `proxy_buffering off;`
+> 를 함께 두는 것을 권장한다(`.ai/INFRA.md` 반영 필요).
+
+> ⚠️ **알림 개수(배지)를 위한 별도 API 는 만들지 않았다.** 안 읽은 개수는 기존 목록 API 로 구한다 —
+> `GET /api/v1/notifications?isRead=false&size=1` 의 `data.totalElements`.
+
+---
+
 ## 📌 타 도메인 연동 가이드 — 알림을 보내려면
 
 > **다른 도메인 담당자가 읽어야 할 부분.** 알림을 보내려면 **이벤트 발행 한 줄**이면 된다.
@@ -309,6 +390,7 @@ domainEventPublisher.publish(NotificationRequestedEvent.of(
 
 ### 알아둘 것
 
+- **실시간 전송은 자동이다.** 이벤트를 발행하면 저장 후 SSE(§5)로 자동 전송된다 — 발행하는 도메인이 추가로 할 일은 **없다.**
 - `notificationType`·`targetType`은 **미리 등록할 필요가 없다.** 처음 보는 값이어도 그대로 저장·응답된다.
 - 수신자 **1명당 1건**이다(`GEN-004`). 여러 명에게 보내려면 사람 수만큼 발행한다.
 - `targetContext`는 **생성 시점 스냅샷**이다(`VIW-010`). 클릭 시점에 재조회하지 않으므로, 그 사건 당시의 값을 넣어야 알림 문구와 목적지가 일치한다.

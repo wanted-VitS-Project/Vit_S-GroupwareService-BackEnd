@@ -40,6 +40,12 @@ public class ApprovalBlockDetailAdapter implements BlockDetailPort {
         return approvalHandlerService.create(blockId);
     }
 
+    /** DEL-016 — 상신된 결재는 블록 직접 삭제로 없앨 수 없다. cascade 는 이 경로로 들어오지 않는다 */
+    @Override
+    public void assertDeletable(Long typeId) {
+        approvalHandlerService.assertDeletableByBlock(typeId);
+    }
+
     @Override
     public void deleteDetail(Long typeId, String userId, String blockTitle, LocalDateTime deletedAt) {
         approvalHandlerService.deleteByBlock(typeId, userId, blockTitle, deletedAt);
