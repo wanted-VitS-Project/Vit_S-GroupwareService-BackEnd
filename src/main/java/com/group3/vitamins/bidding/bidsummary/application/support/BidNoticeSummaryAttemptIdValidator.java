@@ -14,8 +14,8 @@ public final class BidNoticeSummaryAttemptIdValidator {
         }
 
         try {
-            UUID.fromString(value);
-            return true;
+            UUID parsed = UUID.fromString(value);
+            return parsed.toString().equals(value);
         } catch (IllegalArgumentException exception) {
             return false;
         }
