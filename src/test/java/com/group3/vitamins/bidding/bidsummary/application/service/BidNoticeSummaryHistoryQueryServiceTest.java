@@ -97,6 +97,22 @@ class BidNoticeSummaryHistoryQueryServiceTest {
         verifyNoInteractions(accessPort, companyIdProvider, noticePort, historyPort);
     }
 
+    @Test
+    @DisplayName("전체 페이지 범위를 벗어나면 본문 조회 없이 빈 페이지를 반환한다")
+    void returnsEmptyPageWithoutHistoryQuery() {
+        when(historyPort.countHistory(COMPANY_ID, NOTICE_ID, USER_ID))
+                .thenReturn(21L);
+        when(historyPort.findLatestMineSummaryId(COMPANY_ID, NOTICE_ID, USER_ID))
+                .thenReturn(32L);
+
+        var result = service.get(query(Integer.MAX_VALUE, 20));
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isEqualTo(21L);
+        assertThat(result.totalPages()).isEqualTo(2);
+        verify(historyPort, never()).findHistory(anyLong(), anyLong(), anyString(), anyInt(), anyInt());
+    }
+
     private GetBidNoticeSummaryHistoryQuery query(int page, int size) {
         return new GetBidNoticeSummaryHistoryQuery(
                 NOTICE_ID, page, size, USER_ID, "ADMIN"

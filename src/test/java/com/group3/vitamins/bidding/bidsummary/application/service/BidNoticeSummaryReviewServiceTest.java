@@ -11,6 +11,8 @@ import com.group3.vitamins.bidding.collectioncondition.application.port.BiddingP
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.DomainException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -126,6 +128,29 @@ class BidNoticeSummaryReviewServiceTest {
     }
 
     @Test
+    @DisplayName("처리 중인 요약은 확정할 수 없다")
+    void rejectsConfirmBeforeCompletion() {
+        when(managementPort.findOwnedForUpdate(COMPANY_ID, SUMMARY_ID, USER_ID))
+                .thenReturn(Optional.of(details(BidNoticeSummaryStatus.PROCESSING, false)));
+
+        assertError(() -> service.confirm(confirmCommand()),
+                ConflictException.class, BiddingErrorCode.BIDDING_SUMMARY_NOT_COMPLETED);
+        verify(managementPort, never()).confirm(anyLong(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("입찰 권한이 없으면 회사와 요약을 조회하지 않는다")
+    void rejectsPermissionDenied() {
+        when(accessPort.hasAccess(USER_ID, "ADMIN")).thenReturn(false);
+
+        assertError(() -> service.confirm(confirmCommand()),
+                ForbiddenException.class,
+                BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED);
+
+        verifyNoInteractions(companyIdProvider, managementPort);
+    }
+
+    @Test
     @DisplayName("다른 사용자의 요약은 존재 여부를 숨기고 Not Found를 반환한다")
     void rejectsNonOwner() {
         when(managementPort.findOwnedForUpdate(COMPANY_ID, SUMMARY_ID, USER_ID))
@@ -195,12 +220,9 @@ class BidNoticeSummaryReviewServiceTest {
     ) {
         assertThatThrownBy(invocation::run)
                 .isInstanceOf(type)
-                .satisfies(exception -> {
-                    if (exception instanceof ConflictException conflict) {
-                        assertThat(conflict.getErrorCode()).isEqualTo(errorCode);
-                    } else if (exception instanceof NotFoundException notFound) {
-                        assertThat(notFound.getErrorCode()).isEqualTo(errorCode);
-                    }
-                });
+                .isInstanceOf(DomainException.class)
+                .satisfies(exception -> assertThat(
+                        ((DomainException) exception).getErrorCode()
+                ).isEqualTo(errorCode));
     }
 }

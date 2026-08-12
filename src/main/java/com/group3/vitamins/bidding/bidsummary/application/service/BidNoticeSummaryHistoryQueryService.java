@@ -1,5 +1,7 @@
 package com.group3.vitamins.bidding.bidsummary.application.service;
 
+import java.util.List;
+
 import com.group3.vitamins.bidding.bidsummary.application.port.BidNoticeSummaryHistoryQueryPort;
 import com.group3.vitamins.bidding.bidsummary.application.port.BidNoticeSummaryNoticePort;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryHistoryQuery;
@@ -38,19 +40,32 @@ public class BidNoticeSummaryHistoryQueryService
                         BiddingErrorCode.BIDDING_NOTICE_NOT_FOUND
                 ));
 
-        int offset = query.page() * query.size();
-        var content = historyQueryPort.findHistory(
-                companyId, query.noticeId(), query.userId(), offset, query.size()
-        );
         long totalElements = historyQueryPort.countHistory(
                 companyId, query.noticeId(), query.userId()
         );
-        int totalPages = (int) Math.ceil((double) totalElements / query.size());
+        int totalPages = calculateTotalPages(totalElements, query.size());
+        Long latestMineSummaryId = historyQueryPort.findLatestMineSummaryId(
+                companyId, query.noticeId(), query.userId()
+        );
+
+        if (query.page() >= totalPages) {
+            return new BidNoticeSummaryHistoryResult(
+                    latestMineSummaryId,
+                    List.of(),
+                    totalElements,
+                    totalPages,
+                    query.page(),
+                    query.size()
+            );
+        }
+
+        int offset = Math.multiplyExact(query.page(), query.size());
+        var content = historyQueryPort.findHistory(
+                companyId, query.noticeId(), query.userId(), offset, query.size()
+        );
 
         return new BidNoticeSummaryHistoryResult(
-                historyQueryPort.findLatestMineSummaryId(
-                        companyId, query.noticeId(), query.userId()
-                ),
+                latestMineSummaryId,
                 content,
                 totalElements,
                 totalPages,
@@ -59,11 +74,21 @@ public class BidNoticeSummaryHistoryQueryService
         );
     }
 
+    private int calculateTotalPages(long totalElements, int size) {
+        if (totalElements == 0) {
+            return 0;
+        }
+
+        long pages = ((totalElements - 1) / size) + 1;
+        return pages > Integer.MAX_VALUE
+                ? Integer.MAX_VALUE
+                : (int) pages;
+    }
+
     private void validate(GetBidNoticeSummaryHistoryQuery query) {
         if (query == null || query.noticeId() == null || query.noticeId() <= 0
                 || query.page() < 0 || query.size() <= 0
                 || query.size() > MAX_PAGE_SIZE
-                || query.page() > Integer.MAX_VALUE / query.size()
                 || query.userId() == null || query.userId().isBlank()) {
             throw new ValidationException(
                     BiddingErrorCode.BIDDING_INVALID_SUMMARY_REQUEST

@@ -14,6 +14,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ConflictExceptio
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,8 @@ public class BidNoticeSummaryCreateService
 
     private static final int MAX_PROMPT_LENGTH = 3000;
     private static final int MAX_REVISION_NO = 20;
+    private static final String ACTIVE_PROCESSING_CONSTRAINT =
+            "uk_bid_notice_summary_active_processing";
 
     private final BidNoticeSummaryNoticePort noticePort;
     private final BidNoticeSummaryCommandPort commandPort;
@@ -77,14 +80,43 @@ public class BidNoticeSummaryCreateService
                 now
         );
 
-        BidNoticeSummary saved =
-                commandPort.savePendingWithOutbox(summary, noticeSnapshot);
+        BidNoticeSummary saved = savePending(summary, noticeSnapshot);
 
         return new CreateBidNoticeSummaryResult(
                 saved.summaryId(),
                 saved.summaryStatus().name(),
                 saved.createdAt()
         );
+    }
+
+    private BidNoticeSummary savePending(
+            BidNoticeSummary summary,
+            BidNoticeSummaryNoticePort.BidNoticeSnapshot noticeSnapshot
+    ) {
+        try {
+            return commandPort.savePendingWithOutbox(summary, noticeSnapshot);
+        } catch (DataIntegrityViolationException exception) {
+            if (isActiveProcessingConstraintViolation(exception)) {
+                throw new ConflictException(
+                        BiddingErrorCode.BIDDING_SUMMARY_ALREADY_PROCESSING,
+                        exception
+                );
+            }
+            throw exception;
+        }
+    }
+
+    private boolean isActiveProcessingConstraintViolation(Throwable exception) {
+        Throwable current = exception;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.contains(ACTIVE_PROCESSING_CONSTRAINT)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private BidNoticeSummaryCommandPort.ImprovementBase findAndValidateBase(

@@ -13,7 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.UUID;
+
+import static com.group3.vitamins.bidding.bidsummary.application.support.BidNoticeSummaryAttemptIdValidator.isValid;
 
 @Service
 @RequiredArgsConstructor
@@ -50,23 +51,11 @@ public class BidNoticeSummaryJobQueryService
         if (query == null
                 || query.summaryId() == null
                 || query.summaryId() <= 0
-                || !isUuid(query.attemptId())) {
+                || !isValid(query.attemptId())) {
             throw new ValidationException(
                     BiddingErrorCode.BIDDING_INVALID_SUMMARY_JOB_REQUEST
             );
         }
     }
 
-    private boolean isUuid(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-
-        try {
-            UUID.fromString(value);
-            return true;
-        } catch (IllegalArgumentException exception) {
-            return false;
-        }
-    }
 }

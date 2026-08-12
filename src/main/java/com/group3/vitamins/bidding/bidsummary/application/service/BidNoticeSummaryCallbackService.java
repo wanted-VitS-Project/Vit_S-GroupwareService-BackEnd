@@ -14,7 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.UUID;
+
+import static com.group3.vitamins.bidding.bidsummary.application.support.BidNoticeSummaryAttemptIdValidator.isValid;
 
 @Service
 @RequiredArgsConstructor
@@ -87,7 +88,7 @@ public class BidNoticeSummaryCallbackService
         if (command == null
                 || command.summaryId() == null
                 || command.summaryId() <= 0
-                || !isUuid(command.attemptId())) {
+                || !isValid(command.attemptId())) {
             invalid();
         }
 
@@ -121,15 +122,6 @@ public class BidNoticeSummaryCallbackService
                 || command.taskSummary() != null
                 || command.riskSummary() != null) {
             invalid();
-        }
-    }
-
-    private boolean isUuid(String value) {
-        try {
-            UUID.fromString(value);
-            return true;
-        } catch (RuntimeException exception) {
-            return false;
         }
     }
 

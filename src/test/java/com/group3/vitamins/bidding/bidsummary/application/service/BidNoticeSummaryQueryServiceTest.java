@@ -9,6 +9,7 @@ import com.group3.vitamins.bidding.collectioncondition.application.port.BiddingP
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -57,6 +58,32 @@ class BidNoticeSummaryQueryServiceTest {
 
         assertThat(result.summaryId()).isEqualTo(SUMMARY_ID);
         assertThat(result.summaryStatus()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @DisplayName("같은 회사에서 확정된 요약을 조회한다")
+    void returnsConfirmedCompanySummary() {
+        when(managementPort.findAccessible(COMPANY_ID, SUMMARY_ID, USER_ID))
+                .thenReturn(Optional.of(details(true)));
+
+        var result = service.get(query());
+
+        assertThat(result.confirmed()).isTrue();
+        assertThat(result.confirmedBy()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("입찰 권한이 없으면 회사와 요약을 조회하지 않는다")
+    void rejectsPermissionDenied() {
+        when(accessPort.hasAccess(USER_ID, "ADMIN")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.get(query()))
+                .isInstanceOf(ForbiddenException.class)
+                .satisfies(exception -> assertThat(
+                        ((ForbiddenException) exception).getErrorCode()
+                ).isEqualTo(BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED));
+
+        verifyNoInteractions(companyIdProvider, managementPort);
     }
 
     @Test

@@ -43,20 +43,23 @@ public class BidNoticeSummaryOutboxPublishService {
     public int publishBatch(String lockOwner, int batchSize) {
         validateRequest(lockOwner, batchSize);
 
-        LocalDateTime now = LocalDateTime.now(clock);
-
-        List<ClaimedBidNoticeSummaryOutbox> outboxes =
-                outboxStorePort.claimPublishable(
-                        lockOwner,
-                        batchSize,
-                        now,
-                        now.plusSeconds(lockSeconds)
-                );
-
         int publishedCount = 0;
 
-        for (ClaimedBidNoticeSummaryOutbox outbox : outboxes) {
-            if (publishOne(outbox, lockOwner)) {
+        for (int index = 0; index < batchSize; index++) {
+            LocalDateTime claimedAt = LocalDateTime.now(clock);
+            List<ClaimedBidNoticeSummaryOutbox> outboxes =
+                    outboxStorePort.claimPublishable(
+                            lockOwner,
+                            1,
+                            claimedAt,
+                            claimedAt.plusSeconds(lockSeconds)
+                    );
+
+            if (outboxes.isEmpty()) {
+                break;
+            }
+
+            if (publishOne(outboxes.get(0), lockOwner)) {
                 publishedCount++;
             }
         }

@@ -1411,17 +1411,17 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 
 **상태**: ✅ 확정
 
-**Request 권장값**
+**Request Body**
 
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `summaryId` | Long | 현재 회사에서 확정된 `COMPLETED` AI 요약 ID |
-| `name` | String | 프로젝트명 |
-| `description` | String | 설명 |
-| `businessCategoryId` | Long | 사업 카테고리 ID |
-| `startedOn` | Date | 시작일 |
-| `endedOn` | Date | 종료일 |
-| `memberIds` | String[] | 추가 참여자 user ID 목록. 전환 요청자는 서버가 자동 포함 |
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|------|------|
+| `summaryId` | Long | Y | 현재 회사에서 확정된 `COMPLETED` AI 요약 ID. 누락 시 `COMMON_INVALID_REQUEST` |
+| `name` | String | Y | 프로젝트명 |
+| `description` | String | N | 설명 |
+| `businessCategoryId` | Long | Y | 사업 카테고리 ID |
+| `startedOn` | Date | Y | 시작일 |
+| `endedOn` | Date | Y | 종료일 |
+| `memberIds` | String[] | N | 추가 참여자 user ID 목록. 전환 요청자는 서버가 자동 포함 |
 
 서버 처리:
 

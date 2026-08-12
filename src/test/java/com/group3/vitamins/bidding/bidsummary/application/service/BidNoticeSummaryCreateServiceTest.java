@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -125,6 +126,32 @@ class BidNoticeSummaryCreateServiceTest {
                 .satisfies(exception -> assertThat(((NotFoundException) exception).getErrorCode())
                         .isEqualTo(BiddingErrorCode.BIDDING_SUMMARY_NOT_FOUND));
         verify(commandPort, never()).savePendingWithOutbox(any(), any());
+    }
+
+    @Test
+    @DisplayName("동시 요청이 활성 처리 유니크 제약과 충돌하면 처리 중 오류로 변환한다")
+    void translatesConcurrentActiveProcessingConflict() {
+        doThrow(new DataIntegrityViolationException(
+                "Duplicate entry for key 'uk_bid_notice_summary_active_processing'"
+        )).when(commandPort).savePendingWithOutbox(any(), any());
+
+        assertThatThrownBy(() -> service.create(command(null)))
+                .isInstanceOf(ConflictException.class)
+                .satisfies(exception -> assertThat(
+                        ((ConflictException) exception).getErrorCode()
+                ).isEqualTo(BiddingErrorCode.BIDDING_SUMMARY_ALREADY_PROCESSING));
+    }
+
+    @Test
+    @DisplayName("다른 무결성 제약 위반은 처리 중 충돌로 오인하지 않는다")
+    void propagatesUnrelatedIntegrityViolation() {
+        DataIntegrityViolationException failure =
+                new DataIntegrityViolationException("another_constraint");
+        doThrow(failure).when(commandPort)
+                .savePendingWithOutbox(any(), any());
+
+        assertThatThrownBy(() -> service.create(command(null)))
+                .isSameAs(failure);
     }
 
     private void assertNotEditable(CreateBidNoticeSummaryCommand command) {
