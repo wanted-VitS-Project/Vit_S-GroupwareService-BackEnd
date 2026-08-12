@@ -42,6 +42,11 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
 
+    // --- 모니터링 (그라파나 Phase4/5: 부하테스트 랭킹·회사별/도메인별 트래픽 태깅) ---
+    // actuator 는 /actuator/health·/actuator/prometheus 를 연다 (SecurityConfig 에서 permitAll).
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
     // --- Security ---
     implementation 'org.springframework.boot:spring-boot-starter-security'
     // Argon2PasswordEncoder 는 BouncyCastle 의 Argon2BytesGenerator 에 위임한다.
