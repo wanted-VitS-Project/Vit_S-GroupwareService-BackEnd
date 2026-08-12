@@ -1,7 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-11 (수집 조건별 자동 수집 주기·시각 계약 확정)
+**최종 동기화**: 2026-08-12 (입찰 AI 요약 개정 요청과 이전 요약 Worker 전달 계약 구현)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -24,22 +24,28 @@
 | ✅ 확정 | 직접 등록 공고 수정 | PATCH | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
 | ✅ 확정 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
 | ✅ 확정 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
-| 📝 초안 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
-| 📝 초안 | 입찰 AI 요약 조회 | GET | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
-| 📝 초안 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
-| 📝 초안 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
-| 📝 초안 | 공고 프로젝트 전환 | POST | `/api/v1/bidding/notices/{noticeId}/projects` | `BIDDING` |
+| ✔️ 완료 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
+| ✔️ 완료 | 공고별 입찰 AI 요약 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
+| ✅ 확정 | 입찰 AI 요약 조회 | GET | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
+| ✅ 확정 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
+| ✅ 확정 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
+| ✔️ 완료 | Python 입찰 요약 작업 조회 | GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | 내부 서버 |
+| ✅ 확정 | Python 입찰 요약 결과 callback | POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | 내부 서버 |
+| ✅ 확정 | 공고 프로젝트 전환 | POST | `/api/v1/bidding/notices/{noticeId}/projects` | `BIDDING` |
 
 ---
 
 ## 입찰 공고 프로젝트 전환 정책
 
 v1에서는 입찰용 블록과 프로젝트 공고 스냅샷을 사용하지 않는다.
-입찰 공고에서 프로젝트를 만들 때는 `project.bid_notice_id`만 저장한다.
+입찰 담당자가 AI 요약을 검토·확정한 뒤 별도 프로젝트 생성 명령을 실행한다.
+프로젝트는 `project.bid_notice_id`로 공고를 연결하고, 확정 요약은
+`bid_notice_summary.project_id`로 실제 생성된 프로젝트를 연결한다.
 
 ```text
 bid_notice = 입찰 공고 원본
-project = bid_notice_id 링크만 보유
+bid_notice_summary = 담당자가 확정한 AI 검토 결과와 생성된 project_id 보유
+project = bid_notice_id로 공고 원본 연결
 ```
 
 정책:
@@ -48,7 +54,8 @@ project = bid_notice_id 링크만 보유
 |------|------|
 | 블록 생성 | 생성하지 않는다 |
 | 수동 생성 | 제공하지 않는다 |
-| 프로젝트 연결 | `project.bid_notice_id`로 전환한 공고 원본과 연결한다 |
+| 프로젝트 생성 조건 | 현재 회사의 `COMPLETED`·확정 AI 요약을 선택해야 한다 |
+| 프로젝트 연결 | `project.bid_notice_id`로 공고 원본을 연결하고 `bid_notice_summary.project_id`로 사용한 확정 요약을 고정한다 |
 | 입찰 상세 조회 | 입찰 공고 API 또는 `project.bid_notice_id` 기준 `bid_notice` 조회로 처리한다 |
 | 공고 원본 수정 | 입찰 공고 API 정책을 따른다 |
 | 프로젝트 스냅샷 | 저장하지 않는다 |
@@ -953,54 +960,485 @@ Request Body는 없다.
 
 ## 입찰 AI 요약
 
-입찰 AI 요약과 비타메이트 AI는 별개의 기능이다.
+**상태**: ✅ 확정
 
-| API | 설명 |
-|-----|------|
-| `POST /api/v1/bidding/notices/{noticeId}/summaries` | 요약 요청 |
-| `GET /api/v1/bidding/summaries/{summaryId}` | 상태 및 결과 조회 |
-| `PATCH /api/v1/bidding/summaries/{summaryId}` | 사용자 수정 |
-| `PATCH /api/v1/bidding/summaries/{summaryId}/confirm` | 최종 확정 |
+입찰 AI 요약과 비타메이트 문서 검토는 별개의 기능이다. 입찰 AI 요약은 Spring Boot에 저장된 입찰 공고의 구조화 정보와 사용자가 직접 입력한 프롬프트를 기준으로 공고를 요약한다.
 
-요약 요청은 비동기다.
+### 공통 정책
 
-```text
-202 Accepted
-→ summaryId 반환
-→ 상태 및 결과 조회
+| 항목 | 규칙 |
+|------|------|
+| 공고 원본 | `bid_notice`는 전 회사가 공유하는 공공 원천 데이터로 유지한다 |
+| 회사 격리 | AI 요약은 요청 시 인증 사용자의 `companyId`를 직접 저장한다. 다른 회사의 요약은 모든 상태에서 조회할 수 없다 |
+| 개인 초안 | `PENDING`, `PROCESSING`, `FAILED`와 미확정 `COMPLETED` 요약은 요청자만 조회할 수 있다 |
+| 수정·확정 권한 | 미확정 `COMPLETED` 요약은 최초 요청자만 수정하고 확정할 수 있다 |
+| 회사 확정본 | 확정된 요약은 같은 회사의 `BIDDING` 권한 사용자가 조회하고 프로젝트 생성에 사용할 수 있다 |
+| 분석 입력 | 공고 기본 정보, 금액, 일정, 참가 자격, 계약·평가 방식과 첨부파일 메타데이터를 사용한다 |
+| 첨부 본문 | 입찰 AI 요약에서는 다운로드하거나 본문을 분석하지 않는다. 첨부 문서 본문 검토는 프로젝트 전환 후 비타메이트가 담당한다 |
+| 사용자 프롬프트 | 사용자가 `prompt`를 직접 입력한다. 서버 기본 업무 프롬프트나 도메인별 프롬프트 템플릿을 앞뒤에 추가하지 않는다 |
+| 출력 형식 | Python worker는 사용자 프롬프트를 바꾸지 않고 Gemini 구조화 응답 스키마로 결과 필드만 구분한다 |
+| 안전 정책 | 인증, 회사 격리, 입력 데이터 경계, 민감 정보 차단과 출력 형식 검증은 사용자 프롬프트와 분리된 실행 정책으로 적용한다 |
+| 처리 방식 | Spring Boot가 DB Outbox와 Redis Stream으로 작업을 발행하고 Python worker가 Gemini 호출 후 callback한다 |
+| 이력 | 요약 요청마다 새 `summaryId`를 생성하며 이전 완료 이력을 덮어쓰지 않는다 |
+| 개선 요청 | 본인이 만든 같은 공고의 미확정 `COMPLETED` 요약을 `baseSummaryId`로 선택해 새 개선 요약을 요청할 수 있다 |
+| 개정 계보 | 최초 요청은 `parentSummaryId = null`, `revisionNo = 1`이며 개선 요청은 기준 요약을 부모로 연결하고 개정 번호를 1 증가시킨다 |
+| 개정 상한 | 하나의 개선 계보는 최대 20차까지 허용한다 |
+| 중복 실행 | 같은 회사·공고·요청자에 `PENDING` 또는 `PROCESSING` 요약이 있으면 그 요청자의 새 요청을 거부한다 |
+| 확정 | `COMPLETED`인 본인 미확정 요약만 확정할 수 있다. 확정 후에는 변경하지 않고 재분석 시 새 요약을 생성한다 |
+| 프로젝트 전환 | 확정과 프로젝트 생성은 분리한다. 확정된 요약을 선택해 프로젝트 생성 API를 명시적으로 호출한다 |
+| 프로젝트 근거 고정 | 프로젝트 생성에 사용한 확정 요약은 `projectId`로 연결하며 한 프로젝트에는 하나의 확정 요약만 연결한다 |
+
+### 상태값
+
+| 상태 | 설명 |
+|------|------|
+| `PENDING` | 요청과 Outbox가 저장되어 worker 처리를 기다리는 상태 |
+| `PROCESSING` | 현재 `attemptId`를 가진 worker가 분석 중인 상태 |
+| `COMPLETED` | Gemini 결과가 정상 저장되어 사용자 검토가 가능한 상태 |
+| `FAILED` | 재시도 불가능하거나 최대 재시도를 초과하여 종료된 상태 |
+
+`summaryStatus`와 사용자 확정 여부인 `confirmed`는 별도로 관리한다.
+
+---
+
+## 입찰 AI 요약 요청 `POST /api/v1/bidding/notices/{noticeId}/summaries`
+
+**상태**: ✅ 확정
+
+현재 회사가 조회할 수 있는 입찰 공고와 사용자가 입력한 프롬프트를 기준으로 비동기 AI 요약을 요청한다.
+
+### Path Parameter
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `noticeId` | Long | Y | 요약할 입찰 공고 ID |
+
+### Request Body
+
+| 필드 | 타입 | 필수 | 규칙 |
+|------|------|------|------|
+| `prompt` | String | Y | 사용자가 직접 입력하는 분석 요청. 공백 불가, 최대 3,000자 |
+| `baseSummaryId` | Long | N | 개선 기준이 되는 본인의 같은 공고 미확정 `COMPLETED` 요약 ID |
+
+```json
+{
+  "prompt": "기존 요약을 유지하되 보안 인증과 일정 위험을 더 구체적으로 정리해줘.",
+  "baseSummaryId": 31
+}
 ```
+
+### Success Response
+
+```json
+{
+  "httpStatus": 202,
+  "message": "입찰 공고 AI 요약 요청이 접수되었습니다.",
+  "data": {
+    "summaryId": 31,
+    "summaryStatus": "PENDING",
+    "requestedAt": "2026-08-11T17:30:00"
+  }
+}
+```
+
+### 처리 규칙
+
+1. 인증 사용자의 회사와 `BIDDING` 권한을 확인한다.
+2. 현재 회사가 조회할 수 있는 공고인지 확인한다.
+3. 같은 회사·공고·요청자에 진행 중인 요약이 있는지 확인한다.
+4. `baseSummaryId`가 있으면 본인의 같은 공고 미확정 `COMPLETED` 요약인지 확인하고 최대 20차 제한을 검증한다.
+5. `bid_notice_summary(PENDING)`과 요약 요청 Outbox를 같은 DB 트랜잭션에서 저장한다.
+6. 커밋 이후 Outbox Dispatcher가 Redis Stream에 작업을 발행한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 202 | - | 요약 요청 접수 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_REQUEST` | 공고 ID 또는 프롬프트 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 기준 요약이 없거나 다른 회사·공고·요청자의 요약임 |
+| 409 | `BIDDING_SUMMARY_ALREADY_PROCESSING` | 같은 회사·공고·요청자에 진행 중인 요약이 있음 |
+| 409 | `BIDDING_SUMMARY_NOT_EDITABLE` | 기준 요약이 미완료·확정 상태이거나 이미 20차임 |
+
+---
+
+## 공고별 입찰 AI 요약 이력 조회 `GET /api/v1/bidding/notices/{noticeId}/summaries`
+
+**상태**: ✅ 확정
+
+현재 사용자가 요청한 모든 상태의 요약과 같은 회사에서 확정된 요약을 최신순으로 조회한다.
+다른 사용자의 미확정 요약은 반환하지 않는다.
+
+### Query Parameter
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|----------|------|------|--------|------|
+| `page` | Integer | N | `0` | 0부터 시작하는 페이지 번호 |
+| `size` | Integer | N | `20` | 페이지 크기. 최대 50 |
+
+### Response Data
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `content[].summaryId` | Long | AI 요약 ID |
+| `content[].parentSummaryId` | Long | 개선 기준 요약 ID. 최초 요청이면 `null` |
+| `content[].revisionNo` | Integer | 개선 계보의 개정 번호. 최초 요청은 `1` |
+| `content[].summaryStatus` | String | 처리 상태 |
+| `content[].prompt` | String | 요청 당시 프롬프트 |
+| `content[].confirmed` | Boolean | 확정 여부 |
+| `content[].isMine` | Boolean | 현재 사용자가 요청한 요약인지 여부 |
+| `content[].projectId` | Long | 이 확정 요약으로 생성한 프로젝트 ID. 미전환이면 `null` |
+| `content[].requestedAt` | String | 요청 시각 |
+| `content[].confirmedAt` | String | 확정 시각. 미확정이면 `null` |
+| `latestMySummaryId` | Long | 현재 사용자가 요청한 요약 중 가장 최신 ID. 없으면 `null` |
+| `totalElements` | Long | 조회 가능한 전체 요약 수 |
+| `totalPages` | Integer | 전체 페이지 수 |
+| `page` | Integer | 현재 페이지 |
+| `size` | Integer | 페이지 크기 |
+
+조회 대상은 `(requested_by = 현재 사용자) OR (company_id = 현재 회사 AND confirmed = TRUE)`로 제한한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 이력 조회 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_REQUEST` | 공고 ID 또는 페이징 값 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
+
+---
+
+## 입찰 AI 요약 조회 `GET /api/v1/bidding/summaries/{summaryId}`
+
+**상태**: ✅ 확정
+
+본인이 요청한 요약 또는 같은 회사에서 확정된 요약의 처리 상태, 구조화 결과와 프로젝트 전환 상태를 조회한다.
+
+### Response Data
+
+| 필드 | 타입 | null 가능 | 설명 |
+|------|------|-----------|------|
+| `summaryId` | Long | N | AI 요약 ID |
+| `noticeId` | Long | N | 입찰 공고 ID |
+| `parentSummaryId` | Long | Y | 개선 기준 요약 ID. 최초 요청이면 `null` |
+| `revisionNo` | Integer | N | 개선 계보의 개정 번호. 최초 요청은 `1` |
+| `prompt` | String | N | 요청 당시 사용자가 입력한 프롬프트 원문 |
+| `summaryStatus` | String | N | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
+| `overviewSummary` | String | Y | 공고 개요. 완료 전 또는 근거 부족 시 `null` |
+| `amountSummary` | String | Y | 금액 요약 |
+| `scheduleSummary` | String | Y | 일정 요약 |
+| `qualificationSummary` | String | Y | 참가 자격 요약 |
+| `taskSummary` | String | Y | 주요 과업 요약 |
+| `riskSummary` | String | Y | 위험 요소 요약 |
+| `confirmed` | Boolean | N | 사용자 최종 확정 여부 |
+| `confirmedBy` | String | Y | 확정 사용자 ID. 미확정이면 `null` |
+| `confirmedAt` | String | Y | 확정 시각. 미확정이면 `null` |
+| `projectId` | Long | Y | 이 확정 요약으로 생성한 프로젝트 ID. 미전환이면 `null` |
+| `errorMessage` | String | Y | 실패 사유. `FAILED`가 아니면 `null` |
+| `requestedAt` | String | N | 요청 생성 시각 |
+| `completedAt` | String | Y | 분석 완료 또는 실패 시각 |
+| `updatedAt` | String | Y | 사용자가 요약 결과를 마지막으로 수정한 시각 |
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입찰 공고 AI 요약 조회 성공",
+  "data": {
+    "summaryId": 31,
+    "noticeId": 317,
+    "prompt": "이 공고의 금액, 일정, 참가 자격과 수행 위험을 실무 검토용으로 정리해줘.",
+    "summaryStatus": "COMPLETED",
+    "overviewSummary": "스마트시티 통합관제 플랫폼 구축 용역입니다.",
+    "amountSummary": "추정가격은 3억 3천만 원입니다.",
+    "scheduleSummary": "입찰 마감은 2026-08-20 18:00입니다.",
+    "qualificationSummary": "관련 사업 수행 실적을 보유한 소프트웨어사업자가 대상입니다.",
+    "taskSummary": "통합관제 플랫폼 구축과 운영 체계 수립이 주요 과업입니다.",
+    "riskSummary": "입찰 마감까지 준비 기간이 짧고 관련 실적 증빙이 필요합니다.",
+    "confirmed": false,
+    "confirmedBy": null,
+    "confirmedAt": null,
+    "projectId": null,
+    "errorMessage": null,
+    "requestedAt": "2026-08-11T17:30:00",
+    "completedAt": "2026-08-11T17:30:12",
+    "updatedAt": null
+  }
+}
+```
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 요약 조회 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_REQUEST` | 유효하지 않은 요약 ID |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 본인 요약 또는 현재 회사의 확정 요약이 존재하지 않음 |
+
+---
+
+## 입찰 AI 요약 수정 `PATCH /api/v1/bidding/summaries/{summaryId}`
+
+**상태**: ✅ 확정
+
+AI가 생성한 구조화 결과를 요청자가 검토하여 부분 수정한다. 본인이 요청한 `COMPLETED`이면서 미확정인 요약만 수정할 수 있다.
+
+### Request Body
+
+아래 필드는 모두 선택이며 최소 한 개를 전달해야 한다. 생략한 필드는 유지하고, 전달한 필드는 공백이 아닌 문자열로 교체한다. `null`로 필드를 삭제하는 것은 허용하지 않는다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `overviewSummary` | String | 공고 개요 수정값 |
+| `amountSummary` | String | 금액 요약 수정값 |
+| `scheduleSummary` | String | 일정 요약 수정값 |
+| `qualificationSummary` | String | 참가 자격 수정값 |
+| `taskSummary` | String | 주요 과업 수정값 |
+| `riskSummary` | String | 위험 요소 수정값 |
+
+```json
+{
+  "riskSummary": "실적 증빙과 보안 인증 자료를 입찰 마감 전에 확보해야 합니다.",
+  "taskSummary": "관제 플랫폼 구축, 데이터 연계와 운영자 교육이 주요 과업입니다."
+}
+```
+
+성공 응답의 `data`는 AI 요약 조회 응답과 동일하다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 요약 수정 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_UPDATE` | 수정 필드가 없거나 값 형식이 올바르지 않음 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 현재 회사의 요약이 존재하지 않음 |
+| 409 | `BIDDING_SUMMARY_NOT_EDITABLE` | 분석 미완료, 실패 또는 이미 확정되어 수정할 수 없음 |
+
+---
+
+## 입찰 AI 요약 확정 `PATCH /api/v1/bidding/summaries/{summaryId}/confirm`
+
+**상태**: ✅ 확정
+
+요청자의 검토가 끝난 AI 요약을 최종 확정한다. Request Body는 없다.
+확정 성공 후 프로젝트 생성이 가능해지지만 프로젝트를 자동으로 생성하지는 않는다.
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입찰 공고 AI 요약 확정 성공",
+  "data": {
+    "summaryId": 31,
+    "confirmed": true,
+    "confirmedBy": "vitas-USER001",
+    "confirmedAt": "2026-08-11T17:40:00",
+    "projectCreationAllowed": true
+  }
+}
+```
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 요약 확정 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_REQUEST` | 유효하지 않은 요약 ID |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 현재 회사의 요약이 존재하지 않음 |
+| 409 | `BIDDING_SUMMARY_NOT_COMPLETED` | 완료되지 않은 요약을 확정하려고 함 |
+| 409 | `BIDDING_SUMMARY_ALREADY_CONFIRMED` | 이미 확정된 요약 |
+
+---
+
+## Python 입찰 요약 작업 조회 `GET /internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}`
+
+**상태**: ✅ 확정
+
+Python worker가 Redis 작업을 받은 뒤 현재 시도와 분석 입력을 Spring Boot에서 조회한다.
+
+### 인증
+
+| 항목 | 규칙 |
+|------|------|
+| Header | `X-Bidding-Worker-Token` |
+| 환경변수 | Spring Boot와 Python worker에 `BIDDING_WORKER_TOKEN`으로 주입한다 |
+| 전송 | 배포 환경에서는 HTTPS와 인증서 검증을 강제하며 redirect 요청에는 토큰을 전달하지 않는다 |
+
+### Response Data
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `summaryId` | Long | AI 요약 ID |
+| `companyId` | Long | 회사 ID. worker 로그에는 노출하지 않는다 |
+| `attemptId` | String | 현재 작업 시도 ID |
+| `prompt` | String | 사용자가 입력한 프롬프트 원문 |
+| `previousSummary` | Object | 개선 기준 요약의 구조화 결과. 최초 요청이면 `null` |
+| `previousSummary.summaryId` | Long | 개선 기준 요약 ID |
+| `previousSummary.revisionNo` | Integer | 개선 기준 요약의 개정 번호 |
+| `previousSummary.overviewSummary` | String | 이전 공고 개요 |
+| `previousSummary.amountSummary` | String | 이전 금액 요약 |
+| `previousSummary.scheduleSummary` | String | 이전 일정 요약 |
+| `previousSummary.qualificationSummary` | String | 이전 참가 자격 요약 |
+| `previousSummary.taskSummary` | String | 이전 주요 과업 요약 |
+| `previousSummary.riskSummary` | String | 이전 위험 요소 요약 |
+| `notice` | Object | 요청 시점의 입찰 공고 구조화 스냅샷 |
+| `notice.attachments` | List&lt;Object&gt; | 파일명과 원문 URL 등 첨부 메타데이터. 본문은 포함하지 않는다 |
+
+Spring Boot는 `summaryId`, `companyId`, `attemptId`가 현재 처리 대상과 모두 일치할 때만 작업 입력을 반환한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 작업 입력 조회 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_JOB_REQUEST` | 경로 값 또는 작업 시도 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | worker 토큰 누락 또는 불일치 |
+| 404 | `BIDDING_SUMMARY_JOB_NOT_FOUND` | 현재 시도와 일치하는 작업이 없음 |
+
+---
+
+## Python 입찰 요약 결과 callback `POST /internal/v1/bidding/summaries/{summaryId}/callback`
+
+**상태**: ✅ 확정
+
+Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
+
+### 인증
+
+`X-Bidding-Worker-Token`을 사용하며 작업 조회 API와 같은 전송 보안 규칙을 따른다.
+
+### Request Body
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `attemptId` | String | Y | Redis 작업과 작업 조회 응답에서 받은 현재 시도 ID |
+| `summaryStatus` | String | Y | `COMPLETED` 또는 `FAILED` |
+| `overviewSummary` | String | 조건부 | `COMPLETED` 결과 |
+| `amountSummary` | String | 조건부 | `COMPLETED` 결과. 근거가 없으면 `null` |
+| `scheduleSummary` | String | 조건부 | `COMPLETED` 결과. 근거가 없으면 `null` |
+| `qualificationSummary` | String | 조건부 | `COMPLETED` 결과. 근거가 없으면 `null` |
+| `taskSummary` | String | 조건부 | `COMPLETED` 결과. 근거가 없으면 `null` |
+| `riskSummary` | String | 조건부 | `COMPLETED` 결과. 근거가 없으면 `null` |
+| `errorMessage` | String | 조건부 | `FAILED`이면 필수. 민감 정보와 외부 응답 원문 금지 |
+| `retryable` | Boolean | N | `FAILED` 오류의 일시 장애 여부. 생략 시 `false`로 처리하며 `COMPLETED`에서는 `false`여야 함 |
+
+`COMPLETED`에서는 `overviewSummary`가 필수이고 `errorMessage`는 `null`, `retryable`은 `false`여야 한다. `FAILED`에서는 모든 결과 필드가 `null`이고 `errorMessage`가 필수다.
+
+```json
+{
+  "attemptId": "4b0f03bb-c04d-4ff0-997b-3ff762cbfe22",
+  "summaryStatus": "COMPLETED",
+  "overviewSummary": "스마트시티 통합관제 플랫폼 구축 용역입니다.",
+  "amountSummary": "추정가격은 3억 3천만 원입니다.",
+  "scheduleSummary": "입찰 마감은 2026-08-20 18:00입니다.",
+  "qualificationSummary": "관련 사업 수행 실적 보유 업체가 대상입니다.",
+  "taskSummary": "통합관제 플랫폼 구축과 운영 체계 수립이 주요 과업입니다.",
+  "riskSummary": "관련 실적과 보안 인증 증빙 준비가 필요합니다.",
+  "errorMessage": null,
+  "retryable": false
+}
+```
+
+일시 장애 callback 예시:
+
+```json
+{
+  "attemptId": "4b0f03bb-c04d-4ff0-997b-3ff762cbfe22",
+  "summaryStatus": "FAILED",
+  "overviewSummary": null,
+  "amountSummary": null,
+  "scheduleSummary": null,
+  "qualificationSummary": null,
+  "taskSummary": null,
+  "riskSummary": null,
+  "errorMessage": "AI provider temporarily unavailable",
+  "retryable": true
+}
+```
+
+### Success Response
+
+```json
+{
+  "accepted": true,
+  "summaryId": 31,
+  "summaryStatus": "COMPLETED",
+  "reason": null
+}
+```
+
+오래된 `attemptId`, 중복 완료 callback 또는 이미 확정된 요약에는 HTTP 200과 `accepted=false`를 반환한다. Python worker는 이를 정상적인 멱등 처리로 보고 Redis 메시지를 ACK한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | callback 처리 성공 또는 오래된 결과의 멱등 거절 |
+| 400 | `BIDDING_INVALID_SUMMARY_CALLBACK` | 상태별 필드 규칙 또는 요청 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | worker 토큰 누락 또는 불일치 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 요약 자체가 존재하지 않음 |
+
+### 비동기 신뢰성 규칙
+
+| 항목 | 규칙 |
+|------|------|
+| 요청 원자성 | 요약 `PENDING` 저장과 Outbox 저장은 같은 DB 트랜잭션에서 처리한다 |
+| 메시지 | Redis에는 `summaryId`, `companyId`, `attemptId`, `retryCount`만 전달한다 |
+| 작업 점유 | worker가 작업 조회에 성공하면 Spring Boot가 현재 요약을 `PROCESSING`으로 전이한다 |
+| callback 검증 | 현재 저장된 `attemptId`와 일치하는 결과만 반영한다 |
+| 총 시도 횟수 | 최초 1회와 재시도 2회를 합쳐 최대 3회 처리한다 |
+| 재시도 대상 | Gemini HTTP 429·5xx, Timeout, 일시적 네트워크 오류만 `retryable=true`로 전달한다 |
+| 즉시 종료 대상 | 잘못된 API 키·요청·설정 오류는 `retryable=false`로 전달하고 `FAILED`로 종료한다 |
+| 재시도 간격 | 첫 실패 후 10초, 두 번째 실패 후 30초 뒤 Outbox 발행이 가능하다 |
+| 새 시도 식별자 | 재시도마다 Spring Boot가 새 `attemptId`를 발급하고 이전 callback은 `accepted=false`로 거절한다 |
+| 재시도 원자성 | 현재 요약의 `PENDING` 전이와 새 attempt Outbox 저장은 같은 DB 트랜잭션에서 처리한다 |
+| 최종 실패 | 복구 불가능한 오류 또는 최대 재시도 초과 시 `FAILED` callback으로 종료한다 |
+| ACK | callback에서 `accepted=true` 또는 멱등 거절 응답을 받은 뒤 Redis 메시지를 ACK한다 |
+| 로그 | `summaryId`, `attemptId`, 상태와 단계만 기록하며 프롬프트·공고 원문·회사 ID·토큰은 기록하지 않는다 |
 
 ---
 
 ## 공고 프로젝트 전환 `POST /api/v1/bidding/notices/{noticeId}/projects`
 
-**상태**: 📝 초안
+**상태**: ✅ 확정
 
-**Request 권장값**
+**Request Body**
 
-| 파라미터 | 타입 | 설명 |
-|---------|------|------|
-| `name` | String | 프로젝트명 |
-| `description` | String | 설명 |
-| `businessCategoryId` | Long | 사업 카테고리 ID |
-| `startedOn` | Date | 시작일 |
-| `endedOn` | Date | 종료일 |
-| `memberIds` | String[] | 추가 참여자 user ID 목록. 전환 요청자는 서버가 자동 포함 |
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|------|------|
+| `summaryId` | Long | Y | 현재 회사에서 확정된 `COMPLETED` AI 요약 ID. 누락 시 `COMMON_INVALID_REQUEST` |
+| `name` | String | Y | 프로젝트명 |
+| `description` | String | N | 설명 |
+| `businessCategoryId` | Long | Y | 사업 카테고리 ID |
+| `startedOn` | Date | Y | 시작일 |
+| `endedOn` | Date | Y | 종료일 |
+| `memberIds` | String[] | N | 추가 참여자 user ID 목록. 전환 요청자는 서버가 자동 포함 |
 
 서버 처리:
 
-1. 공고 존재 여부 확인
-2. 기존 프로젝트 전환 여부 확인
-3. 요청자가 `BIDDING` 권한을 갖는지 확인
-4. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
-5. 하나의 DB 트랜잭션 시작
-6. 프로젝트 생성
-7. `project.bid_notice_id` 저장
-8. 인증된 전환 요청자를 `project_member`에 자동 등록
-9. 추가 `memberIds`를 `project_member`에 등록
-10. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
-11. 입찰용 블록은 생성하지 않음
-12. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
+1. 공고 존재 여부와 현재 회사의 접근 권한 확인
+2. `summaryId`가 같은 공고·회사에 속한 `COMPLETED`·확정 요약인지 확인
+3. 해당 요약이 아직 프로젝트에 연결되지 않았는지 확인
+4. 기존 프로젝트 전환 여부 확인
+5. 요청자가 `BIDDING` 권한을 갖는지 확인
+6. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
+7. 하나의 DB 트랜잭션 시작
+8. 프로젝트 생성과 `project.bid_notice_id` 저장
+9. `bid_notice_summary.project_id`에 생성된 프로젝트 ID 저장
+10. 인증된 전환 요청자를 `project_member`에 자동 등록
+11. 추가 `memberIds`를 `project_member`에 등록
+12. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
+13. 입찰용 블록은 생성하지 않음
+14. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
 
 권한 정책:
 
@@ -1015,7 +1453,7 @@ Request Body는 없다.
 
 | 항목 | 규칙 |
 |------|------|
-| 원자성 | 프로젝트 생성부터 `project.bid_notice_id` 저장, 참여자 등록, 기본 단계 생성까지 하나의 DB 트랜잭션 |
+| 원자성 | 프로젝트 생성부터 `project.bid_notice_id`, `bid_notice_summary.project_id`, 참여자 등록과 기본 단계 생성까지 하나의 DB 트랜잭션 |
 | 중간 실패 | 전체 롤백. 불완전한 프로젝트를 남기지 않음 |
 | 이미 전환된 공고 | 새 트랜잭션을 시작하지 않고 409 반환 |
 | 재시도 | 이전 요청이 롤백됐다면 재시도 가능. 이미 커밋됐다면 409 |
@@ -1026,6 +1464,7 @@ Request Body는 없다.
 |------|------|
 | 공고 하나당 프로젝트 | 1개만 생성 |
 | 중복 방지 | `UNIQUE(project.bid_notice_id)` |
+| 확정 요약 연결 | `UNIQUE(bid_notice_summary.project_id)`로 한 프로젝트의 근거 요약을 하나로 고정 |
 | 스냅샷 | 저장하지 않음 |
 | 정정공고 | 변경 감지와 자동 반영은 v1 범위 밖 |
 

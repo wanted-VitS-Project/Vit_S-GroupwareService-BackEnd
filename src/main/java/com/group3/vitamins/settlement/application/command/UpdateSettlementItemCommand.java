@@ -16,6 +16,8 @@ public record UpdateSettlementItemCommand(
         String bankName,
         String accountNumber,
         String accountHolder,
+        int version,
+        boolean overwrite,
         String role
 ) {
 }

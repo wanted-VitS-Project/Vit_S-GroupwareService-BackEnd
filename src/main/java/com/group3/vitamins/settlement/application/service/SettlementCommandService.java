@@ -5,6 +5,7 @@ import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.settlement.application.command.UpdateSettlementItemCommand;
 import com.group3.vitamins.settlement.application.policy.SettlementEligibilityPolicy;
@@ -55,28 +56,53 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         Settlement before = eligibilityPolicy.getActiveSettlementOrThrow(command.settleId());
         eligibilityPolicy.assertEditPermission(command.settleId(), command.userId(), command.role());
 
+        // 편의상 빠른 실패용 검사다(잠금 이전에 읽은 before 기준) — 진짜 방어는 아래 잠금 후 재조회다.
         assertModifiable(before);
-        eligibilityPolicy.assertNoTypeDowngrade(before.getType(), type);
 
         // SETL-008 검증(조회) 전에 같은 프로젝트의 정산 블록 전체를 잠근다 — 두 개의 빈 블록이 동시에
         // PATCH되면서 서로 "기준값 없음"으로 읽고 다른 totalAmount를 저장하는 레이스를 막는다.
         settlementSiblingLookupPort.lockSiblingSettlementBlocksForUpdate(command.settleId());
+
+        // 잠금 직후 이 행의 현재(최신 커밋) 상태 전체를 다시 읽는다. 이 판정 이후로는 이 트랜잭션이 끝날
+        // 때까지 아무도 이 행을 못 바꾸므로(FOR UPDATE로 계속 잠겨 있음):
+        // 1) 삭제·연결 여부를 여기서 판정하면, 아래 조건부 UPDATE가 0건이 되는 원인은 버전 불일치뿐임이
+        //    보장된다 — "갱신 실패 후 일반 조회로 원인 재분류"는 REPEATABLE READ 스냅샷 때문에 부정확할 수
+        //    있다는 지적(CodeRabbit, 2026-08-12)을 "쓰기 전에 잠금 하에 미리 확정"으로 근본 해결한 것이다.
+        // 2) 타입 다운그레이드 판정·활동 로그 이전값 비교도 여기서 읽은 값을 써야 한다 — before(잠금 이전
+        //    값)로 하면 그 사이 남이 타입/내용을 바꿔도 옛 값 기준으로 잘못 판정·기록된다(CodeRabbit,
+        //    2026-08-12 2차 지적).
+        SettlementSiblingLookupPort.SettlementCurrentState currentState =
+                settlementSiblingLookupPort.findCurrentStateForUpdate(command.settleId());
+        if (currentState == null || currentState.deletedAt() != null) {
+            throw new NotFoundException(SettlementErrorCode.BLOCK_NOT_FOUND);
+        }
+        if (!SettlementStatus.PENDING.name().equals(currentState.status())) {
+            log.warn("연결된 정산 블록 수정 시도 - settleId={}, status={}", command.settleId(), currentState.status());
+            throw new ConflictException(SettlementErrorCode.ALREADY_LINKED);
+        }
+        eligibilityPolicy.assertNoTypeDowngrade(SettlementType.valueOf(currentState.type()), type);
+
         assertTotalAmountConsistent(command.settleId(), type, command.totalAmount());
 
         String encryptedAccountNumber = command.accountNumber() == null
                 ? null
                 : accountNumberCipher.encrypt(command.accountNumber());
 
+        // overwrite면 위에서 잠금 하에 다시 읽은 "지금" 버전을 기대값으로 써서 반드시 통과시킨다. 아니면
+        // 클라이언트가 보낸 버전을 그대로 검사한다(WHERE version = ?, CONCURRENCY.md §1-5).
+        int expectedVersion = command.overwrite() ? currentState.version() : command.version();
+
         Settlement saved = settlementRepository.updateItem(
                 command.settleId(), type, command.roundNo(), command.totalAmount(),
                 command.plannedAmount(), command.plannedTaxAmount(), command.plannedDate(),
-                command.traderName(), command.bankName(), encryptedAccountNumber, command.accountHolder());
+                command.traderName(), command.bankName(), encryptedAccountNumber, command.accountHolder(),
+                expectedVersion);
 
         log.info("정산 항목 작성/수정 완료 - settleId={}", saved.getSettleId());
 
         // 활동 로그(항목 작성/수정) — text 도메인과 동일하게 실제로 바뀐 필드가 있을 때만 발행한다.
         // 계좌번호는 원문을 절대 로그에 남기지 않는다 — 이전/이후 값 모두 마스킹해서 비교·기록한다.
-        List<ActivityFieldChange> changes = detectChanges(before, saved, command.accountNumber());
+        List<ActivityFieldChange> changes = detectChanges(currentState, saved, command.accountNumber());
         if (!changes.isEmpty()) {
             domainEventPublisher.publish(ActivityOccurredEvent.of(
                     ActivityLogAction.MODIFY,
@@ -153,28 +179,30 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         }
     }
 
-    private List<ActivityFieldChange> detectChanges(Settlement before, Settlement saved, String plainAccountNumber) {
+    private List<ActivityFieldChange> detectChanges(
+            SettlementSiblingLookupPort.SettlementCurrentState before, Settlement saved, String plainAccountNumber
+    ) {
         List<ActivityFieldChange> changes = new ArrayList<>();
-        addIfChanged(changes, "roundNo", before.getRoundNo(), saved.getRoundNo());
-        addIfChanged(changes, "type", before.getType(), saved.getType());
-        addIfChanged(changes, "totalAmount", before.getTotalAmount(), saved.getTotalAmount());
-        addIfChanged(changes, "plannedAmount", before.getPlannedAmount(), saved.getPlannedAmount());
-        addIfChanged(changes, "plannedTaxAmount", before.getPlannedTaxAmount(), saved.getPlannedTaxAmount());
-        addIfChanged(changes, "plannedDate", before.getPlannedDate(), saved.getPlannedDate());
-        addIfChanged(changes, "traderName", before.getTraderName(), saved.getTraderName());
-        addIfChanged(changes, "bankName", before.getBankName(), saved.getBankName());
-        addIfChanged(changes, "accountHolder", before.getAccountHolder(), saved.getAccountHolder());
+        addIfChanged(changes, "roundNo", before.roundNo(), saved.getRoundNo());
+        addIfChanged(changes, "type", before.type(), saved.getType().name());
+        addIfChanged(changes, "totalAmount", before.totalAmount(), saved.getTotalAmount());
+        addIfChanged(changes, "plannedAmount", before.plannedAmount(), saved.getPlannedAmount());
+        addIfChanged(changes, "plannedTaxAmount", before.plannedTaxAmount(), saved.getPlannedTaxAmount());
+        addIfChanged(changes, "plannedDate", before.plannedDate(), saved.getPlannedDate());
+        addIfChanged(changes, "traderName", before.traderName(), saved.getTraderName());
+        addIfChanged(changes, "bankName", before.bankName(), saved.getBankName());
+        addIfChanged(changes, "accountHolder", before.accountHolder(), saved.getAccountHolder());
 
         // 변경 여부는 원문으로 판단한다 — 마스킹은 앞·뒤 3자리만 남겨서, 서로 다른 계좌번호가 같은
         // 마스킹값이 될 수 있다(예: "100111111444"/"100999999444" 둘 다 "100******444"). 마스킹값으로
         // 비교하면 그런 변경이 조용히 로그에서 빠진다. 로그에 기록하는 값은 여전히 마스킹된 값만이다 —
         // 비교에만 원문을 쓰고, changes에는 원문을 절대 담지 않는다.
-        String beforePlainAccountNumber = before.getAccountNumber() == null
+        String beforePlainAccountNumber = before.accountNumber() == null
                 ? null
-                : accountNumberCipher.decrypt(before.getAccountNumber());
+                : accountNumberCipher.decrypt(before.accountNumber());
         if (!Objects.equals(beforePlainAccountNumber, plainAccountNumber)) {
             changes.add(new ActivityFieldChange("accountNumber",
-                    accountNumberCipher.decryptAndMask(before.getAccountNumber()),
+                    accountNumberCipher.decryptAndMask(before.accountNumber()),
                     accountNumberCipher.mask(plainAccountNumber)));
         }
 
@@ -213,7 +241,8 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 saved.getActualDate(),
                 saved.getStatus(),
                 SettlementProgress.ratio(actualAmountSum, saved.getTotalAmount()),
-                saved.getCreatedAt()
+                saved.getCreatedAt(),
+                saved.getVersion()
         );
     }
 }

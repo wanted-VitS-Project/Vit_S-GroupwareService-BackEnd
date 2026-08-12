@@ -14,19 +14,21 @@ import java.time.LocalDateTime;
 public interface SpringDataSettlementRepository extends JpaRepository<SettlementJpaEntity, Long> {
 
     /**
-     * deleted_at·status 조건을 UPDATE 문 자체에 걸어서, "확인 후 쓰기" 2단계 사이의 틈을 없앤다.
-     * 이미 삭제됐거나(다른 트랜잭션이 삭제) 그 사이 상태가 expectedStatus(PENDING)를 벗어났으면(연결됨)
-     * 0을 반환한다. clearAutomatically 로 벌크 업데이트 후 영속성 컨텍스트의 캐시된(오래된) 엔티티를
-     * 지워서, 이어지는 조회가 DB 최신값을 다시 읽게 한다.
+     * deleted_at·status·version 조건을 UPDATE 문 자체에 걸어서, "확인 후 쓰기" 2단계 사이의 틈을 없앤다.
+     * 이미 삭제됐거나(다른 트랜잭션이 삭제), 그 사이 상태가 expectedStatus(PENDING)를 벗어났거나(연결됨),
+     * 그 사이 남이 먼저 저장해 version이 어긋났으면 0을 반환한다(CONCURRENCY.md §3). clearAutomatically·
+     * flushAutomatically 로 벌크 업데이트 후 영속성 컨텍스트의 캐시된(오래된) 엔티티를 지워서, 이어지는
+     * 조회가 DB 최신값을 다시 읽게 한다(§6-2).
      */
-    @Modifying(clearAutomatically = true)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE SettlementJpaEntity s SET "
             + "s.type = :type, s.roundNo = :roundNo, s.totalAmount = :totalAmount, "
             + "s.plannedAmount = :plannedAmount, s.plannedTaxAmount = :plannedTaxAmount, "
             + "s.plannedDate = :plannedDate, s.traderName = :traderName, s.bankName = :bankName, "
             + "s.accountNumber = :accountNumber, s.accountHolder = :accountHolder, "
-            + "s.updatedAt = CURRENT_TIMESTAMP "
-            + "WHERE s.settleId = :settleId AND s.deletedAt IS NULL AND s.status = :expectedStatus")
+            + "s.updatedAt = CURRENT_TIMESTAMP, s.version = s.version + 1 "
+            + "WHERE s.settleId = :settleId AND s.deletedAt IS NULL AND s.status = :expectedStatus "
+            + "AND s.version = :expectedVersion")
     int updateItemIfActive(@Param("settleId") Long settleId,
                             @Param("type") SettlementType type,
                             @Param("roundNo") Integer roundNo,
@@ -38,7 +40,8 @@ public interface SpringDataSettlementRepository extends JpaRepository<Settlement
                             @Param("bankName") String bankName,
                             @Param("accountNumber") String accountNumber,
                             @Param("accountHolder") String accountHolder,
-                            @Param("expectedStatus") SettlementStatus expectedStatus);
+                            @Param("expectedStatus") SettlementStatus expectedStatus,
+                            @Param("expectedVersion") int expectedVersion);
 
     /**
      * 같은 이유로 삭제도 조건부 UPDATE — 이미 삭제된 행이면 0을 반환한다.

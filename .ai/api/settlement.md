@@ -400,6 +400,8 @@
 | `bankName` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 은행명 |
 | `accountNumber` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 계좌번호(하이픈·띄어쓰기 없이) |
 | `accountHolder` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 예금주 |
+| `version` | Integer | Y | 블록 목록 조회에서 받은 version 그대로. 2026-08-11 낙관적 락 추가(`.ai/docs/global/CONCURRENCY.md`) |
+| `overwrite` | Boolean | N | true면 충돌 무시하고 덮어씀. 생략 시 false. 2026-08-11 추가 |
 
 **Request Example**
 
@@ -410,7 +412,8 @@
   "plannedAmount": 1500000,
   "plannedTaxAmount": 200000,
   "plannedDate": "2026-09-01",
-  "traderName": "(주)대한항공"
+  "traderName": "(주)대한항공",
+  "version": 1
 }
 ```
 
@@ -424,7 +427,8 @@
   "traderName": "(주)대한항공",
   "bankName": "신한은행",
   "accountNumber": "100555074444",
-  "accountHolder": "홍길동"
+  "accountHolder": "홍길동",
+  "version": 1
 }
 ```
 
@@ -449,6 +453,7 @@
 | `data.status` | String | 정산 상태: `PENDING`(미연결) \| `WAITING`(정산 대기) \| `PARTIAL`(부분 정산) \| `COMPLETED`(정산 완료) |
 | `data.paidAmountRatio` | Double | 금액 기준 진행률 — 이 블록 하나가 아니라 **같은 프로젝트·같은 타입**(INCOME/OUTCOME) 정산 블록 전체의 실제 금액 합계를 이 타입의 프로젝트 총 예정 금액(`totalAmount`)으로 나눈 값. INCOME 블록은 입금 진행률, OUTCOME 블록은 외주 출금 진행률을 뜻한다 |
 | `data.createdAt` | LocalDateTime | 정산 블록에 내용이 생성된 일시 |
+| `data.version` | int | 수정 후 버전(기존값+1). 2026-08-11 추가 |
 
 **Success Example**
 
@@ -471,7 +476,8 @@
     "actualDate": null,
     "status": "PENDING",
     "paidAmountRatio": 0.0,
-    "createdAt": "2026-08-07T17:00:00"
+    "createdAt": "2026-08-07T17:00:00",
+    "version": 2
   }
 }
 ```
@@ -495,7 +501,8 @@
     "actualDate": null,
     "status": "PENDING",
     "paidAmountRatio": 0.0,
-    "createdAt": "2026-08-07T17:00:00"
+    "createdAt": "2026-08-07T17:00:00",
+    "version": 2
   }
 }
 ```
@@ -509,13 +516,69 @@
 | 400 | Bad Request | `SETL-003` | "내용을 입력해 주세요." (공통 필수 필드 누락) |
 | 400 | Bad Request | `SETL-004` | "출금 타입은 계좌정보가 필수입니다." (`OUTCOME`인데 계좌정보 누락) |
 | 400 | Bad Request | `SETL-011` | "회차 번호는 1 이상이어야 합니다." (`roundNo <= 0`) |
+| 400 | Bad Request | `SETTLEMENT_VERSION_REQUIRED` | "버전 정보가 없습니다. 화면을 새로고침해 주세요." (2026-08-11 추가) |
 | 403 | Forbidden | `SETL-001` | "편집 권한이 없습니다." |
 | 404 | Not Found | `SETL-002` | "존재하지 않는 블록입니다." |
 | 409 | Conflict | `SETL-006` | "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다." (OUTCOME → INCOME 다운그레이드 시도) |
 | 409 | Conflict | `SETL-007` | "세금계산서 또는 입출금 내역이 연결되어 있어 수정할 수 없습니다." (`status != PENDING`) |
 | 409 | Conflict | `SETL-008` | "같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (기존 등록된 금액: N원)" (같은 프로젝트·같은 타입의 다른 회차가 이미 정해둔 `totalAmount`와 다름) |
+| 409 | Conflict | `SETTLEMENT_VERSION_CONFLICT` | "다른 사용자가 먼저 수정했습니다." (2026-08-11 추가 — 낙관적 락. `SETL-007`과 판정 순서: 삭제→상태(연결)→버전 순으로 확인) |
 
 ---
+
+## 구현 메모 — 낙관적 락 (2026-08-11)
+
+`.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `settlement_block` 테이블에 `version` 컬럼 추가
+(`V20260812120000__add_version_settlement.sql` — ⚠️ 문서 §7-1 표는 `V20260811150000`을 배정했으나
+issue 도메인과 충돌해서 150000 → 170000 → 170100 → 110000/0812까지 재배정됐고, 그 뒤 develop에 먼저
+머지된 tenant(사업카테고리) 마이그레이션이 같은 번호를 이미 써서 120000/0812로 또 재배정됨(CI
+마이그레이션 검증에 반복해서 걸림). 문서 수정 권한이 없어 이 사실은 마이그레이션 파일 주석에만 남김 —
+김동현님께 별도 전달 필요).
+
+기존에도 `status = PENDING` 조건부 UPDATE(세금계산서/입출금 연결 시 잠금)가 있었는데, 여기에
+`version = ?` 조건을 추가로 걸었다. 원인을 3단계로 구분한다: ① 삭제됨 → `SETL-002` 404,
+② 상태가 PENDING을 벗어남(연결됨) → `SETL-007` 409, ③ 그 외(버전 불일치) →
+`SETTLEMENT_VERSION_CONFLICT` 409. **①·②는 조건부 UPDATE를 실행하기 전에, 잠금(`FOR UPDATE`) 하에
+다시 읽은 현재 상태로 먼저 판정한다**(아래 CodeRabbit 2번 항목 참고 — 갱신 실패 후 재조회하는 방식은
+REPEATABLE READ 스냅샷 때문에 부정확할 수 있어서 순서를 바꿨다) — 그래서 조건부 UPDATE 자체가 0행이면
+남는 원인은 ③뿐이다. 블록 목록 조회(프로젝트 상세의 블록 카드)의 `SETTLEMENT` 상세에도 `version`이
+함께 내려간다(§5-1 "목록도" 규칙).
+
+**CodeRabbit 리뷰 반영 (2026-08-12, 낙관적 락 PR)**:
+
+1. **`overwrite=true`가 잠금 이전 버전을 기대값으로 쓰던 문제 — 반영.**
+2. **0행 갱신 시 원인 분류(`SettlementRepositoryAdapter.updateItem`)가 REPEATABLE READ 스냅샷 때문에 부정확할 수
+   있다는 지적 — 3차 재지적 끝에 근본 반영(2026-08-12).** 앞선 두 라운드는 "영향이 메시지 정확도뿐"이라며
+   반영 안 함으로 넘겼는데, 3차 리뷰가 "이 오류 코드는 API 계약이라 메시지 정확도만의 문제가 아니다"라고
+   재반박했고 — 맞는 말이다. `SETTLEMENT_VERSION_CONFLICT`(재조회 없이 `overwrite`로 덮어쓰기 가능)와
+   `SETL-007`/`SETL-002`(막혀있음, 재조회해도 소용없음)는 프론트 처리 분기가 다르니 코드 자체가 계약이다.
+   **"실패 후 재분류" 대신 "쓰기 전에 잠금 하에 미리 확정"으로 근본 해결**했다 — 마침 1번 수정으로 이미
+   만든 `FOR UPDATE` 잠금 재확인 인프라를 그대로 확장하면 되어 비용도 낮아졌다:
+   - `SettlementSiblingLookupPort.findCurrentVersionForUpdate`(버전만 반환)를 **`findCurrentStateForUpdate`로
+     교체** — 이제 `version`/`status`/`deletedAt` 셋 다 `FOR UPDATE`로 함께 반환한다.
+   - `SettlementCommandService.upsertItem`이 `lockSiblingSettlementBlocksForUpdate` 직후(= 이 행이 이미
+     잠긴 시점) 이 조회를 **overwrite 여부와 무관하게 항상** 호출해서, 삭제됨(`SETL-002`)·연결됨(`SETL-007`)을
+     여기서 먼저 판정한다. 이 판정 이후로는 트랜잭션이 끝날 때까지 이 행을 아무도 못 바꾼다(같은 잠금이
+     계속 유지됨).
+   - 그래서 `SettlementRepositoryAdapter.updateItem`의 조건부 UPDATE가 0건이 되는 원인은 **이제 버전
+     불일치뿐임이 보장**된다 — 뒤따르던 일반 `findById` 재분류 코드 자체를 제거하고 바로
+     `SETTLEMENT_VERSION_CONFLICT`를 던지도록 단순화했다.
+   - 부수 효과: overwrite 경로도 더 견고해졌다 — 1번에서 만든 잠금-재조회가 이제 판정과 버전 조회를 한 번에
+     하므로, "판정은 프론트 사이드가 아니라 항상 최신 커밋 상태 기준"이라는 게 명확해졌다.
+3. **`GET /api/v1/projects/{projectId}/settlements` 응답에 `data.blocks[].version`이 없다는 지적(라인 403의
+   "블록 목록 조회에서 받은 version"과의 정합성) — 반영 안 함, 다른 엔드포인트를 가리킨 것으로 판단.** 라인
+   403의 "블록 목록 조회"는 `GET /api/v1/steps/{stepId}/blocks`(블록 카드, `SettlementDetail`이 `version` 포함)를
+   가리킨다 — PATCH가 실제로 호출되는 화면(프로젝트 상세)이 거기다. 이 엔드포인트(정산현황 화면의 읽기 전용
+   드릴다운)는 PATCH에 필수인 `traderName`조차 응답에 없다 — 애초에 여기서 받은 값으로 PATCH를 채울 수 있는
+   구조가 아니다. `version`만 추가해도 편집이 안 되는 응답이라 의미가 없어서 반영 안 함.
+4. **request.http의 SETL-003~011 시나리오 전부가 version 컬럼 추가 이후 400 SETTLEMENT_VERSION_REQUIRED로만
+   막힌다는 지적 — 반영.** 각 PATCH에 실제 누적 버전값을 채워 넣었다(버전 검사보다 먼저 걸리는 검증들은 정확한
+   값이 굳이 필요 없지만, 파일을 읽는 사람이 헷갈리지 않도록 실제 값을 그대로 넣음). `overwrite=true` 시나리오
+   (10-7)도 대상 settleId·totalAmount가 10-6과 어긋나 있던 걸 맞췄고, 로그인 계정 안내 문구(EMP003 고정 서술)도
+   맨 위 로그인 계정을 가리키도록 정정.
+
+⚠️ 위 1번 수정은 **overwrite=true 경로에서만** 동작이 바뀐다. overwrite=false(일반 저장)는 여전히 클라이언트가
+보낸 `version`을 그대로 검증하므로 영향 없다.
 
 ## 구현 메모 (사람이 확인할 것)
 

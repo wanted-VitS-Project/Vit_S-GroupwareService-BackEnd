@@ -66,7 +66,8 @@ public class SettlementBlockDetailAdapter implements BlockDetailPort {
                 row.actualAmount(),
                 row.actualDate(),
                 SettlementProgress.ratio(row.actualAmountSum(), row.totalAmount()),
-                row.createdAt()
+                row.createdAt(),
+                row.version()
         );
     }
 }

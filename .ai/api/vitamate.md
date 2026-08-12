@@ -159,7 +159,7 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 | 위치 | 파라미터 | 타입 | 필수 | 설명 |
 |------|---------|------|------|------|
 | Header | `Idempotency-Key` | String | Y | 같은 사용자 동작의 재시도 중복 방지 키 |
-| Path | `blockId` | Long | Y | 비타메이트 AI 블록 ID |
+| Path | `blockId` | Long | Y | `GET /api/v1/steps/{stepId}/blocks` 응답의 최상위 `blocks[].blockId`. 비타메이트 상세 테이블 PK가 아니다 |
 | Body | `referenceFileVersionIds` | Long[] | Y | 비교 기준으로 사용할 파일 버전 ID 목록 |
 | Body | `targetFileVersionIds` | Long[] | Y | 실제 검토할 대상 파일 버전 ID 목록 |
 | Body | `reviewType` | String | Y | 검토 템플릿 목록 조회 API의 `reviewType` 값 |
@@ -241,6 +241,17 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 | 큐 발행 실패 | Spring Boot는 실패 로그를 남기고 해당 분석을 `FAILED`로 마감한다 |
 | 처리 실패 | Python worker는 실패 사유를 callback으로 전달하고 Spring Boot가 `FAILED`로 저장한다 |
 
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 202 | Accepted | - | 분석 요청 접수 성공 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | 요청 형식 또는 검토 조건이 잘못됨 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음 또는 만료 |
+| 403 | Forbidden | `STEP_ACCESS_DENIED` | 해당 블록이 속한 스텝에 접근 권한이 없음 |
+| 404 | Not Found | `VITAMATE_BLOCK_NOT_FOUND`, `VITAMATE_FILE_VERSION_INVALID` | 비타메이트 블록 또는 파일 버전이 유효하지 않음 |
+| 409 | Conflict | `VITAMATE_IDEMPOTENCY_CONFLICT` | 같은 멱등성 키로 다른 요청을 전송함 |
+
 ---
 
 ## AI 분석 상태 및 결과 조회 `GET /api/v1/vitamate/analyses/{analysisId}`
@@ -269,7 +280,7 @@ analysisId
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `analysisId` | Long | 분석 ID |
-| `blockId` | Long | 비타메이트 블록 ID |
+| `blockId` | Long | `GET /api/v1/steps/{stepId}/blocks` 응답의 최상위 공통 블록 ID |
 | `reviewType` | String | 검토 유형 |
 | `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
 | `prompt` | String | 사용자가 확정해 요청 당시 저장한 최종 프롬프트 |
@@ -337,6 +348,16 @@ analysisId
 | `pageNumber` | Integer | 페이지 번호 |
 | `excerpt` | String | 근거 발췌문 |
 
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 200 | OK | - | 분석 조회 성공 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | `analysisId` 형식이 잘못됨 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음 또는 만료 |
+| 403 | Forbidden | `STEP_ACCESS_DENIED` | 분석이 속한 스텝에 접근 권한이 없음 |
+| 404 | Not Found | `VITAMATE_ANALYSIS_NOT_FOUND` | 분석 이력이 존재하지 않음 |
+
 ---
 
 ## 블록별 분석 실행 이력 조회 `GET /api/v1/blocks/{blockId}/vitamate/analyses`
@@ -366,6 +387,16 @@ analysisId
 | `completedAt` | LocalDateTime | 완료 시각 |
 
 > 이 기능은 채팅 이력이 아니라 **분석 실행 이력**이다.
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+|------|------|------|------|
+| 200 | OK | - | 분석 실행 이력 조회 성공 |
+| 400 | Bad Request | `VITAMATE_INVALID_REQUEST` | `blockId` 형식이 잘못됨 |
+| 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | 세션 없음 또는 만료 |
+| 403 | Forbidden | `STEP_ACCESS_DENIED` | 해당 블록이 속한 스텝에 접근 권한이 없음 |
+| 404 | Not Found | `VITAMATE_BLOCK_NOT_FOUND` | 공통 블록 ID에 연결된 비타메이트 블록이 없음 |
 
 ---
 

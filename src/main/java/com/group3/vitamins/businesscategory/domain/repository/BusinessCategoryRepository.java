@@ -16,11 +16,11 @@ public interface BusinessCategoryRepository {
      */
     List<BusinessCategory> search(String keyword, boolean includeDeleted, Long companyId);
 
-    /** 회사 범위에서 이름으로 조회한다. 삭제분도 포함해서 찾는다 (§3-1 중복 검사용). */
-    Optional<BusinessCategory> findByName(String name, Long companyId);
+    /** 회사 범위에서 활성(deleted_at IS NULL) 카테고리를 이름으로 조회한다 (중복 검사용 · DELETE.md §6-1). */
+    Optional<BusinessCategory> findActiveByName(String name, Long companyId);
 
-    /** 회사 범위에서 업무코드로 조회한다. 삭제분도 포함해서 찾는다 (§3-1 중복 검사용). */
-    Optional<BusinessCategory> findByCode(String code, Long companyId);
+    /** 회사 범위에서 활성(deleted_at IS NULL) 카테고리를 업무코드로 조회한다 (중복 검사용 · DELETE.md §6-1). */
+    Optional<BusinessCategory> findActiveByCode(String code, Long companyId);
 
     /** 새로 만들거나 변경된 카테고리를 저장한다. */
     BusinessCategory save(BusinessCategory category);
