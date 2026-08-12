@@ -13,7 +13,7 @@ public record VitamateAnalysisResponse(
         @Schema(description = "분석 ID", example = "501")
         Long analysisId,
 
-        @Schema(description = "비타메이트 블록 ID", example = "12")
+        @Schema(description = "스텝 블록 조회 응답의 최상위 공통 블록 ID", example = "12")
         Long blockId,
 
         @Schema(description = "검토 유형", example = "COST_REPORT")
