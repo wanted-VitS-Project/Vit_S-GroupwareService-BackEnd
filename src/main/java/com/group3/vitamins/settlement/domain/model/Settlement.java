@@ -32,12 +32,15 @@ public class Settlement {
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
     private final LocalDateTime deletedAt;
+    // 조회 시점 값. 도메인은 이 값을 절대 올리지 않는다 — +1은 저장 시 WHERE와 같은 문장 안에서
+    // DB가 한다(CONCURRENCY.md §3-3).
+    private final int version;
 
     private Settlement(Long settleId, Long blockId, Integer roundNo, SettlementType type, SettlementStatus status,
                         Long totalAmount, Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
                         Long actualAmount, LocalDateTime actualDate, String traderName, String bankName,
                         String accountNumber, String accountHolder,
-                        LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
+                        LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt, int version) {
         this.settleId = settleId;
         this.blockId = blockId;
         this.roundNo = roundNo;
@@ -56,6 +59,7 @@ public class Settlement {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.deletedAt = deletedAt;
+        this.version = version;
     }
 
     public static Settlement reconstruct(Long settleId, Long blockId, Integer roundNo, SettlementType type,
@@ -63,10 +67,11 @@ public class Settlement {
                                           Long plannedTaxAmount, LocalDate plannedDate, Long actualAmount,
                                           LocalDateTime actualDate, String traderName, String bankName,
                                           String accountNumber, String accountHolder,
-                                          LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
+                                          LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt,
+                                          int version) {
         return new Settlement(settleId, blockId, roundNo, type, status, totalAmount, plannedAmount,
                 plannedTaxAmount, plannedDate, actualAmount, actualDate, traderName, bankName,
-                accountNumber, accountHolder, createdAt, updatedAt, deletedAt);
+                accountNumber, accountHolder, createdAt, updatedAt, deletedAt, version);
     }
 
     public Long getSettleId() {
@@ -139,5 +144,9 @@ public class Settlement {
 
     public LocalDateTime getDeletedAt() {
         return deletedAt;
+    }
+
+    public int getVersion() {
+        return version;
     }
 }

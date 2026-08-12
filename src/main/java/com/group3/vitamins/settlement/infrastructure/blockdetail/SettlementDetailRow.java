@@ -27,6 +27,7 @@ public record SettlementDetailRow(
         Long actualAmount,
         LocalDateTime actualDate,
         LocalDateTime createdAt,
+        int version,
         Long actualAmountSum
 ) {
 }
