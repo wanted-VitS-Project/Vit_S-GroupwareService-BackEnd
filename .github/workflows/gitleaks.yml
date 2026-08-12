@@ -45,7 +45,10 @@ jobs:
         run: |
           set -euo pipefail
           TARBALL="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfL -o "${RUNNER_TEMP}/${TARBALL}" \
+          # 러너→GitHub 릴리스 CDN 사이 일시적 연결 끊김(curl exit 56 등)을 자동 재시도한다.
+          # 체크섬 검증은 그대로라 재시도가 검증 없이 통과시키는 경로를 만들지 않는다.
+          curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors \
+            -o "${RUNNER_TEMP}/${TARBALL}" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${TARBALL}"
 
           # ⚠️ 검증 없이 풀어서 실행하면 변조된 tarball 이 CI 권한으로 실행될 수 있다.
