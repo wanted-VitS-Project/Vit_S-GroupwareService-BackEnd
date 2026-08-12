@@ -78,7 +78,7 @@ class VitamateBlockDetailAdapterTest {
             Map<Long, BlockDetail> details = adapter.loadDetails(List.of(VITAMATE_BLOCK_ID));
 
             assertThat(details)
-                    .containsEntry(VITAMATE_BLOCK_ID, new VitamateDetail(VITAMATE_BLOCK_ID, "안녕하세요"));
+                    .containsEntry(VITAMATE_BLOCK_ID, new VitamateDetail("안녕하세요"));
         }
     }
 }
