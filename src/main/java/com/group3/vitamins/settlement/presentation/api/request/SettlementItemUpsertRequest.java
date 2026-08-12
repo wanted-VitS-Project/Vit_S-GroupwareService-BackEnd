@@ -1,6 +1,7 @@
 package com.group3.vitamins.settlement.presentation.api.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 
@@ -31,6 +32,14 @@ public record SettlementItemUpsertRequest(
         String accountNumber,
 
         @Schema(description = "예금주. type=OUTCOME 인 경우만 필수", example = "홍길동", nullable = true)
-        String accountHolder
+        String accountHolder,
+
+        @NotNull(message = "SETTLEMENT_VERSION_REQUIRED|버전 정보가 없습니다. 화면을 새로고침해 주세요.")
+        @Schema(description = "블록 목록 조회에서 받은 version 을 그대로 실어 보낸다. "
+                + "그 사이 남이 먼저 저장했으면 409 다", example = "1")
+        Integer version,
+
+        @Schema(description = "true 면 충돌을 무시하고 덮어쓴다. 생략하면 false", example = "false")
+        Boolean overwrite
 ) {
 }

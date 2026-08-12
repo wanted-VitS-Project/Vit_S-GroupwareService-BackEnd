@@ -10,7 +10,7 @@ import java.util.List;
 @Schema(description = "비타메이트 블록별 분석 실행 이력 조회 응답")
 public record VitamateAnalysisHistoryResponse(
 
-        @Schema(description = "비타메이트 블록 ID", example = "12")
+        @Schema(description = "스텝 블록 조회 응답의 최상위 공통 블록 ID", example = "12")
         Long blockId,
 
         @Schema(description = "분석 실행 이력 목록. 이력이 없으면 빈 배열")

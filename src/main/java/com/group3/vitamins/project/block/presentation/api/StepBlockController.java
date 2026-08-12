@@ -75,7 +75,7 @@ public class StepBlockController {
     @Operation(summary = "스텝 블록 일괄 조회",
             description = "블록 골격과 타입별 상세를 한 응답에 담아 rowIndex → sortOrder 순으로 내린다. "
                     + "블록은 진행 상태를 갖지 않으므로 status 필드가 없다. "
-                    + "typeId 는 내부 식별자라 최상위에 내리지 않고 detail 안에 상세 PK 로만 담는다.")
+                    + "후속 블록 API에는 응답 최상위의 blockId를 사용하며, typeId와 타입별 상세 PK는 외부 식별자로 노출하지 않는다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "조회 성공"),
