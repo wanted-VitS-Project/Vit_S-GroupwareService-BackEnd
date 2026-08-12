@@ -44,25 +44,28 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
     public Settlement updateItem(Long settleId, SettlementType type, Integer roundNo, Long totalAmount,
                                   Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
                                   String traderName, String bankName, String encryptedAccountNumber,
-                                  String accountHolder) {
-        // deleted_at IS NULL·status = PENDING 조건을 UPDATE 문 자체에 걸어서 "확인 후 쓰기" 사이의 틈을
-        // 없앤다 — 이 메서드를 호출하기 전에 이미 assertModifiable로 PENDING임을 확인했지만, 그건 락 걸기
-        // 전에 읽은 값이라 그 사이 다른 트랜잭션이 연결(WAITING 등)했을 수 있다. 그 경우도 여기서 막는다.
+                                  String accountHolder, int expectedVersion) {
+        // deleted_at IS NULL·status = PENDING·version = expectedVersion 조건을 UPDATE 문 자체에 걸어서
+        // "확인 후 쓰기" 사이의 틈을 없앤다 — 이 메서드를 호출하기 전에 이미 assertModifiable로 PENDING임을
+        // 확인했지만, 그건 락 걸기 전에 읽은 값이라 그 사이 다른 트랜잭션이 연결(WAITING 등)했거나 먼저
+        // 저장(version 변경)했을 수 있다. 그 경우도 여기서 막는다(CONCURRENCY.md §3).
         int updated = springDataSettlementRepository.updateItemIfActive(
                 settleId, type, roundNo,
                 toDecimal(totalAmount), toDecimal(plannedAmount), toDecimal(plannedTaxAmount),
                 plannedDate, traderName, bankName, encryptedAccountNumber, accountHolder,
-                SettlementStatus.PENDING);
+                SettlementStatus.PENDING, expectedVersion);
         if (updated == 0) {
-            // 0건이 된 이유가 삭제인지 상태 변경(연결)인지 구분한다 — 존재하고 삭제도 안 됐는데 갱신이
-            // 안 됐다면 그 사이 상태가 PENDING을 벗어난 것이다.
-            boolean stillActive = springDataSettlementRepository.findById(settleId)
-                    .filter(entity -> entity.getDeletedAt() == null)
-                    .isPresent();
-            if (stillActive) {
+            // 0건이 된 원인을 삭제/상태변경(연결)/버전충돌 셋으로 구분한다 — 존재하고 삭제도 안 됐고
+            // 상태도 여전히 PENDING인데 갱신이 안 됐다면 그 사이 남이 먼저 저장해 version이 어긋난
+            // 것이다(낙관락 충돌, CONCURRENCY.md §3).
+            SettlementJpaEntity current = springDataSettlementRepository.findById(settleId).orElse(null);
+            if (current == null || current.getDeletedAt() != null) {
+                throw new NotFoundException(SettlementErrorCode.BLOCK_NOT_FOUND);
+            }
+            if (current.getStatus() != SettlementStatus.PENDING) {
                 throw new ConflictException(SettlementErrorCode.ALREADY_LINKED);
             }
-            throw new NotFoundException(SettlementErrorCode.BLOCK_NOT_FOUND);
+            throw new ConflictException(SettlementErrorCode.SETTLEMENT_VERSION_CONFLICT);
         }
 
         SettlementJpaEntity entity = springDataSettlementRepository.findById(settleId)
@@ -97,7 +100,8 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
                 entity.getAccountHolder(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
-                entity.getDeletedAt()
+                entity.getDeletedAt(),
+                entity.getVersion()
         );
     }
 

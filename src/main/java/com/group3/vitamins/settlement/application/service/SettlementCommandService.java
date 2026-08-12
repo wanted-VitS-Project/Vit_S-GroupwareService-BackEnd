@@ -67,10 +67,16 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 ? null
                 : accountNumberCipher.encrypt(command.accountNumber());
 
+        // 진입 시 검사(assertModifiable)는 편의일 뿐 방어가 아니다 — 본체는 아래 조건부 UPDATE의
+        // WHERE version = ? 다(CONCURRENCY.md §1-5). overwrite면 방금 읽은 DB 현재 버전을 기대값으로
+        // 써서 반드시 통과시킨다.
+        int expectedVersion = command.overwrite() ? before.getVersion() : command.version();
+
         Settlement saved = settlementRepository.updateItem(
                 command.settleId(), type, command.roundNo(), command.totalAmount(),
                 command.plannedAmount(), command.plannedTaxAmount(), command.plannedDate(),
-                command.traderName(), command.bankName(), encryptedAccountNumber, command.accountHolder());
+                command.traderName(), command.bankName(), encryptedAccountNumber, command.accountHolder(),
+                expectedVersion);
 
         log.info("정산 항목 작성/수정 완료 - settleId={}", saved.getSettleId());
 
@@ -213,7 +219,8 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 saved.getActualDate(),
                 saved.getStatus(),
                 SettlementProgress.ratio(actualAmountSum, saved.getTotalAmount()),
-                saved.getCreatedAt()
+                saved.getCreatedAt(),
+                saved.getVersion()
         );
     }
 }

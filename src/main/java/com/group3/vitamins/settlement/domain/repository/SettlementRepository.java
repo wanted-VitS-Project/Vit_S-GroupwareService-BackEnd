@@ -23,11 +23,15 @@ public interface SettlementRepository {
     /**
      * 정산 항목 내용을 채운다(작성/수정 겸용) — 행 자체는 Block 도메인이 블록 생성 시점에
      * 이미 빈 상태로 만들어 둔다. {@code encryptedAccountNumber} 는 암호화가 끝난 값을 받는다.
+     *
+     * <p>기대 버전(expectedVersion)과 DB 버전이 같을 때만 저장한다(CONCURRENCY.md §3-4). status=PENDING
+     * 조건과 함께 걸리는데, 0건이 되는 원인이 삭제·연결(status 변경)·버전 충돌 셋 중 무엇인지는
+     * 구현체가 구분해서 각각 다른 예외를 던진다.
      */
     Settlement updateItem(Long settleId, SettlementType type, Integer roundNo, Long totalAmount,
                            Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
                            String traderName, String bankName, String encryptedAccountNumber,
-                           String accountHolder);
+                           String accountHolder, int expectedVersion);
 
     /**
      * @return 실제로 이번 호출이 삭제 처리했으면 true, 이미 삭제돼 있어 아무것도 안 했으면 false

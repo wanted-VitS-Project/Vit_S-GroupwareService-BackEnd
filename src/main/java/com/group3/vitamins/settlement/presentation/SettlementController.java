@@ -24,6 +24,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -89,13 +90,15 @@ public class SettlementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "정산 항목 작성/수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "정산 블록의 타입 지정은 필수입니다. (SETL-005) / 내용을 입력해 주세요. (SETL-003) "
-                            + "/ 출금 타입은 계좌정보가 필수입니다. (SETL-004) / 회차 번호는 1 이상이어야 합니다. (SETL-011)"),
+                            + "/ 출금 타입은 계좌정보가 필수입니다. (SETL-004) / 회차 번호는 1 이상이어야 합니다. (SETL-011) "
+                            + "/ 버전 정보가 없습니다. (SETTLEMENT_VERSION_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "편집 권한이 없습니다. (SETL-001)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (SETL-002)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
                     description = "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다. (SETL-006) "
                             + "/ 세금계산서 또는 입출금 내역이 연결되어 있어 수정할 수 없습니다. (SETL-007) "
-                            + "/ 같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (SETL-008)")
+                            + "/ 같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (SETL-008) "
+                            + "/ 다른 사용자가 먼저 수정했습니다. (SETTLEMENT_VERSION_CONFLICT)")
     })
     @PatchMapping("/api/v1/blocks/settlements/{settleId}/items")
     public ResponseEntity<ApiResponse<SettlementItemResponse>> upsertItem(
@@ -104,7 +107,7 @@ public class SettlementController {
             @Parameter(description = "우리 회사 입장에서 입금(INCOME)인지 출금(OUTCOME)인지 여부", example = "INCOME",
                     required = true)
             @RequestParam(required = false) String type,
-            @RequestBody SettlementItemUpsertRequest request,
+            @Valid @RequestBody SettlementItemUpsertRequest request,
             Authentication authentication
     ) {
         UpdateSettlementItemView view = settlementCommandUseCase.upsertItem(new UpdateSettlementItemCommand(
@@ -120,6 +123,8 @@ public class SettlementController {
                 request.bankName(),
                 request.accountNumber(),
                 request.accountHolder(),
+                request.version(),
+                Boolean.TRUE.equals(request.overwrite()),
                 RequesterRole.from(authentication)
         ));
 

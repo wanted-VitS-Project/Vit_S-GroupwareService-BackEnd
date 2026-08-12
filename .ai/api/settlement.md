@@ -400,6 +400,8 @@
 | `bankName` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 은행명 |
 | `accountNumber` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 계좌번호(하이픈·띄어쓰기 없이) |
 | `accountHolder` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 예금주 |
+| `version` | Integer | Y | 블록 목록 조회에서 받은 version 그대로. 2026-08-11 낙관적 락 추가(`.ai/docs/global/CONCURRENCY.md`) |
+| `overwrite` | Boolean | N | true면 충돌 무시하고 덮어씀. 생략 시 false. 2026-08-11 추가 |
 
 **Request Example**
 
@@ -410,7 +412,8 @@
   "plannedAmount": 1500000,
   "plannedTaxAmount": 200000,
   "plannedDate": "2026-09-01",
-  "traderName": "(주)대한항공"
+  "traderName": "(주)대한항공",
+  "version": 1
 }
 ```
 
@@ -424,7 +427,8 @@
   "traderName": "(주)대한항공",
   "bankName": "신한은행",
   "accountNumber": "100555074444",
-  "accountHolder": "홍길동"
+  "accountHolder": "홍길동",
+  "version": 1
 }
 ```
 
@@ -449,6 +453,7 @@
 | `data.status` | String | 정산 상태: `PENDING`(미연결) \| `WAITING`(정산 대기) \| `PARTIAL`(부분 정산) \| `COMPLETED`(정산 완료) |
 | `data.paidAmountRatio` | Double | 금액 기준 진행률 — 이 블록 하나가 아니라 **같은 프로젝트·같은 타입**(INCOME/OUTCOME) 정산 블록 전체의 실제 금액 합계를 이 타입의 프로젝트 총 예정 금액(`totalAmount`)으로 나눈 값. INCOME 블록은 입금 진행률, OUTCOME 블록은 외주 출금 진행률을 뜻한다 |
 | `data.createdAt` | LocalDateTime | 정산 블록에 내용이 생성된 일시 |
+| `data.version` | int | 수정 후 버전(기존값+1). 2026-08-11 추가 |
 
 **Success Example**
 
@@ -471,7 +476,8 @@
     "actualDate": null,
     "status": "PENDING",
     "paidAmountRatio": 0.0,
-    "createdAt": "2026-08-07T17:00:00"
+    "createdAt": "2026-08-07T17:00:00",
+    "version": 2
   }
 }
 ```
@@ -495,7 +501,8 @@
     "actualDate": null,
     "status": "PENDING",
     "paidAmountRatio": 0.0,
-    "createdAt": "2026-08-07T17:00:00"
+    "createdAt": "2026-08-07T17:00:00",
+    "version": 2
   }
 }
 ```
@@ -509,13 +516,28 @@
 | 400 | Bad Request | `SETL-003` | "내용을 입력해 주세요." (공통 필수 필드 누락) |
 | 400 | Bad Request | `SETL-004` | "출금 타입은 계좌정보가 필수입니다." (`OUTCOME`인데 계좌정보 누락) |
 | 400 | Bad Request | `SETL-011` | "회차 번호는 1 이상이어야 합니다." (`roundNo <= 0`) |
+| 400 | Bad Request | `SETTLEMENT_VERSION_REQUIRED` | "버전 정보가 없습니다. 화면을 새로고침해 주세요." (2026-08-11 추가) |
 | 403 | Forbidden | `SETL-001` | "편집 권한이 없습니다." |
 | 404 | Not Found | `SETL-002` | "존재하지 않는 블록입니다." |
 | 409 | Conflict | `SETL-006` | "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다." (OUTCOME → INCOME 다운그레이드 시도) |
 | 409 | Conflict | `SETL-007` | "세금계산서 또는 입출금 내역이 연결되어 있어 수정할 수 없습니다." (`status != PENDING`) |
 | 409 | Conflict | `SETL-008` | "같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (기존 등록된 금액: N원)" (같은 프로젝트·같은 타입의 다른 회차가 이미 정해둔 `totalAmount`와 다름) |
+| 409 | Conflict | `SETTLEMENT_VERSION_CONFLICT` | "다른 사용자가 먼저 수정했습니다." (2026-08-11 추가 — 낙관적 락. `SETL-007`과 판정 순서: 삭제→상태(연결)→버전 순으로 확인) |
 
 ---
+
+## 구현 메모 — 낙관적 락 (2026-08-11)
+
+`.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `settlement_block` 테이블에 `version` 컬럼 추가
+(`V20260811170000__add_version_settlement.sql` — ⚠️ 문서 §7-1 표는 `V20260811150000`을 배정했으나
+issue 도메인이 이미 그 번호를 쓰고 있어 충돌 확인, 실제로 비어 있는 `170000`을 대신 사용함. 문서
+수정 권한이 없어 이 사실은 마이그레이션 파일 주석에만 남김 — 김동현님께 별도 전달 필요).
+
+기존에도 `status = PENDING` 조건부 UPDATE(세금계산서/입출금 연결 시 잠금)가 있었는데, 여기에
+`version = ?` 조건을 추가로 걸었다. 저장 실패(0행) 시 원인을 3단계로 구분한다: ① 삭제됨 →
+`SETL-002` 404, ② 상태가 PENDING을 벗어남(연결됨) → `SETL-007` 409, ③ 그 외(버전 불일치) →
+`SETTLEMENT_VERSION_CONFLICT` 409. 블록 목록 조회(프로젝트 상세의 블록 카드)의 `SETTLEMENT` 상세에도
+`version`이 함께 내려간다(§5-1 "목록도" 규칙).
 
 ## 구현 메모 (사람이 확인할 것)
 

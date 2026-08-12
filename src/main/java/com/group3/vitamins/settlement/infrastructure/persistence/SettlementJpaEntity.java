@@ -92,9 +92,20 @@ public class SettlementJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    /** 상세 빈 행 생성용. 내용은 나중에 정산 항목 작성/수정 API 가 채운다. */
+    // ⚠️ @Version(JPA)을 붙이지 않는다 — SettlementRepositoryAdapter가 매번 new로 detached 객체를
+    // 만들어 merge되므로 JPA 낙관락은 DB 최신값을 다시 읽어 항상 통과해버린다(CONCURRENCY.md §6-1).
+    @Column(name = "version", nullable = false)
+    private int version;
+
+    /**
+     * 상세 빈 행 생성용. 내용은 나중에 정산 항목 작성/수정 API 가 채운다.
+     *
+     * ⚠️ version을 명시적으로 1로 채운다 — Java int 필드 기본값 0을 그대로 두면 컬럼의
+     * {@code DEFAULT 1}과 무관하게 INSERT 문에 0이 실린다(CONCURRENCY.md §3-1).
+     */
     public SettlementJpaEntity(Long blockId) {
         this.blockId = blockId;
         this.status = SettlementStatus.PENDING;
+        this.version = 1;
     }
 }
