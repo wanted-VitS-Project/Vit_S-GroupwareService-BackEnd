@@ -141,6 +141,15 @@ Block 도메인이 남의 컬럼명을 들고 있으면 **남의 스키마 변�
 **8·9 가 실수하기 쉽다.** 특히 9번 — 1:N 타입은 쿼리 결과가 아니라 **요청 PK 를 순회**해야 한다.
 `ChecklistBlockDetailAdapter.loadDetails` 가 그 참조 구현이다 (항목 0개 블록도 `0/0 · items:[]` 로 내린다).
 
+> 📌 **선택 확장점 `assertDeletable(Long typeId)`** (2026-08-12 신설 · `DEL-016`).
+> 상태에 따라 **블록 직접 삭제를 막아야 하는 타입**만 오버라이드한다. 기본 구현이 no-op 이라
+> 구현하지 않으면 지금과 똑같이 동작하므로 **기존 어댑터는 손댈 필요가 없다.**
+> 참조 구현은 `ApprovalBlockDetailAdapter` 다.
+>
+> ⛔ **cascade(스텝 삭제)는 이 메서드를 부르지 않는다.** 여기서 막아도 스텝 삭제는 그대로 진행된다 —
+> 의도된 설계다(§8). 막고 싶다고 `deleteDetail` 안에서 예외를 던지면 **스텝 삭제 전체가 롤백**되므로
+> 그렇게 하지 마라.
+
 ### 2-6. 스켈레톤
 
 ⚠️ 컬럼명은 자기 스키마에 맞춰라. 아래는 **형식만** 이다.
@@ -219,7 +228,7 @@ public Long create(Long blockId) {
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
 | `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail(welcomeMessage)` 조회. 내부 `vitamate_block_id`는 응답에 노출하지 않음 |
 | `IMAGE` | ✅ `image/infrastructure/blockdetail/` | 값 | 1:N (`image_block` → `image`) |
-| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | `IN_PROGRESS`를 포함해 상태와 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다 |
+| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | **cascade(스텝 삭제)** 는 `IN_PROGRESS` 포함 상태 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다. ⚠️ **직접 삭제는 `assertDeletable`이 상신 이후를 409로 막는다** (2026-08-12 · `DEL-016` · §4-7·§8) |
 | ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block` |
 | `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환. 🚨 **조회 `detail` 도 안 채워진다** (명세는 `{fileCount}`) |
 | ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | ❌ | **NULL** | ⛔ **상세 테이블이 DROP 됐다** (`V20260809130000`) — `SETTLEMENT` 로 통합. enum 값만 남은 빈 껍데기이며 **정리는 Block 도메인 소관** |
@@ -356,7 +365,7 @@ public Long create(Long blockId) {
 | 대상 지정 ⚠️ | 결재 블록에서 공용 파일 업로드 API로 업로드한 `file_version_id`를 직접 연결한다. 파일 블록 경유 방식은 폐기됐다 |
 | 버전 고정 | 상신 시점 `file_version_id` 를 박는다. 새 버전 업로드는 허용하되 `대상보다 새 버전 있음` 경고 배지 |
 | 권한 | 상신은 스텝 편집 권한자. 승인·반려는 **결재선에 있는 사람만** (role 무관) |
-| **삭제 잠금** | **없음.** 진행 중이어도 블록 삭제를 허용하고 `deleteDetail()`로 결재 상세 정리를 같은 트랜잭션에 전파한다 |
+| **삭제 잠금** ⚠️ | **직접 삭제만 차단** (2026-08-12 · `DEL-016`). `DRAFT`·`CANCELED` 는 허용, **`IN_PROGRESS`·`REJECTED`·`COMPLETED` 는 409 `APPROVAL_ALREADY_SUBMITTED`** (`message` 는 상태별로 다르다). ⛔ **스텝 삭제 cascade 는 예외** — 상태 무관 삭제 후 `deleteDetail()` 로 같은 트랜잭션에 전파(현행 유지). 상세 → **§8** |
 | 템플릿 | 담김: **결재선** / 안 담김: 진행 상태 · 대상 지목 |
 | 담당 | 이강욱 |
 
@@ -420,7 +429,7 @@ public Long create(Long blockId) {
 | `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | — | 김동현 | — |
 | `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | — (폐기) | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
 | `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | — (폐기) | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
-| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | — | 이강욱 | [`APR-V1.md`](../domain/결재·알림/APR-V1.md) |
+| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ **직접만** (§4-7) | 이강욱 | [`APR-V1.md`](../domain/결재·알림/APR-V1.md) |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
 | **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
@@ -490,7 +499,7 @@ public Long create(Long blockId) {
 |------|------|
 | 입금이 연결된 입금확인 블록 | `detachFinanceLinks=true` 를 요구한다. 없으면 400 `FINANCE_LINK_DETACH_REQUIRED` + 연결 건수. 확인하면 `payment.block_id = NULL` 로 끊고 삭제. **입금 행은 남는다** |
 | 계산서가 연결된 조회 블록 | 같은 확인 요구. 확인하면 `tax_invoice_confirm` 행을 **하드 삭제**하고 블록 삭제. 계산서는 재연결 가능해진다 |
-| 진행 중인 결재 블록 | 블록 삭제와 같은 트랜잭션에서 `ApprovalBlockDetailAdapter.deleteDetail()`을 호출한다. 미종결 결재는 `CANCELED`로 종결하고 문서 연결을 포함한 하위 행을 논리 삭제한다 |
+| 진행 중인 결재 블록 | **스텝 삭제 cascade** 는 같은 트랜잭션에서 `ApprovalBlockDetailAdapter.deleteDetail()`을 호출한다. 미종결 결재는 `CANCELED`로 종결하고 문서 연결을 포함한 하위 행을 논리 삭제한다. ⚠️ **직접 삭제는 2026-08-12 부터 409 로 막힌다** — 아래 「예외 1건」 참고 |
 | 결재 대상 파일 블록 | 그냥 삭제한다 |
 
 **스텝을 지울 때 살리고 싶은 블록은 다른 스텝으로 옮긴다** (STP-013 · BLK-014) — 그게 잠금을 대신하는 탈출구다.
