@@ -267,8 +267,11 @@
         JOIN block b ON b.block_id = bf.block_id
         JOIN step s ON s.step_id = b.step_id
         JOIN (
+              <!-- 회사 스코프로 먼저 좁힌 뒤 집계한다 — file_version 전체를 스캔하지 않도록(§12 findProjectFiles 와 동일 전략). -->
               SELECT fv.file_id, COUNT(*) AS cnt, MAX(fv.version_no) AS mx
                 FROM file_version fv
+                JOIN file fj ON fj.file_id = fv.file_id
+                JOIN project pj ON pj.project_id = fj.project_id AND pj.company_id = #{companyId} AND pj.deleted_at IS NULL
                WHERE fv.upload_status = 'COMPLETED' AND fv.deleted_at IS NULL
                GROUP BY fv.file_id
              ) vc ON vc.file_id = f.file_id

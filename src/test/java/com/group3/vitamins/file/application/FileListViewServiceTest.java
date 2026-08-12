@@ -110,6 +110,20 @@ class FileListViewServiceTest {
     }
 
     @Test
+    @DisplayName("전사 — 큰 page 에서도 offset 이 int overflow 로 음수가 되지 않는다")
+    void companyFilesOffsetNoOverflow() {
+        when(fileQueryPort.countCompanyFiles(any())).thenReturn(0L);
+        when(fileQueryPort.findCompanyFiles(any())).thenReturn(List.of());
+
+        service.getCompanyFiles(new CompanyFileQuery(USER, "ADMIN", null, null, null, Integer.MAX_VALUE, 100));
+
+        ArgumentCaptor<CompanyFileCriteria> cap = ArgumentCaptor.forClass(CompanyFileCriteria.class);
+        verify(fileQueryPort).findCompanyFiles(cap.capture());
+        assertThat(cap.getValue().offset()).isEqualTo((long) Integer.MAX_VALUE * 100);
+        assertThat(cap.getValue().offset()).isPositive();
+    }
+
+    @Test
     @DisplayName("내 파일 — MEMBER 는 adminAll=false(스텝 필터 적용), 빈 검색어는 null")
     void myFilesMemberKeepsStepFilter() {
         when(fileQueryPort.findMyProjectFiles(any())).thenReturn(List.of(projection("a.pdf", "pdf")));

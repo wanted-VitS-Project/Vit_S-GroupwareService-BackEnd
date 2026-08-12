@@ -7,7 +7,7 @@ package com.group3.vitamins.file.application.query;
  * @param keyword    파일명·원본명·업로더 검색어 (nullable)
  * @param projectId  프로젝트 필터 (nullable)
  * @param extension  확장자 필터 (nullable)
- * @param offset     LIMIT 시작 위치 (page * size)
+ * @param offset     LIMIT 시작 위치 (page * size) — 큰 page 에서 int overflow 를 피하려 long
  * @param limit      페이지 크기
  */
 public record CompanyFileCriteria(
@@ -15,7 +15,7 @@ public record CompanyFileCriteria(
         String keyword,
         Long projectId,
         String extension,
-        int offset,
+        long offset,
         int limit
 ) {
 }

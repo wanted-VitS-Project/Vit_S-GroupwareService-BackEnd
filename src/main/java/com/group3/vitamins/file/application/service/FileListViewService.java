@@ -46,9 +46,10 @@ public class FileListViewService implements FileListViewUseCase {
         int page = Math.max(query.page(), 0);
         int size = Math.min(Math.max(query.size(), 1), MAX_PAGE_SIZE);
 
+        // ⚠️ (long) 캐스팅 — page 가 크면 int 곱셈이 음수로 넘쳐 잘못된 OFFSET 이 나간다.
         CompanyFileCriteria criteria = new CompanyFileCriteria(
                 companyId, blankToNull(query.keyword()), query.projectId(),
-                blankToNull(query.extension()), page * size, size);
+                blankToNull(query.extension()), (long) page * size, size);
 
         long total = fileQueryPort.countCompanyFiles(criteria);
         List<FileViewResult> content = fileQueryPort.findCompanyFiles(criteria).stream()
