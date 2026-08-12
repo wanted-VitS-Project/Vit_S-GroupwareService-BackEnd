@@ -183,6 +183,18 @@
   silent clamp 아님). **`projects` 키 이름은 유지**(아직 프론트 연동 전이라 `content`로 바꿀 필요 없다고 확인).
   `sort` 기본값 `NEXT_PLANNED_DATE_ASC`(널은 `IS NULL` 우선순위로 항상 뒤로) — 이전 고정 정렬(`projectId`
   오름차순)은 폐기, 이제 필요한 값은 이 두 가지뿐이라고 확인해 추가 검토 없이 확정.
+- **CodeRabbit 리뷰 반영 (2026-08-12, 페이징 PR)**:
+  1. **날짜 역전(`startDate > endDate`) 테스트 시나리오 누락 지적 — 반영.** `request.http`에 추가.
+  2. **`SettlementQueryService`가 `SettlementStatusMapper`/`SettlementProjectRow`(MyBatis 구현 타입)를
+     직접 참조해 Application 계층 경계를 넘는다는 지적(신규 `countProjectSettlements` 호출이 결합을 더
+     늘림) — 반영 안 함, 별도 리팩터로 분리 제안.** 지적 자체는 맞다 — `.ai/ARCHITECTURE.md` §2-1의
+     "다른 애그리게이트 테이블은 `application/port` + MyBatis 어댑터로" 원칙과 결이 같다. 하지만 이
+     서비스는 **2026-08-09 최초 구현 시점부터** 이미 `SettlementStatusMapper`를 직접 주입받는 구조였고
+     (`findDistinctClientNames`/`findProjectSettlements`/`findProjectSettlementBlocks`/`existsActiveProject`
+     4개 기존 메서드 전부 동일 패턴), `finance/FinanceQueryService`도 `CashFlowMapper`를 똑같이 직접
+     주입받는다 — 이번 PR(페이징) 하나만 고쳐서 해결되는 범위가 아니라 두 도메인의 Query Service 전체를
+     Port/Adapter로 감싸는 별도 리팩터가 필요하다(Heavy lift, CodeRabbit 표기와 동일). 페이징 PR 범위를
+     벗어난다고 판단해 반영 안 함 — 김동현님께 별도 리팩터링 이슈로 전달 필요.
 - **`client` 필터는 정확히 일치** — 필터 옵션 조회가 내려주는 드롭다운 값을 그대로 선택하는 구조라 부분
   검색이 아니라 완전 일치로 구현했다.
 - **✅ 회사 범위(company_id) 반영 (2026-08-11 추가)** — 위 필터 옵션 조회와 동일한 사유로
