@@ -11,6 +11,7 @@ import com.group3.vitamins.file.domain.exception.FileErrorCode;
 import com.group3.vitamins.file.domain.model.FileVersion;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,10 @@ public class AttachStagedFileService implements AttachStagedFileUseCase {
         UploaderLookupPort.UploaderSnapshot uploader = uploaderLookupPort.findByUserId(command.requesterUserId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_REQUESTER_NOT_EMPLOYEE));
 
+        // temporaryStorageKey 는 요청 회사(테넌트) 프리픽스여야 한다 — 다른 회사 S3 객체를 정식 키로 복사하는 것을 방어적으로 차단.
+        // 임시 객체의 전체 소유·수명 검증은 입찰 도메인 소관(§2-G) — 여기선 멀티테넌시 경계(companies/{companyId}/)만 확인한다.
+        requireTenantScopedTempKey(command.temporaryStorageKey(), command.companyId());
+
         String extension = extractExtension(command.originalFileName());
         String mimeType = mimeTypeResolver.resolve(extension);
 
@@ -55,8 +60,10 @@ public class AttachStagedFileService implements AttachStagedFileUseCase {
                     command.originalFileName(), command.sizeBytes(), command.name(), command.comment(),
                     extension, mimeType, command.idempotencyKey(), uploader);
         } catch (DataIntegrityViolationException race) {
+            // 멱등키 UNIQUE 경합만 흡수한다 — 승자 행이 있으면 그걸 쓴다. 승자가 없으면 이 DIVE 는 멱등 경합이 아니라
+            // 무관한 제약 위반(FK·NOT NULL)이므로 원인을 삼키지 말고 원래 예외를 그대로 던진다.
             prepared = txSupport.findByIdempotencyKey(command.idempotencyKey())
-                    .orElseThrow(() -> new ConflictException(FileErrorCode.FILE_INVALID_REQUEST));
+                    .orElseThrow(() -> race);
         }
 
         FileVersion version = prepared.version();
@@ -94,6 +101,14 @@ public class AttachStagedFileService implements AttachStagedFileUseCase {
 
         // 6) 완료 + 인덱싱(tx2).
         return txSupport.completeAndIndex(version.getFileVersionId(), stored.sizeBytes(), command.checksum(), pageCount);
+    }
+
+    /** 임시 키가 요청 회사 프리픽스({@code companies/{companyId}/}) 아래인지 확인한다(테넌트 경계 방어). */
+    private void requireTenantScopedTempKey(String temporaryStorageKey, long companyId) {
+        String tenantPrefix = "companies/" + companyId + "/";
+        if (temporaryStorageKey == null || !temporaryStorageKey.startsWith(tenantPrefix)) {
+            throw new ValidationException(FileErrorCode.FILE_INVALID_REQUEST);
+        }
     }
 
     /** 확장자(소문자, 점 제외). 없으면 빈 문자열. {@code FileUploadService} 와 동일 규약. */

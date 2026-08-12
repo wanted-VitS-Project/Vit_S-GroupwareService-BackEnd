@@ -201,4 +201,54 @@ class AttachStagedFileServiceTest {
         assertThat(result.fileVersionId()).isEqualTo(74L);
         verify(fileStoragePort, never()).copyObject(anyString(), anyString());
     }
+
+    @Test
+    @DisplayName("멱등 경합이 아닌 무결성 위반(승자 없음)은 원래 예외를 그대로 던진다")
+    void unrelatedIntegrityViolationPropagates() {
+        stubUploader();
+        when(txSupport.prepareOrResume(anyLong(), anyLong(), any(), any(), anyLong(),
+                any(), any(), any(), any(), any(), any()))
+                .thenThrow(new DataIntegrityViolationException("fk violation"));
+        when(txSupport.findByIdempotencyKey(IDEM)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.attach(cmd()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        verify(fileStoragePort, never()).copyObject(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("경합 재조회에서 미완료(UPLOADING) 승자면 그 행으로 복사·완료를 재개한다")
+    void resumesUploadingWinner() {
+        stubUploader();
+        FileVersion winner = uploadingVersion();
+        when(txSupport.prepareOrResume(anyLong(), anyLong(), any(), any(), anyLong(),
+                any(), any(), any(), any(), any(), any()))
+                .thenThrow(new DataIntegrityViolationException("dup"));
+        when(txSupport.findByIdempotencyKey(IDEM)).thenReturn(Optional.of(new Prepared(winner, false)));
+        when(fileStoragePort.head(anyString())).thenReturn(Optional.of(new FileStoragePort.StoredObject(5000L)));
+        when(fileStoragePort.getObject(anyString())).thenReturn(new byte[]{1});
+        when(pdfPageCounterPort.countPages(any())).thenReturn(Optional.of(3));
+        when(txSupport.completeAndIndex(74L, 5000L, null, 3))
+                .thenReturn(new AttachStagedFileResult(31L, 74L, 1, AttachStagedFileResult.INDEX_PENDING));
+
+        AttachStagedFileResult result = service.attach(cmd());
+
+        assertThat(result.fileVersionId()).isEqualTo(74L);
+        verify(fileStoragePort, times(1)).copyObject(TEMP_KEY, STORAGE_KEY);
+        verify(txSupport, times(1)).completeAndIndex(74L, 5000L, null, 3);
+    }
+
+    @Test
+    @DisplayName("temporaryStorageKey 가 다른 회사 프리픽스면 FILE_INVALID_REQUEST — 준비 안 함")
+    void rejectsForeignTenantTempKey() {
+        stubUploader();
+        AttachStagedFileCommand foreign = new AttachStagedFileCommand(
+                COMPANY, PROJECT, USER, "companies/999/staging/x.pdf",
+                "재정상태.pdf", 5000L, null, null, "AI 검토 첨부", true, IDEM);
+
+        assertThatThrownBy(() -> service.attach(foreign))
+                .satisfies(hasCode(FileErrorCode.FILE_INVALID_REQUEST));
+        verify(txSupport, never()).prepareOrResume(anyLong(), anyLong(), any(), any(), anyLong(),
+                any(), any(), any(), any(), any(), any());
+    }
 }
