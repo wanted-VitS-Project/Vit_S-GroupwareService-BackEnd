@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  사내 문서함 조회 (COMPANY-DOC-V1 §3 목록 · §7 버전 이력).
+  file 의 FileQueryMapper.xml 을 미러링하되, 프로젝트/블록/스텝 조인이 없다 — company_document 가 직접 company_id 를 가진다.
+  ⚠️ 모든 SELECT alias 순서 = 대응 Projection record 필드 순서(위치 기반 매핑). 어긋나면 값이 전부 밀린다.
+-->
+<mapper namespace="com.group3.vitamins.companydocument.infrastructure.adapter.CompanyDocumentQueryMapper">
+
+    <!-- 목록 컬럼(§3) — 문서 + 최신 완료 버전(lv) + 버전 수(vc). alias = CompanyDocumentListProjection 필드 순서. -->
+    <sql id="listColumns">
+        cd.company_document_id  AS companyDocumentId,
+        cd.category             AS category,
+        cd.name                 AS name,
+        lv.company_document_version_id AS latestVersionId,
+        lv.version_no           AS latestVersionNo,
+        vc.cnt                  AS versionCount,
+        lv.original_file_name   AS originalFileName,
+        lv.extension            AS extension,
+        lv.size_bytes           AS sizeBytes,
+        lv.uploader_name        AS uploaderName,
+        lv.uploader_department  AS uploaderDepartment,
+        lv.uploader_position    AS uploaderPosition,
+        lv.completed_at         AS updatedAt
+    </sql>
+
+    <!-- 문서→최신 완료 버전(vc/lv). 완료 버전 0개 문서는 INNER JOIN 으로 자동 제외(§3). -->
+    <sql id="listJoins">
+        FROM company_document cd
+        JOIN (
+              <!-- 회사 스코프로 먼저 좁힌 뒤 집계한다 — company_document_version 전체를 스캔하지 않도록. -->
+              SELECT v.company_document_id, COUNT(*) AS cnt, MAX(v.version_no) AS mx
+                FROM company_document_version v
+                JOIN company_document cdj ON cdj.company_document_id = v.company_document_id
+                 AND cdj.company_id = #{companyId}
+               WHERE v.upload_status = 'COMPLETED' AND v.deleted_at IS NULL
+               GROUP BY v.company_document_id
+             ) vc ON vc.company_document_id = cd.company_document_id
+        JOIN company_document_version lv
+              ON lv.company_document_id = cd.company_document_id
+             AND lv.version_no = vc.mx
+             AND lv.upload_status = 'COMPLETED'
+             AND lv.deleted_at IS NULL
+    </sql>
+
+    <sql id="listFilters">
+        <if test="category != null">AND cd.category = #{category}</if>
+        <if test="keyword != null">
+            AND (cd.name LIKE CONCAT('%', #{keyword}, '%')
+                 OR lv.original_file_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <!-- 목록 총 건수(§3). 문서당 1행이라 COUNT(*) = 문서 수. -->
+    <select id="countDocuments" resultType="long">
+        SELECT COUNT(*)
+        <include refid="listJoins"/>
+        WHERE cd.company_id = #{companyId} AND cd.deleted_at IS NULL
+        <include refid="listFilters"/>
+    </select>
+
+    <!-- 목록 한 페이지(§3). 최신 완료 시각 내림차순. -->
+    <select id="findDocuments"
+            resultType="com.group3.vitamins.companydocument.application.result.CompanyDocumentListProjection">
+        SELECT
+        <include refid="listColumns"/>
+        <include refid="listJoins"/>
+        WHERE cd.company_id = #{companyId} AND cd.deleted_at IS NULL
+        <include refid="listFilters"/>
+        ORDER BY lv.completed_at DESC, cd.company_document_id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 버전 이력(§7) — 완료 버전만, 차수 내림차순. alias = CompanyDocumentVersionProjection 필드 순서. -->
+    <!-- 문서 소유(회사) 검증은 서비스가 먼저 하므로 여기선 companyDocumentId 로만 좁힌다. -->
+    <select id="findCompletedVersions"
+            resultType="com.group3.vitamins.companydocument.application.result.CompanyDocumentVersionProjection">
+        SELECT company_document_version_id AS versionId,
+               version_no          AS versionNo,
+               original_file_name  AS originalFileName,
+               extension           AS extension,
+               size_bytes          AS sizeBytes,
+               page_count          AS pageCount,
+               comment             AS comment,
+               uploader_name       AS uploaderName,
+               uploader_department AS uploaderDepartment,
+               uploader_position   AS uploaderPosition,
+               completed_at        AS completedAt
+          FROM company_document_version
+         WHERE company_document_id = #{companyDocumentId}
+           AND upload_status = 'COMPLETED'
+           AND deleted_at IS NULL
+         ORDER BY version_no DESC
+    </select>
+
+</mapper>
