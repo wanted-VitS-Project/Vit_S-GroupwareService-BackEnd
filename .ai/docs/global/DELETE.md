@@ -1,6 +1,6 @@
 # 🗑️ 삭제 정책 — 전 도메인 공통 규칙
 
-**최종 업데이트**: 2026-08-12 (§6-1 — `business_category` UNIQUE 해소 **완료**: `V20260812110000` 이 `uk_bc_company_name`·`uk_bc_company_code` DROP, 앱이 활성 행만 중복 검사 → 삭제된 이름·업무코드 재사용 가능. `V20260811100100` 이 재부착했던 D-7 위반 제거)
+**최종 업데이트**: 2026-08-12 (§6-1 — `business_category` UNIQUE 해소 **완료**: `V20260812110000` 이 전역 UNIQUE 를 걷고 **활성일 때만 값을 갖는 생성 컬럼**(`active_name`·`active_code`)에 UNIQUE 재구성 → 삭제분 재사용 허용 + 활성 유일성은 DB 가 강제. 경합 시 `DataIntegrityViolation`→409. D-7 「삭제 시 유니크 키를 NULL」 방식 적용)
 **최종 업데이트**: 2026-08-11 (§4-1 신설 — 삭제된 사원 표시 규약 **동훈↔김동현 합의 완료**: 필드명 `deleted` · 이름 유지 · `resigned` 와 별개 · 참조 7곳 공통. §5-1 ③ 에 **「비우는가」 판정표** 신설 — 파일(연결이 끊김 → 비운다) vs 계층(연결이 남음 → 유지) · §5-2 예시 2 정정: `categoryId` 를 `CASE WHEN` 하면 접기 키가 사라져 **행이 통째로 소멸**한다)
 **최종 업데이트**: 2026-08-11 (§4 동훈 항목 적용 완료 — 검증용/조회용 포트 분리 · 이름 유지 확정 · §5-2 예시 1 갱신)
 **담당**: 김동현 (프로젝트 계층 · DevOps)
@@ -459,7 +459,7 @@ MySQL 은 `UNIQUE` 안의 `NULL` 을 **서로 다른 값으로 취급**한다. �
 |---|---|
 | 삭제 시 그 컬럼을 `NULL` 로 비운다 | `uk_project_bid_notice` 방식 — 참조 컬럼일 때 |
 | 아예 하드 DELETE 로 돌린다 | 연결 행일 때 (D-2) |
-| `UNIQUE` 를 걷고 앱이 **활성 행만** 중복 검사 | 마스터 데이터일 때 — ✅ `business_category` `uk_bc_company_name`·`uk_bc_company_code` **해결** (`V20260812110000` 에서 DROP, 앱이 활성 행만 검사) |
+| **활성일 때만 값을 갖는 생성 컬럼에 `UNIQUE`** + 앱이 활성 행만 선검사 | 마스터 데이터일 때 — ✅ `business_category` **해결** (`V20260812110000`) — `active_name`·`active_code`(삭제 시 `NULL`)에 `uk_bc_active_name`·`uk_bc_active_code`. 활성은 DB 가 유일성 강제(동시 생성 경합도 차단), 삭제분은 `NULL` 이라 재사용 허용. 앱 선검사 + 경합 시 `DataIntegrityViolation`→409 |
 
 ### 6-2. ⚠️ 삭제 순서를 뒤집으면 `block.deleted_at` 이 유실된다
 
