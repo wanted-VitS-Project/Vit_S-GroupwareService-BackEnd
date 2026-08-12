@@ -21,20 +21,20 @@ public class BidReferenceFileOutboxJpaEntity {
     @Column(name = "bid_reference_file_outbox_id")
     private Long outboxId;
 
-    @Column(name = "event_id", nullable = false, length = 36, columnDefinition = "CHAR(36)")
+    @Column(name = "event_id", nullable = false, length = 36, columnDefinition = "CHAR(36)", updatable = false)
     private String eventId;
 
-    @Column(name = "bid_reference_file_id", nullable = false)
+    @Column(name = "bid_reference_file_id", nullable = false, updatable = false)
     private Long referenceFileId;
 
-    @Column(name = "attempt_id", nullable = false, length = 36, columnDefinition = "CHAR(36)")
+    @Column(name = "attempt_id", nullable = false, length = 36, columnDefinition = "CHAR(36)", updatable = false)
     private String attemptId;
 
-    @Column(name = "event_type", nullable = false, length = 50)
+    @Column(name = "event_type", nullable = false, length = 50, updatable = false)
     private String eventType;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "payload", nullable = false, columnDefinition = "json")
+    @Column(name = "payload", nullable = false, columnDefinition = "json", updatable = false)
     private JsonNode payload;
 
     @Column(name = "publish_status", nullable = false, length = 20)

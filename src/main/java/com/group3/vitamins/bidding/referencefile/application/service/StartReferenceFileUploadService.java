@@ -25,6 +25,7 @@ import java.util.UUID;
 public class StartReferenceFileUploadService implements StartReferenceFileUploadUseCase {
 
     private static final long MAX_SIZE_BYTES = 50L * 1024 * 1024;
+    private static final int MAX_EXTENSION_LENGTH = 20;
 
     private final BidReferenceFileRepository referenceFileRepository;
     private final FileStoragePort fileStoragePort;
@@ -63,7 +64,7 @@ public class StartReferenceFileUploadService implements StartReferenceFileUpload
         return new StartReferenceFileUploadResult(
                 created.referenceFileId(),
                 presigned.url(),
-                LocalDateTime.ofInstant(presigned.expiresAt(), java.time.ZoneId.systemDefault())
+                LocalDateTime.ofInstant(presigned.expiresAt(), clock.getZone())
         );
     }
 
@@ -80,12 +81,19 @@ public class StartReferenceFileUploadService implements StartReferenceFileUpload
         }
     }
 
+    // 마지막 '.' 뒤 문자열을 그대로 storageKey에 넣지 않는다 — 영숫자·길이 제한을 벗어나면
+    // storageKey 구조가 깨질 수 있어 확장자 없음으로 취급한다.
     private String extractExtension(String fileName) {
         int dot = fileName.lastIndexOf('.');
         if (dot < 0 || dot == fileName.length() - 1) {
             return "";
         }
-        return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
+
+        String candidate = fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
+        boolean isSafe = candidate.length() <= MAX_EXTENSION_LENGTH
+                && candidate.chars().allMatch(Character::isLetterOrDigit);
+
+        return isSafe ? candidate : "";
     }
 
     private String buildStorageKey(Long companyId, String extension) {

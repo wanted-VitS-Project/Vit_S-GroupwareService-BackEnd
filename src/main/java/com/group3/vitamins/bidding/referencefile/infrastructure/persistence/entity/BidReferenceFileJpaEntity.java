@@ -21,7 +21,7 @@ public class BidReferenceFileJpaEntity {
     @Column(name = "bid_reference_file_id")
     private Long referenceFileId;
 
-    @Column(name = "company_id", nullable = false)
+    @Column(name = "company_id", nullable = false, updatable = false)
     private Long companyId;
 
     @Column(name = "file_name", nullable = false, length = 255)
@@ -36,7 +36,7 @@ public class BidReferenceFileJpaEntity {
     @Column(name = "size_bytes", nullable = false)
     private long sizeBytes;
 
-    @Column(name = "storage_key", nullable = false, length = 1000)
+    @Column(name = "storage_key", nullable = false, length = 1000, updatable = false)
     private String storageKey;
 
     @Enumerated(EnumType.STRING)
@@ -65,7 +65,7 @@ public class BidReferenceFileJpaEntity {
     @Column(name = "indexed_at")
     private LocalDateTime indexedAt;
 
-    @Column(name = "created_by", nullable = false, length = 20)
+    @Column(name = "created_by", nullable = false, length = 20, updatable = false)
     private String createdBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)

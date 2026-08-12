@@ -90,7 +90,7 @@ public class JpaBidReviewRepositoryAdapter
     @Transactional(readOnly = true)
     public List<BidReviewDocument> findDocumentsByReviewId(Long reviewId) {
         return documentRepository
-                .findAllByReviewIdOrderByReviewDocumentIdAsc(reviewId)
+                .findAllByReviewIdOrderByDocumentRoleAscReviewDocumentIdAsc(reviewId)
                 .stream()
                 .map(BidReviewDocumentJpaEntity::toDomain)
                 .toList();

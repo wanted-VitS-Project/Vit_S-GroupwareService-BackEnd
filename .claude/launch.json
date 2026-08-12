@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "vitamins-backend",
-      "runtimeExecutable": "./gradlew.bat",
+      "runtimeExecutable": "./gradlew",
       "runtimeArgs": ["bootRun"],
       "port": 8080
     }

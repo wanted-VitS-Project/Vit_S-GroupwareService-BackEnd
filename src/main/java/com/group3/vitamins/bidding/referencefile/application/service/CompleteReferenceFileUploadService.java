@@ -6,6 +6,7 @@ import com.group3.vitamins.bidding.referencefile.application.result.CompleteRefe
 import com.group3.vitamins.bidding.referencefile.application.usecase.CompleteReferenceFileUploadUseCase;
 import com.group3.vitamins.bidding.referencefile.domain.exception.BidReferenceFileErrorCode;
 import com.group3.vitamins.bidding.referencefile.domain.model.BidReferenceFile;
+import com.group3.vitamins.bidding.referencefile.domain.model.ReferenceFileUploadStatus;
 import com.group3.vitamins.bidding.referencefile.domain.repository.BidReferenceFileRepository;
 import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
@@ -42,6 +43,19 @@ public class CompleteReferenceFileUploadService implements CompleteReferenceFile
                 ));
 
         LocalDateTime now = LocalDateTime.now(clock);
+
+        if (referenceFile.uploadStatus() != ReferenceFileUploadStatus.UPLOADING) {
+            throw new ConflictException(
+                    BidReferenceFileErrorCode.BIDDING_REFERENCE_FILE_NOT_UPLOADING
+            );
+        }
+        if (referenceFile.uploadExpiresAt() != null
+                && now.isAfter(referenceFile.uploadExpiresAt())) {
+            failureRecorder.markUploadFailed(referenceFile, now);
+            throw new ConflictException(
+                    BidReferenceFileErrorCode.BIDDING_REFERENCE_FILE_UPLOAD_EXPIRED
+            );
+        }
 
         FileStoragePort.StoredObject stored = fileStoragePort.head(referenceFile.storageKey())
                 .orElse(null);

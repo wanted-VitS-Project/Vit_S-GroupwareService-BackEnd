@@ -14,7 +14,8 @@ public interface BidReferenceFileJpaRepository
             Long companyId
     );
 
-    List<BidReferenceFileJpaEntity> findAllByCompanyIdAndDeletedAtIsNullOrderByCreatedAtDesc(
+    List<BidReferenceFileJpaEntity>
+    findAllByCompanyIdAndDeletedAtIsNullOrderByCreatedAtDescReferenceFileIdDesc(
             Long companyId
     );
 }

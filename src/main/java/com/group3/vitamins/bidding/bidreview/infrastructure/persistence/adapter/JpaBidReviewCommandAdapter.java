@@ -112,11 +112,13 @@ public class JpaBidReviewCommandAdapter
                 .put("reviewId", savedReview.getReviewId())
                 .put("companyId", savedReview.getCompanyId());
 
+        // attemptId를 매번 새로 뽑으면 (reviewId, attemptId, eventType) 유니크 제약이
+        // 중복 정리 요청을 못 걸러낸다. 검토당 정리 시도는 하나면 충분하므로 reviewId로 고정한다.
         BidReviewOutboxJpaEntity outbox =
                 BidReviewOutboxJpaEntity.pending(
                         UUID.randomUUID().toString(),
                         savedReview.getReviewId(),
-                        UUID.randomUUID().toString(),
+                        "abandon-" + savedReview.getReviewId(),
                         REVIEW_CLEANUP_REQUESTED_EVENT,
                         payload,
                         savedReview.getUpdatedAt()

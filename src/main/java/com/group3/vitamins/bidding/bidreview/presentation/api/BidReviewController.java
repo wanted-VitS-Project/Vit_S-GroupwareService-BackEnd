@@ -232,7 +232,8 @@ public class BidReviewController {
                     responseCode = "401", description = "AUTH_UNAUTHENTICATED"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "403", description = "BIDDING_REVIEW_ACCESS_DENIED"
+                    responseCode = "403",
+                    description = "BIDDING_ACCESS_PERMISSION_REQUIRED 또는 BIDDING_REVIEW_ACCESS_DENIED"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "404", description = "BIDDING_REVIEW_NOT_FOUND"

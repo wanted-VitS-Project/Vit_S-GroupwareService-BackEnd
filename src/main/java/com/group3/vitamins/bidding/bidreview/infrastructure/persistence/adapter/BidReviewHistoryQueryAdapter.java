@@ -32,7 +32,7 @@ public class BidReviewHistoryQueryAdapter implements BidReviewHistoryQueryPort {
                 WHERE review.company_id = :companyId
                   AND review.bid_notice_id = :noticeId
                   AND review.requested_by = :userId
-                ORDER BY review.created_at DESC
+                ORDER BY review.created_at DESC, review.bid_review_id DESC
                 LIMIT :maxSize
                 """;
 

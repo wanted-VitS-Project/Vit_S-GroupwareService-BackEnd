@@ -1,6 +1,7 @@
 package com.group3.vitamins.bidding.referencefile.application.service;
 
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
+import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.referencefile.application.query.GetReferenceFileListQuery;
 import com.group3.vitamins.bidding.referencefile.application.result.ReferenceFileListResult;
 import com.group3.vitamins.bidding.referencefile.domain.model.BidReferenceFile;
@@ -8,6 +9,7 @@ import com.group3.vitamins.bidding.referencefile.domain.model.ReferenceFileIndex
 import com.group3.vitamins.bidding.referencefile.domain.model.ReferenceFileUploadStatus;
 import com.group3.vitamins.bidding.referencefile.domain.repository.BidReferenceFileRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @DisplayName("GetReferenceFileListService 입찰 기준자료 파일함 조회")
@@ -28,12 +33,13 @@ class GetReferenceFileListServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 12, 10, 0);
 
     private BidReferenceFileRepository referenceFileRepository;
+    private BiddingAccessPolicy biddingAccessPolicy;
     private GetReferenceFileListService service;
 
     @BeforeEach
     void setUp() {
         referenceFileRepository = mock(BidReferenceFileRepository.class);
-        BiddingAccessPolicy biddingAccessPolicy = mock(BiddingAccessPolicy.class);
+        biddingAccessPolicy = mock(BiddingAccessPolicy.class);
         CurrentCompanyIdProvider companyIdProvider = mock(CurrentCompanyIdProvider.class);
 
         service = new GetReferenceFileListService(
@@ -72,6 +78,18 @@ class GetReferenceFileListServiceTest {
         );
 
         assertThat(result.content()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("입찰 관리 권한이 없으면 저장소를 건드리기 전에 403으로 막힌다")
+    void shortCircuitsOnAccessDenied() {
+        doThrow(new ForbiddenException(BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED))
+                .when(biddingAccessPolicy).assertAccess(USER_ID, ROLE);
+
+        assertThatThrownBy(() -> service.get(new GetReferenceFileListQuery(USER_ID, ROLE)))
+                .isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(referenceFileRepository);
     }
 
     private BidReferenceFile readyFile() {

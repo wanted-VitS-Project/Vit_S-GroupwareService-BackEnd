@@ -77,7 +77,7 @@ class JpaBidReviewCommandAdapterTest {
         assertThat(saved.reviewStatus()).isEqualTo(BidReviewStatus.PENDING);
 
         List<BidReviewDocumentJpaEntity> savedDocuments = documentRepository
-                .findAllByReviewIdOrderByReviewDocumentIdAsc(saved.reviewId());
+                .findAllByReviewIdOrderByDocumentRoleAscReviewDocumentIdAsc(saved.reviewId());
         assertThat(savedDocuments).hasSize(2);
         assertThat(savedDocuments)
                 .extracting(BidReviewDocumentJpaEntity::getFileName)

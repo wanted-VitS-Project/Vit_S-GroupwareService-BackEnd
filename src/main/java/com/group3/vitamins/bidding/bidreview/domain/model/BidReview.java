@@ -41,7 +41,8 @@ public record BidReview(
         Objects.requireNonNull(attemptId, "처리 시도 ID는 필수입니다.");
         Objects.requireNonNull(now, "생성 시각은 필수입니다.");
 
-        if (prompt.isBlank() || prompt.length() > 3000) {
+        if (prompt.isBlank()
+                || prompt.codePointCount(0, prompt.length()) > 3000) {
             throw new IllegalArgumentException("검토 프롬프트가 올바르지 않습니다.");
         }
 
@@ -183,7 +184,9 @@ public record BidReview(
         if (projectId != null
                 || (reviewStatus != BidReviewStatus.COMPLETED
                 && reviewStatus != BidReviewStatus.FAILED
-                && reviewStatus != BidReviewStatus.ABANDONED)) {
+                && reviewStatus != BidReviewStatus.ABANDONED)
+                || expiresAt == null
+                || now.isBefore(expiresAt)) {
             throw new IllegalStateException("현재 검토는 만료 처리할 수 없습니다.");
         }
 

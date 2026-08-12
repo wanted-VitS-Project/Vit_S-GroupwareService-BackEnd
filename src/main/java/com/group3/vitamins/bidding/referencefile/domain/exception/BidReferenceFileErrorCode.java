@@ -27,6 +27,14 @@ public enum BidReferenceFileErrorCode implements ErrorCode {
     BIDDING_REFERENCE_FILE_IN_USE(
             "BIDDING_REFERENCE_FILE_IN_USE",
             "처리 중인 검토가 사용 중인 기준자료입니다."
+    ),
+    BIDDING_REFERENCE_FILE_NOT_UPLOADING(
+            "BIDDING_REFERENCE_FILE_NOT_UPLOADING",
+            "이미 처리되었거나 삭제된 기준자료입니다."
+    ),
+    BIDDING_REFERENCE_FILE_UPLOAD_EXPIRED(
+            "BIDDING_REFERENCE_FILE_UPLOAD_EXPIRED",
+            "업로드 유효 시간이 만료된 기준자료입니다."
     );
 
     private final String code;

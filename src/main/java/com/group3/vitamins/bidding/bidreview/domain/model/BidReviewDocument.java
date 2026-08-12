@@ -36,11 +36,14 @@ public record BidReviewDocument(
                 bidAttachmentId,
                 null,
                 fileName,
+                BidReviewDocumentStatus.PENDING,
                 now
         );
     }
 
-    // 선택한 사내 기준자료 스냅샷을 생성합니다.
+    // 선택한 사내 기준자료 스냅샷을 생성합니다. 업로드·인덱싱이 끝난 자료만 검토에
+    // 선택할 수 있으므로(BidReviewReferenceFilePort.ReferenceFileSnapshot.isReady() 검증),
+    // 생성 시점에 바로 READY로 저장한다 — BID_ATTACHMENT처럼 Worker 다운로드를 기다리지 않는다.
     public static BidReviewDocument createInternalReference(
             Long referenceFileId,
             String fileName,
@@ -53,6 +56,7 @@ public record BidReviewDocument(
                 null,
                 referenceFileId,
                 fileName,
+                BidReviewDocumentStatus.READY,
                 now
         );
     }
@@ -62,6 +66,7 @@ public record BidReviewDocument(
             Long bidAttachmentId,
             Long referenceFileId,
             String fileName,
+            BidReviewDocumentStatus initialStatus,
             LocalDateTime now
     ) {
         Objects.requireNonNull(role, "문서 역할은 필수입니다.");
@@ -79,7 +84,7 @@ public record BidReviewDocument(
                 bidAttachmentId,
                 referenceFileId,
                 fileName,
-                BidReviewDocumentStatus.PENDING,
+                initialStatus,
                 null,
                 null,
                 null,

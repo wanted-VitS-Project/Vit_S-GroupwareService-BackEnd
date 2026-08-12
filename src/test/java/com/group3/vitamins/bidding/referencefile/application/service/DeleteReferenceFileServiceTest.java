@@ -1,6 +1,7 @@
 package com.group3.vitamins.bidding.referencefile.application.service;
 
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
+import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.referencefile.application.command.DeleteReferenceFileCommand;
 import com.group3.vitamins.bidding.referencefile.application.port.BidReferenceFileActiveUsagePort;
 import com.group3.vitamins.bidding.referencefile.domain.exception.BidReferenceFileErrorCode;
@@ -10,6 +11,7 @@ import com.group3.vitamins.bidding.referencefile.domain.model.ReferenceFileUploa
 import com.group3.vitamins.bidding.referencefile.domain.repository.BidReferenceFileRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,13 +39,14 @@ class DeleteReferenceFileServiceTest {
 
     private BidReferenceFileRepository referenceFileRepository;
     private BidReferenceFileActiveUsagePort activeUsagePort;
+    private BiddingAccessPolicy biddingAccessPolicy;
     private DeleteReferenceFileService service;
 
     @BeforeEach
     void setUp() {
         referenceFileRepository = mock(BidReferenceFileRepository.class);
         activeUsagePort = mock(BidReferenceFileActiveUsagePort.class);
-        BiddingAccessPolicy biddingAccessPolicy = mock(BiddingAccessPolicy.class);
+        biddingAccessPolicy = mock(BiddingAccessPolicy.class);
         CurrentCompanyIdProvider companyIdProvider = mock(CurrentCompanyIdProvider.class);
         Clock clock = Clock.fixed(
                 Instant.parse("2026-08-12T01:00:00Z"),
@@ -99,6 +102,19 @@ class DeleteReferenceFileServiceTest {
 
         verifyNoInteractions(activeUsagePort);
         verify(referenceFileRepository, never()).saveDeletedWithCleanupOutbox(any());
+    }
+
+    @Test
+    @DisplayName("입찰 관리 권한이 없으면 저장소를 건드리기 전에 403으로 막힌다")
+    void shortCircuitsOnAccessDenied() {
+        doThrow(new ForbiddenException(BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED))
+                .when(biddingAccessPolicy).assertAccess(USER_ID, ROLE);
+
+        assertThatThrownBy(() -> service.delete(
+                new DeleteReferenceFileCommand(REFERENCE_FILE_ID, USER_ID, ROLE)
+        )).isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(referenceFileRepository, activeUsagePort);
     }
 
     private BidReferenceFile completedFile() {

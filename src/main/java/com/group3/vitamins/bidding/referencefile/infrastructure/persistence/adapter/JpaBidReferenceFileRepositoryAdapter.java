@@ -53,7 +53,7 @@ public class JpaBidReferenceFileRepositoryAdapter implements BidReferenceFileRep
     @Transactional(readOnly = true)
     public List<BidReferenceFile> findAllActiveByCompanyId(Long companyId) {
         return repository
-                .findAllByCompanyIdAndDeletedAtIsNullOrderByCreatedAtDesc(companyId)
+                .findAllByCompanyIdAndDeletedAtIsNullOrderByCreatedAtDescReferenceFileIdDesc(companyId)
                 .stream()
                 .map(BidReferenceFileJpaEntity::toDomain)
                 .toList();
@@ -96,10 +96,12 @@ public class JpaBidReferenceFileRepositoryAdapter implements BidReferenceFileRep
                 .put("referenceFileId", saved.getReferenceFileId())
                 .put("companyId", saved.getCompanyId());
 
+        // attemptId를 매번 새로 뽑으면 (파일ID, attemptId, 이벤트유형) 유니크 제약이
+        // 중복 삭제 요청을 못 걸러낸다. 파일당 정리 시도는 하나면 충분하므로 ID로 고정한다.
         outboxRepository.save(BidReferenceFileOutboxJpaEntity.pending(
                 UUID.randomUUID().toString(),
                 saved.getReferenceFileId(),
-                UUID.randomUUID().toString(),
+                "delete-" + saved.getReferenceFileId(),
                 DELETE_REQUESTED_EVENT,
                 payload,
                 saved.getUpdatedAt()

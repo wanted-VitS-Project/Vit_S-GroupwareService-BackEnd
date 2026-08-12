@@ -9,5 +9,5 @@ public interface BidReviewDocumentJpaRepository
         extends JpaRepository<BidReviewDocumentJpaEntity, Long> {
 
     List<BidReviewDocumentJpaEntity>
-    findAllByReviewIdOrderByReviewDocumentIdAsc(Long reviewId);
+    findAllByReviewIdOrderByDocumentRoleAscReviewDocumentIdAsc(Long reviewId);
 }
