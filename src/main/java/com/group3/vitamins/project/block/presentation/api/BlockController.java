@@ -86,7 +86,9 @@ public class BlockController {
             description = "블록을 논리 삭제한다. 하드 삭제 API 는 존재하지 않는다. "
                     + "타입별 상세 행도 같은 트랜잭션에서 함께 삭제된다. "
                     + "⛔ 삭제 잠금 4종은 폐기됐다(2026-08-09) — 막는 대신 옮길 수단을 준다. "
-                    + "입금·계산서 연결 해제는 별도 작업으로 붙는다(BLK-013).")
+                    + "입금·계산서 연결 해제는 별도 작업으로 붙는다(BLK-013). "
+                    + "📌 예외 1건: 결재 블록은 상신 이후 이 API 로 삭제할 수 없다(DEL-016). "
+                    + "스텝 삭제(DELETE /api/v1/steps/{stepId})에는 이 제약이 없어 결재 상태와 무관하게 함께 삭제된다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "삭제 성공"),
@@ -95,7 +97,12 @@ public class BlockController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "STEP_EDIT_DENIED — 스텝 편집 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "BLOCK_NOT_FOUND — 블록이 존재하지 않음")
+                    description = "BLOCK_NOT_FOUND — 블록이 존재하지 않음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "APPROVAL_ALREADY_SUBMITTED — 상신 이후 결재 블록. "
+                            + "approval.status 가 IN_PROGRESS·REJECTED·COMPLETED 이면 거부한다. "
+                            + "message 는 상태별로 다르다(진행 중인/반려된/완료된 결재는 삭제할 수 없습니다.) — "
+                            + "분기는 code 로 하고 message 는 그대로 노출한다")
     })
     @DeleteMapping("/{blockId}")
     public ResponseEntity<ApiResponse<Void>> deleteBlock(
