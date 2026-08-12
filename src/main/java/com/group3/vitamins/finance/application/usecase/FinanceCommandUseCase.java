@@ -8,6 +8,8 @@ import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvUploadCommand;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,6 +41,12 @@ public interface FinanceCommandUseCase {
 
     //입출금 내역 연결 제외 처리/해제(배치, 제외 시 매칭된 항목은 건너뜀)
     CashFlowExclusionResultView updateCashFlowExclusion(UpdateCashFlowExclusionCommand command);
+
+    //세금계산서 CSV 업로드 전 컬럼 매핑 추천 조회
+    TaxInvoiceCsvPreviewView previewTaxInvoiceCsv(TaxInvoiceCsvPreviewCommand command);
+
+    //확정된 컬럼 매핑으로 CSV를 파싱해 세금계산서로 저장
+    TaxInvoiceCsvUploadView uploadTaxInvoiceCsv(TaxInvoiceCsvUploadCommand command);
 
     record CashFlowCsvPreviewView(
             List<String> columns,
@@ -119,6 +127,44 @@ public interface FinanceCommandUseCase {
 
     record SkippedCashFlowView(
             Long cashFlowId,
+            String reason
+    ) {
+    }
+
+    record TaxInvoiceCsvPreviewView(
+            List<String> columns,
+            List<Map<String, String>> sampleRows,
+            String recommendedType,
+            TaxInvoiceCsvMappingView recommendedMapping
+    ) {
+    }
+
+    record TaxInvoiceCsvMappingView(
+            String approvalNoColumn,
+            String issuedDateColumn,
+            String supplierBizNoColumn,
+            String buyerBizNoColumn,
+            String buyerNameColumn,
+            String supplyAmountColumn,
+            String taxAmountColumn,
+            String totalAmountColumn,
+            String itemNameColumn,
+            String ceoNameColumn,
+            String subBizNoColumn,
+            String memoColumn
+    ) {
+    }
+
+    record TaxInvoiceCsvUploadView(
+            int totalRows,
+            int savedCount,
+            int duplicateCount,
+            List<TaxInvoiceDuplicateRowView> duplicateRows
+    ) {
+    }
+
+    record TaxInvoiceDuplicateRowView(
+            String approvalNo,
             String reason
     ) {
     }

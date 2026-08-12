@@ -481,6 +481,138 @@
 
 ---
 
+## 세금계산서 CSV 컬럼 추천 조회 `POST /api/v1/finance/tax-invoices/csv/preview`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·추천 컬럼 매핑 + 추천 구분(INCOME/OUTCOME)을
+내려준다. 파일은 서버에 저장하지 않는다(stateless) — 업로드 API를 호출할 때 같은 파일을 다시 첨부해야
+한다.
+
+**⭐ CSV 뿐 아니라 엑셀(.xlsx/.xls)·비밀번호로 보호된 엑셀도 받는다 (2026-08-12, 사용자 확정)** — 원
+명세는 "CSV 파일"만 언급하지만, 컬럼 구성만 명세를 따르고 나머지 동작은 입출금 내역 CSV와 동일하게
+맞추라는 방침에 따라 `cash_flow`의 `CashFlowUploadFileReader`/`CashFlowExcelParser`를 그대로 옮긴
+`TaxInvoiceUploadFileReader`/`TaxInvoiceExcelParser`를 쓴다. 업로드 파일명 확장자로 CSV/엑셀을
+구분해 같은 결과 구조로 통일하며, 엑셀에 여러 시트가 있어도 **첫 번째 시트만** 읽는다(시트 자동 판정은
+지원하지 않음 — 필요하면 원하는 시트를 활성 시트로 두고 저장해서 올려야 한다).
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `file` | File | Y | 업로드한 CSV 또는 엑셀(.xlsx/.xls) 파일 |
+| `password` | String | N | 파일이 비밀번호로 보호돼 있으면 그 비밀번호(엑셀만 해당) — 신규 필드 |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.columns` | List\<String\> | CSV에 있는 전체 컬럼명 목록 |
+| `data.sampleRows` | List\<Object\> | 상위 5행 미리보기 (컬럼명: 값) |
+| `data.recommendedType` | String | 추천 구분(INCOME/OUTCOME). 판단 불가하면 null |
+| `data.recommendedMapping.*` | String | 추천 컬럼 매핑 12종(원 명세와 동일) — `itemNameColumn`/`ceoNameColumn`/`subBizNoColumn`/`memoColumn`은 없으면 null |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 CSV 컬럼 추천 조회 성공" |
+| 400 | Bad Request | `FINANCE_CSV_PASSWORD_REQUIRED` | "비밀번호가 필요한 파일입니다." (신규) |
+| 400 | Bad Request | `FINANCE_CSV_PASSWORD_INVALID` | "비밀번호가 올바르지 않습니다." (신규) |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." — 원 명세는 code 빈칸, 입출금 내역 CSV 미리보기와 동일 코드 재사용 |
+| 404 | Not Found | `FINANCE_INVALID_CSV_FILE` | "유효하지 않은 형식입니다." — 원 명세는 code 빈칸, 입출금 내역과 동일 코드 재사용 |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **`recommendedType` 판단 기준 (2026-08-12, 사용자 확인)** — 공급자 사업자번호 컬럼에 실제 값이 채워져
+  있으면 매입(`OUTCOME`), 공급받는자 사업자번호 컬럼에 값이 채워져 있으면 매출(`INCOME`)로 추천한다.
+  "우리 회사 사업자번호"를 저장하는 곳이 코드베이스에 없어서(company 테이블에도 없음) 절대비교는
+  불가능 — 대신 "홈택스 매출/매입 목록 내보내기는 상대방(카운터파티) 정보만 채워서 나온다"는 실무
+  관행을 이용해, 첫 데이터 행 기준으로 어느 쪽이 채워져 있는지만 본다. 둘 다 비어있거나 둘 다 채워져
+  있으면 null(사용자가 라디오 버튼으로 직접 선택).
+- **엑셀/비밀번호 지원 — 입출금 내역과 동일 (2026-08-12 정정)** — 처음엔 원 명세 문구("CSV 파일")를
+  그대로 좁혀서 CSV 전용으로 만들었는데, "컬럼만 명세대로 하고 나머지는 입출금 양식에 맞추라"는 지시와
+  맞지 않아 바로 잡았다. 여러 시트가 있는 엑셀은 첫 번째 시트만 읽는다(cash_flow와 동일 — 시트 자동
+  판정 기능은 없음).
+- **403/404 `code` — 원 명세엔 빈칸이었다.** 입출금 내역 CSV 미리보기와 같은 성격의 에러라 동일 코드
+  (`FINANCE_EDIT_ACCESS_DENIED`/`FINANCE_INVALID_CSV_FILE`) 재사용.
+
+---
+
+## 세금계산서(CSV 기반) 업로드 `POST /api/v1/finance/tax-invoices/csv`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+미리보기에서 확정한 구분(`type`)·컬럼 매핑으로 CSV(또는 엑셀 .xlsx/.xls)를 파싱해 세금계산서로
+저장한다. 엑셀·비밀번호 지원은 위 미리보기 API와 동일 — `TaxInvoiceUploadFileReader`가 파일명
+확장자로 자동 판단한다.
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `file` | File | Y | CSV 또는 엑셀 파일 (프리뷰 때와 동일 파일 재전송) |
+| `request` | JSON | Y | 구분 + 컬럼 매핑 정보 |
+| `request.type` | String | Y | 구분 (INCOME: 매출/OUTCOME: 매입), 라디오 버튼으로 선택 |
+| `request.approvalNoColumn` | String | Y | 승인번호 컬럼명 |
+| `request.issuedDateColumn` | String | Y | 작성일자 컬럼명 |
+| `request.supplierBizNoColumn` | String | Y | 공급자 사업자번호 컬럼명 |
+| `request.buyerBizNoColumn` | String | Y | 공급받는자 사업자번호 컬럼명 |
+| `request.buyerNameColumn` | String | Y | 공급받는자 상호 컬럼명 |
+| `request.supplyAmountColumn` | String | Y | 공급가액 컬럼명 |
+| `request.taxAmountColumn` | String | Y | 세액 컬럼명 |
+| `request.totalAmountColumn` | String | Y | 합계금액 컬럼명 |
+| `request.itemNameColumn` | String | N | 품목명 컬럼명 (없으면 null) |
+| `request.ceoNameColumn` | String | N | 대표자명 컬럼명 (없으면 null) |
+| `request.subBizNoColumn` | String | N | 종사업장번호 컬럼명 (없으면 null) |
+| `request.memoColumn` | String | N | 비고/메모 컬럼명 (없으면 null) |
+| `request.password` | String | N | 파일이 비밀번호로 보호돼 있으면 그 비밀번호(엑셀만 해당) — 신규 필드 |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.totalRows` | Int | 전체 행 수 |
+| `data.savedCount` | Int | 저장 성공 건수 |
+| `data.duplicateCount` | Int | 중복 제외 건수 |
+| `data.duplicateRows[].approvalNo` | String | 중복 승인번호 |
+| `data.duplicateRows[].reason` | String | 제외 사유 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 201 | Created | — | "세금계산서(CSV 기반) 업로드 성공" |
+| 400 | Bad Request | `FINANCE_CSV_MAPPING_REQUIRED` | "필수 컬럼 매핑이 누락되었습니다." — `type` 값이 INCOME/OUTCOME이 아니거나, 필수 컬럼이 CSV에 없는 경우도 포함 |
+| 400 | Bad Request | `FINANCE_CSV_PASSWORD_REQUIRED` | "비밀번호가 필요한 파일입니다." (신규) |
+| 400 | Bad Request | `FINANCE_CSV_PASSWORD_INVALID` | "비밀번호가 올바르지 않습니다." (신규) |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." — 원 명세는 code 빈칸, 입출금 내역과 동일 코드 재사용 |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **중복 판정 기준 — `approval_no` 단일 컬럼.** `cash_flow`처럼 (은행명·거래일시·금액) 복합키가 아니다 —
+  `tax_invoice.approval_no`가 이미 `uk_tax_invoice_approval_no`로 **회사 스코프 없이 테이블 전체에서**
+  유일해야 하는 값이라서(국세청 승인번호는 전국 유일값, 2026-08-09 확정), 중복 조회(`findExistingApprovalNos`)도
+  `company_id`로 안 좁힌다.
+- **동시 업로드 시 배치 충돌 재시도** — `cash_flow`의 `insertWithConcurrentDuplicateRetry`와 완전히 동일한
+  구조. `insertAll`이 단일 배치 INSERT라 그중 한 행이라도 유니크 충돌하면 배치 전체가 실패하는데, 조회
+  시점 이후 동시에 들어온 다른 요청이 같은 승인번호를 먼저 커밋한 경우가 이에 해당한다. 최신 상태로 한
+  번만 다시 걸러서 재시도 — 그래도 또 걸리면(극히 드묾) 예외를 그대로 던진다.
+- **`type`은 행마다가 아니라 요청 전체에 하나(라디오 버튼)** — CSV 자체에 구분 컬럼이 없다(원 명세에
+  없음). 업로드 파일 전체가 매출 또는 매입 중 하나로 일괄 저장된다.
+- **금액은 부호 그대로 저장** — `cash_flow`처럼 방향(입출금)을 절댓값+type으로 분리하는 개념이 없다.
+  세금계산서 금액은 원본 값 그대로 저장한다(음수도 허용 — 수정세금계산서 등 실제로 음수가 나올 수 있음).
+- **엑셀/비밀번호 지원 — 입출금 내역과 동일 (2026-08-12 정정)** — 위 미리보기 API와 같은 이유로 CSV
+  전용에서 바로잡았다.
+- **400 `code` — 원 명세엔 빈칸이었다.** `FINANCE_CSV_MAPPING_REQUIRED` 재사용(입출금 내역 CSV 업로드와
+  동일한 성격의 에러).
+
+---
+
 ## 입출금 내역 CSV 컬럼 추천 조회 `POST /api/v1/finance/cash-flows/csv/preview`
 
 **상태**: ✅ 확정

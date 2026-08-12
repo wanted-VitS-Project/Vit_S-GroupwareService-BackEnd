@@ -607,3 +607,151 @@ GET localhost:8080/api/v1/finance/tax-invoices
 
 ### 세금계산서 필터 옵션 조회 — C가 연결된 프로젝트 하나가 나와야 한다(A·B는 미연결이라 안 잡힘)
 GET localhost:8080/api/v1/finance/tax-invoices/filters
+
+### ========================================================================
+### 11단계 — 세금계산서 CSV 업로드 (미리보기 → 업로드, 2026-08-12 신규)
+### 편집 권한(EDITOR) 필요 — 7단계(입출금 CSV)와 동일한 권한 규칙.
+### 같은 폴더의 sample-tax-invoice.csv를 쓴다(승인번호/작성일자/공급자사업자번호/공급받는자사업자번호/
+### 상호/공급가액/세액/합계금액/품목 9컬럼, 3행 — 1·3행은 승인번호가 완전히 동일해서 파일 내부 중복
+### 확인용). 공급자사업자번호 컬럼은 모든 행에서 값이 비어 있고 공급받는자사업자번호만 채워져 있어
+### recommendedType=INCOME이 나와야 한다("공급자 사업자번호가 채워져 있으면 OUTCOME, 공급받는자
+### 사업자번호가 채워져 있으면 INCOME" 규칙, 2026-08-12 확정). 대표자명/종사업장번호/비고 컬럼은
+### 파일에 없으므로 그 세 매핑은 null로 나와야 한다.
+### ========================================================================
+
+### 11-1. CSV 컬럼 추천 조회 — recommendedType=INCOME, approvalNoColumn="승인번호",
+### issuedDateColumn="작성일자", supplierBizNoColumn="공급자사업자번호", buyerBizNoColumn="공급받는자사업자번호",
+### buyerNameColumn="상호", supplyAmountColumn="공급가액", taxAmountColumn="세액", totalAmountColumn="합계금액",
+### itemNameColumn="품목", ceoNameColumn/subBizNoColumn/memoColumn은 전부 null이어야 한다.
+POST localhost:8080/api/v1/finance/tax-invoices/csv/preview
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary--
+
+### 11-2. CSV 업로드 — totalRows=3. 1·3행이 승인번호(20260720-12345678)가 완전히 동일해서
+### 그중 하나가 duplicateRows로 빠져야 한다 → savedCount=2, duplicateCount=1.
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "INCOME",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "buyerNameColumn": "상호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액",
+    "itemNameColumn": "품목"
+}
+--WebAppBoundary--
+
+### 11-3. 같은 파일 재업로드 — 이번엔 3행 전부(1·3행 포함)가 이미 DB에 있으므로
+### savedCount=0, duplicateCount=3이어야 한다(DB 레벨 중복 판정 확인).
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "INCOME",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "buyerNameColumn": "상호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액",
+    "itemNameColumn": "품목"
+}
+--WebAppBoundary--
+
+### 11-4. 필수 컬럼 매핑 누락(buyerNameColumn 빠뜨림) → 400 FINANCE_CSV_MAPPING_REQUIRED 확인용
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "INCOME",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액"
+}
+--WebAppBoundary--
+
+### 11-5. type 값이 INCOME/OUTCOME이 아님 → 400 FINANCE_CSV_MAPPING_REQUIRED 확인용
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "잘못된값",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "buyerNameColumn": "상호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액"
+}
+--WebAppBoundary--
+
+### 11-6. 편집 권한 없음(VIEWER거나 미부여) → 403 FINANCE_EDIT_ACCESS_DENIED 확인용
+### FINANCE에 VIEWER만 부여됐거나 아예 없는 MEMBER 계정으로 로그인 후 호출할 것
+POST localhost:8080/api/v1/finance/tax-invoices/csv/preview
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary--
+
+### 11-7. 유효하지 않은 형식(파일 파트 자체를 빼고 호출) → 404 FINANCE_INVALID_CSV_FILE 확인용
+POST localhost:8080/api/v1/finance/tax-invoices/csv/preview
+Content-Type: multipart/form-data; boundary=WebAppBoundary

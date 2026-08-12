@@ -12,6 +12,7 @@ import com.group3.vitamins.finance.application.command.CashFlowCsvPreviewCommand
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
 import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase;
@@ -21,6 +22,8 @@ import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.Cas
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowDetailView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowExclusionResultView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowMatchView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvPreviewView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvUploadView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowListView;
@@ -46,6 +49,9 @@ import com.group3.vitamins.finance.presentation.api.response.CashFlowMatchRespon
 import com.group3.vitamins.finance.presentation.api.response.CashFlowUpdateResponse;
 import com.group3.vitamins.finance.presentation.api.request.MatchCashFlowRequest;
 import com.group3.vitamins.finance.presentation.api.response.FinanceSummaryResponse;
+import com.group3.vitamins.finance.presentation.api.request.TaxInvoiceCsvUploadRequest;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceCsvPreviewResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceCsvUploadResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceFilterResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceListResponse;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
@@ -199,6 +205,82 @@ public class FinanceController {
                 new TaxInvoiceFilterQuery(authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("세금계산서 필터 옵션 조회 성공", TaxInvoiceFilterResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 CSV 컬럼 추천 조회",
+            description = "업로드한 CSV(또는 엑셀 .xlsx/.xls)의 컬럼 목록·미리보기·추천 컬럼 매핑 + 추천 구분(INCOME/OUTCOME)을 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 CSV 컬럼 추천 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
+                            + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "유효하지 않은 형식입니다. (FINANCE_INVALID_CSV_FILE)")
+    })
+    @PostMapping(value = "/tax-invoices/csv/preview", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<TaxInvoiceCsvPreviewResponse>> previewTaxInvoiceCsv(
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @Parameter(description = "파일이 비밀번호로 보호돼 있으면 그 비밀번호(엑셀만 해당). "
+                    + "원 명세엔 없던 필드 — cash_flow와 동일하게 추가함(2026-08-12)")
+            @RequestPart(value = "password", required = false) String password,
+            Authentication authentication
+    ) {
+        byte[] fileBytes = readBytes(file);
+        TaxInvoiceCsvPreviewView view = financeCommandUseCase.previewTaxInvoiceCsv(
+                new TaxInvoiceCsvPreviewCommand(fileBytes, file.getOriginalFilename(), password,
+                        authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 CSV 컬럼 추천 조회 성공", TaxInvoiceCsvPreviewResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서(CSV 기반) 업로드",
+            description = "미리보기에서 확정한 구분·컬럼 매핑으로 CSV(또는 엑셀 .xlsx/.xls)를 파싱해 세금계산서로 저장한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "세금계산서(CSV 기반) 업로드 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "필수 컬럼 매핑이 누락되었습니다. (FINANCE_CSV_MAPPING_REQUIRED) / "
+                            + "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
+                            + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+    })
+    @PostMapping(value = "/tax-invoices/csv", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<TaxInvoiceCsvUploadResponse>> uploadTaxInvoiceCsv(
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @Parameter(description = "구분 + 컬럼 매핑 정보 JSON 문자열. password는 파일이 비밀번호로 "
+                    + "보호된 경우에만 필요(엑셀만 해당, 선택 필드라 없으면 생략 가능)",
+                    example = "{\"type\": \"INCOME\", \"approvalNoColumn\": \"승인번호\", "
+                            + "\"issuedDateColumn\": \"작성일자\", \"supplierBizNoColumn\": \"공급자사업자번호\", "
+                            + "\"buyerBizNoColumn\": \"공급받는자사업자번호\", \"buyerNameColumn\": \"상호\", "
+                            + "\"supplyAmountColumn\": \"공급가액\", \"taxAmountColumn\": \"세액\", "
+                            + "\"totalAmountColumn\": \"합계금액\", \"itemNameColumn\": \"품목\", "
+                            + "\"ceoNameColumn\": null, \"subBizNoColumn\": null, \"memoColumn\": null, "
+                            + "\"password\": null}")
+            @RequestPart(value = "request", required = false) String requestJson,
+            Authentication authentication
+    ) {
+        TaxInvoiceCsvUploadRequest request = parseTaxInvoiceUploadRequest(requestJson);
+
+        byte[] fileBytes = readBytes(file);
+        TaxInvoiceCsvUploadView view = financeCommandUseCase.uploadTaxInvoiceCsv(
+                request.toCommand(fileBytes, file.getOriginalFilename(),
+                        authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created("세금계산서(CSV 기반) 업로드 성공", TaxInvoiceCsvUploadResponse.from(view)));
+    }
+
+    private TaxInvoiceCsvUploadRequest parseTaxInvoiceUploadRequest(String requestJson) {
+        if (requestJson == null || requestJson.isBlank()) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
+        }
+        try {
+            return objectMapper.readValue(requestJson, TaxInvoiceCsvUploadRequest.class);
+        } catch (JsonProcessingException e) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, e);
+        }
     }
 
     @Operation(summary = "입출금 내역 CSV 컬럼 추천 조회",

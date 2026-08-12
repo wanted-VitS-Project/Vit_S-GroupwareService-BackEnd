@@ -5,6 +5,8 @@ import com.group3.vitamins.finance.application.command.CashFlowCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
 import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
@@ -29,6 +31,14 @@ import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvTable;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowDateTimeMode;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowUploadFileReader;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.ParsedCashFlowRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceCommandMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.ParsedTaxInvoiceRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvColumnRecommender;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvMapping;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvRecommendation;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvRowParser;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvTable;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceUploadFileReader;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
@@ -69,6 +79,10 @@ public class FinanceCommandService implements FinanceCommandUseCase {
     private final CashFlowCsvRowParser cashFlowCsvRowParser;
     private final CashFlowCommandMapper cashFlowCommandMapper;
     private final CashFlowMapper cashFlowMapper;
+    private final TaxInvoiceUploadFileReader taxInvoiceUploadFileReader;
+    private final TaxInvoiceCsvColumnRecommender taxInvoiceCsvColumnRecommender;
+    private final TaxInvoiceCsvRowParser taxInvoiceCsvRowParser;
+    private final TaxInvoiceCommandMapper taxInvoiceCommandMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -271,6 +285,140 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (!headers.contains(column)) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
                     fieldName + "(" + column + ")이(가) CSV에 없는 컬럼입니다.");
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TaxInvoiceCsvPreviewView previewTaxInvoiceCsv(TaxInvoiceCsvPreviewCommand command) {
+        log.info("세금계산서 CSV 컬럼 추천 조회 요청 - userId={}", command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        TaxInvoiceCsvTable table =
+                taxInvoiceUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
+        TaxInvoiceCsvRecommendation recommendation =
+                taxInvoiceCsvColumnRecommender.recommend(table.headers(), table.rows());
+
+        List<Map<String, String>> sampleRows = table.rows().stream()
+                .limit(SAMPLE_ROW_LIMIT)
+                .map(row -> toDisplayRow(table.headers(), row))
+                .toList();
+
+        return new TaxInvoiceCsvPreviewView(
+                table.headers(), sampleRows, recommendation.recommendedType(),
+                toTaxInvoiceMappingView(recommendation.mapping())
+        );
+    }
+
+    private TaxInvoiceCsvMappingView toTaxInvoiceMappingView(TaxInvoiceCsvMapping mapping) {
+        return new TaxInvoiceCsvMappingView(
+                mapping.approvalNoColumn(), mapping.issuedDateColumn(),
+                mapping.supplierBizNoColumn(), mapping.buyerBizNoColumn(), mapping.buyerNameColumn(),
+                mapping.supplyAmountColumn(), mapping.taxAmountColumn(), mapping.totalAmountColumn(),
+                mapping.itemNameColumn(), mapping.ceoNameColumn(), mapping.subBizNoColumn(), mapping.memoColumn()
+        );
+    }
+
+    // cash_flow의 uploadCashFlowCsv와 동일한 이유로 @Transactional을 안 붙인다 — 파일 파싱은 DB 접근이
+    // 없고, insertAll은 단일 INSERT문으로 그 자체가 원자적이다. 조회(findExistingApprovalNos)와 굳이
+    // 같은 트랜잭션으로 묶을 이유가 없다 — uk_tax_invoice_approval_no 유니크 제약이 최종 방어선이다.
+    @Override
+    public TaxInvoiceCsvUploadView uploadTaxInvoiceCsv(TaxInvoiceCsvUploadCommand command) {
+        log.info("세금계산서(CSV 기반) 업로드 요청 - userId={}, type={}", command.userId(), command.type());
+
+        assertEditAccess(command.userId(), command.role());
+
+        String type = parseTaxInvoiceType(command.type());
+        TaxInvoiceCsvMapping mapping = new TaxInvoiceCsvMapping(
+                command.approvalNoColumn(), command.issuedDateColumn(),
+                command.supplierBizNoColumn(), command.buyerBizNoColumn(), command.buyerNameColumn(),
+                command.supplyAmountColumn(), command.taxAmountColumn(), command.totalAmountColumn(),
+                command.itemNameColumn(), command.ceoNameColumn(), command.subBizNoColumn(), command.memoColumn()
+        );
+
+        TaxInvoiceCsvTable table =
+                taxInvoiceUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
+        validateTaxInvoiceMapping(table.headers(), mapping);
+
+        List<ParsedTaxInvoiceRow> parsedRows = taxInvoiceCsvRowParser.parseRows(table, mapping);
+
+        Set<String> seenApprovalNos = new HashSet<>();
+        if (!parsedRows.isEmpty()) {
+            List<String> candidates = parsedRows.stream().map(ParsedTaxInvoiceRow::approvalNo).toList();
+            seenApprovalNos.addAll(taxInvoiceCommandMapper.findExistingApprovalNos(candidates));
+        }
+
+        List<ParsedTaxInvoiceRow> toInsert = new ArrayList<>();
+        List<TaxInvoiceDuplicateRowView> duplicateRows = new ArrayList<>();
+        for (ParsedTaxInvoiceRow row : parsedRows) {
+            // seenApprovalNos에는 DB에 이미 있는 승인번호뿐 아니라, 같은 파일 안에서 먼저 처리된 행의
+            // 승인번호도 함께 쌓인다 — 파일 내부 중복도 같은 로직으로 걸러진다.
+            if (!seenApprovalNos.add(row.approvalNo())) {
+                duplicateRows.add(new TaxInvoiceDuplicateRowView(row.approvalNo(), "이미 등록된 승인번호입니다."));
+            } else {
+                toInsert.add(row);
+            }
+        }
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        int savedCount = toInsert.isEmpty()
+                ? 0
+                : insertTaxInvoicesWithConcurrentDuplicateRetry(companyId, type, toInsert, duplicateRows);
+
+        return new TaxInvoiceCsvUploadView(table.rows().size(), savedCount, duplicateRows.size(), duplicateRows);
+    }
+
+    /** cash_flow의 insertWithConcurrentDuplicateRetry와 동일한 이유·동일한 구조. */
+    private int insertTaxInvoicesWithConcurrentDuplicateRetry(
+            Long companyId, String type, List<ParsedTaxInvoiceRow> toInsert, List<TaxInvoiceDuplicateRowView> duplicateRows) {
+        try {
+            return taxInvoiceCommandMapper.insertAll(companyId, type, toInsert);
+        } catch (DuplicateKeyException e) {
+            List<String> candidates = toInsert.stream().map(ParsedTaxInvoiceRow::approvalNo).toList();
+            Set<String> latestApprovalNos = new HashSet<>(taxInvoiceCommandMapper.findExistingApprovalNos(candidates));
+
+            List<ParsedTaxInvoiceRow> retryInsert = new ArrayList<>();
+            for (ParsedTaxInvoiceRow row : toInsert) {
+                if (latestApprovalNos.contains(row.approvalNo())) {
+                    duplicateRows.add(new TaxInvoiceDuplicateRowView(row.approvalNo(), "이미 등록된 승인번호입니다."));
+                } else {
+                    retryInsert.add(row);
+                }
+            }
+            return retryInsert.isEmpty() ? 0 : taxInvoiceCommandMapper.insertAll(companyId, type, retryInsert);
+        }
+    }
+
+    private String parseTaxInvoiceType(String raw) {
+        if (!"INCOME".equals(raw) && !"OUTCOME".equals(raw)) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "type 값이 올바르지 않습니다.");
+        }
+        return raw;
+    }
+
+    private void validateTaxInvoiceMapping(List<String> headers, TaxInvoiceCsvMapping mapping) {
+        requireColumn(headers, mapping.approvalNoColumn(), "approvalNoColumn");
+        requireColumn(headers, mapping.issuedDateColumn(), "issuedDateColumn");
+        requireColumn(headers, mapping.supplierBizNoColumn(), "supplierBizNoColumn");
+        requireColumn(headers, mapping.buyerBizNoColumn(), "buyerBizNoColumn");
+        requireColumn(headers, mapping.buyerNameColumn(), "buyerNameColumn");
+        requireColumn(headers, mapping.supplyAmountColumn(), "supplyAmountColumn");
+        requireColumn(headers, mapping.taxAmountColumn(), "taxAmountColumn");
+        requireColumn(headers, mapping.totalAmountColumn(), "totalAmountColumn");
+
+        // itemName/ceoName/subBizNo/memo는 선택 — 보냈으면 실제 CSV에 있는 컬럼인지만 확인한다.
+        if (StringUtils.hasText(mapping.itemNameColumn())) {
+            requireColumn(headers, mapping.itemNameColumn(), "itemNameColumn");
+        }
+        if (StringUtils.hasText(mapping.ceoNameColumn())) {
+            requireColumn(headers, mapping.ceoNameColumn(), "ceoNameColumn");
+        }
+        if (StringUtils.hasText(mapping.subBizNoColumn())) {
+            requireColumn(headers, mapping.subBizNoColumn(), "subBizNoColumn");
+        }
+        if (StringUtils.hasText(mapping.memoColumn())) {
+            requireColumn(headers, mapping.memoColumn(), "memoColumn");
         }
     }
 

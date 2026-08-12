@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceCommandMapper">
+
+    <!--
+        ⚠️ company_id 필터 없음(의도적) — uk_tax_invoice_approval_no가 회사 스코프 없이 테이블 전체에서
+        유일해야 한다(국세청 승인번호는 전국 유일값). deleted_at IS NULL만 거른다 — cash_flow의
+        findExistingDedupKeys와 동일한 기조(소프트 삭제된 건 재사용 가능하다고 봄). 실제 승인번호가
+        삭제 후 재등록될 일은 거의 없어 이 필터로 인한 리스크는 낮다고 판단(2026-08-12).
+    -->
+    <select id="findExistingApprovalNos" resultType="java.lang.String">
+        SELECT approval_no
+        FROM tax_invoice
+        WHERE deleted_at IS NULL
+        AND approval_no IN
+        <foreach collection="candidates" item="no" open="(" separator="," close=")">
+            #{no}
+        </foreach>
+    </select>
+
+    <!-- 호출부(FinanceCommandService)에서 이미 중복 제거된 행만 넘어온다. type은 요청 전체에 하나뿐이라 반복 바인딩. -->
+    <insert id="insertAll">
+        INSERT INTO tax_invoice
+        (company_id, type, approval_no, issued_no, supplier_biz_no, buyer_biz_no, buyer_name,
+        supply_amount, tax_amount, total_amount, item_name, ceo_name, sub_biz_no, memo, source_type)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{companyId}, #{type}, #{r.approvalNo}, #{r.issuedNo}, #{r.supplierBizNo}, #{r.buyerBizNo}, #{r.buyerName},
+            #{r.supplyAmount}, #{r.taxAmount}, #{r.totalAmount}, #{r.itemName}, #{r.ceoName}, #{r.subBizNo}, #{r.memo}, 'CSV')
+        </foreach>
+    </insert>
+
+</mapper>
