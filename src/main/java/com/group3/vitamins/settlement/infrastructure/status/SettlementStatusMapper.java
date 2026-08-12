@@ -14,10 +14,21 @@ public interface SettlementStatusMapper {
     List<String> findDistinctClientNames(@Param("companyId") Long companyId);
 
     /**
-     * 정산 현황 프로젝트 조회 — 재무팀이 보는 전체 프로젝트 단위 목록.
+     * 정산 현황 프로젝트 조회 — 재무팀이 보는 전체 프로젝트 단위 목록(페이지 단위).
      * startDate/endDate 는 nextPlannedDate(프로젝트별 다음 정산 예정일) 기준으로 거른다.
      */
     List<SettlementProjectRow> findProjectSettlements(
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("client") String client,
+            @Param("includeCompleted") Boolean includeCompleted,
+            @Param("sort") String sort,
+            @Param("size") int size,
+            @Param("offset") int offset,
+            @Param("companyId") Long companyId);
+
+    /** 위 목록과 같은 필터 조건의 전체 개수(페이징용) — sort/size/offset은 개수에 영향 없어 안 받는다. */
+    long countProjectSettlements(
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate,
             @Param("client") String client,

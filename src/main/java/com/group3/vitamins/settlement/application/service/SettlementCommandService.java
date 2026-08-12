@@ -80,7 +80,12 @@ public class SettlementCommandService implements SettlementCommandUseCase {
             log.warn("연결된 정산 블록 수정 시도 - settleId={}, status={}", command.settleId(), currentState.status());
             throw new ConflictException(SettlementErrorCode.ALREADY_LINKED);
         }
-        eligibilityPolicy.assertNoTypeDowngrade(SettlementType.valueOf(currentState.type()), type);
+        // currentState.type()은 한 번도 작성된 적 없는 빈 블록이면 null이다(2026-08-12, NPE로 발견) —
+        // assertNoTypeDowngrade는 storedType==null을 "다운그레이드 대상 없음"으로 이미 처리하므로 null을
+        // 그대로 넘긴다. SettlementType.valueOf(null)은 IllegalArgumentException이 아니라 NPE라
+        // 기존 어디서도 못 잡고 그대로 500이 됐다.
+        SettlementType storedType = currentState.type() == null ? null : SettlementType.valueOf(currentState.type());
+        eligibilityPolicy.assertNoTypeDowngrade(storedType, type);
 
         assertTotalAmountConsistent(command.settleId(), type, command.totalAmount());
 
