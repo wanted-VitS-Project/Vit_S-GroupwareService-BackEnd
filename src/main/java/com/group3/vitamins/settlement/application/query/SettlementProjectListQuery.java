@@ -7,6 +7,9 @@ public record SettlementProjectListQuery(
         LocalDate endDate,
         String client,
         Boolean includeCompleted,
+        int page,
+        int size,
+        String sort,
         String userId,
         String role
 ) {

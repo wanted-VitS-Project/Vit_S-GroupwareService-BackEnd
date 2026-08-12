@@ -114,11 +114,18 @@
 | `endDate` | LocalDate | N | 조회 종료일 — 〃 |
 | `client` | String | N | 발주처 (정확히 일치) |
 | `includeCompleted` | Boolean | N | 종결(완료) 프로젝트 포함 여부. **생략하면 `false`(제외)** |
+| `page` | Int | N | 0-base 페이지 번호. 생략하면 0 (2026-08-12 페이징 추가) |
+| `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
+| `sort` | String | N | 정렬 기준. `NEXT_PLANNED_DATE_ASC`(다음 정산 예정일 빠른 순, 기본값) \| `TOTAL_AMOUNT_DESC`(총 합계 큰 순) |
 
 **Response Parameter**
 
 | 파라미터명 | 타입 | 설명 |
 | --- | --- | --- |
+| `data.page` | Int | 현재 페이지 번호 (0-base) |
+| `data.size` | Int | 페이지당 개수 |
+| `data.totalElements` | Long | 전체 항목 수 |
+| `data.totalPages` | Int | 전체 페이지 수 |
 | `data.projects[].projectId` | Long | 프로젝트 ID |
 | `data.projects[].projectName` | String | 과업명 |
 | `data.projects[].clientName` | String | 발주처 (nullable) |
@@ -139,6 +146,7 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | — | "정산 현황 조회 성공" |
+| 400 | Bad Request | `SETL-012` | "페이지 조회 조건이 올바르지 않습니다." — `page`<0 · `size`≤0 또는 >100 · `sort` 허용값 아님 · `startDate`>`endDate` |
 | 403 | Forbidden | `SETL-009` | "접근 권한이 없습니다." |
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
@@ -170,8 +178,23 @@
 - **대상 범위 — 필터 옵션 조회와 다르다** — 필터 옵션 조회(`/filters`)는 "활성 정산 블록이 하나라도 있는
   프로젝트"만 대상이지만, 이 API는 **전체 프로젝트**를 대상으로 한다(정산 블록이 아직 없는 프로젝트도
   0/null 값으로 나온다). "재무팀 쪽에서 보일 전체 프로젝트"라는 요구사항 그대로 반영.
-- **정렬 순서** — 명세에 없어 `projectId` 오름차순으로 뒀다. 다른 기준(예: `nextPlannedDate` 오름차순)이
-  필요하면 알려달라.
+- **✅ 페이징 추가 (2026-08-12)** — 프론트 요청으로 `page`/`size`/`sort` + `{page,size,totalElements,totalPages}`
+  추가(공고·프로젝트 목록과 같은 컨벤션 — `page`≥0·`size`(1~100)·`sort` 허용값 검증, 위반 시 `SETL-012` 400,
+  silent clamp 아님). **`projects` 키 이름은 유지**(아직 프론트 연동 전이라 `content`로 바꿀 필요 없다고 확인).
+  `sort` 기본값 `NEXT_PLANNED_DATE_ASC`(널은 `IS NULL` 우선순위로 항상 뒤로) — 이전 고정 정렬(`projectId`
+  오름차순)은 폐기, 이제 필요한 값은 이 두 가지뿐이라고 확인해 추가 검토 없이 확정.
+- **CodeRabbit 리뷰 반영 (2026-08-12, 페이징 PR)**:
+  1. **날짜 역전(`startDate > endDate`) 테스트 시나리오 누락 지적 — 반영.** `request.http`에 추가.
+  2. **`SettlementQueryService`가 `SettlementStatusMapper`/`SettlementProjectRow`(MyBatis 구현 타입)를
+     직접 참조해 Application 계층 경계를 넘는다는 지적(신규 `countProjectSettlements` 호출이 결합을 더
+     늘림) — 반영 안 함, 별도 리팩터로 분리 제안.** 지적 자체는 맞다 — `.ai/ARCHITECTURE.md` §2-1의
+     "다른 애그리게이트 테이블은 `application/port` + MyBatis 어댑터로" 원칙과 결이 같다. 하지만 이
+     서비스는 **2026-08-09 최초 구현 시점부터** 이미 `SettlementStatusMapper`를 직접 주입받는 구조였고
+     (`findDistinctClientNames`/`findProjectSettlements`/`findProjectSettlementBlocks`/`existsActiveProject`
+     4개 기존 메서드 전부 동일 패턴), `finance/FinanceQueryService`도 `CashFlowMapper`를 똑같이 직접
+     주입받는다 — 이번 PR(페이징) 하나만 고쳐서 해결되는 범위가 아니라 두 도메인의 Query Service 전체를
+     Port/Adapter로 감싸는 별도 리팩터가 필요하다(Heavy lift, CodeRabbit 표기와 동일). 페이징 PR 범위를
+     벗어난다고 판단해 반영 안 함 — 김동현님께 별도 리팩터링 이슈로 전달 필요.
 - **`client` 필터는 정확히 일치** — 필터 옵션 조회가 내려주는 드롭다운 값을 그대로 선택하는 구조라 부분
   검색이 아니라 완전 일치로 구현했다.
 - **✅ 회사 범위(company_id) 반영 (2026-08-11 추가)** — 위 필터 옵션 조회와 동일한 사유로
@@ -529,11 +552,11 @@
 ## 구현 메모 — 낙관적 락 (2026-08-11)
 
 `.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `settlement_block` 테이블에 `version` 컬럼 추가
-(`V20260812120000__add_version_settlement.sql` — ⚠️ 문서 §7-1 표는 `V20260811150000`을 배정했으나
-issue 도메인과 충돌해서 150000 → 170000 → 170100 → 110000/0812까지 재배정됐고, 그 뒤 develop에 먼저
-머지된 tenant(사업카테고리) 마이그레이션이 같은 번호를 이미 써서 120000/0812로 또 재배정됨(CI
-마이그레이션 검증에 반복해서 걸림). 문서 수정 권한이 없어 이 사실은 마이그레이션 파일 주석에만 남김 —
-김동현님께 별도 전달 필요).
+(`V20260812150000__add_version_settlement.sql` — ⚠️ 문서 §7-1 표는 `V20260811150000`을 배정했으나
+계속 재배정됨(150000 → 170000 → 170100 → 110000/0812 → 120000/0812 → 150000/0812) — CI "마이그레이션
+검증"이 기준 브랜치 최대 버전보다 커야 한다고 요구하는데, 다른 PR들이 그 최대 버전을 계속 올려서 매번
+따라잡힘. 문서 수정 권한이 없어 이 사실은 마이그레이션 파일 주석에만 남김 — 김동현님께 §7-2 번호 배분
+방식 자체 재검토 요청 필요(반복되는 패턴이라 개별 재배정으로는 안 끝날 수 있음)).
 
 기존에도 `status = PENDING` 조건부 UPDATE(세금계산서/입출금 연결 시 잠금)가 있었는데, 여기에
 `version = ?` 조건을 추가로 걸었다. 원인을 3단계로 구분한다: ① 삭제됨 → `SETL-002` 404,
@@ -576,6 +599,14 @@ REPEATABLE READ 스냅샷 때문에 부정확할 수 있어서 순서를 바꿨�
    값이 굳이 필요 없지만, 파일을 읽는 사람이 헷갈리지 않도록 실제 값을 그대로 넣음). `overwrite=true` 시나리오
    (10-7)도 대상 settleId·totalAmount가 10-6과 어긋나 있던 걸 맞췄고, 로그인 계정 안내 문구(EMP003 고정 서술)도
    맨 위 로그인 계정을 가리키도록 정정.
+5. **타입 다운그레이드 판정·활동 로그 이전값 비교가 여전히 잠금 이전 `before`를 쓴다는 지적(2번 항목의 후속,
+   2026-08-12 2차) — 반영.** 2번에서 `findCurrentStateForUpdate`를 만들 때 `version`/`status`/`deletedAt`
+   3개만 반환해서, 그 사이 남이 타입/내용을 바꿔도 `assertNoTypeDowngrade`와 `detectChanges`(활동 로그)는
+   여전히 잠금 이전 값 기준으로 판정·기록했다 — 진짜 놓친 지점이었다. `findCurrentStateForUpdate`가
+   `type`/`roundNo`/금액류/`traderName`/`bankName`/`accountNumber`/`accountHolder`까지 같은 조회로 함께
+   반환하도록 확장했고, 타입 다운그레이드 판정은 이 값 기준으로 잠금 후로 옮겼다(잠금 전 얕은 검사는
+   제거 — 옛 값 기준으로 오탐/누락 둘 다 가능해서 얕은 버전을 남겨둘 이유가 없었다). 활동 로그 이전값
+   비교(`detectChanges`)도 이제 이 값을 쓴다.
 
 ⚠️ 위 1번 수정은 **overwrite=true 경로에서만** 동작이 바뀐다. overwrite=false(일반 저장)는 여전히 클라이언트가
 보낸 `version`을 그대로 검증하므로 영향 없다.
