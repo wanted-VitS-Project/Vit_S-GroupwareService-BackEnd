@@ -95,6 +95,55 @@ public enum BiddingErrorCode implements ErrorCode {
     BIDDING_NOTICE_NOT_DISMISSED(
             "BIDDING_NOTICE_NOT_DISMISSED",
             "제외 상태가 아닌 입찰 공고입니다."
+    ),
+
+    BIDDING_INVALID_SUMMARY_REQUEST(
+            "BIDDING_INVALID_SUMMARY_REQUEST",
+            "입찰 공고 AI 요약 요청이 올바르지 않습니다."
+    ),
+
+    BIDDING_SUMMARY_ALREADY_PROCESSING(
+            "BIDDING_SUMMARY_ALREADY_PROCESSING",
+            "현재 사용자가 요청한 AI 요약이 처리 중입니다."
+    ),
+    BIDDING_INVALID_SUMMARY_JOB_REQUEST(
+            "BIDDING_INVALID_SUMMARY_JOB_REQUEST",
+            "입찰 공고 AI 요약 작업 조회 요청이 올바르지 않습니다."
+    ),
+
+    BIDDING_SUMMARY_JOB_NOT_FOUND(
+            "BIDDING_SUMMARY_JOB_NOT_FOUND",
+            "현재 처리 가능한 입찰 공고 AI 요약 작업을 찾을 수 없습니다."
+    ),
+
+    BIDDING_INVALID_SUMMARY_CALLBACK(
+            "BIDDING_INVALID_SUMMARY_CALLBACK",
+            "입찰 공고 AI 요약 callback 요청이 올바르지 않습니다."
+    ),
+
+    BIDDING_SUMMARY_NOT_FOUND(
+            "BIDDING_SUMMARY_NOT_FOUND",
+            "입찰 공고 AI 요약을 찾을 수 없습니다."
+    ),
+
+    BIDDING_INVALID_SUMMARY_UPDATE(
+            "BIDDING_INVALID_SUMMARY_UPDATE",
+            "입찰 공고 AI 요약 수정값이 올바르지 않습니다."
+    ),
+
+    BIDDING_SUMMARY_NOT_EDITABLE(
+            "BIDDING_SUMMARY_NOT_EDITABLE",
+            "수정할 수 없는 입찰 공고 AI 요약입니다."
+    ),
+
+    BIDDING_SUMMARY_NOT_COMPLETED(
+            "BIDDING_SUMMARY_NOT_COMPLETED",
+            "완료되지 않은 입찰 공고 AI 요약은 확정할 수 없습니다."
+    ),
+
+    BIDDING_SUMMARY_ALREADY_CONFIRMED(
+            "BIDDING_SUMMARY_ALREADY_CONFIRMED",
+            "이미 확정된 입찰 공고 AI 요약입니다."
     );
 
     private final String code;
