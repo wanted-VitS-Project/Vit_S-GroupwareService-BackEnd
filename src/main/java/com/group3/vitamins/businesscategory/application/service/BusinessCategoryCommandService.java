@@ -14,6 +14,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ConflictExceptio
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +46,7 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
             checkCodeDuplicate(command.code(), null, companyId);
         }
 
-        BusinessCategory saved = businessCategoryRepository.save(
+        BusinessCategory saved = saveHandlingUniqueConflict(
                 BusinessCategory.create(command.name(), command.code(), command.description(),
                         LocalDateTime.now(), companyId));
 
@@ -81,7 +82,7 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
             category.changeDescription(command.description());
         }
 
-        BusinessCategory saved = businessCategoryRepository.save(category);
+        BusinessCategory saved = saveHandlingUniqueConflict(category);
         boolean deletable = !projectCategoryLinkPort.findLinkedCategoryIds(companyId)
                 .contains(saved.getBusinessCategoryId());
 
@@ -131,29 +132,51 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
         }
     }
 
-    /** 이름 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. 삭제분에 걸리면 안내 문구를 달리 낸다 (§3-1). */
+    /**
+     * 이름 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다.
+     * 활성 행만 대상으로 한다 (DELETE.md §6-1) — 삭제된 이름은 재사용을 막지 않는다.
+     */
     private void checkNameDuplicate(String name, Long excludeId, Long companyId) {
-        businessCategoryRepository.findByName(name, companyId)
+        businessCategoryRepository.findActiveByName(name, companyId)
                 .filter(existing -> !existing.getBusinessCategoryId().equals(excludeId))
                 .ifPresent(existing -> {
-                    BusinessCategoryErrorCode errorCode = BusinessCategoryErrorCode.BUSINESS_CATEGORY_NAME_DUPLICATED;
-                    if (existing.isDeleted()) {
-                        throw new ConflictException(errorCode, "삭제된 카테고리에 같은 이름이 있습니다. 다른 이름을 쓰세요.");
-                    }
-                    throw new ConflictException(errorCode);
+                    throw new ConflictException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NAME_DUPLICATED);
                 });
     }
 
-    /** 업무코드 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. 삭제분에 걸리면 안내 문구를 달리 낸다 (§3-1). */
+    /**
+     * 업무코드 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다.
+     * 활성 행만 대상으로 한다 (DELETE.md §6-1) — 삭제된 업무코드는 재사용을 막지 않는다.
+     */
     private void checkCodeDuplicate(String code, Long excludeId, Long companyId) {
-        businessCategoryRepository.findByCode(code, companyId)
+        businessCategoryRepository.findActiveByCode(code, companyId)
                 .filter(existing -> !existing.getBusinessCategoryId().equals(excludeId))
                 .ifPresent(existing -> {
-                    BusinessCategoryErrorCode errorCode = BusinessCategoryErrorCode.BUSINESS_CATEGORY_CODE_DUPLICATED;
-                    if (existing.isDeleted()) {
-                        throw new ConflictException(errorCode, "삭제된 카테고리에 같은 업무코드가 있습니다. 다른 코드를 쓰세요.");
-                    }
-                    throw new ConflictException(errorCode);
+                    throw new ConflictException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_CODE_DUPLICATED);
                 });
+    }
+
+    /**
+     * 저장 중 활성 UNIQUE(uk_bc_active_name · uk_bc_active_code) 위반을 409 로 변환한다.
+     *
+     * <p>위 check* 로 활성 행을 선검사하지만, 검사와 저장 사이에 동시 요청이 겹칠 수 있다.
+     * DB UNIQUE 가 최종 방어선이고, 그 위반을 전역 핸들러가 500 으로 흘리지 않도록 여기서 409 로 바꾼다
+     * (department·job_position 선례). 어느 제약인지에 따라 이름/업무코드 에러를 구분한다.
+     */
+    private BusinessCategory saveHandlingUniqueConflict(BusinessCategory category) {
+        try {
+            return businessCategoryRepository.save(category);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(resolveUniqueViolation(e), e);
+        }
+    }
+
+    /** UNIQUE 위반 예외의 제약명으로 이름/업무코드 에러코드를 판정한다. 코드 제약이 아니면 이름 충돌로 본다. */
+    private BusinessCategoryErrorCode resolveUniqueViolation(DataIntegrityViolationException e) {
+        String cause = e.getMostSpecificCause().getMessage();
+        if (cause != null && cause.contains("uk_bc_active_code")) {
+            return BusinessCategoryErrorCode.BUSINESS_CATEGORY_CODE_DUPLICATED;
+        }
+        return BusinessCategoryErrorCode.BUSINESS_CATEGORY_NAME_DUPLICATED;
     }
 }

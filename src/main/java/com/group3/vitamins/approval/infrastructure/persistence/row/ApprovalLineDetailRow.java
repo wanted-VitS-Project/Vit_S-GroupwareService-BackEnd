@@ -18,7 +18,8 @@ public record ApprovalLineDetailRow(
         int sequenceNo,
         String status,
         String opinion,
-        LocalDateTime processedAt
+        LocalDateTime processedAt,
+        boolean approverUnavailable
 ) {
 
     /** "기술본부 / 개발팀" 형태. {@code auth.UserProfileRow.departmentPath()}와 동일 로직(SQL이 아닌 코드에서 조립) */

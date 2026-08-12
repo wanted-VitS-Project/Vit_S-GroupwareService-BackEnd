@@ -16,8 +16,11 @@ public interface ImageStoragePort {
     /**
      * 파일을 저장소에 올린다. 큰 이미지는 구현체가 업로드 전에 축소할 수 있다 —
      * 그 경우 반환되는 {@code sizeBytes} 는 축소 후 실제로 저장된 크기다.
+     *
+     * @param companyId 저장 키에 회사 접두사(companies/{companyId}/...)를 넣기 위한 값
+     *                   (2026-08-11 멀티테넌시 반영 — file 도메인과 동일한 키 규칙)
      */
-    UploadedImage upload(Long imgBlockId, MultipartFile file, String extension);
+    UploadedImage upload(Long companyId, Long imgBlockId, MultipartFile file, String extension);
 
     /** 저장된 키로 한시적으로 열리는 조회용 URL을 발급한다. */
     String presignViewUrl(String storageKey);

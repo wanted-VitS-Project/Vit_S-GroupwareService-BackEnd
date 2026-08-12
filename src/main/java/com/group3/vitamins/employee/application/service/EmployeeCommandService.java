@@ -17,6 +17,8 @@ import com.group3.vitamins.employee.application.usecase.EmployeeCommandUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
 import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
+import com.group3.vitamins.employee.contract.EmployeeParticipationUnavailableEvent;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
@@ -74,6 +76,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private final AccountDeactivationPort accountDeactivationPort;
     private final CompanyCodeQueryPort companyCodeQueryPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public EmployeeRegisterResult register(RegisterEmployeeCommand command) {
@@ -226,6 +229,8 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
 
         employeeRepository.resign(command.userId(), resignedAt);
         accountDeactivationPort.deactivate(command.userId());
+        domainEventPublisher.publish(new EmployeeParticipationUnavailableEvent(
+                command.userId(), current.getCompanyId()));
 
         log.info("사원 퇴사 - userId={} resignedAt={}", command.userId(), resignedAt);
         return new EmployeeResignResult(command.userId(), resignedAt.toString(), "INACTIVE");

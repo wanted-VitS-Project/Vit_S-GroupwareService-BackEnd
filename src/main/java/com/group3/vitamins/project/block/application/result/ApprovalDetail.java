@@ -20,6 +20,7 @@ package com.group3.vitamins.project.block.application.result;
  * 영역에 맞춰 자르는 건 프론트 표시 로직(예: CSS 줄바꿈 제한)의 몫이다.
  */
 public record ApprovalDetail(Long approvalId, Long revisionId, int revisionNo,
-                             String status, String title, String content, int totalLines, int approvedLines)
+                             String status, String title, String content, int totalLines, int approvedLines,
+                             boolean requiresApproverReplacement)
         implements BlockDetail {
 }

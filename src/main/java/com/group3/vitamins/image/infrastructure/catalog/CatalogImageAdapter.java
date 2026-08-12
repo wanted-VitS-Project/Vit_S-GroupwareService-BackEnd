@@ -55,8 +55,16 @@ public class CatalogImageAdapter implements ImageRepository {
 
     @Override
     @Transactional
-    public int updateCaptionAndOrder(Long imgId, Long imgBlockId, String caption, int orderIndex) {
-        return springDataImageRepository.updateCaptionAndOrder(imgId, imgBlockId, caption, orderIndex);
+    public int updateCaptionAndOrderIfVersionMatches(Long imgId, Long imgBlockId, String caption, int orderIndex,
+                                                      int expectedVersion) {
+        return springDataImageRepository.updateCaptionAndOrderIfVersionMatches(
+                imgId, imgBlockId, caption, orderIndex, expectedVersion);
+    }
+
+    @Override
+    @Transactional
+    public int touchVersionIfMatches(Long imgId, Long imgBlockId, int expectedVersion) {
+        return springDataImageRepository.touchVersionIfMatches(imgId, imgBlockId, expectedVersion);
     }
 
     @Override
@@ -145,7 +153,8 @@ public class CatalogImageAdapter implements ImageRepository {
                 entity.getOrderIndex(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
-                entity.getDeletedAt()
+                entity.getDeletedAt(),
+                entity.getVersion()
         );
     }
 }

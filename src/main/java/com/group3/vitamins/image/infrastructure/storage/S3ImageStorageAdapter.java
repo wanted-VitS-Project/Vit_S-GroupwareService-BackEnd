@@ -24,9 +24,9 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 이미지 저장소 구현체. S3 키는 {@code images/{imgBlockId}/{uuid}.{ext}} 로 둔다 — 회사/부서별
- * 접두사는 아직 그 개념 자체가 도메인에 없어 보류했고, {@code imgBlockId} 를 키에 포함해 나중에
- * 블록 기준으로 묶을 수 있게만 해둔다 (`.ai/api/image.md` §S3 저장 정책).
+ * 이미지 저장소 구현체. S3 키는 {@code companies/{companyId}/images/{imgBlockId}/{uuid}.{ext}} 로 둔다
+ * (2026-08-11 — file 도메인의 {@code companies/{companyId}/...} 키 규칙과 통일). {@code imgBlockId}
+ * 를 키에 포함해 블록 기준으로도 묶을 수 있다 (`.ai/api/image.md` §S3 저장 정책).
  */
 @Component
 @RequiredArgsConstructor
@@ -46,14 +46,14 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
     private String bucket;
 
     @Override
-    public UploadedImage upload(Long imgBlockId, MultipartFile file, String extension) {
+    public UploadedImage upload(Long companyId, Long imgBlockId, MultipartFile file, String extension) {
         // 실제 콘텐츠가 진짜 이미지인지(위장 업로드 방지)는 여기서 다시 확인하지 않는다 — 호출자
         // (ImageCommandService)가 업로드를 시작하기 전에 ImageEligibilityPolicy.assertActualImageContentOrThrow
         // 로 전체 파일을 먼저 검증한다(2026-08-06, 파일마다 여기서 검증하면 뒤쪽 파일이 걸릴 때 앞서
         // 올라간 파일이 고아 객체로 남는 문제가 있어서 검증 시점을 앞단으로 옮김).
         byte[] original = readAllBytes(file);
         byte[] body = prepareBody(file, extension, original);
-        String key = "images/" + imgBlockId + "/" + UUID.randomUUID() + "." + extension;
+        String key = "companies/" + companyId + "/images/" + imgBlockId + "/" + UUID.randomUUID() + "." + extension;
 
         try {
             s3Client.putObject(

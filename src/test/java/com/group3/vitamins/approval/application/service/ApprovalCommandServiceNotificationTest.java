@@ -51,6 +51,7 @@ class ApprovalCommandServiceNotificationTest {
     private static final Long REVISION_ID = 56L;
     private static final Long BLOCK_ID = 10L;
     private static final String DRAFTER = "EMP001";
+    private static final String ACTING_DRAFTER = "EMP004";
     private static final String APPROVER_1 = "EMP002";
     private static final String APPROVER_2 = "EMP003";
 
@@ -75,7 +76,12 @@ class ApprovalCommandServiceNotificationTest {
     private ApprovalCommandService service;
 
     private Approval approval(ApprovalStatus status) {
-        return Approval.reconstruct(APPROVAL_ID, BLOCK_ID, DRAFTER, status, 1, null, null, null, null);
+        return approval(status, null);
+    }
+
+    private Approval approval(ApprovalStatus status, String actingDrafterId) {
+        return Approval.reconstruct(
+                APPROVAL_ID, BLOCK_ID, DRAFTER, actingDrafterId, status, 1, null, null, null, null);
     }
 
     private ApprovalRevision revision() {
@@ -174,6 +180,49 @@ class ApprovalCommandServiceNotificationTest {
         List<NotificationRequestedEvent> events = capturedNotifications();
         assertThat(events).singleElement().satisfies(event -> {
             assertThat(event.recipientUserId()).isEqualTo(DRAFTER);
+            assertThat(event.notificationType()).isEqualTo("APPROVAL_REJECTED");
+            assertPointsToApproval(event);
+        });
+    }
+
+    @Test
+    @DisplayName("마지막 순번 승인 시 대행 기안자가 있으면 대행자에게 완료 알림을 보낸다")
+    void approveNotifiesActingDrafterOnCompletion() {
+        ApprovalLine current = line(1L, APPROVER_1, 1, ApprovalLineStatus.ACTIVE);
+
+        when(lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(1L))
+                .thenReturn(approval(ApprovalStatus.IN_PROGRESS, ACTING_DRAFTER));
+        when(lineProcessingPolicy.getActiveOwnedLineOrThrow(1L, APPROVER_1)).thenReturn(current);
+        when(approvalRepository.findRevisionById(REVISION_ID)).thenReturn(Optional.of(revision()));
+        when(approvalRepository.markLineProcessed(1L, ApprovalLineStatus.APPROVED, null))
+                .thenReturn(line(1L, APPROVER_1, 1, ApprovalLineStatus.APPROVED));
+        when(approvalRepository.findLineBySequenceNo(REVISION_ID, 2)).thenReturn(Optional.empty());
+
+        service.approve(new ApproveApprovalLineCommand(1L, null, APPROVER_1));
+
+        assertThat(capturedNotifications()).singleElement().satisfies(event -> {
+            assertThat(event.recipientUserId()).isEqualTo(ACTING_DRAFTER);
+            assertThat(event.notificationType()).isEqualTo("APPROVAL_COMPLETED");
+            assertPointsToApproval(event);
+        });
+    }
+
+    @Test
+    @DisplayName("반려 시 대행 기안자가 있으면 대행자에게 반려 알림을 보낸다")
+    void rejectNotifiesActingDrafter() {
+        ApprovalLine current = line(1L, APPROVER_1, 1, ApprovalLineStatus.ACTIVE);
+
+        when(lineProcessingPolicy.getApprovalForLineForUpdateOrThrow(1L))
+                .thenReturn(approval(ApprovalStatus.IN_PROGRESS, ACTING_DRAFTER));
+        when(lineProcessingPolicy.getActiveOwnedLineOrThrow(1L, APPROVER_1)).thenReturn(current);
+        when(approvalRepository.findRevisionById(REVISION_ID)).thenReturn(Optional.of(revision()));
+        when(approvalRepository.markLineProcessed(1L, ApprovalLineStatus.REJECTED, "보완 필요"))
+                .thenReturn(line(1L, APPROVER_1, 1, ApprovalLineStatus.REJECTED));
+
+        service.reject(new RejectApprovalLineCommand(1L, "보완 필요", APPROVER_1));
+
+        assertThat(capturedNotifications()).singleElement().satisfies(event -> {
+            assertThat(event.recipientUserId()).isEqualTo(ACTING_DRAFTER);
             assertThat(event.notificationType()).isEqualTo("APPROVAL_REJECTED");
             assertPointsToApproval(event);
         });

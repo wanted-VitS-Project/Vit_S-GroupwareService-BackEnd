@@ -153,7 +153,7 @@ jobs:
             "docker compose pull",
             "docker compose up -d --remove-orphans",
             "echo \"[\$(ts)] 기동 확인: localhost:8080 HTTP 응답 대기...\"",
-            "for i in \$(seq 1 40); do code=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || echo 000); [ \"\$code\" != \"000\" ] && { echo \"[\$(ts)] OK: 앱 응답(HTTP \$code)\"; break; }; [ \$i -eq 40 ] && { echo \"[\$(ts)] FAIL: 200초 후에도 무응답\"; docker compose logs --tail 80 spring; exit 1; }; sleep 5; done",
+            "for i in \$(seq 1 40); do code=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true); [ -n \"\$code\" ] && [ \"\$code\" != \"000\" ] && { echo \"[\$(ts)] OK: 앱 응답(HTTP \$code)\"; break; }; [ \$i -eq 40 ] && { echo \"[\$(ts)] FAIL: 200초 후에도 무응답\"; docker compose logs --tail 80 spring; exit 1; }; sleep 5; done",
             "docker image prune -f",
             "echo \"[\$(ts)] === 배포 완료 (EC2) ===\""
           ]}

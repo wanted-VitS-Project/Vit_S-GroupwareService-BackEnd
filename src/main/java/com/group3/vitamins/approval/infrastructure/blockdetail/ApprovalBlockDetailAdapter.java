@@ -65,9 +65,13 @@ public class ApprovalBlockDetailAdapter implements BlockDetailPort {
             int approvedCount = (int) lines.stream()
                     .filter(line -> "APPROVED".equals(line.status()))
                     .count();
+            boolean requiresApproverReplacement = lines.stream()
+                    .anyMatch(line -> ("ACTIVE".equals(line.status()) || "WAITING".equals(line.status()))
+                            && line.approverUnavailable());
             details.put(revision.approvalId(), new ApprovalDetail(
                     revision.approvalId(), revision.revisionId(), revision.revisionNo(),
-                    revision.status(), revision.title(), revision.content(), lines.size(), approvedCount));
+                    revision.status(), revision.title(), revision.content(), lines.size(), approvedCount,
+                    requiresApproverReplacement));
         }
         return details;
     }

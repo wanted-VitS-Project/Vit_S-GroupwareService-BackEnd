@@ -27,12 +27,22 @@
 
     <select id="findLinesByRevisionIds"
             resultType="com.group3.vitamins.approval.infrastructure.blockdetail.ApprovalLineRow">
-        SELECT approval_revision_id AS revisionId,
-               status               AS status
-        FROM approval_line
-        WHERE approval_revision_id IN
+        SELECT al.approval_revision_id AS revisionId,
+               al.status               AS status,
+               CASE WHEN e.user_id IS NULL
+                          OR e.resigned_at IS NOT NULL
+                          OR e.deleted_at IS NOT NULL
+                          OR a.status IS NULL
+                          OR a.status &lt;&gt; 'ACTIVE'
+                    THEN TRUE ELSE FALSE END AS approverUnavailable
+        FROM approval_line al
+        LEFT JOIN employee e
+            ON e.user_id = al.user_id
+        LEFT JOIN account a
+            ON a.user_id = e.user_id
+        WHERE al.approval_revision_id IN
         <foreach item="id" collection="revisionIds" open="(" separator="," close=")">#{id}</foreach>
-        AND deleted_at IS NULL
+        AND al.deleted_at IS NULL
     </select>
 
 </mapper>

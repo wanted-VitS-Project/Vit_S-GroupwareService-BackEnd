@@ -43,6 +43,10 @@ public class ApprovalJpaEntity {
     @Column(name = "user_id", nullable = false, length = 20)
     private String drafterId;
 
+    /** 원 기안자가 참여 불가일 때 기존 결재를 이어받은 대행 기안자. 원 기안자 감사 이력은 유지한다. */
+    @Column(name = "acting_drafter_id", length = 20)
+    private String actingDrafterId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false,
             columnDefinition = "enum('DRAFT','IN_PROGRESS','REJECTED','COMPLETED','CANCELED')")

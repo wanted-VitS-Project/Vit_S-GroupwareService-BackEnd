@@ -2,6 +2,9 @@ package com.group3.vitamins.approval.application.service;
 
 import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.application.port.BlockSummary;
+import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
+import com.group3.vitamins.approval.application.port.EmployeeSummary;
+import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
 import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
@@ -9,6 +12,7 @@ import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
+import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +41,7 @@ public class ApprovalHandlerService {
 
     private final ApprovalRepository approvalRepository;
     private final BlockCatalogPort blockCatalogPort;
+    private final EmployeeCatalogPort employeeCatalogPort;
     private final DomainEventPublisher domainEventPublisher;
 
     /**
@@ -47,6 +52,12 @@ public class ApprovalHandlerService {
         BlockSummary block = blockCatalogPort.findBlock(blockId)
                 .orElseThrow(() -> new IllegalStateException(
                         "block not found right after creation - blockId=" + blockId));
+
+        EmployeeSummary creator = employeeCatalogPort.findEmployee(block.createdBy())
+                .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER));
+        if (creator.participationUnavailable() || "ADMIN".equals(creator.role())) {
+            throw new ForbiddenException(ApprovalErrorCode.APPROVAL_NOT_DRAFTER);
+        }
 
         Long approvalId = approvalRepository.createDraft(blockId, block.createdBy()).approval().getApprovalId();
         log.info("결재 상세 생성 - blockId={}, approvalId={}, drafterId={}", blockId, approvalId, block.createdBy());
@@ -100,7 +111,8 @@ public class ApprovalHandlerService {
         }
 
         Set<String> recipients = new LinkedHashSet<>();
-        recipients.add(approval.getDrafterId());
+        recipients.add(approval.getActingDrafterId() != null
+                ? approval.getActingDrafterId() : approval.getDrafterId());
         approvalRepository.findLinesByApprovalId(approval.getApprovalId()).stream()
                 .filter(line -> line.getStatus() == ApprovalLineStatus.ACTIVE)
                 .map(ApprovalLine::getApproverId)

@@ -9,6 +9,8 @@ import com.group3.vitamins.account.application.usecase.AccountCommandUseCase;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
 import com.group3.vitamins.account.infrastructure.persistence.AccountEntity;
 import com.group3.vitamins.account.infrastructure.persistence.AccountJpaRepository;
+import com.group3.vitamins.employee.contract.EmployeeParticipationUnavailableEvent;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
@@ -49,6 +51,7 @@ public class AccountCommandService implements AccountCommandUseCase {
     private final SessionTerminator sessionTerminator;
     private final AccountAdminPolicy accountAdminPolicy;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final DomainEventPublisher domainEventPublisher;
 
     /**
      * 전역 권한 변경 (`.ai/api/account.md` §1).
@@ -90,6 +93,8 @@ public class AccountCommandService implements AccountCommandUseCase {
 
         account.changeStatus(command.status());
         if (INACTIVE.equals(command.status())) {
+            domainEventPublisher.publish(new EmployeeParticipationUnavailableEvent(
+                    command.targetUserId(), currentCompanyIdProvider.currentCompanyId()));
             terminateSessionsAfterCommit(command.targetUserId());
         }
         log.info("계정 상태 변경 — targetUserId={} status={}", command.targetUserId(), command.status());

@@ -13,6 +13,7 @@ public class Approval {
     private final Long approvalId;
     private final Long blockId;
     private final String drafterId;
+    private final String actingDrafterId;
     private final ApprovalStatus status;
     private final int currentRevisionNo;
     private final LocalDateTime completedAt;
@@ -20,12 +21,13 @@ public class Approval {
     private final LocalDateTime updatedAt;
     private final LocalDateTime deletedAt;
 
-    private Approval(Long approvalId, Long blockId, String drafterId, ApprovalStatus status,
+    private Approval(Long approvalId, Long blockId, String drafterId, String actingDrafterId, ApprovalStatus status,
                       int currentRevisionNo, LocalDateTime completedAt,
                       LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
         this.approvalId = approvalId;
         this.blockId = blockId;
         this.drafterId = drafterId;
+        this.actingDrafterId = actingDrafterId;
         this.status = status;
         this.currentRevisionNo = currentRevisionNo;
         this.completedAt = completedAt;
@@ -34,10 +36,11 @@ public class Approval {
         this.deletedAt = deletedAt;
     }
 
-    public static Approval reconstruct(Long approvalId, Long blockId, String drafterId, ApprovalStatus status,
+    public static Approval reconstruct(Long approvalId, Long blockId, String drafterId, String actingDrafterId,
+                                        ApprovalStatus status,
                                         int currentRevisionNo, LocalDateTime completedAt,
                                         LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
-        return new Approval(approvalId, blockId, drafterId, status, currentRevisionNo,
+        return new Approval(approvalId, blockId, drafterId, actingDrafterId, status, currentRevisionNo,
                 completedAt, createdAt, updatedAt, deletedAt);
     }
 
@@ -51,6 +54,10 @@ public class Approval {
 
     public String getDrafterId() {
         return drafterId;
+    }
+
+    public String getActingDrafterId() {
+        return actingDrafterId;
     }
 
     public ApprovalStatus getStatus() {

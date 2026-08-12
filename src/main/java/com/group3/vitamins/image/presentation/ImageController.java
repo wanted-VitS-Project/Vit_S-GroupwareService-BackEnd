@@ -34,6 +34,7 @@ import com.group3.vitamins.image.presentation.api.response.UpdatedImageOrderResp
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import jakarta.validation.Valid;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import io.swagger.v3.oas.annotations.Operation;
@@ -140,7 +141,7 @@ public class ImageController {
         List<BlockImageItemResponse> images = view.images().stream()
                 .map(image -> new BlockImageItemResponse(
                         image.imgId(), image.originalName(), image.imageUrl(),
-                        image.caption(), image.orderIndex()))
+                        image.caption(), image.orderIndex(), image.version()))
                 .toList();
 
         ImageItemsQueryResponse data = new ImageItemsQueryResponse(view.totalCount(), images);
@@ -229,7 +230,8 @@ public class ImageController {
                         image.imageUrl(),
                         image.caption(),
                         image.orderIndex(),
-                        image.createdAt()
+                        image.createdAt(),
+                        image.version()
                 ))
                 .toList();
 
@@ -241,10 +243,13 @@ public class ImageController {
     @Operation(summary = "이미지 항목 수정", description = "이미지 블록의 항목 순서와 캡션을 한 번에 수정한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이미지 수정 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청한 이미지 목록이 유효하지 않습니다. (IMG-005)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "요청한 이미지 목록이 유효하지 않습니다. (IMG-005) / 버전 정보가 없습니다. (IMAGE_VERSION_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "편집 권한이 없습니다. (IMG-002) / 초기 비밀번호를 먼저 변경해 주세요. (AUTH_PASSWORD_RESET_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (IMG-003)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "다른 사용자가 먼저 수정했습니다. (IMAGE_VERSION_CONFLICT)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "COMMON_INTERNAL_ERROR — 서버 내부 오류입니다.")
     })
@@ -252,7 +257,7 @@ public class ImageController {
     public ResponseEntity<ApiResponse<UpdateImageItemsResponse>> updateItems(
             @Parameter(description = "수정할 이미지 블록 ID", example = "1")
             @PathVariable Long imgBlockId,
-            @RequestBody ImageItemUpdateRequest request,
+            @Valid @RequestBody ImageItemUpdateRequest request,
             Authentication authentication
     ) {
         // 배열 자체가 없거나(null), 배열 안에 항목 하나가 null로 온 경우 — 후자는 이 뒤 map()에서
@@ -262,7 +267,7 @@ public class ImageController {
             throw new ValidationException(ImageErrorCode.INVALID_IMAGE_LIST);
         }
         List<UpdateImageItemsCommand.Entry> entries = request.images().stream()
-                .map(entry -> new UpdateImageItemsCommand.Entry(entry.imgId(), entry.caption()))
+                .map(entry -> new UpdateImageItemsCommand.Entry(entry.imgId(), entry.caption(), entry.version()))
                 .toList();
 
         UpdateImageItemsView view = imageCommandUseCase.updateItems(
@@ -270,7 +275,8 @@ public class ImageController {
                         RequesterRole.from(authentication)));
 
         List<UpdatedImageOrderResponse> images = view.images().stream()
-                .map(image -> new UpdatedImageOrderResponse(image.imgId(), image.orderIndex(), image.caption()))
+                .map(image -> new UpdatedImageOrderResponse(
+                        image.imgId(), image.orderIndex(), image.caption(), image.version()))
                 .toList();
 
         return ResponseEntity.ok(ApiResponse.success("이미지 수정 성공", new UpdateImageItemsResponse(images)));
