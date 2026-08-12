@@ -81,6 +81,6 @@ class ApprovalFileCatalogAdapterTest {
         return FileVersion.restore(FILE_VERSION_ID, FILE_ID, 1, UploadStatus.COMPLETED,
                 "projects/5/files/30/v1", "제안서_v1.pdf", "pdf", "application/pdf",
                 4404019L, "checksum", 12, null,
-                "EMP001", "김결재", "영업팀", "과장", COMPLETED_AT, null);
+                "EMP001", "김결재", "영업팀", "과장", COMPLETED_AT, null, null);
     }
 }

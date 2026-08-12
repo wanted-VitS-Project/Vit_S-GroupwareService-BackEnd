@@ -81,4 +81,7 @@ public class FileVersionJpaEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
 }
