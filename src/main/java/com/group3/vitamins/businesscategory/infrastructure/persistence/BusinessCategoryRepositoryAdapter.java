@@ -23,14 +23,14 @@ public class BusinessCategoryRepositoryAdapter implements BusinessCategoryReposi
     }
 
     @Override
-    public Optional<BusinessCategory> findByName(String name, Long companyId) {
-        return springDataRepository.findByNameAndCompanyId(name, companyId)
+    public Optional<BusinessCategory> findActiveByName(String name, Long companyId) {
+        return springDataRepository.findByNameAndCompanyIdAndDeletedAtIsNull(name, companyId)
                 .map(BusinessCategoryMapper::toDomain);
     }
 
     @Override
-    public Optional<BusinessCategory> findByCode(String code, Long companyId) {
-        return springDataRepository.findByCodeAndCompanyId(code, companyId)
+    public Optional<BusinessCategory> findActiveByCode(String code, Long companyId) {
+        return springDataRepository.findByCodeAndCompanyIdAndDeletedAtIsNull(code, companyId)
                 .map(BusinessCategoryMapper::toDomain);
     }
 

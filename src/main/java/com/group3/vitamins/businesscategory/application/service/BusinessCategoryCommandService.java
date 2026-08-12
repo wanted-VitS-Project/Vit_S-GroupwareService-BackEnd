@@ -131,29 +131,27 @@ public class BusinessCategoryCommandService implements BusinessCategoryCommandUs
         }
     }
 
-    /** 이름 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. 삭제분에 걸리면 안내 문구를 달리 낸다 (§3-1). */
+    /**
+     * 이름 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다.
+     * 활성 행만 대상으로 한다 (DELETE.md §6-1) — 삭제된 이름은 재사용을 막지 않는다.
+     */
     private void checkNameDuplicate(String name, Long excludeId, Long companyId) {
-        businessCategoryRepository.findByName(name, companyId)
+        businessCategoryRepository.findActiveByName(name, companyId)
                 .filter(existing -> !existing.getBusinessCategoryId().equals(excludeId))
                 .ifPresent(existing -> {
-                    BusinessCategoryErrorCode errorCode = BusinessCategoryErrorCode.BUSINESS_CATEGORY_NAME_DUPLICATED;
-                    if (existing.isDeleted()) {
-                        throw new ConflictException(errorCode, "삭제된 카테고리에 같은 이름이 있습니다. 다른 이름을 쓰세요.");
-                    }
-                    throw new ConflictException(errorCode);
+                    throw new ConflictException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_NAME_DUPLICATED);
                 });
     }
 
-    /** 업무코드 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다. 삭제분에 걸리면 안내 문구를 달리 낸다 (§3-1). */
+    /**
+     * 업무코드 중복을 검사한다. excludeId 는 수정 중인 자기 자신 — 있으면 건너뛴다.
+     * 활성 행만 대상으로 한다 (DELETE.md §6-1) — 삭제된 업무코드는 재사용을 막지 않는다.
+     */
     private void checkCodeDuplicate(String code, Long excludeId, Long companyId) {
-        businessCategoryRepository.findByCode(code, companyId)
+        businessCategoryRepository.findActiveByCode(code, companyId)
                 .filter(existing -> !existing.getBusinessCategoryId().equals(excludeId))
                 .ifPresent(existing -> {
-                    BusinessCategoryErrorCode errorCode = BusinessCategoryErrorCode.BUSINESS_CATEGORY_CODE_DUPLICATED;
-                    if (existing.isDeleted()) {
-                        throw new ConflictException(errorCode, "삭제된 카테고리에 같은 업무코드가 있습니다. 다른 코드를 쓰세요.");
-                    }
-                    throw new ConflictException(errorCode);
+                    throw new ConflictException(BusinessCategoryErrorCode.BUSINESS_CATEGORY_CODE_DUPLICATED);
                 });
     }
 }
