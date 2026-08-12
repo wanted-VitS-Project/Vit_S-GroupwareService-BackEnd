@@ -17,6 +17,7 @@ import com.group3.vitamins.finance.infrastructure.status.FinanceSummaryRow;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +34,9 @@ import java.util.List;
 public class FinanceQueryService implements FinanceQueryUseCase {
 
     private static final String FINANCE_PAGE_CODE = "FINANCE";
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> ALLOWED_CASH_FLOW_SORTS =
+            Set.of("TRADED_AT_DESC", "TRADED_AT_ASC", "AMOUNT_DESC");
 
     private final PagePermissionPort pagePermissionPort;
     private final FinanceSummaryMapper financeSummaryMapper;
@@ -60,13 +65,32 @@ public class FinanceQueryService implements FinanceQueryUseCase {
     public CashFlowListView getCashFlows(CashFlowListQuery query) {
         log.info("입출금 내역 조회 요청 - userId={}", query.userId());
 
+        validateCashFlowListQuery(query);
         assertFinanceAccess(query.userId(), query.role());
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<CashFlowRow> rows = cashFlowMapper.findCashFlows(
-                currentCompanyIdProvider.currentCompanyId(),
-                query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword());
+                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword(),
+                query.sort(), query.size(), query.page() * query.size());
+        long totalElements = cashFlowMapper.countCashFlows(
+                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword());
+        int totalPages = (int) Math.ceil((double) totalElements / query.size());
 
-        return new CashFlowListView(rows.stream().map(this::toCashFlowView).toList());
+        return new CashFlowListView(
+                rows.stream().map(this::toCashFlowView).toList(),
+                query.page(), query.size(), totalElements, totalPages
+        );
+    }
+
+    // bidnotice 목록과 동일 컨벤션 — 잘못된 page/size/sort는 클램프 대신 400으로 던진다.
+    private void validateCashFlowListQuery(CashFlowListQuery query) {
+        if (query.page() < 0 || query.size() <= 0 || query.size() > MAX_PAGE_SIZE
+                || query.page() > Integer.MAX_VALUE / query.size()
+                || (query.startDate() != null && query.endDate() != null
+                && query.startDate().isAfter(query.endDate()))
+                || (query.sort() != null && !ALLOWED_CASH_FLOW_SORTS.contains(query.sort()))) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_PAGE_QUERY_INVALID);
+        }
     }
 
     private CashFlowView toCashFlowView(CashFlowRow row) {

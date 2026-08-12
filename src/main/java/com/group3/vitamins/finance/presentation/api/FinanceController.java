@@ -98,6 +98,8 @@ public class FinanceController {
             description = "재무 관리 페이지의 입출금 내역 목록을 조회한다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "페이지 조회 조건이 올바르지 않습니다. (FINANCE_PAGE_QUERY_INVALID)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
                     description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)")
     })
@@ -115,10 +117,19 @@ public class FinanceController {
             @RequestParam(required = false) Long projectId,
             @Parameter(description = "적요 또는 입금자명 검색 키워드", example = "환경부")
             @RequestParam(required = false) String keyword,
+            @Parameter(description = "0-base 페이지 번호. 생략하면 0", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지당 개수(최대 100). 생략하면 20", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "정렬 기준. 생략하면 TRADED_AT_DESC",
+                    example = "TRADED_AT_DESC",
+                    schema = @io.swagger.v3.oas.annotations.media.Schema(
+                            allowableValues = {"TRADED_AT_DESC", "TRADED_AT_ASC", "AMOUNT_DESC"}))
+            @RequestParam(defaultValue = "TRADED_AT_DESC") String sort,
             Authentication authentication
     ) {
         CashFlowListView view = financeQueryUseCase.getCashFlows(new CashFlowListQuery(
-                startDate, endDate, unlinked, projectId, keyword,
+                startDate, endDate, unlinked, projectId, keyword, page, size, sort,
                 authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("입출금 내역 조회 성공", CashFlowListResponse.from(view)));
