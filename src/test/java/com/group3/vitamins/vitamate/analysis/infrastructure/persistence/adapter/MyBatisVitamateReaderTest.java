@@ -34,9 +34,7 @@ class MyBatisVitamateReaderTest {
     @DisplayName("분석 상세 조회 시 카테고리별 템플릿 버전 스냅샷을 모두 반환한다")
     void returnsTemplateVersionForEachSelectedCategory() {
         Long analysisId = 1L;
-        String userId = "EMP001";
-
-        when(analysisMapper.findAccessibleAnalysis(analysisId, userId))
+        when(analysisMapper.findAnalysis(analysisId))
                 .thenReturn(analysisRow(analysisId));
         when(templateMapper.findAnalysisTemplateSnapshots(analysisId))
                 .thenReturn(List.of(
@@ -47,7 +45,7 @@ class MyBatisVitamateReaderTest {
         when(analysisMapper.findAnalysisCitations(analysisId)).thenReturn(List.of());
 
         VitamateAnalysisReaderPort.VitamateAnalysisDetail detail = reader
-                .findAccessibleAnalysis(analysisId, userId)
+                .findAnalysis(analysisId)
                 .orElseThrow();
 
         assertThat(detail.reviewCategoryCodes())
@@ -68,19 +66,18 @@ class MyBatisVitamateReaderTest {
     @DisplayName("템플릿 도입 전 분석은 템플릿 버전 빈 목록으로 조회한다")
     void returnsEmptyTemplateVersionsForLegacyAnalysis() {
         Long analysisId = 2L;
-        String userId = "EMP001";
         VitamateAnalysisRow row = analysisRow(analysisId);
         row.setReviewType(null);
         row.setReviewCategoryCodes(null);
         row.setPrompt(null);
 
-        when(analysisMapper.findAccessibleAnalysis(analysisId, userId)).thenReturn(row);
+        when(analysisMapper.findAnalysis(analysisId)).thenReturn(row);
         when(templateMapper.findAnalysisTemplateSnapshots(analysisId)).thenReturn(List.of());
         when(analysisMapper.findAnalysisDocuments(analysisId)).thenReturn(List.of());
         when(analysisMapper.findAnalysisCitations(analysisId)).thenReturn(List.of());
 
         VitamateAnalysisReaderPort.VitamateAnalysisDetail detail = reader
-                .findAccessibleAnalysis(analysisId, userId)
+                .findAnalysis(analysisId)
                 .orElseThrow();
 
         assertThat(detail.reviewType()).isNull();

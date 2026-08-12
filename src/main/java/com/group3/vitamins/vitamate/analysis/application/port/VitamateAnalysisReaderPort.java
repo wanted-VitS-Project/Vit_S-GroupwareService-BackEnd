@@ -7,8 +7,8 @@ import java.util.Optional;
 // 비타메이트 분석 상세와 worker 작업 조회를 위한 읽기 포트입니다.
 public interface VitamateAnalysisReaderPort {
 
-    // 요청자가 접근 가능한 분석이면 분석 본문, 선택 문서, 근거 목록을 함께 반환합니다.
-    Optional<VitamateAnalysisDetail> findAccessibleAnalysis(Long analysisId, String userId);
+    // 분석 본문, 선택 문서, 근거 목록을 함께 반환합니다. 접근 권한은 application service가 판정합니다.
+    Optional<VitamateAnalysisDetail> findAnalysis(Long analysisId);
 
     // Python worker가 처리할 PROCESSING 분석 작업 입력을 조회합니다.
     Optional<VitamateAnalysisJobDetail> findProcessingAnalysisJob(Long analysisId, String attemptId);

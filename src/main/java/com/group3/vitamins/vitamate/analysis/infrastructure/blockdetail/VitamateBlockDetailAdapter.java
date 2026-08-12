@@ -49,7 +49,7 @@ public class VitamateBlockDetailAdapter implements BlockDetailPort {
         return vitamateDetailMapper.findByVitamateBlockIds(typeIds).stream()
                 .collect(Collectors.toMap(
                         VitamateDetailRow::vitamateBlockId,
-                        row -> new VitamateDetail(row.vitamateBlockId(), row.welcomeMessage())
+                        row -> new VitamateDetail(row.welcomeMessage())
                 ));
     }
 }

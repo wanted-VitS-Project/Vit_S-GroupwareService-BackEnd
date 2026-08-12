@@ -10,11 +10,8 @@ import java.util.List;
 @Mapper
 public interface VitamateAnalysisMapper {
 
-    // AI 블록, 비타메이트 블록, 스텝, 프로젝트 권한을 함께 조회한다.
-    VitamateBlockContextRow findAccessibleVitamateBlock(
-            @Param("blockId") Long blockId,
-            @Param("userId") String userId
-    );
+    // AI 블록, 비타메이트 블록, 스텝 연결 정보를 조회한다.
+    VitamateBlockContextRow findVitamateBlock(@Param("blockId") Long blockId);
 
     // 선택된 파일 버전 중 해당 프로젝트에 속하고 업로드 완료된 건수를 센다.
     int countCompletedFileVersionsInProject(
@@ -22,11 +19,8 @@ public interface VitamateAnalysisMapper {
             @Param("fileVersionIds") List<Long> fileVersionIds
     );
 
-    // 요청자가 접근할 수 있는 분석 상세 본문을 조회한다.
-    VitamateAnalysisRow findAccessibleAnalysis(
-            @Param("analysisId") Long analysisId,
-            @Param("userId") String userId
-    );
+    // 분석 상세 본문을 조회한다.
+    VitamateAnalysisRow findAnalysis(@Param("analysisId") Long analysisId);
 
     // 분석 요청 당시 선택된 문서 목록을 조회한다.
     List<VitamateAnalysisDocumentRow> findAnalysisDocuments(@Param("analysisId") Long analysisId);

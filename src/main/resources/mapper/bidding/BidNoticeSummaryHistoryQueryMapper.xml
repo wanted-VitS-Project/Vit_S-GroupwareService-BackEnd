@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.group3.vitamins.bidding.bidsummary.infrastructure.query.BidNoticeSummaryHistoryQueryMapper">
+
+    <sql id="visibleHistoryWhere">
+        WHERE company_id = #{companyId}
+          AND bid_notice_id = #{noticeId}
+          AND deleted_at IS NULL
+          AND (requested_by = #{userId} OR confirmed = TRUE)
+    </sql>
+
+    <select id="findHistory"
+            resultType="com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryHistoryItemResult">
+        SELECT
+            bid_notice_summary_id AS summary_id,
+            parent_summary_id,
+            revision_no,
+            summary_status,
+            prompt,
+            confirmed,
+            CASE WHEN requested_by = #{userId} THEN TRUE ELSE FALSE END AS mine,
+            project_id,
+            created_at AS requested_at,
+            confirmed_at
+        FROM bid_notice_summary
+        <include refid="visibleHistoryWhere"/>
+        ORDER BY created_at DESC, bid_notice_summary_id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countHistory" resultType="long">
+        SELECT COUNT(*)
+        FROM bid_notice_summary
+        <include refid="visibleHistoryWhere"/>
+    </select>
+
+    <select id="findLatestMineSummaryId" resultType="long">
+        SELECT bid_notice_summary_id
+        FROM bid_notice_summary
+        WHERE company_id = #{companyId}
+          AND bid_notice_id = #{noticeId}
+          AND requested_by = #{userId}
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC, bid_notice_summary_id DESC
+        LIMIT 1
+    </select>
+</mapper>

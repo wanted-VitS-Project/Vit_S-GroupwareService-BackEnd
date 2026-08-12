@@ -5,8 +5,8 @@ import java.util.Optional;
 // 비타메이트 블록과 프로젝트 접근 컨텍스트를 조회하는 포트
 public interface VitamateBlockReaderPort {
 
-    // 요청자가 접근 가능한 비타메이트 블록이면 블록과 프로젝트 컨텍스트를 반환한다.
-    Optional<VitamateBlockContext> findAccessibleVitamateBlock(Long blockId, String userId);
+    // 공통 blockId에 연결된 비타메이트 블록과 스텝 컨텍스트를 반환한다.
+    Optional<VitamateBlockContext> findVitamateBlock(Long blockId);
 
     record VitamateBlockContext(
             Long blockId,
