@@ -137,6 +137,7 @@
 | `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
 | `data.images[].caption` | String | 이미지 캡션 |
 | `data.images[].orderIndex` | Int | 이미지 정렬 번호 |
+| `data.images[].version` | Int | 버전(2026-08-11 추가) — 이 목록을 그대로 수정(PATCH) 요청에 실어 보낸다 |
 
 **Success Example**
 
@@ -147,8 +148,8 @@
   "data": {
     "totalCount": 2,
     "images": [
-      { "imgId": 10, "originalName": "image1.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "orderIndex": 1 },
-      { "imgId": 11, "originalName": "image2.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "orderIndex": 2 }
+      { "imgId": 10, "originalName": "image1.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "orderIndex": 1, "version": 1 },
+      { "imgId": 11, "originalName": "image2.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "orderIndex": 2, "version": 1 }
     ]
   }
 }
@@ -325,6 +326,7 @@
 | `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
 | `data.images[].caption` | String | 이미지 캡션 |
 | `data.images[].deletedAt` | LocalDateTime | 삭제 일시 |
+| `data.images[].blockDeleted` | Boolean | 상위 블록까지 삭제됐는지(2026-08-11 추가) — true면 복구 시도해도 `IMG-009`로 거부됨 |
 
 **Success Example**
 
@@ -339,7 +341,8 @@
         "originalName": "회의사진.jpg",
         "imageUrl": "https://s3.../abc.jpg",
         "caption": "회의실 전경",
-        "deletedAt": "2026-08-03T10:00:00"
+        "deletedAt": "2026-08-03T10:00:00",
+        "blockDeleted": false
       }
     ]
   }
@@ -484,11 +487,24 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 | `images` | List<Object> | Y | 정렬된 순서대로 나열된 이미지 목록(캡션 포함) |
 | `images[].imgId` | Long | Y | 이미지 ID |
 | `images[].caption` | String | N | 이미지 캡션(없으면 빈 문자열로 저장) |
+| `images[].version` | Int | Y | 이미지 항목 전체 조회에서 받은 version(2026-08-11 추가) — 배열 중 하나라도 그 사이 남이 먼저 저장했으면 요청 전체가 409로 처리된다 |
 
 > 🔄 **삭제 버튼 반영 (2026-08-04 팀 확인)**: 이 화면에 이미지 삭제 버튼이 같이 있어서, **요청 `images`에서 빠진 이미지 = 삭제로 간주한다.** 그 블록의 활성 이미지 중 요청에 없는 것은 이 호출로 소프트 삭제된다. 빈 배열(`images: []`)을 보내면 그 블록의 이미지 전체가 삭제된다.
 > ⚠️ **검증**: `images`에 있는 imgId는 전부 그 블록 소속의 활성 이미지여야 한다(부분집합 OK). 중복 imgId·다른 블록 소속·존재하지 않는 imgId가 섞이면 배열 위치 기준 `orderIndex` 계산이 깨지므로 `400 IMG-005`로 거부한다 (명세에 이 기준이 없어 임의로 정함).
 > ⚠️ **S3는 지우지 않는다** (2026-08-04 팀 확인) — 이미지는 복구(휴지통) 기능이 없어서 File 도메인처럼 소프트 삭제 후 남겨두는 게 지금은 의미가 없어 보이지만, DB는 팀 전체 방침대로 소프트 삭제만 하고 **S3 실제 삭제는 나중에 하드 삭제 정책이 정해지면 그때 처리한다** (별도 정리 배치로 예정, 아래 "미확정" 참고). 그 전까지 이 사이에 지워진 이미지의 S3 객체는 버킷에 계속 남아 있다 — 필요하면 `aws s3 rm`으로 수동 정리.
 > 🔄 **캡션 기본값 — 원 명세("없으면 null")에서 변경 (2026-08-04 담당자 확인)**: 생성 API와 동일하게 **없으면 `""`(빈 문자열)로 저장**한다. `null`/`""` 두 상태가 공존하면 "캡션 지우기"(있던 캡션을 빈 값으로 보냄)와 "원래 없음"을 구분해야 할 이유가 없는데도 프론트·활동 로그 양쪽이 두 값을 다 처리해야 해서 통일했다.
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.images` | List<Object> | 순서가 반영된 이미지 목록 |
+| `data.images[].imgId` | Long | 이미지 ID |
+| `data.images[].orderIndex` | Int | 수정 후 순서 |
+| `data.images[].caption` | String | 수정된 캡션 |
+| `data.images[].version` | Int | 수정 후 버전(2026-08-11 추가) — 다음 수정 요청에 그대로 실어 보낸다 |
 
 **Success Example**
 
@@ -498,9 +514,9 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
   "message": "이미지 수정 성공",
   "data": {
     "images": [
-      { "imgId": 13, "orderIndex": 1, "caption": "회의실 전경" },
-      { "imgId": 10, "orderIndex": 2, "caption": "화이트보드" },
-      { "imgId": 15, "orderIndex": 3, "caption": "" }
+      { "imgId": 13, "orderIndex": 1, "caption": "회의실 전경", "version": 2 },
+      { "imgId": 10, "orderIndex": 2, "caption": "화이트보드", "version": 2 },
+      { "imgId": 15, "orderIndex": 3, "caption": "", "version": 1 }
     ]
   }
 }
@@ -512,9 +528,11 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 | --- | --- | --- | --- |
 | 200 | OK | — | "이미지 수정 성공" |
 | 400 | Bad Request | `IMG-005` | "요청한 이미지 목록이 유효하지 않습니다." |
+| 400 | Bad Request | `IMAGE_VERSION_REQUIRED` | "버전 정보가 없습니다. 화면을 새로고침해 주세요." (2026-08-11 추가) |
 | 403 | Forbidden | `IMG-002` | "편집 권한이 없습니다." |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `IMG-003` | "존재하지 않는 블록입니다." |
+| 409 | Conflict | `IMAGE_VERSION_CONFLICT` | "다른 사용자가 먼저 수정했습니다." (2026-08-11 추가 — 배열 중 하나라도 충돌하면 요청 전체가 실패) |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | "로그인이 필요합니다." (전 도메인 공통) |
 | 500 | Internal Server Error | `COMMON_INTERNAL_ERROR` | "서버 내부 오류가 발생했습니다." (전 도메인 공통 폴백) |
 
@@ -711,7 +729,7 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 
 | 항목 | 값 | 근거 |
 |---|---|---|
-| 저장소 키 | `images/{imgBlockId}/{UUID}.{ext}` | "회사별 접두사" 요청 검토 중 — 현재 도메인 모델엔 회사/고객사 개념이 없어(`PRODUCT.md` 단일 회사 내부 시스템) 보류. 대신 `imgBlockId`를 키에 포함해 나중에 블록↔회사/부서 매핑이 생기면 그 기준으로 묶을 수 있게 함 |
+| 저장소 키 | `companies/{companyId}/images/{imgBlockId}/{UUID}.{ext}` | 2026-08-11 멀티테넌시 반영 — file 도메인의 `companies/{companyId}/...` 키 규칙과 통일. `imgBlockId`도 계속 포함해 블록 기준으로도 묶을 수 있게 유지 |
 | 리사이즈 | 원본이 임계값(가로/세로 1920px 또는 5MB) 초과 시 축소 후 업로드 | 원본 훼손 없이 저장 용량 절약 |
 | 원본 파일명 | DB `image.original_name` 에 그대로 보존 | 리사이즈와 무관하게 사용자가 올린 파일명 유지 |
 | 허용 확장자 | `jpg`·`jpeg`·`png`·`gif`·`webp` (화이트리스트) | 명세에 없어 구현 시 임의 결정 — 확장 필요하면 사용자 확인 후 추가 |
@@ -720,6 +738,51 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 > ⚠️ **이미지 목록/다음 이미지 조회 API를 나중에 추가할 때 주의** — 위 presigned 방식 때문에, 그 API도 저장된 URL을 그대로 내려주면 안 되고 매 요청마다 새로 서명해야 한다. 1시간 지난 URL은 403이 난다.
 >
 > **프론트 캐싱 관련 (2026-08-05 논의)**: "다음" 버튼으로 이미지를 한 장씩 순차 조회하는 화면에서, "마지막 이미지 도달"만 프론트가 로컬로 캐싱해 그 이후 "다음" 클릭 시 API 호출을 생략하는 방식은 **권장하지 않는다** — presigned URL이 1시간마다 만료돼서 어차피 이미지를 보여줄 때마다 백엔드를 거쳐 새로 서명받아야 하고(캐싱해서 아낄 수 있는 API 호출 자체가 없음), 캐싱해두면 그 사이 새로 추가된 이미지를 프론트가 알 방법이 없어진다. **"다음" 버튼은 항상 API를 호출하는 쪽으로 구현할 것.** 이 API 응답엔 매번 최신 `totalCount`(또는 `hasNext`)를 같이 내려서, 프론트가 별도 캐싱 없이 매 응답 기준으로 "다음 버튼 비활성화 여부"를 판단하게 한다.
+
+## 구현 메모 — 낙관적 락 및 blockDeleted (2026-08-11)
+
+`.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `image` 테이블(⚠️ `image_block`이 아니다)에
+`version` 컬럼 추가(`V20260812100000__add_version_image.sql` — CI 마이그레이션 검증에 걸려
+140000 → 200000 → 100000/0812로 두 번 더 재배정됨, develop이 날짜를 넘겨 계속 진행 중이라 계속
+따라잡힘, 2026-08-11~12).
+
+- **이미지 항목 전체 조회**(`GET /blocks/images/{imgBlockId}/items`) 응답의 각 이미지 항목에 `version` 추가 —
+  이 화면이 목록을 통째로 그려 그대로 수정 API로 되돌려 보내는 구조라, 목록에 값이 없으면 프론트가
+  보낼 값이 없다.
+- **이미지 항목 생성**(`POST .../items`) 응답에도 `version`(항상 1) 추가.
+- **이미지 항목 수정**(`PATCH /blocks/images/items/{imgBlockId}`)은 CONCURRENCY.md §4의 "목록 통째 전송"
+  패턴 — 요청 `images[]` 각 항목에 `version` 필수(`IMAGE_VERSION_REQUIRED`, 400), 그 안 하나라도
+  그 사이 변경됐으면 요청 전체가 `409 IMAGE_VERSION_CONFLICT`로 롤백된다(별도 묶음 버전 컬럼 없음).
+  응답의 각 항목에도 갱신된 `version` 포함.
+- `@Version`(JPA) 대신 수동 `WHERE version = ?` 조건부 UPDATE로 검사한다(§6-1).
+
+✅ **배열에 남아있지만 값이 안 바뀐 항목도 version은 검사한다(2026-08-11, CodeRabbit 지적으로 수정).**
+처음엔 "캡션·순서가 실제로 바뀐 항목만 DB에 쓴다"는 최적화 때문에, 값이 안 바뀐 항목은 version 검사
+자체를 건너뛰고 있었다 — 그러면 그 항목의 version이 stale인데도 요청이 그냥 통과해서 "하나라도
+충돌하면 전체 실패" 계약이 깨졌다. `touchVersionIfMatches`(caption·orderIndex·updated_at은 안 건드리고
+version만 검사 후 증가)를 추가해서, 값이 안 바뀐 항목도 실제로 DB에서 원자적으로 version을
+재검증하게 했다 — updated_at·활동 로그가 불필요하게 갱신되는 건 여전히 안 생긴다.
+
+⚠️ **알려진 제약 — 배열에서 빠진(삭제되는) 이미지는 버전 검사가 없다(2026-08-11, CodeRabbit round 지적).**
+`images[]`에 명시적으로 남긴 항목은 각자 `version`이 검사되지만, **배열에서 빠져서 삭제로 처리되는
+항목은 무조건 삭제된다(LWW)** — 그 사이 다른 사용자가 캡션을 수정했거나, 심지어 새 이미지를
+추가했어도(그 이미지도 이 클라이언트의 옛 배열엔 없으니 "빠짐"으로 처리돼 같이 삭제됨) 충돌 감지가
+안 된다. 고치려면 삭제 대상도 `{imgId, version}`으로 명시하는 계약 변경이 필요한데, 이건 "배열에서
+빠지면 삭제"라는 기존 확정 계약(2026-08-04) 자체의 성격이라 이번 낙관락 작업 범위를 벗어난다고
+판단해 이번 PR에서는 반영하지 않음 — **후속 작업으로 분리, 계약 변경 시 프론트와 함께 조율 필요.**
+
+> **완화 방안 확정(2026-08-12, 프론트 협의)** — 백엔드 계약 변경 없이, **프론트가 저장 버튼을 누르는
+> 시점에 이미지 항목 전체 조회(`GET .../items`)를 한 번 더 호출**해서 처음 열었을 때의 목록과
+> `imgId` 집합·개수를 비교하도록 한다. 자기가 모르는 `imgId`가 새로 생겼거나(누가 추가) 자기가 아는
+> `imgId`가 빠졌으면(누가 삭제) 그 자리에서 재조회/덮어쓰기를 사용자에게 물어보고, 그 확인을 통과한
+> 배열만 실제 PATCH로 보낸다. 이 재조회~PATCH 사이의 아주 짧은 틈(수백ms)은 여전히 원자적으로
+> 보장되진 않지만, 실사용에서 위험한 구간("화면 켜놓고 오래 방치")은 이걸로 사실상 해소된다 — 그래서
+> 완전한 서버 사이드 버전 검사(계약 변경) 없이도 이 갭을 받아들이기로 함.
+
+**이미지 휴지통 조회**(`GET /projects/{projectId}/images/trash`) 응답 각 항목에 `blockDeleted`(boolean)
+추가 — 상위 블록까지 삭제됐으면 true. 이 값이 없으면 프론트가 복구를 시도해서 `IMG-009` 실패를
+받아야만 알 수 있었다. 삭제 정책 Pattern D(`b.deleted_at`을 JOIN 조건에서 필터링하지 않고 그대로
+노출만 함)로 구현.
 
 ## 미확정
 

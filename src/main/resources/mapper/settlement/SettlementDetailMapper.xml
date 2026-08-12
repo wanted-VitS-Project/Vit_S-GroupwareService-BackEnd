@@ -34,6 +34,7 @@
         sb.actual_amount AS actualAmount,
         sb.actual_date AS actualDate,
         sb.created_at AS createdAt,
+        sb.version AS version,
         agg.actual_amount_sum AS actualAmountSum
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id

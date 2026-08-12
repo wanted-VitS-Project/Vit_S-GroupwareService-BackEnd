@@ -57,6 +57,17 @@ public class ImageJpaEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // ⚠️ @Version(JPA)을 붙이지 않는다 — 캡션·순서 수정은 엔티티를 save/merge하지 않고
+    // SpringDataImageRepository.updateCaptionAndOrderIfVersionMatches의 JPQL 벌크 UPDATE로만
+    // 반영된다(WHERE i.version = :expectedVersion 검사 후 i.version = i.version + 1). 벌크 UPDATE는
+    // JPA 엔티티 생명주기(dirty checking)를 안 타서 @Version 증가 로직 자체가 안 걸린다(CONCURRENCY.md §6-1).
+    @Column(name = "version", nullable = false)
+    private int version;
+
+    /**
+     * ⚠️ version을 명시적으로 1로 채운다 — Java int 필드 기본값 0을 그대로 두면 컬럼의
+     * {@code DEFAULT 1}과 무관하게 INSERT 문에 0이 실린다(CONCURRENCY.md §3-1).
+     */
     public ImageJpaEntity(Long imgBlockId, String originalName, String imageUrl, String extension,
                            long size, String caption, int orderIndex) {
         this.imgBlockId = imgBlockId;
@@ -66,5 +77,6 @@ public class ImageJpaEntity {
         this.size = size;
         this.caption = caption;
         this.orderIndex = orderIndex;
+        this.version = 1;
     }
 }

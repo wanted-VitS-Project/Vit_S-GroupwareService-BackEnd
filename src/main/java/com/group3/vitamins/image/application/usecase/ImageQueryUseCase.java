@@ -38,7 +38,8 @@ public interface ImageQueryUseCase {
             String originalName,
             String imageUrl,
             String caption,
-            int orderIndex
+            int orderIndex,
+            int version
     ) {
     }
 
@@ -60,7 +61,8 @@ public interface ImageQueryUseCase {
             String originalName,
             String imageUrl,
             String caption,
-            LocalDateTime deletedAt
+            LocalDateTime deletedAt,
+            boolean blockDeleted
     ) {
     }
 

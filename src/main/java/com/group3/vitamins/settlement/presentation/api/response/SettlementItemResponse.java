@@ -53,7 +53,10 @@ public record SettlementItemResponse(
         Double paidAmountRatio,
 
         @Schema(description = "정산 블록에 내용이 생성된 일시")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+
+        @Schema(description = "수정 후 버전 — 다음 수정 요청에 그대로 실어 보낸다", example = "2")
+        int version
 ) {
 
     public static SettlementItemResponse from(UpdateSettlementItemView view) {
@@ -72,7 +75,8 @@ public record SettlementItemResponse(
                 view.actualDate(),
                 view.status().name(),
                 view.paidAmountRatio(),
-                view.createdAt()
+                view.createdAt(),
+                view.version()
         );
     }
 }

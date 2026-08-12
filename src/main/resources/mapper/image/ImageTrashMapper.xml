@@ -11,7 +11,8 @@
         i.original_name AS originalName,
         i.image_url     AS imageUrl,
         i.caption       AS caption,
-        i.deleted_at    AS deletedAt
+        i.deleted_at    AS deletedAt,
+        (b.deleted_at IS NOT NULL) AS blockDeleted
         FROM image i
         JOIN image_block ib ON ib.img_block_id = i.img_block_id
         JOIN block b ON b.block_id = ib.block_id

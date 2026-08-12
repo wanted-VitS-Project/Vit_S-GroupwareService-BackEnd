@@ -18,6 +18,10 @@ public record ImageTrashItemResponse(
         String caption,
 
         @Schema(description = "삭제 일시", example = "2026-08-03T10:00:00")
-        LocalDateTime deletedAt
+        LocalDateTime deletedAt,
+
+        @Schema(description = "상위 블록까지 삭제됐는지 — true면 복구 시도해도 IMG-009로 거부된다. "
+                + "프론트가 복구 버튼을 미리 비활성화하는 용도(2026-08-11 추가)", example = "false")
+        boolean blockDeleted
 ) {
 }

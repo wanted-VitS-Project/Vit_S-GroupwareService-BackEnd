@@ -17,6 +17,8 @@ import com.group3.vitamins.image.domain.model.ImageItem;
 import com.group3.vitamins.image.domain.repository.ImageBlockRepository;
 import com.group3.vitamins.image.domain.repository.ImageRepository;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
+import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +57,7 @@ public class ImageCommandService implements ImageCommandUseCase {
     private final ImageBlockRepository imageBlockRepository;
     private final ImageStoragePort imageStoragePort;
     private final DomainEventPublisher domainEventPublisher;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     // 한 번의 요청 안에서 S3 업로드를 몇 번이나 반복하며 트랜잭션(비관적 락 포함)을 붙잡고 있을지의
     // 최악값을 유한하게 만든다 — 개수 자체는 명세에 없어 구현 시 임의 결정 (.ai/api/image.md 참고).
@@ -99,6 +102,7 @@ public class ImageCommandService implements ImageCommandUseCase {
             extensions.add(extension);
         }
 
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
         int nextOrderIndex = imageRepository.findMaxOrderIndex(command.imgBlockId()) + 1;
 
         List<ImageItem> draftItems = new ArrayList<>(files.size());
@@ -131,7 +135,7 @@ public class ImageCommandService implements ImageCommandUseCase {
             String caption = (captions != null && i < captions.size() && captions.get(i) != null)
                     ? captions.get(i) : "";
 
-            UploadedImage uploaded = imageStoragePort.upload(command.imgBlockId(), file, extension);
+            UploadedImage uploaded = imageStoragePort.upload(companyId, command.imgBlockId(), file, extension);
             uploadedStorageKeys.add(uploaded.storageKey());
 
             draftItems.add(ImageItem.newItem(
@@ -173,7 +177,8 @@ public class ImageCommandService implements ImageCommandUseCase {
                         imageStoragePort.presignViewUrl(item.getImageUrl()),
                         item.getCaption(),
                         item.getOrderIndex(),
-                        item.getCreatedAt()
+                        item.getCreatedAt(),
+                        item.getVersion()
                 ))
                 .toList();
 
@@ -260,21 +265,38 @@ public class ImageCommandService implements ImageCommandUseCase {
                 changes.add(new ActivityFieldChange("orderIndex",
                         String.valueOf(before.getOrderIndex()), String.valueOf(newOrderIndex)));
             }
+            int resultVersion = before.getVersion();
+            // 목록 통째 전송 API(CONCURRENCY.md §4) — 값이 바뀐 항목뿐 아니라 "요청에 실린 모든 항목"의
+            // version을 검사해야 한다(2026-08-11, CodeRabbit 지적) — 안 그러면 stale-version 항목이 값이
+            // 마침 안 바뀌었다는 이유로 검사를 통째로 건너뛰어 "하나라도 충돌하면 전체 실패" 계약이
+            // 깨진다. 값이 안 바뀐 항목은 caption·orderIndex·updatedAt은 그대로 두고 version만
+            // touchVersionIfMatches로 검사+증가시켜, §4의 "실제로 바뀐 게 있는 이미지만 DB에 쓴다"
+            // 원칙(불필요한 updated_at·활동 로그 갱신 방지)은 그대로 지킨다.
             if (!changes.isEmpty()) {
-                int updated = imageRepository.updateCaptionAndOrder(
-                        entry.imgId(), command.imgBlockId(), newCaption, newOrderIndex);
+                // 하나라도 0행이면 이 예외가 트랜잭션 전체를 롤백한다(§4-3). 조회~저장 사이에 삭제된
+                // 경우도 여기서 걸리는데, 어느 쪽이든 클라이언트는 "최신 목록을 다시 받아야 한다"는
+                // 결론이 같아서 별도로 구분하지 않는다(Stage 참조 구현과 동일한 판단, §3-7).
+                int updated = imageRepository.updateCaptionAndOrderIfVersionMatches(
+                        entry.imgId(), command.imgBlockId(), newCaption, newOrderIndex, entry.version());
                 if (updated == 0) {
-                    // 조회~수정 사이에 동시에 삭제된 경우(레이스). 안 바뀐 걸 바뀌었다고 응답하거나
-                    // 일어나지 않은 변경을 활동 로그에 남기면 안 된다.
-                    log.warn("이미지 항목 수정 경합 발생 - imgId={}", entry.imgId());
-                    throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+                    log.warn("이미지 항목 수정 충돌 발생 - imgId={}, expectedVersion={}", entry.imgId(), entry.version());
+                    throw new ConflictException(ImageErrorCode.IMAGE_VERSION_CONFLICT);
                 }
+                resultVersion = entry.version() + 1;
                 domainEventPublisher.publish(ActivityOccurredEvent.of(
                         ActivityLogAction.MODIFY, blockId, entry.imgId(), before.getOriginalName(),
                         command.userId(), changes));
+            } else {
+                int touched = imageRepository.touchVersionIfMatches(entry.imgId(), command.imgBlockId(), entry.version());
+                if (touched == 0) {
+                    log.warn("이미지 항목 수정 충돌 발생(값 변경 없음) - imgId={}, expectedVersion={}",
+                            entry.imgId(), entry.version());
+                    throw new ConflictException(ImageErrorCode.IMAGE_VERSION_CONFLICT);
+                }
+                resultVersion = entry.version() + 1;
             }
 
-            resultViews.add(new UpdatedImageOrderView(entry.imgId(), newOrderIndex, newCaption));
+            resultViews.add(new UpdatedImageOrderView(entry.imgId(), newOrderIndex, newCaption, resultVersion));
         }
 
         log.info("이미지 항목 수정 완료 - imgBlockId={}", command.imgBlockId());
