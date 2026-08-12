@@ -34,10 +34,11 @@ public interface SettlementSiblingMapper {
     List<Long> lockSiblingSettlementBlocksForUpdate(@Param("settleId") Long settleId);
 
     /**
-     * overwrite=true 저장 직전, lockSiblingSettlementBlocksForUpdate로 이미 잠근 이 settleId 행의
-     * 현재 version을 다시 읽는다. FOR UPDATE라 같은 트랜잭션의 기존 잠금을 재확인할 뿐 대기하지 않는다.
+     * lockSiblingSettlementBlocksForUpdate로 이미 잠근 이 settleId 행의 현재 deleted_at/status/version을
+     * 다시 읽는다. FOR UPDATE라 같은 트랜잭션의 기존 잠금을 재확인할 뿐 대기하지 않는다 — 이 값을 기준으로
+     * 삭제·연결 여부를 판정하면, 그 뒤 조건부 UPDATE가 0건이어도 원인이 버전 불일치뿐임이 보장된다.
      */
-    Integer findCurrentVersionForUpdate(@Param("settleId") Long settleId);
+    SettlementCurrentStateRow findCurrentStateForUpdate(@Param("settleId") Long settleId);
 
     /**
      * 정산 항목 수정 화면 진입 시(GET .../items?type=...) 추천 회차 번호·추천 총 금액을 계산하기 위한 조회.

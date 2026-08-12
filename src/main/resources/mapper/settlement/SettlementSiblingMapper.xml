@@ -87,13 +87,18 @@
     </select>
 
     <!--
-        overwrite=true 저장 직전 호출 — lockSiblingSettlementBlocksForUpdate가 이미 이 행을 잠갔으므로
-        대기 없이 즉시 반환된다. ⚠️ FOR UPDATE 필수(findEstablishedTotalAmount와 같은 이유) — 일반
-        SELECT면 이 트랜잭션의 첫 읽기 스냅샷(SettlementCommandService의 최초 조회 시점)을 그대로 보여줘서,
-        그 사이 다른 트랜잭션이 먼저 저장해 바뀐 version을 못 본다.
+        lockSiblingSettlementBlocksForUpdate 직후 호출 — 그 잠금이 이미 이 행을 잠갔으므로 대기 없이
+        즉시 반환된다. ⚠️ FOR UPDATE 필수(findEstablishedTotalAmount와 같은 이유) — 일반 SELECT면 이
+        트랜잭션의 첫 읽기 스냅샷(SettlementCommandService의 최초 조회 시점)을 그대로 보여줘서, 그 사이
+        다른 트랜잭션이 먼저 저장한 값(또는 삭제·상태 변경)을 못 본다.
+        ⭐ 이 조회 결과로 삭제·연결 여부를 판정한 뒤에 조건부 UPDATE를 실행하면(SettlementCommandService),
+        그 UPDATE가 0건이어도 원인이 버전 불일치뿐임이 보장된다 — 이 행은 이 트랜잭션이 끝날 때까지
+        아무도 못 바꾸기 때문이다(2026-08-12, CodeRabbit — "실패 후 일반 조회로 재분류"가 REPEATABLE READ
+        스냅샷 때문에 부정확할 수 있다는 지적을 "쓰기 전에 잠금 하에 미리 확정"으로 근본 해결).
     -->
-    <select id="findCurrentVersionForUpdate" resultType="java.lang.Integer">
-        SELECT version
+    <select id="findCurrentStateForUpdate"
+            resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementCurrentStateRow">
+        SELECT version, status, deleted_at AS deletedAt
         FROM settlement_block
         WHERE settle_id = #{settleId}
         FOR UPDATE

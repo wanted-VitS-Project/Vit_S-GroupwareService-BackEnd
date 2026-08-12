@@ -27,8 +27,9 @@ public class SettlementSiblingLookupAdapter implements SettlementSiblingLookupPo
     }
 
     @Override
-    public Integer findCurrentVersionForUpdate(Long settleId) {
-        return settlementSiblingMapper.findCurrentVersionForUpdate(settleId);
+    public SettlementCurrentState findCurrentStateForUpdate(Long settleId) {
+        SettlementCurrentStateRow row = settlementSiblingMapper.findCurrentStateForUpdate(settleId);
+        return row == null ? null : new SettlementCurrentState(row.version(), row.status(), row.deletedAt());
     }
 
     @Override

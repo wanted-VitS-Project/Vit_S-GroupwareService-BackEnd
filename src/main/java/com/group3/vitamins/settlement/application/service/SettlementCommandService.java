@@ -5,6 +5,7 @@ import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
 import com.group3.vitamins.activitylog.domain.ActivityLogAction;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
+import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.settlement.application.command.UpdateSettlementItemCommand;
 import com.group3.vitamins.settlement.application.policy.SettlementEligibilityPolicy;
@@ -61,22 +62,32 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         // SETL-008 검증(조회) 전에 같은 프로젝트의 정산 블록 전체를 잠근다 — 두 개의 빈 블록이 동시에
         // PATCH되면서 서로 "기준값 없음"으로 읽고 다른 totalAmount를 저장하는 레이스를 막는다.
         settlementSiblingLookupPort.lockSiblingSettlementBlocksForUpdate(command.settleId());
+
+        // 위 assertModifiable(before)은 잠금 이전에 읽은 값 기준이라 편의 검사일 뿐이다(빠른 실패용) —
+        // 진짜 방어는 여기다. 잠금 직후 이 행의 현재(최신 커밋) 상태를 다시 읽어 삭제·연결 여부를 판정한다.
+        // 이 판정 이후로는 이 트랜잭션이 끝날 때까지 아무도 이 행을 못 바꾸므로(FOR UPDATE로 계속 잠겨 있음),
+        // 아래 조건부 UPDATE가 0건이 되는 원인은 버전 불일치뿐임이 보장된다 — "갱신 실패 후 일반 조회로
+        // 원인 재분류"는 REPEATABLE READ 스냅샷 때문에 부정확할 수 있다는 지적(CodeRabbit, 2026-08-12)을
+        // "쓰기 전에 잠금 하에 미리 확정"으로 근본 해결한 것이다.
+        SettlementSiblingLookupPort.SettlementCurrentState currentState =
+                settlementSiblingLookupPort.findCurrentStateForUpdate(command.settleId());
+        if (currentState == null || currentState.deletedAt() != null) {
+            throw new NotFoundException(SettlementErrorCode.BLOCK_NOT_FOUND);
+        }
+        if (!SettlementStatus.PENDING.name().equals(currentState.status())) {
+            log.warn("연결된 정산 블록 수정 시도 - settleId={}, status={}", command.settleId(), currentState.status());
+            throw new ConflictException(SettlementErrorCode.ALREADY_LINKED);
+        }
+
         assertTotalAmountConsistent(command.settleId(), type, command.totalAmount());
 
         String encryptedAccountNumber = command.accountNumber() == null
                 ? null
                 : accountNumberCipher.encrypt(command.accountNumber());
 
-        // 진입 시 검사(assertModifiable)는 편의일 뿐 방어가 아니다 — 본체는 아래 조건부 UPDATE의
-        // WHERE version = ? 다(CONCURRENCY.md §1-5). overwrite면 위 lockSiblingSettlementBlocksForUpdate로
-        // 이미 잠근 이 행의 "지금" 버전을 다시 읽어서 기대값으로 쓴다 — before.getVersion()(잠금 이전 값)을
-        // 쓰면 그 사이 다른 트랜잭션이 먼저 저장했을 때도 충돌로 오판할 수 있다(CodeRabbit, 2026-08-12).
-        Integer currentVersion = command.overwrite()
-                ? settlementSiblingLookupPort.findCurrentVersionForUpdate(command.settleId())
-                : null;
-        int expectedVersion = command.overwrite()
-                ? (currentVersion != null ? currentVersion : before.getVersion())
-                : command.version();
+        // overwrite면 위에서 잠금 하에 다시 읽은 "지금" 버전을 기대값으로 써서 반드시 통과시킨다. 아니면
+        // 클라이언트가 보낸 버전을 그대로 검사한다(WHERE version = ?, CONCURRENCY.md §1-5).
+        int expectedVersion = command.overwrite() ? currentState.version() : command.version();
 
         Settlement saved = settlementRepository.updateItem(
                 command.settleId(), type, command.roundNo(), command.totalAmount(),

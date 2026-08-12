@@ -536,27 +536,35 @@ issue 도메인과 충돌해서 150000 → 170000 → 170100 → 110000/0812까�
 김동현님께 별도 전달 필요).
 
 기존에도 `status = PENDING` 조건부 UPDATE(세금계산서/입출금 연결 시 잠금)가 있었는데, 여기에
-`version = ?` 조건을 추가로 걸었다. 저장 실패(0행) 시 원인을 3단계로 구분한다: ① 삭제됨 →
-`SETL-002` 404, ② 상태가 PENDING을 벗어남(연결됨) → `SETL-007` 409, ③ 그 외(버전 불일치) →
-`SETTLEMENT_VERSION_CONFLICT` 409. 블록 목록 조회(프로젝트 상세의 블록 카드)의 `SETTLEMENT` 상세에도
-`version`이 함께 내려간다(§5-1 "목록도" 규칙).
+`version = ?` 조건을 추가로 걸었다. 원인을 3단계로 구분한다: ① 삭제됨 → `SETL-002` 404,
+② 상태가 PENDING을 벗어남(연결됨) → `SETL-007` 409, ③ 그 외(버전 불일치) →
+`SETTLEMENT_VERSION_CONFLICT` 409. **①·②는 조건부 UPDATE를 실행하기 전에, 잠금(`FOR UPDATE`) 하에
+다시 읽은 현재 상태로 먼저 판정한다**(아래 CodeRabbit 2번 항목 참고 — 갱신 실패 후 재조회하는 방식은
+REPEATABLE READ 스냅샷 때문에 부정확할 수 있어서 순서를 바꿨다) — 그래서 조건부 UPDATE 자체가 0행이면
+남는 원인은 ③뿐이다. 블록 목록 조회(프로젝트 상세의 블록 카드)의 `SETTLEMENT` 상세에도 `version`이
+함께 내려간다(§5-1 "목록도" 규칙).
 
 **CodeRabbit 리뷰 반영 (2026-08-12, 낙관적 락 PR)**:
 
-1. **`overwrite=true`가 잠금 이전 버전을 기대값으로 쓰던 문제 — 반영.** `SettlementCommandService.upsertItem`이
-   `lockSiblingSettlementBlocksForUpdate`로 잠그기 **전에** 읽은 `before.getVersion()`을 그대로 `expectedVersion`으로
-   썼다 — 그 사이 다른 PATCH가 먼저 커밋되면 overwrite인데도 `SETTLEMENT_VERSION_CONFLICT`가 잘못 날 수 있었다
-   (overwrite의 "무조건 덮어쓰기" 보장이 깨짐). `SettlementSiblingLookupPort.findCurrentVersionForUpdate` 신설
-   (`SettlementSiblingMapper` `FOR UPDATE` 단건 조회, `findEstablishedTotalAmount`와 같은 이유·같은 패턴) —
-   이미 걸린 잠금을 재확인만 해서 대기 없이 즉시 현재 버전을 반환한다. overwrite=true일 때 이 값을 우선 사용하고,
-   null(레이스로 그 사이 삭제된 극단적 케이스)이면 `before.getVersion()`으로 폴백한다.
+1. **`overwrite=true`가 잠금 이전 버전을 기대값으로 쓰던 문제 — 반영.**
 2. **0행 갱신 시 원인 분류(`SettlementRepositoryAdapter.updateItem`)가 REPEATABLE READ 스냅샷 때문에 부정확할 수
-   있다는 지적 — 반영 안 함(2차 리뷰에서 재지적, 판단 유지).** 이론적으로는 맞다(위 1번과 같은 종류) — 2차 리뷰가
-   짚었듯 `clearAutomatically`는 영속성 컨텍스트만 비울 뿐 DB 트랜잭션의 REPEATABLE READ 스냅샷 자체는 못
-   비운다. 하지만 영향이 **에러 메시지 정확도뿐**이다 — 실제로 갱신이 실패해서 409/404가 나가는 결과는 어차피
-   동일하고, "버전 충돌"이라고 나오는데 실제로는 "이미 연결됨"이었어도 사용자 입장에서 재조회 후 재시도하는
-   대응은 같다. 제대로 고치려면 순수 JPA인 이 어댑터에 MyBatis 락 쿼리(또는 JPA 엔티티 캐시까지 우회하는 락
-   조회)를 새로 끌어와야 해서, 이 레이어 경계를 깨는 비용 대비 체감 이득이 낮다고 판단.
+   있다는 지적 — 3차 재지적 끝에 근본 반영(2026-08-12).** 앞선 두 라운드는 "영향이 메시지 정확도뿐"이라며
+   반영 안 함으로 넘겼는데, 3차 리뷰가 "이 오류 코드는 API 계약이라 메시지 정확도만의 문제가 아니다"라고
+   재반박했고 — 맞는 말이다. `SETTLEMENT_VERSION_CONFLICT`(재조회 없이 `overwrite`로 덮어쓰기 가능)와
+   `SETL-007`/`SETL-002`(막혀있음, 재조회해도 소용없음)는 프론트 처리 분기가 다르니 코드 자체가 계약이다.
+   **"실패 후 재분류" 대신 "쓰기 전에 잠금 하에 미리 확정"으로 근본 해결**했다 — 마침 1번 수정으로 이미
+   만든 `FOR UPDATE` 잠금 재확인 인프라를 그대로 확장하면 되어 비용도 낮아졌다:
+   - `SettlementSiblingLookupPort.findCurrentVersionForUpdate`(버전만 반환)를 **`findCurrentStateForUpdate`로
+     교체** — 이제 `version`/`status`/`deletedAt` 셋 다 `FOR UPDATE`로 함께 반환한다.
+   - `SettlementCommandService.upsertItem`이 `lockSiblingSettlementBlocksForUpdate` 직후(= 이 행이 이미
+     잠긴 시점) 이 조회를 **overwrite 여부와 무관하게 항상** 호출해서, 삭제됨(`SETL-002`)·연결됨(`SETL-007`)을
+     여기서 먼저 판정한다. 이 판정 이후로는 트랜잭션이 끝날 때까지 이 행을 아무도 못 바꾼다(같은 잠금이
+     계속 유지됨).
+   - 그래서 `SettlementRepositoryAdapter.updateItem`의 조건부 UPDATE가 0건이 되는 원인은 **이제 버전
+     불일치뿐임이 보장**된다 — 뒤따르던 일반 `findById` 재분류 코드 자체를 제거하고 바로
+     `SETTLEMENT_VERSION_CONFLICT`를 던지도록 단순화했다.
+   - 부수 효과: overwrite 경로도 더 견고해졌다 — 1번에서 만든 잠금-재조회가 이제 판정과 버전 조회를 한 번에
+     하므로, "판정은 프론트 사이드가 아니라 항상 최신 커밋 상태 기준"이라는 게 명확해졌다.
 3. **`GET /api/v1/projects/{projectId}/settlements` 응답에 `data.blocks[].version`이 없다는 지적(라인 403의
    "블록 목록 조회에서 받은 version"과의 정합성) — 반영 안 함, 다른 엔드포인트를 가리킨 것으로 판단.** 라인
    403의 "블록 목록 조회"는 `GET /api/v1/steps/{stepId}/blocks`(블록 카드, `SettlementDetail`이 `version` 포함)를
