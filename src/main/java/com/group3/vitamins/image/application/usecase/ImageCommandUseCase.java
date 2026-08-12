@@ -28,7 +28,8 @@ public interface ImageCommandUseCase {
             String imageUrl,
             String caption,
             int orderIndex,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            int version
     ) {
     }
 
@@ -43,7 +44,8 @@ public interface ImageCommandUseCase {
     record UpdatedImageOrderView(
             Long imgId,
             int orderIndex,
-            String caption
+            String caption,
+            int version
     ) {
     }
 

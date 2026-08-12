@@ -16,6 +16,10 @@ public record BlockImageItemResponse(
         String caption,
 
         @Schema(description = "이미지 정렬 번호", example = "2")
-        int orderIndex
+        int orderIndex,
+
+        @Schema(description = "버전 — 이 목록을 그대로 이미지 항목 수정(PATCH) 요청에 실어 보낸다. "
+                + "그 사이 남이 먼저 저장했으면 409 (IMAGE_VERSION_CONFLICT)", example = "1")
+        int version
 ) {
 }

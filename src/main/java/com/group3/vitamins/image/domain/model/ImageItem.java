@@ -15,6 +15,11 @@ import java.time.LocalDateTime;
  */
 public class ImageItem {
 
+    // 신규 항목의 시작 버전 (CONCURRENCY.md §3-1 — 기존 행·신규 행 모두 1로 시작해야 프론트가 받은
+    // 값과 맞물린다). 도메인은 이후 이 값을 절대 올리지 않는다 — +1은 저장 시 WHERE와 같은 문장 안에서
+    // DB가 한다.
+    private static final int INITIAL_VERSION = 1;
+
     private final Long imgId;
     private final Long imgBlockId;
     private final String originalName;
@@ -26,10 +31,11 @@ public class ImageItem {
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
     private final LocalDateTime deletedAt;
+    private final int version;
 
     private ImageItem(Long imgId, Long imgBlockId, String originalName, String imageUrl, String extension,
                        long size, String caption, int orderIndex,
-                       LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
+                       LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt, int version) {
         this.imgId = imgId;
         this.imgBlockId = imgBlockId;
         this.originalName = originalName;
@@ -41,20 +47,22 @@ public class ImageItem {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.deletedAt = deletedAt;
+        this.version = version;
     }
 
     /** 업로드 완료 후 저장 직전의 새 항목(아직 imgId·createdAt 없음)을 만든다. */
     public static ImageItem newItem(Long imgBlockId, String originalName, String imageUrl, String extension,
                                      long size, String caption, int orderIndex) {
         return new ImageItem(null, imgBlockId, originalName, imageUrl, extension, size,
-                caption, orderIndex, null, null, null);
+                caption, orderIndex, null, null, null, INITIAL_VERSION);
     }
 
     public static ImageItem reconstruct(Long imgId, Long imgBlockId, String originalName, String imageUrl,
                                          String extension, long size, String caption, int orderIndex,
-                                         LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
+                                         LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt,
+                                         int version) {
         return new ImageItem(imgId, imgBlockId, originalName, imageUrl, extension, size,
-                caption, orderIndex, createdAt, updatedAt, deletedAt);
+                caption, orderIndex, createdAt, updatedAt, deletedAt, version);
     }
 
     public Long getImgId() {
@@ -99,5 +107,9 @@ public class ImageItem {
 
     public LocalDateTime getDeletedAt() {
         return deletedAt;
+    }
+
+    public int getVersion() {
+        return version;
     }
 }

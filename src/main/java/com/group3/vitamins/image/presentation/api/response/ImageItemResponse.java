@@ -21,6 +21,9 @@ public record ImageItemResponse(
         int orderIndex,
 
         @Schema(description = "생성일", example = "2026-07-31T15:20:00")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+
+        @Schema(description = "버전 — 이미지 항목 수정(PATCH) 요청에 그대로 실어 보낸다", example = "1")
+        int version
 ) {
 }

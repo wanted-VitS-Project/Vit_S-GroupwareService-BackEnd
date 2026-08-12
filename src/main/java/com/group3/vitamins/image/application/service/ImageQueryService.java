@@ -135,7 +135,8 @@ public class ImageQueryService implements ImageQueryUseCase {
                         // DB에 저장된 건 S3 키다 — presigned URL은 1시간 만료라 응답 시점에 매번 새로 서명한다.
                         imageStoragePort.presignViewUrl(item.getImageUrl()),
                         item.getCaption(),
-                        item.getOrderIndex()))
+                        item.getOrderIndex(),
+                        item.getVersion()))
                 .toList();
 
         log.info("이미지 항목 전체 조회 완료 - imgBlockId={}, count={}", query.imgBlockId(), images.size());
@@ -270,7 +271,7 @@ public class ImageQueryService implements ImageQueryUseCase {
                 .map(row -> new TrashedImageView(
                         row.imgId(), row.originalName(),
                         imageStoragePort.presignViewUrl(row.imageUrl()),
-                        row.caption(), row.deletedAt()))
+                        row.caption(), row.deletedAt(), row.blockDeleted()))
                 .toList();
 
         log.info("이미지 휴지통 조회 완료 - projectId={}, count={}", query.projectId(), trashed.size());
