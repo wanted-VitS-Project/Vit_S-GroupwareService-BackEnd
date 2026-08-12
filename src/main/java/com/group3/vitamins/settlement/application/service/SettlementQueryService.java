@@ -117,12 +117,11 @@ public class SettlementQueryService implements SettlementQueryUseCase {
     public SettlementProjectListView getProjectSettlements(SettlementProjectListQuery query) {
         log.info("정산 현황 프로젝트 조회 요청 - userId={}", query.userId());
 
-        validateProjectListQuery(query);
-
         if (!pagePermissionPort.hasAccess(FINANCE_PAGE_CODE, query.userId(), query.role())) {
             log.warn("재무 관리 페이지 접근 권한 없음 - userId={}", query.userId());
             throw new ForbiddenException(SettlementErrorCode.FINANCE_ACCESS_DENIED);
         }
+        validateProjectListQuery(query);
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<SettlementProjectRow> rows = settlementStatusMapper.findProjectSettlements(
