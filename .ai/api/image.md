@@ -742,8 +742,9 @@ request: { "captions": ["회의실 전경", "", "화이트보드"] }
 ## 구현 메모 — 낙관적 락 및 blockDeleted (2026-08-11)
 
 `.ai/docs/global/CONCURRENCY.md` 팀 표준 반영 — `image` 테이블(⚠️ `image_block`이 아니다)에
-`version` 컬럼 추가(`V20260811200000__add_version_image.sql` — CI 마이그레이션 검증에서 기준
-브랜치 최대 버전보다 작다고 걸려 140000에서 200000으로 재배정함, 2026-08-11).
+`version` 컬럼 추가(`V20260812100000__add_version_image.sql` — CI 마이그레이션 검증에 걸려
+140000 → 200000 → 100000/0812로 두 번 더 재배정됨, develop이 날짜를 넘겨 계속 진행 중이라 계속
+따라잡힘, 2026-08-11~12).
 
 - **이미지 항목 전체 조회**(`GET /blocks/images/{imgBlockId}/items`) 응답의 각 이미지 항목에 `version` 추가 —
   이 화면이 목록을 통째로 그려 그대로 수정 API로 되돌려 보내는 구조라, 목록에 값이 없으면 프론트가
