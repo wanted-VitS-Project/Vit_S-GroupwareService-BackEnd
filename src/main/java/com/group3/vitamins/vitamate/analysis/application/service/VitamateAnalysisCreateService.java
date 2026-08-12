@@ -17,6 +17,7 @@ import com.group3.vitamins.vitamate.analysis.application.usecase.CreateVitamateA
 import com.group3.vitamins.vitamate.analysis.application.usecase.DispatchVitamateAnalysisJobUseCase;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.analysis.domain.model.AnalysisDocumentRole;
+import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
     private final VitamateReviewTemplateReaderPort templateReader;
     private final VitamateRequestHashGenerator requestHashGenerator;
     private final DispatchVitamateAnalysisJobUseCase dispatchUseCase;
+    private final StepAccessUseCase stepAccessUseCase;
 
     // 요청 검증, 멱등성 처리, 저장, 큐 발행 예약을 한 흐름으로 조율합니다.
     @Override
@@ -57,10 +59,9 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         String prompt = normalizeRequired(command.prompt());
         List<ReviewTemplate> reviewTemplates = findSelectedTemplates(reviewType, reviewCategoryCodes);
 
-        VitamateBlockReaderPort.VitamateBlockContext blockContext = blockReader.findAccessibleVitamateBlock(
-                command.blockId(),
-                command.requestedBy()
-        ).orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_BLOCK_NOT_FOUND));
+        VitamateBlockReaderPort.VitamateBlockContext blockContext = blockReader.findVitamateBlock(command.blockId())
+                .orElseThrow(() -> new NotFoundException(VitamateErrorCode.VITAMATE_BLOCK_NOT_FOUND));
+        stepAccessUseCase.requireAccess(blockContext.stepId(), command.requestedBy(), command.role());
 
         List<Long> allFileVersionIds = mergeFileVersionIds(command);
         validateFileVersions(blockContext.projectId(), allFileVersionIds);
@@ -170,6 +171,7 @@ public class VitamateAnalysisCreateService implements CreateVitamateAnalysisUseC
         if (command == null
                 || command.blockId() == null
                 || isBlank(command.requestedBy())
+                || isBlank(command.role())
                 || isBlank(command.idempotencyKey())
                 || isBlank(command.reviewType())
                 || command.referenceFileVersionIds() == null

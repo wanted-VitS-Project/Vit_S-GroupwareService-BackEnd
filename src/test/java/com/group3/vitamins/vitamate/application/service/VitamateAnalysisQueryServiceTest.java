@@ -3,6 +3,8 @@ package com.group3.vitamins.vitamate.application.service;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisReaderPort;
+import com.group3.vitamins.vitamate.analysis.application.port.VitamateBlockReaderPort;
+import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateAnalysisQuery;
 import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisDetailResult;
 import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisQueryService;
@@ -28,14 +30,21 @@ class VitamateAnalysisQueryServiceTest {
 
     private static final Long ANALYSIS_ID = 1L;
     private static final String USER_ID = "EMP001";
+    private static final String ROLE = "ADMIN";
+    private static final Long BLOCK_ID = 10L;
+    private static final Long STEP_ID = 30L;
 
     private VitamateAnalysisReaderPort analysisReader;
+    private VitamateBlockReaderPort blockReader;
+    private StepAccessUseCase stepAccessUseCase;
     private VitamateAnalysisQueryService queryService;
 
     @BeforeEach
     void setUp() {
         analysisReader = mock(VitamateAnalysisReaderPort.class);
-        queryService = new VitamateAnalysisQueryService(analysisReader);
+        blockReader = mock(VitamateBlockReaderPort.class);
+        stepAccessUseCase = mock(StepAccessUseCase.class);
+        queryService = new VitamateAnalysisQueryService(analysisReader, blockReader, stepAccessUseCase);
     }
 
     @Nested
@@ -46,8 +55,9 @@ class VitamateAnalysisQueryServiceTest {
         @DisplayName("returns accessible analysis detail")
         void returnsAccessibleAnalysisDetail() {
             VitamateAnalysisReaderPort.VitamateAnalysisDetail detail = analysisDetail();
-            when(analysisReader.findAccessibleAnalysis(ANALYSIS_ID, USER_ID))
+            when(analysisReader.findAnalysis(ANALYSIS_ID))
                     .thenReturn(Optional.of(detail));
+            when(blockReader.findVitamateBlock(BLOCK_ID)).thenReturn(Optional.of(blockContext()));
 
             VitamateAnalysisDetailResult result = queryService.handle(query());
 
@@ -82,12 +92,13 @@ class VitamateAnalysisQueryServiceTest {
                         assertThat(citation.pageNumber()).isEqualTo(4);
                         assertThat(citation.excerpt()).isEqualTo("security requirement excerpt");
                     });
+            verify(stepAccessUseCase).requireAccess(STEP_ID, USER_ID, ROLE);
         }
 
         @Test
         @DisplayName("throws not found when analysis is not accessible")
         void throwsNotFoundWhenAnalysisIsNotAccessible() {
-            when(analysisReader.findAccessibleAnalysis(ANALYSIS_ID, USER_ID))
+            when(analysisReader.findAnalysis(ANALYSIS_ID))
                     .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> queryService.handle(query()))
@@ -104,40 +115,44 @@ class VitamateAnalysisQueryServiceTest {
         @Test
         @DisplayName("rejects missing analysis id")
         void rejectsMissingAnalysisId() {
-            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(null, USER_ID)))
+            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(null, USER_ID, ROLE)))
                     .isInstanceOf(ValidationException.class)
                     .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
 
-            verify(analysisReader, never()).findAccessibleAnalysis(null, USER_ID);
+            verify(analysisReader, never()).findAnalysis(null);
         }
 
         @Test
         @DisplayName("rejects non-positive analysis id")
         void rejectsNonPositiveAnalysisId() {
-            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(0L, USER_ID)))
+            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(0L, USER_ID, ROLE)))
                     .isInstanceOf(ValidationException.class)
                     .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
 
-            verify(analysisReader, never()).findAccessibleAnalysis(0L, USER_ID);
+            verify(analysisReader, never()).findAnalysis(0L);
         }
 
         @Test
         @DisplayName("rejects blank user id")
         void rejectsBlankUserId() {
-            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(ANALYSIS_ID, " ")))
+            assertThatThrownBy(() -> queryService.handle(new GetVitamateAnalysisQuery(ANALYSIS_ID, " ", ROLE)))
                     .isInstanceOf(ValidationException.class)
                     .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_INVALID_REQUEST));
 
-            verify(analysisReader, never()).findAccessibleAnalysis(ANALYSIS_ID, " ");
+            verify(analysisReader, never()).findAnalysis(ANALYSIS_ID);
         }
     }
 
     // Build the query used by analysis lookup tests.
     private GetVitamateAnalysisQuery query() {
-        return new GetVitamateAnalysisQuery(ANALYSIS_ID, USER_ID);
+        return new GetVitamateAnalysisQuery(ANALYSIS_ID, USER_ID, ROLE);
+    }
+
+    private VitamateBlockReaderPort.VitamateBlockContext blockContext() {
+        return new VitamateBlockReaderPort.VitamateBlockContext(BLOCK_ID, 20L, STEP_ID, 40L);
     }
 
     // Build a representative analysis detail returned by the reader port.

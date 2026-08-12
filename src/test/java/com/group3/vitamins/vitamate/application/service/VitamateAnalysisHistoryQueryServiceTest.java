@@ -8,6 +8,7 @@ import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateBlockA
 import com.group3.vitamins.vitamate.analysis.application.result.VitamateAnalysisHistoryResult;
 import com.group3.vitamins.vitamate.analysis.application.service.VitamateAnalysisHistoryQueryService;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
+import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,17 +34,20 @@ class VitamateAnalysisHistoryQueryServiceTest {
     private static final Long STEP_ID = 30L;
     private static final Long PROJECT_ID = 40L;
     private static final String USER_ID = "EMP001";
+    private static final String ROLE = "ADMIN";
     private static final int HISTORY_LIMIT = 20;
 
     private VitamateBlockReaderPort blockReader;
     private VitamateAnalysisReaderPort analysisReader;
+    private StepAccessUseCase stepAccessUseCase;
     private VitamateAnalysisHistoryQueryService queryService;
 
     @BeforeEach
     void setUp() {
         blockReader = mock(VitamateBlockReaderPort.class);
         analysisReader = mock(VitamateAnalysisReaderPort.class);
-        queryService = new VitamateAnalysisHistoryQueryService(blockReader, analysisReader);
+        stepAccessUseCase = mock(StepAccessUseCase.class);
+        queryService = new VitamateAnalysisHistoryQueryService(blockReader, analysisReader, stepAccessUseCase);
     }
 
     @Nested
@@ -53,7 +57,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
         @Test
         @DisplayName("returns histories for an accessible Vitamate block")
         void returnsHistoriesForAccessibleVitamateBlock() {
-            when(blockReader.findAccessibleVitamateBlock(BLOCK_ID, USER_ID))
+            when(blockReader.findVitamateBlock(BLOCK_ID))
                     .thenReturn(Optional.of(blockContext()));
             when(analysisReader.findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT))
                     .thenReturn(List.of(history(1L), history(2L)));
@@ -71,12 +75,13 @@ class VitamateAnalysisHistoryQueryServiceTest {
                 assertThat(item.prompt()).isEqualTo("금액 산식도 확인해줘.");
             });
             verify(analysisReader).findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT);
+            verify(stepAccessUseCase).requireAccess(STEP_ID, USER_ID, ROLE);
         }
 
         @Test
         @DisplayName("returns empty content when no analysis history exists")
         void returnsEmptyContentWhenNoAnalysisHistoryExists() {
-            when(blockReader.findAccessibleVitamateBlock(BLOCK_ID, USER_ID))
+            when(blockReader.findVitamateBlock(BLOCK_ID))
                     .thenReturn(Optional.of(blockContext()));
             when(analysisReader.findBlockAnalysisHistories(VITAMATE_BLOCK_ID, HISTORY_LIMIT))
                     .thenReturn(List.of());
@@ -90,7 +95,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
         @Test
         @DisplayName("throws not found when block is not accessible")
         void throwsNotFoundWhenBlockIsNotAccessible() {
-            when(blockReader.findAccessibleVitamateBlock(BLOCK_ID, USER_ID))
+            when(blockReader.findVitamateBlock(BLOCK_ID))
                     .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> queryService.handle(query()))
@@ -109,7 +114,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
         @Test
         @DisplayName("rejects missing block id")
         void rejectsMissingBlockId() {
-            assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(null, USER_ID));
+            assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(null, USER_ID, ROLE));
         }
 
         @Test
@@ -126,13 +131,13 @@ class VitamateAnalysisHistoryQueryServiceTest {
         @Test
         @DisplayName("rejects non-positive block id")
         void rejectsNonPositiveBlockId() {
-            assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(0L, USER_ID));
+            assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(0L, USER_ID, ROLE));
         }
 
         @Test
         @DisplayName("rejects blank user id")
         void rejectsBlankUserId() {
-            assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(BLOCK_ID, " "));
+            assertInvalid(new GetVitamateBlockAnalysisHistoryQuery(BLOCK_ID, " ", ROLE));
         }
 
         // 입력값이 잘못되면 블록 조회와 이력 조회를 모두 시작하지 않습니다.
@@ -148,7 +153,7 @@ class VitamateAnalysisHistoryQueryServiceTest {
 
     // 테스트에서 반복 사용하는 분석 이력 조회 Query를 만듭니다.
     private GetVitamateBlockAnalysisHistoryQuery query() {
-        return new GetVitamateBlockAnalysisHistoryQuery(BLOCK_ID, USER_ID);
+        return new GetVitamateBlockAnalysisHistoryQuery(BLOCK_ID, USER_ID, ROLE);
     }
 
     // 접근 가능한 비타메이트 블록 컨텍스트를 만듭니다.

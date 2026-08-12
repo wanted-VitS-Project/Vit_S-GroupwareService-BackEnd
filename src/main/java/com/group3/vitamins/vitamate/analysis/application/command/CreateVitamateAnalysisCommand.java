@@ -6,6 +6,7 @@ import java.util.List;
 public record CreateVitamateAnalysisCommand(
         Long blockId,
         String requestedBy,
+        String role,
         String idempotencyKey,
         List<Long> referenceFileVersionIds,
         List<Long> targetFileVersionIds,
