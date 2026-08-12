@@ -24,11 +24,15 @@ public interface SpringDataBusinessCategoryRepository
                                            @Param("includeDeleted") boolean includeDeleted,
                                            @Param("companyId") Long companyId);
 
-    /** 회사 범위에서 삭제분 포함 전체를 이름으로 찾는다 (deleted_at 조건 없음 — §3-1). */
-    Optional<BusinessCategoryJpaEntity> findByNameAndCompanyId(String name, Long companyId);
+    /**
+     * 회사 범위에서 활성(deleted_at IS NULL) 카테고리를 이름으로 찾는다 — 중복 검사용.
+     * UNIQUE 를 걷은 뒤(DELETE.md §6-1) 삭제분은 같은 이름이 여러 개 쌓일 수 있어,
+     * 삭제분까지 조회하면 Optional 이 NonUniqueResult 로 터진다. 활성만 보면 최대 1건이라 안전하다.
+     */
+    Optional<BusinessCategoryJpaEntity> findByNameAndCompanyIdAndDeletedAtIsNull(String name, Long companyId);
 
-    /** 회사 범위에서 삭제분 포함 전체를 업무코드로 찾는다 (deleted_at 조건 없음 — §3-1). */
-    Optional<BusinessCategoryJpaEntity> findByCodeAndCompanyId(String code, Long companyId);
+    /** 회사 범위에서 활성(deleted_at IS NULL) 카테고리를 업무코드로 찾는다 — 중복 검사용. */
+    Optional<BusinessCategoryJpaEntity> findByCodeAndCompanyIdAndDeletedAtIsNull(String code, Long companyId);
 
     /** 회사 범위에서 삭제되지 않은 것만 ID로 찾는다 (PATCH·DELETE 의 404 판정용). */
     Optional<BusinessCategoryJpaEntity> findByBusinessCategoryIdAndCompanyIdAndDeletedAtIsNull(
