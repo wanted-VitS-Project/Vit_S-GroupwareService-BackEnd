@@ -207,21 +207,3 @@ CREATE TABLE bid_notice_summary_outbox (
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COMMENT='입찰 AI 요약 Redis 발행 Outbox';
--- 기존 상태 이력은 작업자 소속 회사로 가능한 범위에서 보정합니다.
-ALTER TABLE bid_notice_status_history
-    ADD COLUMN company_id BIGINT NULL
-        COMMENT '상태 변경 대상 회사'
-        AFTER bid_notice_status_history_id;
-
-UPDATE bid_notice_status_history history
-    JOIN employee employee_table
-ON employee_table.user_id = history.changed_by
-    SET history.company_id = employee_table.company_id
-WHERE history.company_id IS NULL;
-
-ALTER TABLE bid_notice_status_history
-    ADD KEY idx_bid_notice_status_history_company_notice
-    (company_id, bid_notice_id, created_at),
-    ADD CONSTRAINT fk_bid_notice_status_history_company
-        FOREIGN KEY (company_id)
-        REFERENCES company (company_id);
