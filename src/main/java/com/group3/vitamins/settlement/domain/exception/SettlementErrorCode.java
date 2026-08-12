@@ -19,7 +19,11 @@ public enum SettlementErrorCode implements ErrorCode {
     TOTAL_AMOUNT_MISMATCH("SETL-008", "같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다."),
     FINANCE_ACCESS_DENIED("SETL-009", "접근 권한이 없습니다."),
     PROJECT_NOT_FOUND("SETL-010", "존재하지 않는 프로젝트입니다."),
-    ROUND_NO_INVALID("SETL-011", "회차 번호는 1 이상이어야 합니다.");
+    ROUND_NO_INVALID("SETL-011", "회차 번호는 1 이상이어야 합니다."),
+    PAGE_QUERY_INVALID("SETL-012", "페이지 조회 조건이 올바르지 않습니다."),
+    // 낙관적 락(CONCURRENCY.md) — 코드명은 문서 §5-3 네이밍 규칙(`{도메인}_VERSION_CONFLICT`)을 그대로 따른다.
+    SETTLEMENT_VERSION_REQUIRED("SETTLEMENT_VERSION_REQUIRED", "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
+    SETTLEMENT_VERSION_CONFLICT("SETTLEMENT_VERSION_CONFLICT", "다른 사용자가 먼저 수정했습니다.");
     // 401(미인증)·403(RESET_REQUIRED)은 여기 도메인 코드로 안 만든다 — 전 도메인 공통으로
     // AUTH_UNAUTHENTICATED/AUTH_PASSWORD_RESET_REQUIRED 를 쓴다 (GlobalExceptionHandler·PasswordResetGateFilter).
     // 500(예상 못한 서버 오류)도 도메인 코드를 안 만든다 — GlobalExceptionHandler 의 범용 핸들러가

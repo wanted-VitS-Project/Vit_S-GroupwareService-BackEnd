@@ -24,6 +24,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -89,13 +90,15 @@ public class SettlementController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "정산 항목 작성/수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "정산 블록의 타입 지정은 필수입니다. (SETL-005) / 내용을 입력해 주세요. (SETL-003) "
-                            + "/ 출금 타입은 계좌정보가 필수입니다. (SETL-004) / 회차 번호는 1 이상이어야 합니다. (SETL-011)"),
+                            + "/ 출금 타입은 계좌정보가 필수입니다. (SETL-004) / 회차 번호는 1 이상이어야 합니다. (SETL-011) "
+                            + "/ 버전 정보가 없습니다. (SETTLEMENT_VERSION_REQUIRED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "편집 권한이 없습니다. (SETL-001)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 블록입니다. (SETL-002)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
                     description = "출금(OUTCOME)에서 입금(INCOME)으로는 타입을 변경할 수 없습니다. (SETL-006) "
                             + "/ 세금계산서 또는 입출금 내역이 연결되어 있어 수정할 수 없습니다. (SETL-007) "
-                            + "/ 같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (SETL-008)")
+                            + "/ 같은 프로젝트의 다른 정산 블록과 총 예정 금액이 일치하지 않습니다. (SETL-008) "
+                            + "/ 다른 사용자가 먼저 수정했습니다. (SETTLEMENT_VERSION_CONFLICT)")
     })
     @PatchMapping("/api/v1/blocks/settlements/{settleId}/items")
     public ResponseEntity<ApiResponse<SettlementItemResponse>> upsertItem(
@@ -104,7 +107,7 @@ public class SettlementController {
             @Parameter(description = "우리 회사 입장에서 입금(INCOME)인지 출금(OUTCOME)인지 여부", example = "INCOME",
                     required = true)
             @RequestParam(required = false) String type,
-            @RequestBody SettlementItemUpsertRequest request,
+            @Valid @RequestBody SettlementItemUpsertRequest request,
             Authentication authentication
     ) {
         UpdateSettlementItemView view = settlementCommandUseCase.upsertItem(new UpdateSettlementItemCommand(
@@ -120,6 +123,8 @@ public class SettlementController {
                 request.bankName(),
                 request.accountNumber(),
                 request.accountHolder(),
+                request.version(),
+                Boolean.TRUE.equals(request.overwrite()),
                 RequesterRole.from(authentication)
         ));
 
@@ -147,6 +152,8 @@ public class SettlementController {
             description = "재무팀 쪽에서 보일 전체 프로젝트에 대한 프로젝트 단위 정산 현황을 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "정산 현황 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "페이지 조회 조건이 올바르지 않습니다. (SETL-012)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "접근 권한이 없습니다. (SETL-009)")
     })
     @GetMapping("/api/v1/projects/settlements")
@@ -161,10 +168,19 @@ public class SettlementController {
             @RequestParam(required = false) String client,
             @Parameter(description = "종결(완료) 프로젝트 포함 여부. 생략하면 false(제외)", example = "false")
             @RequestParam(required = false) Boolean includeCompleted,
+            @Parameter(description = "0-base 페이지 번호. 생략하면 0", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지당 개수(최대 100). 생략하면 20", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "정렬 기준. 생략하면 NEXT_PLANNED_DATE_ASC",
+                    example = "NEXT_PLANNED_DATE_ASC",
+                    schema = @io.swagger.v3.oas.annotations.media.Schema(
+                            allowableValues = {"NEXT_PLANNED_DATE_ASC", "TOTAL_AMOUNT_DESC"}))
+            @RequestParam(defaultValue = "NEXT_PLANNED_DATE_ASC") String sort,
             Authentication authentication
     ) {
         SettlementProjectListView view = settlementQueryUseCase.getProjectSettlements(
-                new SettlementProjectListQuery(startDate, endDate, client, includeCompleted,
+                new SettlementProjectListQuery(startDate, endDate, client, includeCompleted, page, size, sort,
                         authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("정산 현황 조회 성공",

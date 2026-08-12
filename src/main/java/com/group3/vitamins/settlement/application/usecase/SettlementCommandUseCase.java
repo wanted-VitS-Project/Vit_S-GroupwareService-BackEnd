@@ -27,7 +27,8 @@ public interface SettlementCommandUseCase {
             LocalDateTime actualDate,
             SettlementStatus status,
             Double paidAmountRatio,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            int version
     ) {
     }
 }

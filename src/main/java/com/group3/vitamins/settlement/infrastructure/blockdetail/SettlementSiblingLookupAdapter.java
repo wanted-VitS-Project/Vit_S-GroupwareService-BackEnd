@@ -27,6 +27,19 @@ public class SettlementSiblingLookupAdapter implements SettlementSiblingLookupPo
     }
 
     @Override
+    public SettlementCurrentState findCurrentStateForUpdate(Long settleId) {
+        SettlementCurrentStateRow row = settlementSiblingMapper.findCurrentStateForUpdate(settleId);
+        if (row == null) {
+            return null;
+        }
+        return new SettlementCurrentState(
+                row.version(), row.status(), row.deletedAt(),
+                row.type(), row.roundNo(), row.totalAmount(), row.plannedAmount(), row.plannedTaxAmount(),
+                row.plannedDate(), row.traderName(), row.bankName(), row.accountNumber(), row.accountHolder()
+        );
+    }
+
+    @Override
     public SiblingRecommendation findSiblingRecommendation(Long settleId, SettlementType type) {
         SettlementRecommendationRow row = settlementSiblingMapper.findRecommendation(settleId, type.name());
         return row == null ? null : new SiblingRecommendation(row.maxRoundNo(), row.recommendedTotalAmount());

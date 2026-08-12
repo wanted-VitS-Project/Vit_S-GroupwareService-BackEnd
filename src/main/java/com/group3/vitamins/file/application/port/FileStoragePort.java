@@ -31,6 +31,13 @@ public interface FileStoragePort {
      */
     int deleteObjects(Collection<String> storageKeys);
 
+    /**
+     * 저장소 안에서 객체를 복사한다(입찰 검토 파일 귀속 §2-G — 임시 키 → 정식 키).
+     * <p>복사 성공만으로 신뢰하지 않는다 — 호출부가 {@link #head} 로 존재·크기를 재검증한다(완료 통보와 대칭).
+     * 원본이 없으면 예외를 던진다(호출부가 버전을 FAILED 로 전이).
+     */
+    void copyObject(String sourceStorageKey, String destStorageKey);
+
     /** presigned URL 과 만료 시각. */
     record PresignedUrl(String url, Instant expiresAt) {
     }
