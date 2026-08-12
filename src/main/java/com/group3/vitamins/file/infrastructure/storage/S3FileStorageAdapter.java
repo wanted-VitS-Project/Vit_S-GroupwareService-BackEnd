@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
@@ -138,5 +139,17 @@ public class S3FileStorageAdapter implements FileStoragePort {
             }
         }
         return deleted;
+    }
+
+    @Override
+    public void copyObject(String sourceStorageKey, String destStorageKey) {
+        // 서버측 복사(입찰 검토 파일 귀속 §2-G). 50MB 상한이라 단순 CopyObject 로 충분(멀티파트 복사 불필요).
+        // 원본이 없으면 NoSuchKeyException/404 S3Exception 이 그대로 전파된다 — 호출부가 버전을 FAILED 로 전이한다.
+        s3Client.copyObject(CopyObjectRequest.builder()
+                .sourceBucket(bucket)
+                .sourceKey(sourceStorageKey)
+                .destinationBucket(bucket)
+                .destinationKey(destStorageKey)
+                .build());
     }
 }

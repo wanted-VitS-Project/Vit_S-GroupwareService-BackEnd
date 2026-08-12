@@ -26,6 +26,10 @@ public enum FileErrorCode implements ErrorCode {
     FILE_EXTENSION_BLOCKED("FILE_EXTENSION_BLOCKED",
             "업로드할 수 없는 실행 파일 확장자입니다."),
 
+    // --- 귀속 (입찰 검토 파일 귀속 · FILE-V1 §2-G) ---
+    FILE_REQUESTER_NOT_EMPLOYEE("FILE_REQUESTER_NOT_EMPLOYEE",
+            "요청자가 임직원이 아니어서 파일 귀속을 처리할 수 없습니다."),
+
     // --- 권한 (스텝 권한을 따른다) ---
     FILE_ACCESS_PERMISSION_REQUIRED("FILE_ACCESS_PERMISSION_REQUIRED",
             "스텝 열람 권한이 없습니다."),
