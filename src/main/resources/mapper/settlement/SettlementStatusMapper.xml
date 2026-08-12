@@ -42,6 +42,12 @@
              같은 round_no 가 여러 타입에 걸쳐 있으면(예: INCOME·OUTCOME 모두 1회차 미완료) 그중 가장
              빠른 planned_date로 묶는다(mr로 최소 round_no를 먼저 구한 뒤 nb와 다시 매칭, 프로젝트당 1행
              으로 GROUP BY 해서 LEFT JOIN 시 행이 늘어나지 않게 한다).
+
+        ⚠️ agg/nb/mr 전부 내부에 project 조인 + company_id 조건을 넣어서 집계 자체를 이 회사로 미리
+        좁힌다 (2026-08-12, CodeRabbit 지적 — 원래는 바깥 WHERE p.company_id만 있어서, 서브쿼리가
+        전체 회사(테넌트)의 settlement_block을 다 집계한 뒤에야 이 회사 프로젝트로 필터링됐다. 정합성
+        문제는 아니었지만(최종 결과는 항상 올바르게 이 회사만 나왔음), 테넌트 전체 데이터가 늘어날수록
+        한 회사의 조회만 해도 계속 느려지는 성능 문제였다). countProjectSettlements도 동일하게 수정.
     -->
     <select id="findProjectSettlements"
             resultType="com.group3.vitamins.settlement.infrastructure.status.SettlementProjectRow">
@@ -72,6 +78,7 @@
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id
         JOIN step st ON st.step_id = b.step_id
+        JOIN project pj ON pj.project_id = st.project_id AND pj.company_id = #{companyId}
         WHERE sb.deleted_at IS NULL
         GROUP BY st.project_id
         ) agg ON agg.project_id = p.project_id
@@ -82,6 +89,7 @@
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id
         JOIN step st ON st.step_id = b.step_id
+        JOIN project pj ON pj.project_id = st.project_id AND pj.company_id = #{companyId}
         WHERE sb.deleted_at IS NULL AND sb.status != 'COMPLETED'
         ) nb
         JOIN (
@@ -89,6 +97,7 @@
         FROM settlement_block sb2
         JOIN block b2 ON b2.block_id = sb2.block_id
         JOIN step st2 ON st2.step_id = b2.step_id
+        JOIN project pj2 ON pj2.project_id = st2.project_id AND pj2.company_id = #{companyId}
         WHERE sb2.deleted_at IS NULL AND sb2.status != 'COMPLETED'
         GROUP BY st2.project_id
         ) mr ON mr.project_id = nb.project_id AND mr.min_round_no = nb.round_no
@@ -128,6 +137,7 @@
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id
         JOIN step st ON st.step_id = b.step_id
+        JOIN project pj ON pj.project_id = st.project_id AND pj.company_id = #{companyId}
         WHERE sb.deleted_at IS NULL AND sb.status != 'COMPLETED'
         ) nb
         JOIN (
@@ -135,6 +145,7 @@
         FROM settlement_block sb2
         JOIN block b2 ON b2.block_id = sb2.block_id
         JOIN step st2 ON st2.step_id = b2.step_id
+        JOIN project pj2 ON pj2.project_id = st2.project_id AND pj2.company_id = #{companyId}
         WHERE sb2.deleted_at IS NULL AND sb2.status != 'COMPLETED'
         GROUP BY st2.project_id
         ) mr ON mr.project_id = nb.project_id AND mr.min_round_no = nb.round_no
