@@ -1,6 +1,7 @@
 package com.group3.vitamins.vitamate.analysis.presentation.api;
 
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
+import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.vitamate.analysis.application.command.CreateVitamateAnalysisCommand;
 import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateAnalysisQuery;
 import com.group3.vitamins.vitamate.analysis.application.query.GetVitamateBlockAnalysisHistoryQuery;
@@ -26,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 // 비타메이트 분석 요청과 조회 API를 제공합니다.
@@ -62,6 +64,7 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202", description = "분석 요청 생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "VITAMATE_INVALID_REQUEST — 잘못된 요청"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "STEP_ACCESS_DENIED — 스텝 접근 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_BLOCK_NOT_FOUND · VITAMATE_FILE_VERSION_INVALID"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "VITAMATE_IDEMPOTENCY_CONFLICT — 같은 키로 다른 요청")
     })
@@ -69,6 +72,7 @@ public class VitamateAnalysisController {
     // HTTP 요청값을 command로 변환하고 분석 요청 생성 유스케이스를 호출합니다.
     public ResponseEntity<ApiResponse<CreateVitamateAnalysisResponse>> createAnalysis(
             @AuthenticationPrincipal String userId,
+            Authentication authentication,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Parameter(description = "스텝 블록 조회 응답의 최상위 공통 블록 ID")
             @PathVariable Long blockId,
@@ -78,6 +82,7 @@ public class VitamateAnalysisController {
                 new CreateVitamateAnalysisCommand(
                         blockId,
                         userId,
+                        RequesterRole.from(authentication),
                         idempotencyKey,
                         request.referenceFileVersionIds(),
                         request.targetFileVersionIds(),
@@ -101,16 +106,17 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "분석 조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "VITAMATE_INVALID_REQUEST — 잘못된 요청"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_ANALYSIS_NOT_FOUND — 분석 이력 없음 또는 접근 불가")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "STEP_ACCESS_DENIED — 스텝 접근 권한 없음")
     })
     @GetMapping("/vitamate/analyses/{analysisId}")
     // 분석 ID와 요청자 정보를 query로 변환하고 분석 조회 유스케이스를 호출합니다.
     public ResponseEntity<ApiResponse<VitamateAnalysisResponse>> getAnalysis(
             @AuthenticationPrincipal String userId,
+            Authentication authentication,
             @PathVariable Long analysisId
     ) {
         VitamateAnalysisDetailResult result = getAnalysisUseCase.handle(
-                new GetVitamateAnalysisQuery(analysisId, userId)
+                new GetVitamateAnalysisQuery(analysisId, userId, RequesterRole.from(authentication))
         );
 
         return ResponseEntity.ok(ApiResponse.of(
@@ -128,17 +134,23 @@ public class VitamateAnalysisController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "분석 실행 이력 조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "VITAMATE_INVALID_REQUEST — 잘못된 요청"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "STEP_ACCESS_DENIED — 스텝 접근 권한 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "VITAMATE_BLOCK_NOT_FOUND — 비타메이트 블록 없음 또는 접근 불가")
     })
     @GetMapping("/blocks/{blockId}/vitamate/analyses")
     // 비타메이트 블록에 연결된 분석 실행 이력 목록을 조회합니다.
     public ResponseEntity<ApiResponse<VitamateAnalysisHistoryResponse>> getAnalysisHistories(
             @AuthenticationPrincipal String userId,
+            Authentication authentication,
             @Parameter(description = "스텝 블록 조회 응답의 최상위 공통 블록 ID")
             @PathVariable Long blockId
     ) {
         VitamateAnalysisHistoryResult result = getHistoryUseCase.handle(
-                new GetVitamateBlockAnalysisHistoryQuery(blockId, userId)
+                new GetVitamateBlockAnalysisHistoryQuery(
+                        blockId,
+                        userId,
+                        RequesterRole.from(authentication)
+                )
         );
 
         return ResponseEntity.ok(ApiResponse.of(
