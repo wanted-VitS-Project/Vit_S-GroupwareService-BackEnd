@@ -159,7 +159,7 @@ Python worker는 별도 템플릿 목록을 들고 있지 않고, 분석 작업 
 | 위치 | 파라미터 | 타입 | 필수 | 설명 |
 |------|---------|------|------|------|
 | Header | `Idempotency-Key` | String | Y | 같은 사용자 동작의 재시도 중복 방지 키 |
-| Path | `blockId` | Long | Y | 비타메이트 AI 블록 ID |
+| Path | `blockId` | Long | Y | `GET /api/v1/steps/{stepId}/blocks` 응답의 최상위 `blocks[].blockId`. 비타메이트 상세 테이블 PK가 아니다 |
 | Body | `referenceFileVersionIds` | Long[] | Y | 비교 기준으로 사용할 파일 버전 ID 목록 |
 | Body | `targetFileVersionIds` | Long[] | Y | 실제 검토할 대상 파일 버전 ID 목록 |
 | Body | `reviewType` | String | Y | 검토 템플릿 목록 조회 API의 `reviewType` 값 |
@@ -269,7 +269,7 @@ analysisId
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
 | `analysisId` | Long | 분석 ID |
-| `blockId` | Long | 비타메이트 블록 ID |
+| `blockId` | Long | `GET /api/v1/steps/{stepId}/blocks` 응답의 최상위 공통 블록 ID |
 | `reviewType` | String | 검토 유형 |
 | `reviewCategoryCodes` | String[] | 요청 당시 선택한 검토 카테고리 코드 목록 |
 | `prompt` | String | 사용자가 확정해 요청 당시 저장한 최종 프롬프트 |

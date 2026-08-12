@@ -216,7 +216,7 @@ public Long create(Long blockId) {
 |------|:-----:|:---------:|------|
 | `TEXT` | ✅ `text/infrastructure/blockdetail/` | 값 | 참조 구현 (1:1) |
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
-| `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail` 조회 |
+| `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail(welcomeMessage)` 조회. 내부 `vitamate_block_id`는 응답에 노출하지 않음 |
 | `IMAGE` | ✅ `image/infrastructure/blockdetail/` | 값 | 1:N (`image_block` → `image`) |
 | `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | `IN_PROGRESS`를 포함해 상태와 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다 |
 | ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block` |

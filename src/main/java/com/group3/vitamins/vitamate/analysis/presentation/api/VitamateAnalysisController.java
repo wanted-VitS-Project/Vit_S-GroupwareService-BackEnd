@@ -18,6 +18,7 @@ import com.group3.vitamins.vitamate.analysis.presentation.api.dto.response.Vitam
 import com.group3.vitamins.vitamate.analysis.presentation.api.dto.response.VitamateAnalysisResponse;
 import com.group3.vitamins.vitamate.analysis.presentation.api.dto.response.VitamateReviewTemplateListResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -69,6 +70,7 @@ public class VitamateAnalysisController {
     public ResponseEntity<ApiResponse<CreateVitamateAnalysisResponse>> createAnalysis(
             @AuthenticationPrincipal String userId,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Parameter(description = "스텝 블록 조회 응답의 최상위 공통 블록 ID")
             @PathVariable Long blockId,
             @Valid @RequestBody CreateVitamateAnalysisRequest request
     ) {
@@ -132,6 +134,7 @@ public class VitamateAnalysisController {
     // 비타메이트 블록에 연결된 분석 실행 이력 목록을 조회합니다.
     public ResponseEntity<ApiResponse<VitamateAnalysisHistoryResponse>> getAnalysisHistories(
             @AuthenticationPrincipal String userId,
+            @Parameter(description = "스텝 블록 조회 응답의 최상위 공통 블록 ID")
             @PathVariable Long blockId
     ) {
         VitamateAnalysisHistoryResult result = getHistoryUseCase.handle(
