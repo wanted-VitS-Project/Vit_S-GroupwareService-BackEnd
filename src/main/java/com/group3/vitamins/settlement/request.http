@@ -74,6 +74,7 @@ GET localhost:8080/api/v1/blocks/settlements/3/items?type=INCOME
 ### 정산 항목 작성/수정 — INCOME. URL의 1을 0-3a 블록의 settleId로 교체할 것
 ### ⚠️ type 쿼리파라미터를 빼고 호출하면 400 SETL-005("정산 블록의 타입 지정은 필수입니다.") 확인
 ### roundNo/totalAmount/plannedAmount/plannedTaxAmount/plannedDate/traderName 중 하나라도 빼면 400 SETL-003 확인
+### ⚠️ version은 신규 블록이라 1(0-4에서 확인한 값). 이 요청 성공 시 data.version=2가 되어야 한다(아래 재호출은 2를 써야 함)
 PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
@@ -83,11 +84,13 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 1
 }
 
 ### 정산 항목 수정(재호출) — 같은 settleId로 값을 바꿔서 다시 보내면 activity_log에 바뀐 필드만 MODIFY로 남아야 한다
 ### (예: totalAmount만 바꿔서 보내면 changes에 totalAmount 한 건만 기록되는지 확인)
+### ⚠️ version=2(위 요청이 성공해서 2가 됨). 이 요청 성공 시 data.version=3이 되어야 한다(아래 음수금액 테스트가 3을 씀)
 PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
@@ -97,11 +100,13 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 2
 }
 
 ### 정산 항목 작성/수정 — OUTCOME. URL의 1을 0-3b 블록의 settleId로 교체할 것
 ### 계좌번호(accountNumber)는 저장 시 암호화되고, 응답에는 "100******444"처럼 앞·뒤 3자리만 남기고 마스킹되어야 한다
+### ⚠️ version은 신규 블록이라 1. 성공 시 data.version=2(아래 SETL-006 테스트가 2를 씀)
 PATCH localhost:8080/api/v1/blocks/settlements/2/items?type=OUTCOME
 Content-Type: application/json
 
@@ -114,7 +119,8 @@ Content-Type: application/json
     "traderName": "(주)대한항공",
     "bankName": "신한은행",
     "accountNumber": "100555074444",
-    "accountHolder": "홍길동"
+    "accountHolder": "홍길동",
+    "version": 1
 }
 
 ### 정산 항목 수정 시 조회 — 0-3b는 이미 OUTCOME으로 내용이 채워진 블록이므로(재수정 케이스),
@@ -127,6 +133,8 @@ GET localhost:8080/api/v1/blocks/settlements/2/items?type=OUTCOME
 GET localhost:8080/api/v1/blocks/settlements/2/items?type=INCOME
 
 ### 정산 항목 작성/수정 — OUTCOME인데 계좌정보 누락 → 400 SETL-004("출금 타입은 계좌정보가 필수입니다.") 확인용
+### version은 계좌정보 검증(SETL-004)이 버전 검사보다 먼저라 값만 있으면 무엇이든 통과에 영향 없음 — settleId=1의
+### 현재 실제 값(3)을 넣어둔다
 PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=OUTCOME
 Content-Type: application/json
 
@@ -136,11 +144,13 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 3
 }
 
 ### 정산 항목 작성/수정 — roundNo가 0 이하 → 400 SETL-011("회차 번호는 1 이상이어야 합니다.") 확인용
 ### (SETL-003과 구분: 필드 자체는 채웠으므로 "내용을 입력해 주세요"가 아니라 이 코드가 나와야 한다)
+### version도 이 검증(필수 필드 검증)보다 먼저라 영향 없음 — settleId=1의 현재 실제 값(3)
 PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
@@ -150,11 +160,13 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 3
 }
 
 ### 정산 항목 작성/수정 — 금액이 음수여도 통과해야 한다(거부되면 버그) — roundNo는 유효값(1), totalAmount는
 ### 위에서 이미 확정된 값(5000000, SETL-008 피하려고 그대로 씀)을 쓰고 plannedTaxAmount만 음수로 바꿔서 확인
+### ⚠️ version=3(위 두 400 시도는 실패해서 버전이 안 올라갔다 — 여전히 3). 성공 시 data.version=4(아래 403 테스트가 4를 씀)
 PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
@@ -164,10 +176,12 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": -200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 3
 }
 
 ### 정산 항목 작성/수정 — 존재하지 않는 settleId → 404 SETL-002 확인용
+### version은 존재 확인(SETL-002)이 버전 검사보다 먼저라 어떤 값이든 무방
 PATCH localhost:8080/api/v1/blocks/settlements/999999/items?type=INCOME
 Content-Type: application/json
 
@@ -177,13 +191,16 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 1
 }
 
 ### 정산 항목 작성/수정 — 편집 권한 없는 계정(프로젝트 미참여) → 403 SETL-001 확인용
-### ⚠️ EMP003으로 다시 로그인하면 안 된다 — EMP003은 0-1에서 이 프로젝트를 직접 생성해 자동 EDITOR다(계약).
+### ⚠️ 지금 로그인 중인 계정(맨 위 로그인 요청의 userId — 0-1에서 이 프로젝트를 직접 생성해 자동 EDITOR가 된 계정)으로
+### 다시 로그인하면 안 된다.
 ### 이 프로젝트에 전혀 참여하지 않은 다른 계정으로 로그인한 뒤 이 요청을 호출할 것.
-### 확인 후에는 0-3c부터 다시 진행하려면 EMP003(또는 이 프로젝트 편집 권한이 있는 계정)으로 재로그인할 것.
+### 확인 후에는 0-3c부터 다시 진행하려면 맨 위 로그인 계정(또는 이 프로젝트 편집 권한이 있는 계정)으로 재로그인할 것.
+### version은 권한 검증(SETL-001)이 버전 검사보다 먼저라 영향 없음 — settleId=1의 현재 실제 값(4)
 PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
@@ -193,7 +210,8 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 4
 }
 
 ### 0-3c. [준비] 정산 블록 생성 (같은 프로젝트에 INCOME 2번째 회차 추가 — 진행률 합산 확인용) — URL의 1을 0-2 응답의 stepId로 교체할 것
@@ -212,6 +230,7 @@ Content-Type: application/json
 GET localhost:8080/api/v1/blocks/settlements/3/items?type=INCOME
 
 ### 정산 항목 작성/수정 — 0-3c 블록에 INCOME 2회차 내용 작성. URL의 3을 0-3c 블록의 settleId로 교체할 것
+### version은 신규 블록이라 1. 성공 시 data.version=2(아래 SETL-008 테스트가 2를 씀)
 PATCH localhost:8080/api/v1/blocks/settlements/3/items?type=INCOME
 Content-Type: application/json
 
@@ -221,11 +240,13 @@ Content-Type: application/json
     "plannedAmount": 3500000,
     "plannedTaxAmount": 350000,
     "plannedDate": "2026-10-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 1
 }
 
 ### 정산 항목 작성/수정 — 같은 프로젝트·같은 타입(INCOME)인데 totalAmount가 다름 → 409 SETL-008 확인용
 ### 0-3a·0-3c가 이미 totalAmount=5000000으로 맞춰져 있는 상태에서, 0-3c에 다른 값(9999999)으로 재수정 시도
+### version은 이 검증(SETL-008, 형제 블록 잠금 뒤)이 버전 검사보다 먼저라 영향 없음 — settleId=3의 현재 실제 값(2)
 PATCH localhost:8080/api/v1/blocks/settlements/3/items?type=INCOME
 Content-Type: application/json
 
@@ -235,11 +256,13 @@ Content-Type: application/json
     "plannedAmount": 3500000,
     "plannedTaxAmount": 350000,
     "plannedDate": "2026-10-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 2
 }
 
 ### 정산 항목 작성/수정 — OUTCOME → INCOME 다운그레이드 시도 → 409 SETL-006 확인용
 ### 0-3b(OUTCOME으로 이미 작성됨) 블록의 settleId로 type=INCOME 호출. 계좌정보를 버려야 하는 변경이라 막혀야 한다
+### version은 이 검증(SETL-006)이 버전 검사보다 먼저라 영향 없음 — settleId=2의 현재 실제 값(2)
 PATCH localhost:8080/api/v1/blocks/settlements/2/items?type=INCOME
 Content-Type: application/json
 
@@ -249,7 +272,8 @@ Content-Type: application/json
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
-    "traderName": "(주)대한항공"
+    "traderName": "(주)대한항공",
+    "version": 2
 }
 
 ### [DB 직접 조작 필요] paidAmountRatio 합산 확인 — 이 PATCH API는 actualAmount를 절대 안 채운다(재무팀 입력 몫이라 아직 API 없음).
@@ -422,15 +446,15 @@ Content-Type: application/json
     "version": 1
 }
 
-### 10-7. ⭐ overwrite=true — 10-6과 완전히 같은 요청(옛 버전 1 그대로)에 overwrite만 true로 추가
-### → 이번엔 200 성공해야 한다(이게 오늘 고친 부분 — 잠금 이전 버전이 아니라 잠금 후 현재 버전을 기대값으로 써서
-### 통과시킨다). 응답의 data.version=3이어야 한다(10-5에서 이미 2였으므로 +1)
-PATCH localhost:8080/api/v1/blocks/settlements/2/items?type=INCOME
+### 10-7. ⭐ overwrite=true — 10-6과 완전히 같은 요청(같은 settleId=1, 옛 버전 1, totalAmount=4600000)에
+### overwrite만 true로 추가 → 이번엔 200 성공해야 한다(이게 오늘 고친 부분 — 잠금 이전 버전이 아니라 잠금 후
+### 현재 버전을 기대값으로 써서 통과시킨다). 응답의 data.version=3이어야 한다(10-5에서 이미 2였으므로 +1)
+PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
 {
     "roundNo": 1,
-    "totalAmount": 500000,
+    "totalAmount": 4600000,
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
@@ -444,12 +468,12 @@ Content-Type: application/json
 GET localhost:8080/api/v1/steps/1/blocks
 
 ### 10-9. version 필드 누락 → 400 SETTLEMENT_VERSION_REQUIRED 확인
-PATCH localhost:8080/api/v1/blocks/settlements/2/items?type=INCOME
+PATCH localhost:8080/api/v1/blocks/settlements/1/items?type=INCOME
 Content-Type: application/json
 
 {
     "roundNo": 1,
-    "totalAmount": 500000,
+    "totalAmount": 4600000,
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
