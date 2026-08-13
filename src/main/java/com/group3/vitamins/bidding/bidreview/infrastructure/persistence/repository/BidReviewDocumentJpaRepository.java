@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.bidreview.infrastructure.persistence.repository;
 
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -19,4 +20,9 @@ public interface BidReviewDocumentJpaRepository
     // Worker callback의 citations[]가 가리키는 근거 문서(사내 기준자료)를 찾는다.
     Optional<BidReviewDocumentJpaEntity>
     findByReviewIdAndReferenceFileId(Long reviewId, Long referenceFileId);
+
+    List<BidReviewDocumentJpaEntity> findAllByReviewIdAndDocumentRoleAndDeletedAtIsNull(
+            Long reviewId,
+            BidReviewDocumentRole documentRole
+    );
 }
