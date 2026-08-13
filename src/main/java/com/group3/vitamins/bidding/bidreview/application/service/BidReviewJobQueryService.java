@@ -114,7 +114,7 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
         List<BidReviewJobResult.AttachmentJob> attachments = attachmentIds.stream()
                 .map(attachmentsById::get)
                 .filter(Objects::nonNull)
-                .map(attachment -> toAttachmentJob(job.reviewId(), attachment))
+                .map(attachment -> toAttachmentJob(job.companyId(), job.reviewId(), attachment))
                 .toList();
 
         List<BidReviewJobResult.ReferenceFileJob> referenceFiles = referenceFileIds.stream()
@@ -156,12 +156,15 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
     // 공고 첨부는 아직 우리 S3에 없는 외부 원본이라, Worker가 다운로드 후 되올릴 임시 업로드 URL을
     // 매번 새로 발급한다(재시도로 다시 조회돼도 무방 - 이 키는 이번 왕복에서만 쓰고 그대로 callback에
     // 되돌아온다). 실제 저장은 Worker가 지정한 대로 믿는다 - Spring은 URL만 발급하고 검증하지 않는다.
+    // ⚠️ companies/{companyId}/ 접두사는 장식이 아니다 - 프로젝트 귀속 시 AttachStagedFileService가
+    // 이 접두사로 테넌트 경계를 검증한다(requireTenantScopedTempKey). 빼면 귀속 호출이 전부 400으로 거절된다.
     private BidReviewJobResult.AttachmentJob toAttachmentJob(
+            Long companyId,
             Long reviewId,
             BidReviewNoticeDocumentPort.AttachmentSnapshot attachment
     ) {
-        String temporaryStorageKey = "bidding/reviews/%d/attachments/%d/%s".formatted(
-                reviewId, attachment.attachmentId(), UUID.randomUUID()
+        String temporaryStorageKey = "companies/%d/bidding/reviews/%d/attachments/%d/%s".formatted(
+                companyId, reviewId, attachment.attachmentId(), UUID.randomUUID()
         );
         String uploadUrl = fileStoragePort
                 .presignUpload(temporaryStorageKey, ATTACHMENT_UPLOAD_CONTENT_TYPE, 0)

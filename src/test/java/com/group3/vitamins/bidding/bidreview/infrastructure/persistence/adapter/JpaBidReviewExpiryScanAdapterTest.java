@@ -147,7 +147,7 @@ class JpaBidReviewExpiryScanAdapterTest {
                 COMPANY_ID, NOTICE_ID, USER_ID, PROMPT,
                 UUID.randomUUID().toString(), completedAt.minusMinutes(1)
         );
-        BidReview completed = pending.complete("검토 결과", completedAt);
+        BidReview completed = pending.complete("검토 결과", completedAt, null);
         return reviewRepository.saveAndFlush(BidReviewJpaEntity.from(completed)).getReviewId();
     }
 
@@ -157,7 +157,7 @@ class JpaBidReviewExpiryScanAdapterTest {
                 COMPANY_ID, NOTICE_ID, USER_ID, PROMPT,
                 UUID.randomUUID().toString(), failedAt.minusMinutes(1)
         );
-        BidReview failed = pending.fail("DOWNLOAD_FAILED", "첨부 다운로드에 실패했습니다.", failedAt);
+        BidReview failed = pending.fail("DOWNLOAD_FAILED", "첨부 다운로드에 실패했습니다.", failedAt, null);
         return reviewRepository.saveAndFlush(BidReviewJpaEntity.from(failed)).getReviewId();
     }
 

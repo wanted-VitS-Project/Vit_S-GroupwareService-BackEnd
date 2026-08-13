@@ -1,8 +1,8 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
+**최종 동기화**: 2026-08-13 (검토 임시파일 보관 정책 변경 — 완료 후 고정 3시간 → 공고 입찰마감일시까지, 마감일 없으면 3시간 fallback)
 **최종 동기화**: 2026-08-13 (문서 검토 Worker 401 코드를 `AUTH_UNAUTHENTICATED`로 통일 — 공용 `BiddingWorkerTokenAuthenticationFilter` 실제 동작과 일치)
-**최종 동기화**: 2026-08-12 (입찰 공고 첨부·사내 문서 비교 검토와 임시파일 생명주기 계약 확정)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -1442,7 +1442,7 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 | 문서 역할 | 공고 첨부는 `BID_ATTACHMENT`, 사내 기준자료 파일함 문서는 `INTERNAL_REFERENCE`, 사내 문서함 참조는 `COMPANY_DOCUMENT_REFERENCE`로 저장한다 |
 | 기준자료 저장 | 기준자료 메타데이터는 `bid_reference_file`, 바이너리는 회사별 S3 prefix에 저장하며 `storageKey`를 외부 응답에 노출하지 않는다. 사내 문서함 참조는 `company_document_version_id`만 저장하고 바이너리는 `companydocument`가 소유한다 |
 | 임시 저장 | 공고 첨부 원본은 프로젝트 파일과 분리된 임시 저장소 prefix에 저장한다. 임시 `storageKey`는 외부 응답에 노출하지 않는다 |
-| 보관 시간 | 검토가 `COMPLETED` 또는 `FAILED`로 종료된 시각부터 3시간 동안 보관한다. 처리 중에는 만료 정리하지 않는다 |
+| 보관 시간(2026-08-13 정책 변경) | 검토가 `COMPLETED` 또는 `FAILED`로 종료되면 **해당 공고의 입찰마감일시(`bid_notice.bid_deadline_at`)까지** 보관한다. 마감일시가 없거나(NULL) 이미 종료 시각보다 과거면 종전 정책(종료 시각 + 3시간)으로 되돌아간다. 처리 중에는 만료 정리하지 않는다 |
 | 화면 이탈 | 뒤로 가기나 브라우저 종료는 별도 요청을 보내지 않는다. 임시파일은 만료 시각까지 유지한다 |
 | 검토 포기 | 포기 API는 검토만 `ABANDONED`로 전이하고 정리 작업을 즉시 요청한다. 입찰 공고 자체는 제외하거나 삭제하지 않는다 |
 | 프로젝트 귀속 | 프로젝트 생성 요청에 `reviewId`가 있으면 해당 검토에서 실제 사용한 공고 첨부만 파일 도메인으로 정식 귀속한다 |
@@ -1781,7 +1781,9 @@ Worker가 받은 값을 그대로 돌려주는 왕복 값). Content-Type이 다�
 잘못된 요청·지원하지 않는 형식·설정 오류 등 복구 불가능한 오류는 `retryable=false`로 전달하고 `FAILED`로 종료한다.
 
 Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 응답으로 `accepted`, `reviewId`,
-`reviewStatus`, `reason`을 반환한다. `COMPLETED` 또는 `FAILED`(재시도 아님) 저장 시 `expiresAt = 완료 시각 + 3시간`으로 계산한다.
+`reviewStatus`, `reason`을 반환한다. `COMPLETED` 또는 `FAILED`(재시도 아님) 저장 시
+`expiresAt = 공고 입찰마감일시`로 계산한다(2026-08-13 정책 변경 - 종전 "완료 시각 + 3시간").
+마감일시가 없거나 이미 완료·실패 시각보다 과거면 `완료(실패) 시각 + 3시간`으로 되돌아간다.
 
 ### Status Code
 
