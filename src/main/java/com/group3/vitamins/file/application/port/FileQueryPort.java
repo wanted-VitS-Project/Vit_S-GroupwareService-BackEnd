@@ -1,7 +1,10 @@
 package com.group3.vitamins.file.application.port;
 
+import com.group3.vitamins.file.application.query.CompanyFileCriteria;
+import com.group3.vitamins.file.application.query.MyProjectFileCriteria;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
+import com.group3.vitamins.file.application.result.FileViewProjection;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
@@ -65,4 +68,16 @@ public interface FileQueryPort {
      * 블록도 삭제된 고아 파일 포함(blockId·blockTitle=null, blockDeleted=true). 정렬은 deletedAt 내림차순.
      */
     List<ProjectTrashFileProjection> findProjectTrashFiles(Long projectId);
+
+    /** 전사 파일 관리(FILE-Q-01) — 회사 스코프 파일 수(페이지네이션 total). */
+    long countCompanyFiles(CompanyFileCriteria criteria);
+
+    /** 전사 파일 관리(FILE-Q-01) — 회사 스코프 파일 한 페이지. 문서 단위 최신 완료 버전 + 프로젝트·스텝·블록 위치. */
+    List<FileViewProjection> findCompanyFiles(CompanyFileCriteria criteria);
+
+    /**
+     * 내 프로젝트 파일 모아보기(FILE-Q-03) — 멤버 프로젝트의 문서를 최신 완료 버전으로. 스텝 VIEWER 이상만(B안).
+     * adminAll 이면 스텝 권한 필터를 스킵한다(멤버십은 유지). 프로젝트 → 스텝 → 블록 순 정렬.
+     */
+    List<FileViewProjection> findMyProjectFiles(MyProjectFileCriteria criteria);
 }

@@ -27,6 +27,12 @@ public class FileVersionRepositoryAdapter implements FileVersionRepository {
     }
 
     @Override
+    public Optional<FileVersion> findByIdempotencyKey(String idempotencyKey) {
+        return springDataRepository.findByIdempotencyKey(idempotencyKey)
+                .map(FileVersionPersistenceMapper::toDomain);
+    }
+
+    @Override
     public int findMaxVersionNo(Long fileId) {
         Integer max = springDataRepository.findMaxVersionNo(fileId);
         return max == null ? 0 : max;

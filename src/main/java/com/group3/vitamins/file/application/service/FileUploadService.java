@@ -105,7 +105,8 @@ public class FileUploadService implements FileUploadUseCase {
                 fileId, versionNo, storageKey,
                 command.originalFileName(), extension, command.mimeType(), command.sizeBytes(),
                 command.comment(),
-                command.requesterUserId(), uploader.name(), uploader.department(), uploader.position()));
+                command.requesterUserId(), uploader.name(), uploader.department(), uploader.position(),
+                null));
 
         if (newDocument) {
             blockFileRepository.link(command.blockId(), fileId, command.requesterUserId());

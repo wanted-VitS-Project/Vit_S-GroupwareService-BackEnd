@@ -19,6 +19,9 @@ public interface FileVersionRepository {
     /** 업로드 완료 통보(§2)에서 대상 버전을 찾는다. */
     Optional<FileVersion> findById(Long fileVersionId);
 
+    /** 귀속 멱등키로 기존 버전을 찾는다(§2-G 재시도 멱등·PROMOTE-007). 없으면 empty. */
+    Optional<FileVersion> findByIdempotencyKey(String idempotencyKey);
+
     /** 새 버전 차수 계산용 — 해당 문서의 현재 최대 versionNo(없으면 0). */
     int findMaxVersionNo(Long fileId);
 
