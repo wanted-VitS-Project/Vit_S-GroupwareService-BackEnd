@@ -182,7 +182,7 @@ class JpaBidReviewCleanupStoreAdapterTest {
         BidReview pending = BidReview.createPending(
                 COMPANY_ID, NOTICE_ID, USER_ID, PROMPT, UUID.randomUUID().toString(), NOW.minusHours(5)
         );
-        BidReview completed = pending.complete("검토 결과", NOW.minusHours(4));
+        BidReview completed = pending.complete("검토 결과", NOW.minusHours(4), null);
         return reviewRepository.saveAndFlush(BidReviewJpaEntity.from(completed)).getReviewId();
     }
 

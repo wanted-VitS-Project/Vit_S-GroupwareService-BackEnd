@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.bidreview.infrastructure.persistence.adapter
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocument;
@@ -46,6 +47,7 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
     private final BidReviewDocumentJpaRepository documentRepository;
     private final BidReviewCitationJpaRepository citationRepository;
     private final BidReviewOutboxJpaRepository outboxRepository;
+    private final BidReviewNoticeDocumentPort noticeDocumentPort;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -129,7 +131,7 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
 
         applyDocumentOutcomes(reviewId, documents, now);
 
-        BidReview completed = entity.toDomain().complete(result, now);
+        BidReview completed = entity.toDomain().complete(result, now, findNoticeDeadlineAt(entity));
         entity.apply(completed);
 
         saveCitations(reviewId, citations, now);
@@ -164,11 +166,21 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
         if (retryable && review.retryCount() < MAX_RETRY_COUNT) {
             retry(entity, review, errorCode, errorMessage, now);
         } else {
-            BidReview failed = review.fail(errorCode, errorMessage, now);
+            BidReview failed = review.fail(errorCode, errorMessage, now, findNoticeDeadlineAt(entity));
             entity.apply(failed);
         }
 
         return accepted(entity);
+    }
+
+    // 임시파일 보관 기한을 공고 입찰마감일시까지로 잡기 위해 조회한다(2026-08-13 정책 변경).
+    // 공고가 그 사이 회사에서 제외(DISMISSED)됐거나 삭제됐으면 조회되지 않는데, 이 경우
+    // BidReview.complete()/fail()이 자체적으로 완료·실패 시각 + 3시간 fallback으로 처리한다.
+    private LocalDateTime findNoticeDeadlineAt(BidReviewJpaEntity entity) {
+        return noticeDocumentPort
+                .findAccessibleNotice(entity.getCompanyId(), entity.getNoticeId())
+                .map(BidReviewNoticeDocumentPort.NoticeSnapshot::bidDeadlineAt)
+                .orElse(null);
     }
 
     // 새 attemptId로 상태를 되돌리고 같은 트랜잭션에 지연 Outbox를 저장한다 (bidsummary의 prepareRetry와 동일 패턴).
