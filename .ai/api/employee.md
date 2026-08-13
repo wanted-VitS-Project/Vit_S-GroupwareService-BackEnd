@@ -107,6 +107,15 @@
 | `data.groups[]` | List\<Object\> | 소속 그룹 |
 | `data.groups[].groupId` | Long | 그룹 번호 |
 | `data.groups[].name` | String | 그룹명 |
+| `data.educations[]` | List\<Object\> | 학력(1:N · HR-V1 `QUAL-003`). 그룹과 같은 조회 패턴 |
+| `data.educations[].majorId` | Long | 전공 마스터 ID |
+| `data.educations[].majorName` | String | 전공명(스냅샷 아님 — 마스터 조인) |
+| `data.educations[].degree` | String | 학위 enum `BACHELOR`·`MASTER`·`DOCTOR` |
+| `data.educations[].school` | String | 학교 (`null` 허용) |
+| `data.certificates[]` | List\<Object\> | 자격증(1:N) |
+| `data.certificates[].certificateId` | Long | 자격증 마스터 ID |
+| `data.certificates[].certificateName` | String | 자격증명(마스터 조인) |
+| `data.certificates[].acquiredDate` | String | 취득일 `yyyy-MM-dd` (`null` 허용) |
 
 | 코드 | code | 설명 |
 |---|---|---|
@@ -142,6 +151,8 @@
 | `jobPositionId` | Long | N | 직급 ID |
 | `email` | String | N | 초기 비밀번호를 이 주소로 발송 |
 | `phone` | String | N | 연락처 |
+| `educations[]` | List\<Object\> | N | 학력. `{majorId(필수), degree(필수 `BACHELOR`·`MASTER`·`DOCTOR`), school(선택)}`. 전공 마스터에 없으면 `MAJOR_NOT_FOUND` (HR-V1 `QUAL-001`) |
+| `certificates[]` | List\<Object\> | N | 자격증. `{certificateId(필수), acquiredDate(선택 `yyyy-MM-dd`)}`. 마스터에 없으면 `CERT_NOT_FOUND` (`QUAL-002`) |
 
 **Response** — `data.userId` · `data.name` · `data.emailRegistered` · `data.emailSent`
 
@@ -155,6 +166,7 @@
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `ACC_ADMIN_REQUIRED` | ADMIN 이 아님 |
 | 404 | `EMP_DEPARTMENT_NOT_FOUND` / `EMP_JOB_POSITION_NOT_FOUND` | 부서/직급 없음 |
+| 404 | `MAJOR_NOT_FOUND` / `CERT_NOT_FOUND` | 학력 전공/자격증이 마스터에 없음 |
 | 409 | `EMP_USER_ID_DUPLICATED` | 이미 등록된 사번 |
 
 ---
@@ -178,15 +190,19 @@
 | `name` · `phone` · `email` | String | N | |
 | `departmentId` · `jobPositionId` | Long | N | `jobPositionId` 에 `null` 을 보내면 직급 미지정 |
 | `hiredAt` | String | N | `yyyy-MM-dd` |
+| `educations[]` | List\<Object\> | N | 학력 **전체 교체**(`QUAL-004`). 등록과 같은 항목 구조. **생략(미전송)하면 유지, `[]` 면 전부 삭제** |
+| `certificates[]` | List\<Object\> | N | 자격증 **전체 교체**. 생략 유지, `[]` 전부 삭제 |
 
-**Response** — 사원 상세와 같은 구조
+> ⛔ **학력·자격증은 부분 diff 가 아니라 전체 교체다**(`QUAL-004`). 보낸 배열이 최종 상태이며, 기존 행을 지우고 다시 넣는다. **필드를 아예 보내지 않으면(생략) 기존을 건드리지 않는다** — `null`(미전송)과 `[]`(비우기)를 구분한다.
+
+**Response** — 사원 상세와 같은 구조(`educations[]`·`certificates[]` 포함)
 
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 수정 성공 |
 | 400 | `EMP_INVALID_REQUEST` | 형식 오류 또는 수정할 필드 없음 |
 | 401 · 403 | `AUTH_UNAUTHENTICATED` / `ACC_ADMIN_REQUIRED` / `ACC_SYSTEM_ACCOUNT_NOT_ALLOWED` | |
-| 404 | `EMP_NOT_FOUND` / `EMP_DEPARTMENT_NOT_FOUND` / `EMP_JOB_POSITION_NOT_FOUND` | |
+| 404 | `EMP_NOT_FOUND` / `EMP_DEPARTMENT_NOT_FOUND` / `EMP_JOB_POSITION_NOT_FOUND` / `MAJOR_NOT_FOUND` / `CERT_NOT_FOUND` | |
 
 ---
 
@@ -228,9 +244,17 @@
 |---|---|
 | Content-Type | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
 | Content-Disposition | `attachment; filename="employee_bulk_template.xlsx"` |
-| 템플릿 컬럼 | 사번 · 이름 · 부서명 · 직급명 · 입사일 · 이메일 · 연락처 · **권한** |
+| 템플릿 컬럼 | 사번 · 이름 · 부서명 · 직급명 · 입사일 · 이메일 · 연락처 · **권한** · **학력** · **자격증** |
 
 > ⭐ **권한 컬럼이 템플릿에 있다** (2026-08-03 수정). 검증 오류에 "엑셀로는 관리자 권한을 부여할 수 없습니다" 가 있으므로 컬럼 자체는 존재하고 **`ADMIN` 값만 거부**한다 (`EMP-010`).
+>
+> 🆕 **학력·자격증 컬럼** (2026-08-13, HR-V1 `QUAL-005`) — 기존 8열 뒤에 붙는 **선택 컬럼 2개**:
+> | 컬럼 | 형식 | 예 |
+> |---|---|---|
+> | 학력 | `전공:학위` · 여러 개는 세미콜론(`;`) | `컴퓨터공학:학사; 소프트웨어공학:석사` |
+> | 자격증 | `자격증명` · 여러 개는 세미콜론(`;`) | `정보처리기사; SQLD` |
+> - 학위는 엑셀에선 한글(`학사`·`석사`·`박사`)로 쓰고 파서가 enum(`BACHELOR`·`MASTER`·`DOCTOR`)으로 변환한다.
+> - 전공·자격증명은 **마스터에 등록된 이름과 정확히 일치**해야 한다(목록 밖은 행 오류).
 
 | 코드 | code |
 |---|---|
@@ -262,7 +286,7 @@
 | `data.errors[].row` | int | 엑셀 행 번호 |
 | `data.errors[].userId` | String | 사번 (`null` 허용 — 사번 누락 행) |
 | `data.errors[].name` | String | 이름 (`null` 허용) |
-| `data.errors[].validation` | String | `REQUIRED_COLUMN` · `USER_ID_DUPLICATED` · `DEPARTMENT_NOT_FOUND` · `ADMIN_ROLE_NOT_ALLOWED` |
+| `data.errors[].validation` | String | `REQUIRED_COLUMN` · `USER_ID_DUPLICATED` · `DEPARTMENT_NOT_FOUND` · `ADMIN_ROLE_NOT_ALLOWED` · `EDU_NOT_FOUND` · `CERT_NOT_FOUND` |
 | `data.errors[].message` | String | 사람이 읽는 설명 |
 | `data.emailNotRegisteredCount` | int | 이메일 없는 행 수 (`EMP-019`) |
 

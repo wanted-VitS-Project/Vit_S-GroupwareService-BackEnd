@@ -31,6 +31,16 @@ public class EmployeeBulkReferenceQueryAdapter implements EmployeeBulkReferenceQ
     }
 
     @Override
+    public Map<String, Long> resolveMajorIdsByName(Collection<String> names, Long companyId) {
+        return toMap(names, companyId, mapper::findMajorIdsByName);
+    }
+
+    @Override
+    public Map<String, Long> resolveCertificateIdsByName(Collection<String> names, Long companyId) {
+        return toMap(names, companyId, mapper::findCertificateIdsByName);
+    }
+
+    @Override
     public Set<String> findExistingUserIds(Collection<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Set.of();

@@ -65,7 +65,11 @@ class EmployeeCommandServiceTest {
         currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         service = new EmployeeCommandService(new EmployeeAdminPolicy(), employeeRepository,
-                referenceQueryPort, registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
+                referenceQueryPort,
+                Mockito.mock(com.group3.vitamins.employee.application.port.QualificationReferenceQueryPort.class),
+                Mockito.mock(com.group3.vitamins.employee.domain.repository.EmployeeEducationRepository.class),
+                Mockito.mock(com.group3.vitamins.employee.domain.repository.EmployeeCertificateRepository.class),
+                registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
                 Mockito.mock(com.group3.vitamins.employee.application.port.AccountDeactivationPort.class),
                 companyCodeQueryPort, currentCompanyIdProvider,
                 Mockito.mock(com.group3.vitamins.global.application.event.DomainEventPublisher.class));
@@ -82,7 +86,7 @@ class EmployeeCommandServiceTest {
 
     private RegisterEmployeeCommand cmd(String role, String hiredAt, String email) {
         return new RegisterEmployeeCommand(
-                "ADMIN", "EMP021", "홍길동", 2L, hiredAt, role, 10L, email, "010-1234-5678");
+                "ADMIN", "EMP021", "홍길동", 2L, hiredAt, role, 10L, email, "010-1234-5678", java.util.List.of(), java.util.List.of());
     }
 
     @Test
@@ -91,12 +95,12 @@ class EmployeeCommandServiceTest {
         stubHappyPath();
         // base 14자 → "vitas-"(6) + 14 = 20 (컬럼 폭 정확히 경계)
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "ADMIN", "EMP01234567890", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null);
+                "ADMIN", "EMP01234567890", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null, java.util.List.of(), java.util.List.of());
 
         service.register(command);
 
         ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
-        verify(registrationWriter).register(captor.capture(), eq("MEMBER"), anyString());
+        verify(registrationWriter).register(captor.capture(), eq("MEMBER"), anyString(), any(), any());
         assertThat(captor.getValue().getUserId()).isEqualTo("vitas-EMP01234567890"); // 20자
         assertThat(captor.getValue().getCompanyId()).isEqualTo(1L);                  // 회사 식별자 스탬핑
     }
@@ -106,18 +110,18 @@ class EmployeeCommandServiceTest {
     void baseUserIdOverLengthBoundaryRejected() {
         // base 15자 → "vitas-" + 15 = 21 > 20
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "ADMIN", "EMP012345678901", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null);
+                "ADMIN", "EMP012345678901", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null, java.util.List.of(), java.util.List.of());
 
         assertThatThrownBy(() -> service.register(command))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
-        verify(registrationWriter, never()).register(any(), anyString(), anyString());
+        verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
     }
 
     @Test
     @DisplayName("ADMIN 이 아니면 ACC_ADMIN_REQUIRED — 아무것도 하지 않는다")
     void rejectsNonAdmin() {
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "MASTER", "EMP021", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null);
+                "MASTER", "EMP021", "홍길동", 2L, "2026-08-05", "MEMBER", 10L, "a@b.com", null, java.util.List.of(), java.util.List.of());
 
         assertThatThrownBy(() -> service.register(command))
                 .satisfies(hasCode(AccountErrorCode.ACC_ADMIN_REQUIRED));
@@ -129,7 +133,7 @@ class EmployeeCommandServiceTest {
     void rejectsAdminRole() {
         assertThatThrownBy(() -> service.register(cmd("ADMIN", "2026-08-05", "a@b.com")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_ADMIN_ROLE_NOT_ALLOWED));
-        verify(registrationWriter, never()).register(any(), anyString(), anyString());
+        verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -150,7 +154,7 @@ class EmployeeCommandServiceTest {
     @DisplayName("필수값(이름) 누락은 EMP_INVALID_REQUEST")
     void rejectsMissingName() {
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "ADMIN", "EMP021", "  ", 2L, "2026-08-05", "MEMBER", null, null, null);
+                "ADMIN", "EMP021", "  ", 2L, "2026-08-05", "MEMBER", null, null, null, java.util.List.of(), java.util.List.of());
         assertThatThrownBy(() -> service.register(command))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
     }
@@ -160,7 +164,7 @@ class EmployeeCommandServiceTest {
     void rejectsInvalidEmail() {
         assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "not-an-email")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
-        verify(registrationWriter, never()).register(any(), anyString(), anyString());
+        verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
         verifyNoInteractions(mailPort);
     }
 
@@ -176,7 +180,7 @@ class EmployeeCommandServiceTest {
     @DisplayName("이름이 50자를 넘으면 EMP_INVALID_REQUEST")
     void rejectsTooLongName() {
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "ADMIN", "EMP021", "가".repeat(51), 2L, "2026-08-05", "MEMBER", null, "a@b.com", null);
+                "ADMIN", "EMP021", "가".repeat(51), 2L, "2026-08-05", "MEMBER", null, "a@b.com", null, java.util.List.of(), java.util.List.of());
         assertThatThrownBy(() -> service.register(command))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
     }
@@ -185,7 +189,7 @@ class EmployeeCommandServiceTest {
     @DisplayName("사번이 20자를 넘으면 EMP_INVALID_REQUEST")
     void rejectsTooLongUserId() {
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "ADMIN", "E".repeat(21), "홍길동", 2L, "2026-08-05", "MEMBER", null, "a@b.com", null);
+                "ADMIN", "E".repeat(21), "홍길동", 2L, "2026-08-05", "MEMBER", null, "a@b.com", null, java.util.List.of(), java.util.List.of());
         assertThatThrownBy(() -> service.register(command))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
     }
@@ -194,7 +198,7 @@ class EmployeeCommandServiceTest {
     @DisplayName("연락처가 20자를 넘으면 EMP_INVALID_REQUEST")
     void rejectsTooLongPhone() {
         RegisterEmployeeCommand command = new RegisterEmployeeCommand(
-                "ADMIN", "EMP021", "홍길동", 2L, "2026-08-05", "MEMBER", null, "a@b.com", "0".repeat(21));
+                "ADMIN", "EMP021", "홍길동", 2L, "2026-08-05", "MEMBER", null, "a@b.com", "0".repeat(21), java.util.List.of(), java.util.List.of());
         assertThatThrownBy(() -> service.register(command))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
     }
@@ -206,7 +210,7 @@ class EmployeeCommandServiceTest {
 
         assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "a@b.com")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_USER_ID_DUPLICATED));
-        verify(registrationWriter, never()).register(any(), anyString(), anyString());
+        verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -239,7 +243,7 @@ class EmployeeCommandServiceTest {
 
         // 저장은 트랜잭션 writer 로, 인코딩된 비밀번호와 role 이 넘어간다
         ArgumentCaptor<Employee> employeeCaptor = ArgumentCaptor.forClass(Employee.class);
-        verify(registrationWriter).register(employeeCaptor.capture(), eq("MEMBER"), eq("ENC-PW"));
+        verify(registrationWriter).register(employeeCaptor.capture(), eq("MEMBER"), eq("ENC-PW"), any(), any());
         assertThat(employeeCaptor.getValue().getUserId()).isEqualTo("vitas-EMP021");
         assertThat(employeeCaptor.getValue().isSystem()).isFalse();
         // 원문 비밀번호로 메일 발송
@@ -255,7 +259,7 @@ class EmployeeCommandServiceTest {
 
         EmployeeRegisterResult result = service.register(cmd("MEMBER", "2026-08-05", null));
 
-        verify(registrationWriter).register(any(), eq("MEMBER"), eq("ENC-PW"));
+        verify(registrationWriter).register(any(), eq("MEMBER"), eq("ENC-PW"), any(), any());
         verifyNoInteractions(mailPort);
         assertThat(result.emailRegistered()).isFalse();
         assertThat(result.emailSent()).isFalse();
@@ -279,7 +283,7 @@ class EmployeeCommandServiceTest {
     void translatesLateUniqueViolation() {
         stubHappyPath();
         doThrow(new DataIntegrityViolationException("dup"))
-                .when(registrationWriter).register(any(), anyString(), anyString());
+                .when(registrationWriter).register(any(), anyString(), anyString(), any(), any());
 
         assertThatThrownBy(() -> service.register(cmd("MEMBER", "2026-08-05", "hong@vitamins.com")))
                 .satisfies(hasCode(EmployeeErrorCode.EMP_USER_ID_DUPLICATED));

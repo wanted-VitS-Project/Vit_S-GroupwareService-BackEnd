@@ -34,6 +34,9 @@ public class BidReviewDocumentJpaEntity {
     @Column(name = "bid_reference_file_id")
     private Long referenceFileId;
 
+    @Column(name = "company_document_version_id")
+    private Long companyDocumentVersionId;
+
     @Column(name = "file_name", nullable = false, length = 500)
     private String fileName;
 
@@ -87,6 +90,7 @@ public class BidReviewDocumentJpaEntity {
         this.documentRole = document.documentRole();
         this.bidAttachmentId = document.bidAttachmentId();
         this.referenceFileId = document.referenceFileId();
+        this.companyDocumentVersionId = document.companyDocumentVersionId();
         this.fileName = document.fileName();
         this.processingStatus = document.processingStatus();
         this.temporaryStorageKey = document.temporaryStorageKey();
@@ -108,6 +112,7 @@ public class BidReviewDocumentJpaEntity {
                 documentRole,
                 bidAttachmentId,
                 referenceFileId,
+                companyDocumentVersionId,
                 fileName,
                 processingStatus,
                 temporaryStorageKey,

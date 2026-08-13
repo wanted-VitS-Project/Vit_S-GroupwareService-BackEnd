@@ -11,6 +11,7 @@ import com.group3.vitamins.project.application.command.LinkBusinessCategoriesCom
 import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.port.StageCascadePort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
@@ -53,6 +54,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final BusinessCategoryLookupPort businessCategoryLookupPort;
     private final EmployeeLookupPort employeeLookupPort;
     private final StepStatLookupPort stepStatLookupPort;
+    private final StageCascadePort stageCascadePort;
     private final ProjectAccessUseCase projectAccessUseCase;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
@@ -268,7 +270,11 @@ public class ProjectCommandService implements ProjectCommandUseCase {
      * <p>블록 수는 따로 세지 않는다. {@code block.step_id} 가 NOT NULL 이라
      * <b>스텝이 0개면 블록도 0개</b>다 — 두 번 세면 쿼리만 늘고 판정은 같다.
      *
-     * <p>⚠️ 하위 정리를 하지 않는다. 스텝이 없다는 것이 전제라 지울 대상 자체가 없다.
+     * <p><b>계층 전파는 없지만 정리는 있다.</b> 스텝과 무관하게 존재하는 것들이 남는다 —
+     * 참여자(생성자 1건은 항상 있다) · 사업분류 연결 · 스테이지 · 스테이지 권한 기본값.
+     * 프로젝트는 복구가 없으므로(§6-5) 전부 죽은 행이다. 연결 3종의 하드 삭제는
+     * <b>D-3 예외</b>다 ({@code .ai/docs/global/DELETE.md} §2-2).
+     * ⛔ {@code activity_log} 는 지우지 않는다 (D-5).
      */
     @Override
     public void deleteProject(DeleteProjectCommand command) {
@@ -281,6 +287,13 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 || stepStatLookupPort.countByProjectId(command.projectId()).totalCount() > 0) {
             throw new ConflictException(ProjectErrorCode.PROJECT_DELETE_NOT_ALLOWED);
         }
+
+        // ⚠️ 프로젝트 save() 를 맨 뒤에 둔다. 스테이지 정리가 @Modifying(clearAutomatically = true)
+        //    벌크 UPDATE 라, 먼저 save() 하면 그 pending UPDATE 를 flush 하지 않고 영속성 컨텍스트를
+        //    비운다. 커밋해도 프로젝트는 안 지워지고 스테이지만 지워진다 (DELETE.md §3-1).
+        stageCascadePort.deleteByProjectId(command.projectId());
+        projectMemberRepository.deleteByProjectId(command.projectId());
+        projectBusinessCategoryRepository.deleteByProjectId(command.projectId());
 
         projectRepository.save(project.delete(LocalDateTime.now()));
     }

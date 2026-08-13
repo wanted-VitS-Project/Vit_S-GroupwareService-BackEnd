@@ -18,6 +18,18 @@ public interface CashFlowMapper {
             @Param("endDate") LocalDate endDate,
             @Param("unlinked") Boolean unlinked,
             @Param("projectId") Long projectId,
+            @Param("keyword") String keyword,
+            @Param("sort") String sort,
+            @Param("size") int size,
+            @Param("offset") int offset);
+
+    /** 위 목록과 같은 필터의 전체 개수(페이징용) — sort/size/offset은 개수와 무관해 안 받는다. */
+    long countCashFlows(
+            @Param("companyId") Long companyId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("unlinked") Boolean unlinked,
+            @Param("projectId") Long projectId,
             @Param("keyword") String keyword);
 
     /** 필터 옵션용 — cash_flow가 하나라도 연결된 정산 블록을 가진 프로젝트만. */

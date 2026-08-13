@@ -145,6 +145,9 @@
 | `unlinked` | Boolean | N | 미연결 항목만 조회 (true: 미매칭, 없으면 전체) |
 | `projectId` | Long | N | 매칭 프로젝트 필터 |
 | `keyword` | String | N | 적요(`bankMemo`) 또는 입금자명(`depositorName`) 검색 키워드 |
+| `page` | Int | N | 0-base 페이지 번호. 생략하면 0 (2026-08-12 페이징 추가) |
+| `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
+| `sort` | String | N | 정렬 기준. `TRADED_AT_DESC`(거래일시 최신순, 기본값) \| `TRADED_AT_ASC`(거래일시 오래된순) \| `AMOUNT_DESC`(거래금액 큰순) |
 
 **Response Parameter**
 
@@ -152,6 +155,10 @@
 | --- | --- | --- |
 | `httpStatus` | int | HTTP 상태 코드 |
 | `message` | String | 응답 메시지 |
+| `data.page` | Int | 현재 페이지 번호 (0-base) |
+| `data.size` | Int | 페이지당 개수 |
+| `data.totalElements` | Long | 전체 항목 수 |
+| `data.totalPages` | Int | 전체 페이지 수 |
 | `data.cashFlows[].cashFlowId` | Long | 입출금 내역 ID |
 | `data.cashFlows[].tradedAt` | LocalDateTime | 거래 일시 |
 | `data.cashFlows[].bankTxnId` | String | 거래고유번호 |
@@ -177,6 +184,10 @@
   "httpStatus": 200,
   "message": "입출금 내역 조회 성공",
   "data": {
+    "page": 0,
+    "size": 20,
+    "totalElements": 3,
+    "totalPages": 1,
     "cashFlows": [
       {
         "cashFlowId": 1,
@@ -245,6 +256,7 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | — | "입출금 내역 조회 성공" |
+| 400 | Bad Request | `FINANCE_PAGE_QUERY_INVALID` | "페이지 조회 조건이 올바르지 않습니다." — `page`<0 · `size`≤0 또는 >100 · `sort` 허용값 아님 · `startDate`>`endDate` |
 | 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
@@ -268,8 +280,12 @@
   `projectId`/`projectName`은 여전히 null로 나간다(요청사항 — "프로젝트가 삭제되면 안 보여야지").
 - **`unlinked=false`를 명시적으로 보내면 생략과 동일하게 전체 조회** — 명세가 `true`(미매칭만)와 생략
   (전체) 두 경우만 정의해서, `false`는 정의되지 않은 입력이다. 생략과 같은 동작(필터 없음)으로 처리했다.
-- **정렬 순서** — 명세에 없어 `tradedAt` 내림차순(최근 거래 먼저)으로 뒀다. 다른 기준이 필요하면 알려달라.
 - **`keyword` 검색** — `bankMemo` 또는 `depositorName`에 부분 일치(`LIKE %keyword%`)로 구현했다.
+- **✅ 페이징 추가 (2026-08-12)** — 프론트 요청으로 `page`/`size`/`sort` + `{page,size,totalElements,totalPages}`
+  추가(공고·프로젝트 목록과 같은 컨벤션 — `page`≥0·`size`(1~100)·`sort` 허용값 검증, 위반 시
+  `FINANCE_PAGE_QUERY_INVALID` 400, silent clamp 아님). **`cashFlows` 키 이름은 유지**(아직 프론트 연동 전이라
+  `content`로 바꿀 필요 없다고 확인). `sort` 기본값 `TRADED_AT_DESC` — 이전 고정 정렬(`tradedAt` 내림차순)과
+  동작이 같다(생략 시 회귀 없음).
 
 ---
 

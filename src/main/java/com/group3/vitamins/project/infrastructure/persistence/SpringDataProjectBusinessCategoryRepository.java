@@ -10,4 +10,6 @@ public interface SpringDataProjectBusinessCategoryRepository
     List<ProjectBusinessCategoryJpaEntity> findByProjectId(Long projectId);
 
     long deleteByProjectIdAndBusinessCategoryId(Long projectId, Long businessCategoryId);
+
+    void deleteByProjectId(Long projectId);
 }

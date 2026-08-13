@@ -152,6 +152,36 @@ public record BidReview(
         );
     }
 
+    // Worker의 처리 실패가 일시적이면 새 attemptId를 발급해 재시도 대기 상태로 되돌립니다.
+    // 최대 재시도 횟수 판단은 호출자(JpaBidReviewWorkerAdapter)가 retryCount()를 보고 먼저 한다 —
+    // 이 메서드는 "재시도한다"는 결정이 내려진 뒤의 상태 전이만 책임진다.
+    public BidReview retryProcessing(
+            String nextAttemptId,
+            String errorCode,
+            String errorMessage,
+            LocalDateTime now
+    ) {
+        requireWorkerCallbackState();
+        Objects.requireNonNull(nextAttemptId, "재시도 처리 시도 ID는 필수입니다.");
+        Objects.requireNonNull(now, "재시도 시각은 필수입니다.");
+
+        return copy(
+                projectId,
+                BidReviewStatus.PENDING,
+                nextAttemptId,
+                retryCount + 1,
+                null,
+                errorCode,
+                errorMessage,
+                null,
+                null,
+                abandonedAt,
+                cleanupStartedAt,
+                cleanupCompletedAt,
+                now
+        );
+    }
+
     // 프로젝트로 전환하지 않은 검토를 포기합니다.
     public BidReview abandon(LocalDateTime now) {
         Objects.requireNonNull(now, "포기 시각은 필수입니다.");
@@ -252,6 +282,26 @@ public record BidReview(
                 cleanupCompletedAt,
                 createdAt,
                 updatedAt
+        );
+    }
+
+    // 정리 스캔이 이 검토를 점유했음을 표시합니다(중복 정리 요청 방지). 상태는 바꾸지 않습니다.
+    public BidReview markCleanupStarted(LocalDateTime now) {
+        Objects.requireNonNull(now, "정리 시작 시각은 필수입니다.");
+        return copy(
+                projectId,
+                reviewStatus,
+                processingAttemptId,
+                retryCount,
+                result,
+                errorCode,
+                errorMessage,
+                completedAt,
+                expiresAt,
+                abandonedAt,
+                now,
+                cleanupCompletedAt,
+                now
         );
     }
 }

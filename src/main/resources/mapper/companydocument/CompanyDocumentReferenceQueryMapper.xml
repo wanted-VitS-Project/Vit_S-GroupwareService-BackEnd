@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  참조 선택용 사내 문서 조회 (입찰 검토 연동 · COMPANY-DOC-V1 §2-G).
+  관리(§3) 조회와 달리 회사 소속이면 MEMBER 도 호출한다. 회사 스코프·soft delete 제외·완료 최신 버전만 노출.
+  ⚠️ SELECT alias 순서 = CompanyDocumentReferenceView 필드 순서(위치 기반 매핑).
+  ⚠️ indexStatus 는 지금 NULL(미추적)이다 — §6-2 로 AI 인덱스 상태 테이블이 생기면
+     LEFT JOIN cdv_index idx ON idx.company_document_version_id = lv.company_document_version_id
+     로 COALESCE(idx.status,'PENDING') 를 채우고, 목록은 그중 READY 만 노출하도록 필터를 얹는다.
+-->
+<mapper namespace="com.group3.vitamins.companydocument.infrastructure.adapter.CompanyDocumentReferenceQueryMapper">
+
+    <!-- 참조 선택 목록 — 문서당 최신 완료 버전 1행. 완료 버전 0개 문서는 INNER JOIN 으로 제외. -->
+    <select id="findSelectableDocuments"
+            resultType="com.group3.vitamins.companydocument.application.result.CompanyDocumentReferenceView">
+        SELECT cd.company_document_id            AS companyDocumentId,
+               lv.company_document_version_id    AS companyDocumentVersionId,
+               cd.category                       AS category,
+               lv.original_file_name             AS originalFileName,
+               lv.version_no                     AS versionNo,
+               NULL                              AS indexStatus,
+               lv.storage_key                    AS storageKey
+          FROM company_document cd
+          JOIN (
+                SELECT v.company_document_id, MAX(v.version_no) AS mx
+                  FROM company_document_version v
+                  JOIN company_document cdj ON cdj.company_document_id = v.company_document_id
+                   AND cdj.company_id = #{companyId}
+                 WHERE v.upload_status = 'COMPLETED' AND v.deleted_at IS NULL
+                 GROUP BY v.company_document_id
+               ) vc ON vc.company_document_id = cd.company_document_id
+          JOIN company_document_version lv
+                ON lv.company_document_id = cd.company_document_id
+               AND lv.version_no = vc.mx
+               AND lv.upload_status = 'COMPLETED'
+               AND lv.deleted_at IS NULL
+         WHERE cd.company_id = #{companyId} AND cd.deleted_at IS NULL
+        <if test="category != null">AND cd.category = #{category}</if>
+        <if test="keyword != null">
+            AND (cd.name LIKE CONCAT('%', #{keyword}, '%')
+                 OR lv.original_file_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+         ORDER BY lv.completed_at DESC, cd.company_document_id DESC
+    </select>
+
+    <!-- 특정 버전이 참조 대상으로 유효한지 — 회사 스코프·완료·미삭제·문서 미삭제. 귀속 검증용. -->
+    <select id="findSelectableVersion"
+            resultType="com.group3.vitamins.companydocument.application.result.CompanyDocumentReferenceView">
+        SELECT cd.company_document_id            AS companyDocumentId,
+               v.company_document_version_id     AS companyDocumentVersionId,
+               cd.category                       AS category,
+               v.original_file_name              AS originalFileName,
+               v.version_no                      AS versionNo,
+               NULL                              AS indexStatus,
+               v.storage_key                     AS storageKey
+          FROM company_document_version v
+          JOIN company_document cd ON cd.company_document_id = v.company_document_id
+         WHERE v.company_document_version_id = #{versionId}
+           AND cd.company_id = #{companyId}
+           AND v.upload_status = 'COMPLETED'
+           AND v.deleted_at IS NULL
+           AND cd.deleted_at IS NULL
+    </select>
+
+</mapper>

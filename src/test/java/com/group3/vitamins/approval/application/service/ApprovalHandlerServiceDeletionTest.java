@@ -41,7 +41,9 @@ class ApprovalHandlerServiceDeletionTest {
     @Mock private DomainEventPublisher domainEventPublisher;
     @InjectMocks private ApprovalHandlerService service;
 
+    /** 여기서 "Locked" 는 <b>행 잠금</b>(DEL-006 순서)이다 — 삭제 차단이 아니다. cascade 는 상태 무관 삭제한다. */
     @Test
+    @DisplayName("DEL-006 — 부모 결재 행을 먼저 잠근 뒤 cascade 삭제한다 (IN_PROGRESS 도 삭제된다)")
     void activeApprovalIsLockedBeforeCascadeDelete() {
         when(approvalRepository.findApprovalIncludingDeletedForUpdate(100L))
                 .thenReturn(Optional.of(approval(ApprovalStatus.IN_PROGRESS, null)));

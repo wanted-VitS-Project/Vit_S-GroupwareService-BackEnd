@@ -66,6 +66,7 @@ public class BidReviewDetailQueryAdapter implements BidReviewDetailQueryPort {
                     document.document_role,
                     document.bid_notice_attachment_id,
                     document.bid_reference_file_id,
+                    document.company_document_version_id,
                     document.file_name,
                     document.processing_status
                 FROM bid_review_document document
@@ -85,6 +86,7 @@ public class BidReviewDetailQueryAdapter implements BidReviewDetailQueryPort {
                         resultSet.getString("document_role"),
                         resultSet.getObject("bid_notice_attachment_id", Long.class),
                         resultSet.getObject("bid_reference_file_id", Long.class),
+                        resultSet.getObject("company_document_version_id", Long.class),
                         resultSet.getString("file_name"),
                         resultSet.getString("processing_status")
                 )
@@ -99,6 +101,7 @@ public class BidReviewDetailQueryAdapter implements BidReviewDetailQueryPort {
                     document.document_role,
                     document.bid_notice_attachment_id,
                     document.bid_reference_file_id,
+                    document.company_document_version_id,
                     citation.file_name,
                     citation.page_number,
                     citation.sheet_name,
@@ -121,6 +124,7 @@ public class BidReviewDetailQueryAdapter implements BidReviewDetailQueryPort {
                         resultSet.getString("document_role"),
                         resultSet.getObject("bid_notice_attachment_id", Long.class),
                         resultSet.getObject("bid_reference_file_id", Long.class),
+                        resultSet.getObject("company_document_version_id", Long.class),
                         resultSet.getString("file_name"),
                         resultSet.getObject("page_number", Integer.class),
                         resultSet.getString("sheet_name"),

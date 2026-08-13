@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:bid-review;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -116,6 +117,41 @@ class JpaBidReviewCommandAdapterTest {
         reviewRepository.saveAndFlush(completed);
 
         assertThat(commandAdapter.existsProcessing(COMPANY_ID, NOTICE_ID, USER_ID)).isFalse();
+    }
+
+    @Test
+    @DisplayName("포기 처리와 정리 Outbox를 잠금 조회 시점의 상태로 저장한다")
+    void savesAbandonedReviewWithCleanupOutbox() {
+        Long reviewId = reviewRepository.saveAndFlush(
+                BidReviewJpaEntity.from(pendingReview(COMPANY_ID, UUID.randomUUID().toString()))
+        ).getReviewId();
+
+        BidReview saved = commandAdapter.saveAbandonedWithCleanupOutbox(reviewId, NOW.plusMinutes(1));
+
+        assertThat(saved.reviewStatus()).isEqualTo(BidReviewStatus.ABANDONED);
+        assertThat(saved.abandonedAt()).isEqualTo(NOW.plusMinutes(1));
+
+        List<BidReviewOutboxJpaEntity> cleanupOutboxes = outboxRepository.findAll().stream()
+                .filter(outbox -> "BID_REVIEW_CLEANUP_REQUESTED".equals(outbox.getEventType()))
+                .toList();
+        assertThat(cleanupOutboxes).hasSize(1);
+        assertThat(cleanupOutboxes.get(0).getReviewId()).isEqualTo(reviewId);
+        assertThat(cleanupOutboxes.get(0).getAttemptId()).isEqualTo("abandon-" + reviewId);
+    }
+
+    @Test
+    @DisplayName("이미 포기된 검토를 다시 포기하려 하면 IllegalStateException을 던진다")
+    void rejectsAbandoningAlreadyAbandonedReview() {
+        Long reviewId = reviewRepository.saveAndFlush(
+                BidReviewJpaEntity.from(
+                        pendingReview(COMPANY_ID, UUID.randomUUID().toString())
+                                .abandon(NOW)
+                )
+        ).getReviewId();
+
+        assertThatThrownBy(() ->
+                commandAdapter.saveAbandonedWithCleanupOutbox(reviewId, NOW.plusMinutes(1))
+        ).isInstanceOf(IllegalStateException.class);
     }
 
     private BidReview pendingReview(Long companyId, String attemptId) {

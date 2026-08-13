@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -66,7 +67,7 @@ class BlockApprovalDeletionPropagationTest {
                 .thenReturn(new StepAccessUseCase.StepAccessView(20L, 30L, MemberPermission.EDITOR));
         when(blockRepository.save(any(Block.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER"));
+        service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER", false));
 
         ArgumentCaptor<LocalDateTime> detailDeletedAt = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(approvalDetailPort).deleteDetail(
@@ -90,13 +91,29 @@ class BlockApprovalDeletionPropagationTest {
         when(stepAccessUseCase.requireEditable(20L, "EMP001", "USER"))
                 .thenReturn(new StepAccessUseCase.StepAccessView(20L, 30L, MemberPermission.EDITOR));
         doThrow(new ConflictException(TestErrorCode.LOCKED))
-                .when(approvalDetailPort).assertDeletable(100L);
+                .when(approvalDetailPort).assertDeletable(100L, "구매 품의", false);
 
-        assertThatThrownBy(() -> service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER")))
+        assertThatThrownBy(() -> service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER", false)))
                 .isInstanceOf(ConflictException.class);
 
         verify(approvalDetailPort, never()).deleteDetail(any(), any(), any(), any());
         verify(blockRepository, never()).save(any(Block.class));
+    }
+
+    /** DEL-016 — 확인 플래그가 상세까지 그대로 전달돼야 한다. 안 그러면 다이얼로그를 눌러도 안 지워진다. */
+    @Test
+    @DisplayName("확인된 요청은 확인 플래그를 상세 판정까지 전달한다")
+    void directBlockDeletionPassesConfirmFlagToDetail() {
+        Block block = approvalBlock();
+        when(blockRepository.findById(10L)).thenReturn(Optional.of(block));
+        when(stepAccessUseCase.requireEditable(20L, "EMP001", "USER"))
+                .thenReturn(new StepAccessUseCase.StepAccessView(20L, 30L, MemberPermission.EDITOR));
+        when(blockRepository.save(any(Block.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER", true));
+
+        verify(approvalDetailPort).assertDeletable(100L, "구매 품의", true);
+        verify(approvalDetailPort).deleteDetail(eq(100L), eq("EMP001"), eq("구매 품의"), any());
     }
 
     /**
@@ -113,7 +130,7 @@ class BlockApprovalDeletionPropagationTest {
 
         assertThatCode(() -> service.deleteBlocks(List.of(10L), "EMP001")).doesNotThrowAnyException();
 
-        verify(approvalDetailPort, never()).assertDeletable(any());
+        verify(approvalDetailPort, never()).assertDeletable(any(), any(), anyBoolean());
         verify(approvalDetailPort).deleteDetail(eq(100L), eq("EMP001"), eq("구매 품의"), any());
         assertThat(block.getDeletedAt()).isNotNull();
     }

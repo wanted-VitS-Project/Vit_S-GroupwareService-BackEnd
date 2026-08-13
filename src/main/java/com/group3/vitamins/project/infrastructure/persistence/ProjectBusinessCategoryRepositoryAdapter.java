@@ -33,4 +33,9 @@ public class ProjectBusinessCategoryRepositoryAdapter implements ProjectBusiness
                 .deleteByProjectIdAndBusinessCategoryId(projectId, businessCategoryId) > 0;
     }
 
+    @Override
+    public void deleteByProjectId(Long projectId) {
+        springDataRepository.deleteByProjectId(projectId);
+    }
+
 }

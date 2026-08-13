@@ -46,7 +46,9 @@ public interface FinanceQueryUseCase {
     ) {
     }
 
-    record CashFlowListView(List<CashFlowView> cashFlows) {
+    record CashFlowListView(
+            List<CashFlowView> cashFlows, int page, int size, long totalElements, int totalPages
+    ) {
     }
 
     record CashFlowView(

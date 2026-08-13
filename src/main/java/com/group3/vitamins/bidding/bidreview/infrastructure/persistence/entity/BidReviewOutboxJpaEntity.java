@@ -108,6 +108,22 @@ public class BidReviewOutboxJpaEntity {
         return entity;
     }
 
+    // 재시도처럼 발행 가능 시각을 생성 시각보다 뒤로 미뤄야 할 때 쓴다(지연 백오프).
+    public static BidReviewOutboxJpaEntity pending(
+            String eventId,
+            Long reviewId,
+            String attemptId,
+            String eventType,
+            JsonNode payload,
+            LocalDateTime availableAt,
+            LocalDateTime now
+    ) {
+        BidReviewOutboxJpaEntity entity =
+                pending(eventId, reviewId, attemptId, eventType, payload, now);
+        entity.availableAt = availableAt;
+        return entity;
+    }
+
     // 현재 서버가 Outbox 발행 작업을 일정 시간 점유합니다.
     public void claim(
             String lockOwner,
@@ -160,6 +176,21 @@ public class BidReviewOutboxJpaEntity {
         this.lastErrorMessage = truncate(errorMessage);
         this.updatedAt = now;
         return true;
+    }
+
+    // 역직렬화할 수 없는 Outbox는 재시도하지 않고 안전한 실패 코드로 종료한다.
+    public void markInvalidPayload(LocalDateTime now) {
+        this.publishStatus = "FAILED";
+        this.lockOwner = null;
+        this.lockExpiresAt = null;
+        this.lastErrorMessage = "INVALID_OUTBOX_PAYLOAD";
+        this.updatedAt = now;
+    }
+
+    // 삭제처럼 되돌릴 수 없는 부수효과(S3 삭제 등) 전에, 이 서버가 실제로 점유 중인지 먼저 확인한다.
+    // 상태를 바꾸지 않는 순수 조회다 — markPublished/markPublishFailed와 달리 부수효과 전에 불러야 한다.
+    public boolean isCurrentlyOwnedBy(String expectedLockOwner) {
+        return isOwnedBy(expectedLockOwner);
     }
 
     private boolean isOwnedBy(String expectedLockOwner) {

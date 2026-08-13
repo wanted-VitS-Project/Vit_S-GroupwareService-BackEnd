@@ -24,15 +24,22 @@ public interface BlockDetailPort {
     Long createDetail(Long blockId);
 
     /**
-     * 이 상세를 <b>블록 직접 삭제</b>로 없앨 수 있는지 판정한다. 막아야 하면 예외를 던진다 (DEL-016·DEL-018).
+     * 이 상세를 <b>블록 직접 삭제</b>로 없애도 되는지 판정한다 (DEL-016·DEL-018).
      *
-     * <p>기본은 no-op — 대부분의 타입은 상태 개념이 없어 언제든 삭제할 수 있다. 상태에 따라 막아야 하는
-     * 타입만 오버라이드한다(현재 APPROVAL 뿐).
+     * <p>기본은 no-op — 대부분의 타입은 상태 개념이 없어 언제든 삭제할 수 있다. 되물어야 하는 타입만
+     * 오버라이드한다(현재 APPROVAL 뿐).
+     *
+     * <p>{@code blockTitle} 은 안내 문구용이다 — 상세가 자기 제목을 못 찾았을 때 대체어로 쓴다
+     * ({@code deleteDetail} 과 같은 이유로 넘긴다).
+     *
+     * <p>{@code confirmed} 는 <b>사용자가 부작용을 이미 확인했다</b>는 뜻이다. 오버라이드하는 어댑터는
+     * {@code false} 일 때만 409 를 던지고, {@code true} 면 통과시켜야 한다 — 막는 것이 목적이 아니라
+     * <b>모르고 지우는 것을 막는 것</b>이 목적이다. 확인의 의미는 타입이 정한다(결재는 "결재 취소 동의").
      *
      * <p>⛔ <b>cascade 경로(스텝 삭제)는 이 메서드를 부르지 않는다</b> (DEL-017). 거기서 막으면 결재 1건
      * 때문에 스텝 삭제 전체가 롤백돼, 폐기된 BLK-008 잠금과 같은 실패로 돌아간다.
      */
-    default void assertDeletable(Long typeId) {
+    default void assertDeletable(Long typeId, String blockTitle, boolean confirmed) {
     }
 
     /** 상세 행을 논리 삭제한다. 블록 삭제와 같은 트랜잭션에서 호출된다. */
