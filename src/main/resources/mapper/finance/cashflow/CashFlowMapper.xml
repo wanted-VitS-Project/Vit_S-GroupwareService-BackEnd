@@ -177,7 +177,8 @@
 
     <!-- 매칭/매칭 해제 검증용 — settleBlockId(현재 연결된 정산 블록)로 "이미 매칭됨" 여부를 판정한다. -->
     <select id="findMatchLookup" resultType="com.group3.vitamins.finance.infrastructure.cashflow.CashFlowMatchLookupRow">
-        SELECT type AS type, amount AS amount, traded_at AS tradedAt, settle_block_id AS settleBlockId
+        SELECT type AS type, amount AS amount, traded_at AS tradedAt,
+        settle_block_id AS settleBlockId, is_excluded AS isExcluded
         FROM cash_flow
         WHERE cash_flow_id = #{cashFlowId} AND company_id = #{companyId} AND deleted_at IS NULL
     </select>

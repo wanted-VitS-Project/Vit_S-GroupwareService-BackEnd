@@ -42,7 +42,14 @@ public enum FinanceErrorCode implements ErrorCode {
     FINANCE_TAX_INVOICE_LINKED_CANNOT_DELETE("FINANCE_TAX_INVOICE_LINKED_CANNOT_DELETE",
             "매칭된 항목은 삭제할 수 없습니다. 먼저 매칭을 해제해주세요."),
     FINANCE_TAX_INVOICE_LINKED_CANNOT_EXCLUDE("FINANCE_TAX_INVOICE_LINKED_CANNOT_EXCLUDE",
-            "이미 매칭된 항목은 제외 처리할 수 없습니다.");
+            "이미 매칭된 항목은 제외 처리할 수 없습니다."),
+    // 2026-08-13 신설 — "매칭된 항목은 제외 못 함"만 있고 그 반대가 없어서, 제외 처리된 항목을 정산 블록에
+    // 매칭할 수 있었다. is_excluded는 "프로젝트와 무관해 미연결 집계에서 뺄 대상"이라는 뜻이라 정산 블록에
+    // 붙이는 것과 앞뒤가 안 맞고, 붙으면 "미연결 집계에선 빠졌는데 정산 현황엔 연결로 보이는" 상태가 된다.
+    FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH("FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH",
+            "제외 처리된 항목은 매칭할 수 없습니다. 먼저 제외를 취소해주세요."),
+    FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH("FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH",
+            "제외 처리된 항목은 매칭할 수 없습니다. 먼저 제외를 취소해주세요.");
     // 401(미인증)·500(예상 못한 서버 오류)은 도메인 코드로 안 만든다 — GlobalExceptionHandler 가
     // AUTH_UNAUTHENTICATED/COMMON_INTERNAL_ERROR 로 공통 처리한다.
 

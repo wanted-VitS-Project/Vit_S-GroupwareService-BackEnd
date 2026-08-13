@@ -186,7 +186,8 @@
 
     <!-- 매칭/매칭 해제 검증용 — settleBlockId(현재 연결된 정산 블록)로 "이미 매칭됨" 여부를 판정한다. -->
     <select id="findMatchLookup" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchLookupRow">
-        SELECT type AS type, total_amount AS totalAmount, issued_no AS issuedNo, settle_block_id AS settleBlockId
+        SELECT type AS type, total_amount AS totalAmount, issued_no AS issuedNo,
+        settle_block_id AS settleBlockId, is_excluded AS isExcluded
         FROM tax_invoice
         WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
     </select>

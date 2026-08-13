@@ -406,6 +406,13 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (taxInvoice.settleBlockId() != null) {
             throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_ALREADY_MATCHED);
         }
+        // 제외 처리(is_excluded)된 항목은 "프로젝트와 무관해 미연결 집계에서 뺀 대상"이라 정산 블록에 붙일
+        // 수 없다(2026-08-13 추가) — 제외 API가 "매칭된 건 제외 못 함"으로 막는 것과 대칭이다. 붙게 두면
+        // 미연결 집계에선 빠져 있는데 정산 현황엔 연결로 보이는 상태가 된다. 해제(unmatch)는 안 막는다 —
+        // 이미 붙어 있는 걸 떼는 건 그 모순을 없애는 방향이다.
+        if (Boolean.TRUE.equals(taxInvoice.isExcluded())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH);
+        }
 
         // 회사 스코프 확인 — companyId 없이는 타사 settleId를 그대로 매칭시킬 수 있다(cash_flow와 동일 이유).
         com.group3.vitamins.finance.infrastructure.taxinvoice.SettlementBlockMatchRow settlementBlock =
@@ -540,7 +547,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
 
         // deletable.size()가 아니라 실제로 지운 행 수를 쓴다 — 조회~삭제 사이에 동시 매칭돼 조건부
         // UPDATE(settle_block_id IS NULL)가 걸러낸 행까지 "삭제 완료"로 보고하면 안 된다.
-        int deletedCount = deletable.isEmpty() ? 0 : taxInvoiceCommandMapper.softDeleteBatch(deletable);
+        int deletedCount = deletable.isEmpty() ? 0 : taxInvoiceCommandMapper.softDeleteBatch(deletable, companyId);
 
         return new TaxInvoiceDeleteResultView(deletedCount, skipped);
     }
@@ -587,7 +594,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         }
 
         if (!updatable.isEmpty()) {
-            taxInvoiceCommandMapper.updateExcludedBatch(updatable, command.isExcluded());
+            taxInvoiceCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
         }
 
         return new TaxInvoiceExclusionResultView(updatable.size(), skipped);
@@ -661,6 +668,10 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         }
         if (cashFlow.settleBlockId() != null) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_ALREADY_MATCHED);
+        }
+        // 제외 처리된 항목은 매칭 불가 — 세금계산서 쪽 matchTaxInvoice와 같은 규칙·같은 이유(2026-08-13 추가).
+        if (Boolean.TRUE.equals(cashFlow.isExcluded())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH);
         }
 
         // 회사 스코프 확인(2026-08-11 추가) — companyId 없이는 타사 settleId를 그대로 매칭시킬 수 있었다.
@@ -853,7 +864,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         // softDeleteBatch가 실제로 지운 행 수를 그대로 쓴다 — deletable.size()를 그대로 응답하면
         // 조회(findDeleteCandidates)~삭제 사이에 동시 매칭돼 조건부 UPDATE가 걸러낸 행까지
         // "삭제 완료"로 잘못 보고하게 된다(2026-08-11, CodeRabbit 지적).
-        int deletedCount = deletable.isEmpty() ? 0 : cashFlowCommandMapper.softDeleteBatch(deletable);
+        int deletedCount = deletable.isEmpty() ? 0 : cashFlowCommandMapper.softDeleteBatch(deletable, companyId);
 
         return new CashFlowDeleteResultView(deletedCount, skipped);
     }
@@ -894,7 +905,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         }
 
         if (!updatable.isEmpty()) {
-            cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded());
+            cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
         }
 
         return new CashFlowExclusionResultView(updatable.size(), skipped);

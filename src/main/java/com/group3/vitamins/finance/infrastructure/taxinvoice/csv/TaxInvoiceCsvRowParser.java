@@ -31,7 +31,9 @@ public class TaxInvoiceCsvRowParser {
     public List<ParsedTaxInvoiceRow> parseRows(TaxInvoiceCsvTable table, TaxInvoiceCsvMapping mapping) {
         List<ParsedTaxInvoiceRow> result = new ArrayList<>();
 
+        int rowNo = 0;
         for (Map<String, String> row : table.rows()) {
+            rowNo++;
             // 완전히 빈 행(공백 줄 등)은 건너뛴다 — 승인번호가 없으면 저장 대상이 아니다.
             String approvalNo = valueOf(row, mapping.approvalNoColumn());
             if (approvalNo == null) {
@@ -40,13 +42,13 @@ public class TaxInvoiceCsvRowParser {
 
             result.add(new ParsedTaxInvoiceRow(
                     approvalNo,
-                    parseDate(requireValue(row, mapping.issuedDateColumn(), "issuedDateColumn")),
+                    parseDate(requireValue(row, mapping.issuedDateColumn(), "issuedDateColumn"), rowNo),
                     valueOf(row, mapping.supplierBizNoColumn()),
                     requireValue(row, mapping.buyerBizNoColumn(), "buyerBizNoColumn"),
                     requireValue(row, mapping.buyerNameColumn(), "buyerNameColumn"),
-                    parseAmount(requireValue(row, mapping.supplyAmountColumn(), "supplyAmountColumn")),
-                    parseAmount(requireValue(row, mapping.taxAmountColumn(), "taxAmountColumn")),
-                    parseAmount(requireValue(row, mapping.totalAmountColumn(), "totalAmountColumn")),
+                    parseAmount(requireValue(row, mapping.supplyAmountColumn(), "supplyAmountColumn"), rowNo),
+                    parseAmount(requireValue(row, mapping.taxAmountColumn(), "taxAmountColumn"), rowNo),
+                    parseAmount(requireValue(row, mapping.totalAmountColumn(), "totalAmountColumn"), rowNo),
                     valueOf(row, mapping.itemNameColumn()),
                     valueOf(row, mapping.ceoNameColumn()),
                     valueOf(row, mapping.subBizNoColumn()),
@@ -56,7 +58,11 @@ public class TaxInvoiceCsvRowParser {
         return result;
     }
 
-    private LocalDate parseDate(String raw) {
+    /**
+     * ⚠️ 실패 메시지에 행 번호를 붙인다 (2026-08-13, CodeRabbit 지적) — 홈택스 파일은 수십~수백 행이라
+     * 값만 알려주면 사용자가 어느 줄을 고쳐야 할지 찾을 수 없다. 번호는 헤더를 제외한 데이터 행 순번이다.
+     */
+    private LocalDate parseDate(String raw, int rowNo) {
         for (DateTimeFormatter format : DATE_FORMATS) {
             try {
                 return LocalDate.parse(raw, format);
@@ -65,16 +71,19 @@ public class TaxInvoiceCsvRowParser {
             }
         }
         throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
-                "작성일자 형식을 해석할 수 없습니다: " + raw);
+                rowNo + "행: 작성일자 형식을 해석할 수 없습니다: " + raw);
     }
 
     /** 절댓값 처리 없음 — 세금계산서 금액은 방향(입출금) 개념이 없는 원본 값 그대로 저장한다. */
-    private BigDecimal parseAmount(String raw) {
+    private BigDecimal parseAmount(String raw, int rowNo) {
         try {
             return new BigDecimal(raw.replace(",", "").trim());
         } catch (NumberFormatException e) {
+            // PMD가 원인 예외 미보존(PreserveStackTrace)을 지적하지만 그대로 둔다 — ValidationException에
+            // (코드, 메시지, 원인) 생성자가 없고 그건 global 공용 클래스라 이 PR 범위가 아니다. 게다가
+            // NumberFormatException의 스택은 BigDecimal 내부라, 아래 메시지(행 번호 + 원본 값)가 진단에 더 낫다.
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
-                    "금액 값을 숫자로 해석할 수 없습니다: " + raw);
+                    rowNo + "행: 금액 값을 숫자로 해석할 수 없습니다: " + raw);
         }
     }
 

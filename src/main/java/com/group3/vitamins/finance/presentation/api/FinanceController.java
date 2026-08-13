@@ -329,6 +329,7 @@ public class FinanceController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "이미 매칭된 항목입니다. (FINANCE_TAX_INVOICE_ALREADY_MATCHED) / "
+                            + "제외 처리된 항목은 매칭할 수 없습니다. (FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH) / "
                             + "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다. (FINANCE_TAX_TYPE_MISMATCH) / "
                             + "이미 매칭된 정산 블록입니다. (FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
@@ -349,7 +350,9 @@ public class FinanceController {
     }
 
     @Operation(summary = "세금계산서 블록 매칭 해제",
-            description = "세금계산서와 정산 블록의 연결을 해제하고, 그 정산 블록을 미연결(PENDING) 상태로 되돌린다.")
+            description = "세금계산서와 정산 블록의 연결을 해제한다. 정산 블록 상태는 남은 연결에 따라 달라진다 — "
+                    + "입출금이 아직 연결돼 있으면 PARTIAL/COMPLETED와 실적값이 그대로 유지되고, "
+                    + "세금계산서만 연결돼 있던 블록(WAITING)이면 미연결(PENDING)로 되돌아간다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 해제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -544,6 +547,7 @@ public class FinanceController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 블록 매칭 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "이미 매칭된 항목입니다. (FINANCE_CASH_FLOW_ALREADY_MATCHED) / "
+                            + "제외 처리된 항목은 매칭할 수 없습니다. (FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH) / "
                             + "입출금 구분과 정산 블록 타입이 일치하지 않습니다. (FINANCE_MATCH_TYPE_MISMATCH) / "
                             + "이미 매칭된 정산 블록입니다. (FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
@@ -564,7 +568,9 @@ public class FinanceController {
     }
 
     @Operation(summary = "입출금 내역 블록 매칭 해제",
-            description = "입출금 내역과 정산 블록의 연결을 해제하고, 그 정산 블록을 미연결(PENDING) 상태로 되돌린다.")
+            description = "입출금 내역과 정산 블록의 연결을 해제하고 실적값(actual_amount·actual_date)을 비운다. "
+                    + "정산 블록 상태는 남은 연결에 따라 달라진다 — 세금계산서가 아직 연결돼 있으면 WAITING(정산 대기), "
+                    + "둘 다 없으면 미연결(PENDING)이 된다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 블록 매칭 해제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",

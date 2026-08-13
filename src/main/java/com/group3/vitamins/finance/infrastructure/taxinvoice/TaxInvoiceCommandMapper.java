@@ -52,8 +52,11 @@ public interface TaxInvoiceCommandMapper {
     int updateTaxInvoiceMemo(@Param("taxId") Long taxId, @Param("memo") String memo);
 
     /** 소프트 삭제(배치) — 매칭된 항목은 지우지 않는다(조건을 UPDATE 문에 걸어 확인~삭제 사이의 틈을 없앤다). */
-    int softDeleteBatch(@Param("taxIds") List<Long> taxIds);
+    int softDeleteBatch(@Param("taxIds") List<Long> taxIds, @Param("companyId") Long companyId);
 
     /** 연결 제외/포함 배치 처리. */
-    int updateExcludedBatch(@Param("taxIds") List<Long> taxIds, @Param("isExcluded") Boolean isExcluded);
+    int updateExcludedBatch(
+            @Param("taxIds") List<Long> taxIds,
+            @Param("isExcluded") Boolean isExcluded,
+            @Param("companyId") Long companyId);
 }

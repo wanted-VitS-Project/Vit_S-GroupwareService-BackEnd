@@ -864,6 +864,16 @@ Content-Type: application/json
   "settleId": 4
 }
 
+### 12-6-1. 제외 처리된 세금계산서를 매칭 시도 → 400 FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH
+### 먼저 13-8로 제외 처리한 taxId로 실행할 것. 제외를 취소(13-10)하면 다시 매칭된다.
+### ⚠️ 입출금도 같은 규칙이다(7단계 "입출력 블록 매칭"을 제외 처리된 cashFlowId로 실행 → 400).
+PATCH localhost:8080/api/v1/finance/tax-invoices/4/match
+Content-Type: application/json
+
+{
+  "settleId": 4
+}
+
 ### 12-7. 존재하지 않는 세금계산서 또는 정산 블록 → 404 FINANCE_TAX_MATCH_TARGET_NOT_FOUND
 PATCH localhost:8080/api/v1/finance/tax-invoices/3/match
 Content-Type: application/json

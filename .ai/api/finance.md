@@ -384,7 +384,7 @@
 | `data.taxInvoices[].taxAmount` | BigDecimal | 세액 |
 | `data.taxInvoices[].totalAmount` | BigDecimal | 합계 |
 | `data.taxInvoices[].memo` | String | 비고/메모 (nullable) |
-| `data.taxInvoices[].sourceType` | String | 수집 출처 (CSV/HOMETAX_API) |
+| `data.taxInvoices[].sourceType` | String | 수집 출처. **현재는 `CSV`만 나간다** — DB enum엔 `HOMETAX_API`도 있지만 그 값을 만드는 코드 경로가 없어서, 구현되지 않은 출처를 계약에 노출하지 않는다(홈택스 연동이 생기면 그때 추가) |
 | `data.taxInvoices[].projectId` | Long | 연결된 프로젝트 ID (미연결이거나 프로젝트 자체가 삭제됐으면 null) |
 | `data.taxInvoices[].projectName` | String | 연결 프로젝트명 (미연결이거나 프로젝트 자체가 삭제됐으면 null) |
 | `data.taxInvoices[].settleId` | Long | 연결 정산 블록 ID (미연결이면 null — 블록이 삭제돼도 값은 유지됨, `linkStatus` 참고) |
@@ -422,7 +422,7 @@
         "taxAmount": 4090910,
         "totalAmount": 45000000,
         "memo": null,
-        "sourceType": "HOMETAX_API",
+        "sourceType": "CSV",
         "projectId": null,
         "projectName": null,
         "settleId": null,
@@ -793,10 +793,10 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 | 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." |
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
-- ⚠️ **원 명세(노션)가 없는 API다 (2026-08-13)** — 세금계산서 쪽 매칭 3종은 명세가 따로 없어서,
-  **이미 확정·구현된 입출금 내역 매칭 3종을 세금계산서 컬럼으로 그대로 옮겼다**(사용자 확정). 경로·응답
-  구조·에러 처리 방식이 전부 입출금 쪽과 1:1 대응이다. 노션에 세금계산서 매칭 명세가 따로 올라오면
-  이 문서와 대조해서 차이를 먼저 확인할 것.
+- **설계 출처 — 입출금 매칭 3종을 이식했다 (2026-08-13, 사용자 확정)** — 세금계산서 매칭은 별도 요구사항
+  문서 없이, **이미 확정·구현된 입출금 내역 매칭 3종을 세금계산서 컬럼으로 옮겨서** 설계했다. 경로·응답
+  구조·에러 처리 방식이 전부 입출금 쪽과 1:1 대응이다. **이 문서가 계약의 단일 기준이다** — 아래 규칙과
+  다른 설명을 다른 곳에서 보면 이 문서를 따른다.
 - **매칭 기준 4종 (입출금은 3종)** — 세금계산서는 세액(`tax_amount`)이 따로 있어서 기준이 하나 늘었다.
   - 대상 정산 블록: **세금계산서가 아직 안 붙은 블록** + **같은 타입(INCOME/OUTCOME)만**.
     ⚠️ status는 안 본다 — 입출금이 이미 매칭된 `PARTIAL`/`COMPLETED` 블록도 후보에 들어온다(입금은
@@ -885,6 +885,7 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 | --- | --- | --- | --- |
 | 200 | OK | — | "세금계산서 블록 매칭 성공" |
 | 400 | Bad Request | `FINANCE_TAX_INVOICE_ALREADY_MATCHED` | "이미 매칭된 항목입니다." (이 세금계산서가 이미 다른 정산 블록에 연결돼 있음) |
+| 400 | Bad Request | `FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH` | "제외 처리된 항목은 매칭할 수 없습니다. 먼저 제외를 취소해주세요." (2026-08-13 신설 — 아래 메모 참고) |
 | 400 | Bad Request | `FINANCE_TAX_TYPE_MISMATCH` | "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다." |
 | 400 | Bad Request | `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED` | "이미 매칭된 정산 블록입니다." (입출금 매칭과 **동일 코드 재사용** — 메시지가 도메인 중립이라 그대로 씀) |
 | 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
@@ -895,6 +896,13 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
   메시지가 "입출금 구분…"/"존재하지 않는 입출금 내역 또는…"으로 도메인 특정 문구라 재사용하지 않고
   `FINANCE_TAX_TYPE_MISMATCH`/`FINANCE_TAX_MATCH_TARGET_NOT_FOUND`를 새로 만들었다. 반대로
   `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED`는 메시지가 "이미 매칭된 정산 블록입니다."로 중립이라 재사용.
+- **제외 처리된 항목은 매칭할 수 없다 (2026-08-13 신설, 사용자 확정)** — 기존엔 "매칭된 항목은 제외 못 함"
+  규칙만 있고 **그 반대가 없어서 제외 처리된 항목을 정산 블록에 붙일 수 있었다.** `is_excluded`는
+  "프로젝트와 무관해 미연결 집계에서 뺄 대상"이라는 뜻이라 정산 블록에 붙이는 것과 앞뒤가 안 맞고,
+  붙게 두면 **미연결 집계에선 빠졌는데 정산 현황엔 연결로 보이는** 상태가 된다. 이제 400으로 막는다 —
+  사용자는 제외를 먼저 취소하고 매칭해야 한다. ⚠️ **입출금 매칭도 같은 규칙으로 함께 바꿨다**(한쪽만
+  고치면 두 원장의 규칙이 갈린다). 매칭 **해제**는 막지 않는다 — 이미 붙어 있는 걸 떼는 건 그 모순을
+  없애는 방향이다.
 - **매칭 가능 조건은 `status`가 아니라 "세금계산서 부착 여부"다** — 입출금이 이미 매칭된
   `PARTIAL`/`COMPLETED` 블록에도 세금계산서를 붙일 수 있다. `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED`
   (400)는 **그 블록에 세금계산서가 이미 1장 있을 때만** 나간다(입출금이 붙어 있는 것과는 무관).
@@ -1606,6 +1614,7 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
 | --- | --- | --- | --- |
 | 200 | OK | — | "입출금 내역 블록 매칭 성공" |
 | 400 | Bad Request | `FINANCE_CASH_FLOW_ALREADY_MATCHED` | "이미 매칭된 항목입니다." (이 입출금 내역이 이미 다른 정산 블록에 연결돼 있음) |
+| 400 | Bad Request | `FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH` | "제외 처리된 항목은 매칭할 수 없습니다. 먼저 제외를 취소해주세요." (2026-08-13 신설 — 세금계산서 매칭과 동일 규칙, 그쪽 메모 참고) |
 | 400 | Bad Request | `FINANCE_MATCH_TYPE_MISMATCH` | "입출금 구분과 정산 블록 타입이 일치하지 않습니다." (신규 — 아래 메모 참고) |
 | 400 | Bad Request | `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED` | "이미 매칭된 정산 블록입니다." (신규 — 아래 메모 참고) |
 | 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |

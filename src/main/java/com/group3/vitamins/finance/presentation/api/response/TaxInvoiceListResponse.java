@@ -62,7 +62,10 @@ public record TaxInvoiceListResponse(
             BigDecimal totalAmount,
             @Schema(description = "비고/메모", example = "선급금", nullable = true)
             String memo,
-            @Schema(description = "수집 출처 (CSV/HOMETAX_API)", example = "HOMETAX_API")
+            // DB enum에는 HOMETAX_API도 있지만 그 값을 만드는 코드 경로가 없다 — 구현되지 않은 출처를
+            // 계약에 노출하면 프론트가 없는 분기를 짜게 되므로 CSV만 적는다(홈택스 연동이 생기면 추가).
+            @Schema(description = "수집 출처. 현재는 CSV 업로드로만 유입된다", example = "CSV",
+                    allowableValues = {"CSV"})
             String sourceType,
             @Schema(description = "연결된 프로젝트 ID. 미연결이거나 프로젝트 자체가 삭제됐으면 null", example = "1", nullable = true)
             Long projectId,

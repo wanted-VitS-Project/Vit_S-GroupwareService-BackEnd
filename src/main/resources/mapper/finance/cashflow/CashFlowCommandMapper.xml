@@ -84,6 +84,12 @@
         세금계산서가 연결돼 있는데도 블록이 미연결로 보이고, 재무 요약의 미연결 카운트에도 잘못 잡힌다.
         실적값은 입출금 소관이라 해제 시 항상 비운다(세금계산서 해제와 정반대다).
     -->
+    <!--
+        ⚠️ "남은 입출금 연결이 없을 때만" 초기화한다 (2026-08-13, CodeRabbit 지적) — 호출부가 cash_flow
+        연결을 먼저 지우고 이 UPDATE를 실행하는데, 그 사이 다른 요청이 같은 블록에 새 입출금을 매칭하면
+        이 문장이 방금 저장된 status·actual_amount·actual_date 를 덮어써 버린다. WHERE 절에 NOT EXISTS 를
+        걸면 그 경우 0행이 되어 새 매칭 결과가 살아남는다.
+    -->
     <update id="resetSettlementBlockMatch">
         UPDATE settlement_block
         SET status = CASE
@@ -95,6 +101,10 @@
         END,
         actual_amount = NULL, actual_date = NULL
         WHERE settle_id = #{settleId}
+        AND NOT EXISTS (
+        SELECT 1 FROM cash_flow cf
+        WHERE cf.settle_block_id = #{settleId} AND cf.deleted_at IS NULL
+        )
     </update>
 
     <insert id="insertManual">
@@ -122,18 +132,25 @@
 
     <!-- deleted_at·settle_block_id 조건을 UPDATE 문 자체에 걸어서, 조회~삭제 사이에 동시 매칭된
          행까지 지워버리는 것을 막는다(2026-08-11, CodeRabbit 지적). -->
+    <!--
+        ⚠️ company_id 조건 필수 (2026-08-13, 세금계산서 쪽 CodeRabbit 지적을 입출금에도 반영) —
+        호출부가 회사 스코프로 걸러주지만, 원본 요청 ID를 그대로 넘기는 실수 하나로 타사 데이터가
+        지워진다. 테넌트 격리는 UPDATE 문 자체에 둔다.
+    -->
     <update id="softDeleteBatch">
         UPDATE cash_flow SET deleted_at = NOW()
-        WHERE deleted_at IS NULL AND settle_block_id IS NULL
+        WHERE company_id = #{companyId} AND deleted_at IS NULL AND settle_block_id IS NULL
         AND cash_flow_id IN
         <foreach collection="cashFlowIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
     </update>
 
+    <!-- company_id 조건은 softDeleteBatch와 같은 이유(테넌트 격리를 UPDATE 문에 둔다). -->
     <update id="updateExcludedBatch">
         UPDATE cash_flow SET is_excluded = #{isExcluded}
-        WHERE cash_flow_id IN
+        WHERE company_id = #{companyId}
+        AND cash_flow_id IN
         <foreach collection="cashFlowIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>

@@ -24,11 +24,11 @@ public record TaxInvoiceCsvUploadRequest(
         String totalAmountColumn,
         @Schema(description = "품목명 컬럼명 (없으면 null)", example = "품목", nullable = true)
         String itemNameColumn,
-        @Schema(description = "대표자명 컬럼명 (없으면 null)", nullable = true)
+        @Schema(description = "대표자명 컬럼명 (없으면 null)", example = "대표자명", nullable = true)
         String ceoNameColumn,
-        @Schema(description = "종사업장번호 컬럼명 (없으면 null)", nullable = true)
+        @Schema(description = "종사업장번호 컬럼명 (없으면 null)", example = "종사업장번호", nullable = true)
         String subBizNoColumn,
-        @Schema(description = "비고/메모 컬럼명 (없으면 null)", nullable = true)
+        @Schema(description = "비고/메모 컬럼명 (없으면 null)", example = "비고", nullable = true)
         String memoColumn,
         @Schema(description = "파일이 비밀번호로 보호돼 있으면 그 비밀번호(엑셀만 해당, CSV는 무시됨). "
                 + "안 보냈는데 파일이 잠겨있으면 FINANCE_CSV_PASSWORD_REQUIRED, 틀리면 FINANCE_CSV_PASSWORD_INVALID",

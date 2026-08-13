@@ -8,12 +8,14 @@ import java.util.List;
 import java.util.Map;
 
 public record TaxInvoiceCsvPreviewResponse(
-        @Schema(description = "CSV에 있는 전체 컬럼명 목록")
+        @Schema(description = "CSV에 있는 전체 컬럼명 목록. 같은 이름이 여러 번 나오면(공급자/공급받는자 블록 각각의 "
+                + "\"상호\"·\"대표자명\"·\"종사업장번호\") 두 번째부터 \" (2)\", \" (3)\" 접미사가 붙어 구분된다")
         List<String> columns,
         @Schema(description = "상위 5행 미리보기 (컬럼명: 값)")
         List<Map<String, String>> sampleRows,
-        @Schema(description = "추천 구분 (INCOME/OUTCOME) — 공급자/공급받는자 사업자번호 중 실제 값이 채워진 쪽으로 판단. "
-                + "판단 불가하면 null", example = "INCOME", nullable = true)
+        @Schema(description = "추천 구분 (INCOME/OUTCOME) — 헤더 위 제목 줄(예: \"2022년도 매출세금계산서\")에 "
+                + "\"매출\"이 있으면 INCOME, \"매입\"이 있으면 OUTCOME. 제목 줄이 없거나 두 키워드가 다 없으면 null "
+                + "(사용자가 직접 선택해야 한다)", example = "INCOME", nullable = true)
         String recommendedType,
         RecommendedMapping recommendedMapping
 ) {

@@ -58,10 +58,15 @@
         WHERE settle_id = #{settleId} AND status = 'PENDING'
     </update>
 
+    <!--
+        settle_block_id IS NOT NULL 조건을 걸어야 동시 해제 요청 중 한쪽만 성공한다 (2026-08-13,
+        CodeRabbit 지적) — tax_id 만 보면 두 요청이 모두 1행 성공으로 보고된다. deleted_at 조건은
+        다른 UPDATE들과 기준을 맞춘 것이다.
+    -->
     <update id="clearTaxInvoiceMatch">
         UPDATE tax_invoice
         SET settle_block_id = NULL, linked_by = NULL, linked_at = NULL
-        WHERE tax_id = #{taxId}
+        WHERE tax_id = #{taxId} AND settle_block_id IS NOT NULL AND deleted_at IS NULL
     </update>
 
     <!--
@@ -72,6 +77,14 @@
         UPDATE settlement_block
         SET status = 'PENDING'
         WHERE settle_id = #{settleId} AND status = 'WAITING'
+        <!--
+            해제 직후 남이 다른 세금계산서를 같은 블록에 매칭했다면(그 경우 status 는 WAITING 그대로다)
+            PENDING 으로 떨어뜨리면 안 된다 — 입출금 해제 쪽과 같은 종류의 경합 방어다(2026-08-13).
+        -->
+        AND NOT EXISTS (
+        SELECT 1 FROM tax_invoice ti
+        WHERE ti.settle_block_id = #{settleId} AND ti.deleted_at IS NULL
+        )
     </update>
 
     <update id="updateTaxInvoiceMemo">
@@ -83,18 +96,25 @@
         settle_block_id IS NULL 조건을 UPDATE 문 자체에 걸어서 "매칭 확인 후 삭제" 사이의 틈을 없앤다 —
         확인 직후 남이 매칭하면 0행이 되고, 호출부가 400으로 되돌린다(cash_flow의 softDeleteBatch와 동일).
     -->
+    <!--
+        ⚠️ company_id 조건 필수 (2026-08-13, CodeRabbit 지적) — 호출부(findDeleteCandidates)가 회사 스코프로
+        걸러주지만, 거기서 원본 요청 ID를 그대로 넘기는 실수 하나로 타사 세금계산서가 지워진다.
+        테넌트 격리는 UPDATE 문 자체에 둔다.
+    -->
     <update id="softDeleteBatch">
         UPDATE tax_invoice SET deleted_at = NOW()
-        WHERE deleted_at IS NULL AND settle_block_id IS NULL
+        WHERE company_id = #{companyId} AND deleted_at IS NULL AND settle_block_id IS NULL
         AND tax_id IN
         <foreach collection="taxIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
     </update>
 
+    <!-- company_id 조건은 softDeleteBatch와 같은 이유(테넌트 격리를 UPDATE 문에 둔다). -->
     <update id="updateExcludedBatch">
         UPDATE tax_invoice SET is_excluded = #{isExcluded}, updated_at = NOW()
-        WHERE tax_id IN
+        WHERE company_id = #{companyId}
+        AND tax_id IN
         <foreach collection="taxIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>

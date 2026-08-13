@@ -15,8 +15,12 @@ public class TaxInvoiceCsvColumnRecommender {
 
     private static final List<String> APPROVAL_NO_KEYWORDS = List.of("승인번호");
     private static final List<String> ISSUED_DATE_KEYWORDS = List.of("작성일자", "발행일", "작성일");
-    private static final List<String> SUPPLIER_BIZ_NO_KEYWORDS = List.of("공급자사업자번호", "공급자사업자등록번호", "공급자");
-    private static final List<String> BUYER_BIZ_NO_KEYWORDS = List.of("공급받는자사업자번호", "공급받는자사업자등록번호", "공급받는자");
+    // ⚠️ "공급자"/"공급받는자" 같은 포괄 키워드를 넣지 않는다 (2026-08-13, CodeRabbit 지적) — 부분 일치라서
+    // "공급자상호"·"공급받는자상호"에도 걸린다. 사업자번호 전용 헤더가 정확히 매칭되지 않는 파일에서
+    // 상호 컬럼이 사업자번호로 추천되고, 사용자가 그대로 업로드하면 정상 파일도 파싱 실패한다.
+    // 헤더에 공백이 섞인 경우("공급자 사업자등록번호")는 아래 findFirst가 공백을 지우고 비교해서 잡는다.
+    private static final List<String> SUPPLIER_BIZ_NO_KEYWORDS = List.of("공급자사업자번호", "공급자사업자등록번호");
+    private static final List<String> BUYER_BIZ_NO_KEYWORDS = List.of("공급받는자사업자번호", "공급받는자사업자등록번호");
     private static final List<String> BUYER_NAME_KEYWORDS = List.of("상호", "거래처", "공급받는자상호");
     private static final List<String> SUPPLY_AMOUNT_KEYWORDS = List.of("공급가액");
     private static final List<String> TAX_AMOUNT_KEYWORDS = List.of("세액");
@@ -71,15 +75,24 @@ public class TaxInvoiceCsvColumnRecommender {
         return null;
     }
 
+    /**
+     * ⚠️ 공백을 지우고 비교한다 (2026-08-13) — 홈택스 파일 헤더에 "공급자 사업자등록번호"처럼 공백이
+     * 섞여 나오는 경우가 있어서, 그대로 비교하면 사업자번호 전용 키워드가 안 걸린다. 포괄 키워드
+     * ("공급자")를 빼는 대신 이 정규화로 잡는다.
+     */
     private String findFirst(List<String> headers, List<String> keywords) {
         for (String keyword : keywords) {
             for (String header : headers) {
-                if (header.contains(keyword)) {
+                if (normalize(header).contains(keyword)) {
                     return header;
                 }
             }
         }
         return null;
+    }
+
+    private String normalize(String header) {
+        return header.replaceAll("\\s", "");
     }
 
     /**
@@ -93,7 +106,7 @@ public class TaxInvoiceCsvColumnRecommender {
         for (String keyword : keywords) {
             List<String> matches = new java.util.ArrayList<>();
             for (String header : headers) {
-                if (header.contains(keyword)) {
+                if (normalize(header).contains(keyword)) {
                     matches.add(header);
                 }
             }

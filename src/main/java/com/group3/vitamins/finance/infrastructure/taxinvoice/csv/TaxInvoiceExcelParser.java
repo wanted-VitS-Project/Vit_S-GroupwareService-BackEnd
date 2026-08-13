@@ -58,6 +58,11 @@ public class TaxInvoiceExcelParser {
 
             int headerRowIndex = findHeaderRowIndex(sheet, lastRowNum);
             Row headerRow = sheet.getRow(headerRowIndex);
+            // ⚠️ null 체크 필요 — 입출금 엑셀 파서와 동일한 이유(2026-08-13, CashFlowExcelParser 주석 참고).
+            // 헤더 행 객체가 아예 없는 시트에서 NPE가 404로 삼켜져 원인 추적이 안 되던 것을 명시적으로 던진다.
+            if (headerRow == null) {
+                throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
+            }
             HeaderColumns headerColumns = readHeaders(headerRow);
             if (headerColumns.headers().isEmpty()) {
                 throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
