@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.DispatcherType;
 import com.group3.vitamins.auth.infrastructure.web.PasswordResetGateFilter;
 import com.group3.vitamins.auth.infrastructure.web.TermsAgreementGateFilter;
+import com.group3.vitamins.global.infrastructure.observability.CompanyIdRequestAttributeFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import lombok.extern.slf4j.Slf4j;
@@ -119,11 +120,21 @@ public class SecurityConfig {
         return new TermsAgreementGateFilter(resolver);
     }
 
+    /**
+     * 그라파나 지표용 — {@code company_id} 태그를 만들 때 쓸 값을 요청 속성으로 스탬핑한다.
+     * 인가·비인가를 가르지 않는다({@link CompanyIdRequestAttributeFilter} 참고).
+     */
+    @Bean
+    public CompanyIdRequestAttributeFilter companyIdRequestAttributeFilter() {
+        return new CompanyIdRequestAttributeFilter();
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    SecurityContextRepository securityContextRepository,
                                                    TermsAgreementGateFilter termsAgreementGateFilter,
-                                                   PasswordResetGateFilter passwordResetGateFilter)
+                                                   PasswordResetGateFilter passwordResetGateFilter,
+                                                   CompanyIdRequestAttributeFilter companyIdRequestAttributeFilter)
             throws Exception {
         http
                 // 쿠키 인증인데 CSRF 를 끄는 근거는 SameSite=Lax 다. 브라우저가 cross-site 요청에
@@ -149,8 +160,10 @@ public class SecurityConfig {
                         // API 문서 — 운영 프로필에서는 springdoc 자체가 꺼져 있어 노출되지 않는다
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
 
-                        // 헬스체크. 그 외 actuator 엔드포인트는 열지 않는다
-                        .requestMatchers("/actuator/health").permitAll()
+                        // 헬스체크 + 그라파나 스크랩용 지표. 그 외 actuator 엔드포인트는 열지 않는다.
+                        // ⚠️ 인증 없이 열려 있다 — node-exporter(9100)·cAdvisor(8081)와 같은 방식으로
+                        //    SG 가 이 포트 접근을 막는 것을 전제로 한다 (앱 자체 인증은 걸지 않음).
+                        .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
 
                         // 로그인만 비인증 허용. 나머지 인증 API(로그아웃·내정보·비밀번호변경)는 세션이 필요하다.
                         // 경로 출처: .ai/api/auth.md (노션 확정)
@@ -165,7 +178,9 @@ public class SecurityConfig {
                 // 인가가 끝난 뒤에 건다 — 미인증 요청은 401 이 먼저 나가야 한다.
                 // 순서: AuthorizationFilter → 약관 게이트 → 비번 게이트 (약관 → 비번 강제, auth.md §6-7)
                 .addFilterAfter(termsAgreementGateFilter, AuthorizationFilter.class)
-                .addFilterAfter(passwordResetGateFilter, TermsAgreementGateFilter.class);
+                .addFilterAfter(passwordResetGateFilter, TermsAgreementGateFilter.class)
+                // 게이트들과 순서 의존 없음 — SecurityContext 가 살아있는 동안이면 아무 데나 껴도 된다.
+                .addFilterAfter(companyIdRequestAttributeFilter, AuthorizationFilter.class);
 
         return http.build();
     }

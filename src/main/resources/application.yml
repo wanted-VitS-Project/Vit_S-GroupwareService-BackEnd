@@ -99,6 +99,17 @@ server:
   # 프록시(ALB/nginx) 뒤에서 원래 스킴·호스트를 인식한다. Secure 쿠키 판정에 필요하다.
   forward-headers-strategy: framework
 
+# ── 모니터링 (그라파나 Phase4/5) ──────────────────────────
+# health 는 배포 헬스체크(.github/workflows/deploy.yml)가 쓴다. prometheus 는 Grafana 스크랩용.
+# ⚠️ 둘 다 앱 메인 포트(8080)에 그대로 열린다 — SecurityConfig 에서 permitAll 이라 이 포트에
+#    닿는 누구나 지표를 볼 수 있다. 별도 인증을 안 거는 이유는 기존 node-exporter/cAdvisor 와
+#    동일하게 "SG 로 포트 접근을 막는다"는 이 프로젝트의 기존 방식을 따르기 때문이다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
 # ── 비밀번호 해시 ────────────────────────────────────────
 # 2026-08-03 실측 기반 잠정값. 근거·실측표는 .ai/local/STATE.md `🔐 인증·보안 확정값` 참고.
 # ⚠️ EC2(t3.medium) 에서 `./gradlew benchmark` 를 다시 돌려 iterations·permits 를 최종 확정할 것.
