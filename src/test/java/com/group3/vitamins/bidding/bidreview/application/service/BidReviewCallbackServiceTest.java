@@ -157,7 +157,7 @@ class BidReviewCallbackServiceTest {
                 REVIEW_ID, ATTEMPT_ID, "PROCESSING",
                 null, null, null, false, null,
                 List.of(new HandleBidReviewCallbackCommand.CitationInputCommand(
-                        1, "BID_ATTACHMENT", 31L, null, "제안요청서.pdf", 3, null, "발췌문"
+                        1, "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf", 3, null, "발췌문"
                 ))
         );
 
@@ -189,7 +189,7 @@ class BidReviewCallbackServiceTest {
                 "검토 결과", null, null, false,
                 null,
                 List.of(new HandleBidReviewCallbackCommand.CitationInputCommand(
-                        1, "BID_ATTACHMENT", 31L, null, "제안요청서.pdf", 3, null, "발췌문"
+                        1, "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf", 3, null, "발췌문"
                 ))
         );
     }

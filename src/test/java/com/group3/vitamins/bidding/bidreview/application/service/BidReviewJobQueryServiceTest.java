@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.bidreview.application.service;
 
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCompanyDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewReferenceFilePort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
@@ -35,6 +36,7 @@ class BidReviewJobQueryServiceTest {
     private BidReviewWorkerPort workerPort;
     private BidReviewNoticeDocumentPort noticeDocumentPort;
     private BidReviewReferenceFilePort referenceFilePort;
+    private BidReviewCompanyDocumentPort companyDocumentPort;
     private BidReviewJobQueryService service;
 
     @BeforeEach
@@ -42,11 +44,14 @@ class BidReviewJobQueryServiceTest {
         workerPort = mock(BidReviewWorkerPort.class);
         noticeDocumentPort = mock(BidReviewNoticeDocumentPort.class);
         referenceFilePort = mock(BidReviewReferenceFilePort.class);
+        companyDocumentPort = mock(BidReviewCompanyDocumentPort.class);
         Clock clock = Clock.fixed(
                 Instant.parse("2026-08-13T00:00:00Z"),
                 ZoneId.of("Asia/Seoul")
         );
-        service = new BidReviewJobQueryService(workerPort, noticeDocumentPort, referenceFilePort, clock);
+        service = new BidReviewJobQueryService(
+                workerPort, noticeDocumentPort, referenceFilePort, companyDocumentPort, clock
+        );
     }
 
     @Test
@@ -57,10 +62,13 @@ class BidReviewJobQueryServiceTest {
                         REVIEW_ID, COMPANY_ID, NOTICE_ID, ATTEMPT_ID, "재정 상태를 검토해줘.",
                         List.of(
                                 new BidReviewWorkerPort.JobDocument(
-                                        "BID_ATTACHMENT", 31L, null, "제안요청서.pdf"
+                                        "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf"
                                 ),
                                 new BidReviewWorkerPort.JobDocument(
-                                        "INTERNAL_REFERENCE", null, 501L, "원가계산_기준.pdf"
+                                        "INTERNAL_REFERENCE", null, 501L, null, "원가계산_기준.pdf"
+                                ),
+                                new BidReviewWorkerPort.JobDocument(
+                                        "COMPANY_DOCUMENT_REFERENCE", null, null, 9001L, "재무제표.xlsx"
                                 )
                         )
                 )));
@@ -76,6 +84,10 @@ class BidReviewJobQueryServiceTest {
                 .thenReturn(List.of(new BidReviewReferenceFilePort.DownloadableReferenceFile(
                         501L, "원가계산_기준.pdf", "https://s3.example/501.pdf?sig=..."
                 )));
+        when(companyDocumentPort.findDownloadableDocuments(COMPANY_ID, List.of(9001L)))
+                .thenReturn(List.of(new BidReviewCompanyDocumentPort.DownloadableCompanyDocument(
+                        9001L, "재무제표.xlsx", "https://s3.example/9001.xlsx?sig=..."
+                )));
 
         BidReviewJobResult result = service.handle(new GetBidReviewJobQuery(REVIEW_ID, ATTEMPT_ID));
 
@@ -87,6 +99,8 @@ class BidReviewJobQueryServiceTest {
         assertThat(result.attachments().get(0).sourceUrl()).isEqualTo("https://nara.example/31.pdf");
         assertThat(result.referenceFiles()).hasSize(1);
         assertThat(result.referenceFiles().get(0).downloadUrl()).isEqualTo("https://s3.example/501.pdf?sig=...");
+        assertThat(result.companyDocuments()).hasSize(1);
+        assertThat(result.companyDocuments().get(0).downloadUrl()).isEqualTo("https://s3.example/9001.xlsx?sig=...");
     }
 
     @Test
@@ -100,7 +114,7 @@ class BidReviewJobQueryServiceTest {
                 .satisfies(exception -> assertThat(((NotFoundException) exception).getErrorCode())
                         .isEqualTo(BidReviewErrorCode.BIDDING_REVIEW_JOB_NOT_FOUND));
 
-        verifyNoInteractions(noticeDocumentPort, referenceFilePort);
+        verifyNoInteractions(noticeDocumentPort, referenceFilePort, companyDocumentPort);
     }
 
     @Test
@@ -112,7 +126,7 @@ class BidReviewJobQueryServiceTest {
                 .satisfies(exception -> assertThat(((ValidationException) exception).getErrorCode())
                         .isEqualTo(BidReviewErrorCode.BIDDING_INVALID_REVIEW_REQUEST));
 
-        verifyNoInteractions(workerPort, noticeDocumentPort, referenceFilePort);
+        verifyNoInteractions(workerPort, noticeDocumentPort, referenceFilePort, companyDocumentPort);
     }
 
     @Test
@@ -121,6 +135,6 @@ class BidReviewJobQueryServiceTest {
         assertThatThrownBy(() -> service.handle(null))
                 .isInstanceOf(ValidationException.class);
 
-        verifyNoInteractions(workerPort, noticeDocumentPort, referenceFilePort);
+        verifyNoInteractions(workerPort, noticeDocumentPort, referenceFilePort, companyDocumentPort);
     }
 }

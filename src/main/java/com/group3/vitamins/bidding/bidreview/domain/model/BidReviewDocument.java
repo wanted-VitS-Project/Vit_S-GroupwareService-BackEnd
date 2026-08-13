@@ -9,6 +9,7 @@ public record BidReviewDocument(
         BidReviewDocumentRole documentRole,
         Long bidAttachmentId,
         Long referenceFileId,
+        Long companyDocumentVersionId,
         String fileName,
         BidReviewDocumentStatus processingStatus,
         String temporaryStorageKey,
@@ -35,13 +36,14 @@ public record BidReviewDocument(
                 BidReviewDocumentRole.BID_ATTACHMENT,
                 bidAttachmentId,
                 null,
+                null,
                 fileName,
                 BidReviewDocumentStatus.PENDING,
                 now
         );
     }
 
-    // 선택한 사내 기준자료 스냅샷을 생성합니다. 업로드·인덱싱이 끝난 자료만 검토에
+    // 선택한 사내 기준자료(bid_reference_file) 스냅샷을 생성합니다. 업로드·인덱싱이 끝난 자료만 검토에
     // 선택할 수 있으므로(BidReviewReferenceFilePort.ReferenceFileSnapshot.isReady() 검증),
     // 생성 시점에 바로 READY로 저장한다 — BID_ATTACHMENT처럼 Worker 다운로드를 기다리지 않는다.
     public static BidReviewDocument createInternalReference(
@@ -55,6 +57,27 @@ public record BidReviewDocument(
                 BidReviewDocumentRole.INTERNAL_REFERENCE,
                 null,
                 referenceFileId,
+                null,
+                fileName,
+                BidReviewDocumentStatus.READY,
+                now
+        );
+    }
+
+    // 선택한 사내 문서함(company_document_version) 스냅샷을 생성합니다. INTERNAL_REFERENCE와 동일하게
+    // 세션 접근 검증이 끝난 완료 버전만 선택되므로 바로 READY로 저장한다.
+    public static BidReviewDocument createCompanyDocumentReference(
+            Long companyDocumentVersionId,
+            String fileName,
+            LocalDateTime now
+    ) {
+        Objects.requireNonNull(companyDocumentVersionId, "사내 문서함 참조 버전 ID는 필수입니다.");
+
+        return create(
+                BidReviewDocumentRole.COMPANY_DOCUMENT_REFERENCE,
+                null,
+                null,
+                companyDocumentVersionId,
                 fileName,
                 BidReviewDocumentStatus.READY,
                 now
@@ -65,6 +88,7 @@ public record BidReviewDocument(
             BidReviewDocumentRole role,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             BidReviewDocumentStatus initialStatus,
             LocalDateTime now
@@ -83,6 +107,7 @@ public record BidReviewDocument(
                 role,
                 bidAttachmentId,
                 referenceFileId,
+                companyDocumentVersionId,
                 fileName,
                 initialStatus,
                 null,
@@ -169,6 +194,7 @@ public record BidReviewDocument(
                 documentRole,
                 bidAttachmentId,
                 referenceFileId,
+                companyDocumentVersionId,
                 fileName,
                 status,
                 storageKey,

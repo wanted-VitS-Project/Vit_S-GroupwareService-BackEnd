@@ -57,11 +57,11 @@ class BidReviewDetailQueryServiceTest {
                 .thenReturn(Optional.of(ownReview()));
         when(detailQueryPort.findDocuments(REVIEW_ID))
                 .thenReturn(List.of(new DocumentRow(
-                        "BID_ATTACHMENT", 31L, null, "제안요청서.pdf", "READY"
+                        "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf", "READY"
                 )));
         when(detailQueryPort.findCitations(REVIEW_ID))
                 .thenReturn(List.of(new CitationRow(
-                        1, "INTERNAL_REFERENCE", null, 501L, "원가계산_기준.pdf", 3, null, "발췌문"
+                        1, "INTERNAL_REFERENCE", null, 501L, null, "원가계산_기준.pdf", 3, null, "발췌문"
                 )));
 
         BidReviewDetailResult result = service.get(

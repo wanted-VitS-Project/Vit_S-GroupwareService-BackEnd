@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.bidreview.application.service;
 
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCompanyDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewReferenceFilePort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
@@ -29,10 +30,12 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
 
     private static final String BID_ATTACHMENT = "BID_ATTACHMENT";
     private static final String INTERNAL_REFERENCE = "INTERNAL_REFERENCE";
+    private static final String COMPANY_DOCUMENT_REFERENCE = "COMPANY_DOCUMENT_REFERENCE";
 
     private final BidReviewWorkerPort workerPort;
     private final BidReviewNoticeDocumentPort noticeDocumentPort;
     private final BidReviewReferenceFilePort referenceFilePort;
+    private final BidReviewCompanyDocumentPort companyDocumentPort;
     private final Clock clock;
 
     @Override
@@ -67,6 +70,11 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
                 .map(BidReviewWorkerPort.JobDocument::referenceFileId)
                 .toList();
 
+        List<Long> companyDocumentVersionIds = job.documents().stream()
+                .filter(document -> COMPANY_DOCUMENT_REFERENCE.equals(document.documentRole()))
+                .map(BidReviewWorkerPort.JobDocument::companyDocumentVersionId)
+                .toList();
+
         Map<Long, BidReviewNoticeDocumentPort.AttachmentSnapshot> attachmentsById =
                 noticeDocumentPort
                         .findAttachments(job.companyId(), job.noticeId(), attachmentIds)
@@ -82,6 +90,15 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
                         .stream()
                         .collect(Collectors.toMap(
                                 BidReviewReferenceFilePort.DownloadableReferenceFile::referenceFileId,
+                                Function.identity()
+                        ));
+
+        Map<Long, BidReviewCompanyDocumentPort.DownloadableCompanyDocument> companyDocumentsById =
+                companyDocumentPort
+                        .findDownloadableDocuments(job.companyId(), companyDocumentVersionIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                BidReviewCompanyDocumentPort.DownloadableCompanyDocument::companyDocumentVersionId,
                                 Function.identity()
                         ));
 
@@ -105,6 +122,16 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
                 ))
                 .toList();
 
+        List<BidReviewJobResult.CompanyDocumentJob> companyDocuments = companyDocumentVersionIds.stream()
+                .map(companyDocumentsById::get)
+                .filter(Objects::nonNull)
+                .map(document -> new BidReviewJobResult.CompanyDocumentJob(
+                        document.companyDocumentVersionId(),
+                        document.fileName(),
+                        document.downloadUrl()
+                ))
+                .toList();
+
         return new BidReviewJobResult(
                 job.reviewId(),
                 job.companyId(),
@@ -113,7 +140,8 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
                 job.noticeId(),
                 noticeName,
                 attachments,
-                referenceFiles
+                referenceFiles,
+                companyDocuments
         );
     }
 

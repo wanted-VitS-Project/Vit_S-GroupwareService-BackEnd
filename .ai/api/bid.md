@@ -1437,9 +1437,10 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 | 공고 첨부 표시 | 검토 전에는 `attachmentId`, `fileName`, `sourceType`과 선택 여부 판단에 필요한 메타데이터만 프론트에 반환한다 |
 | 원본 URL | 프론트에 반환하지 않는다. Spring DB에 보관하고 내부 Worker 작업 조회에서만 전달한다 |
 | 실제 다운로드 | 사용자가 검토 요청 API를 호출한 뒤 Python Worker가 선택된 `bidAttachmentIds`만 다운로드한다 |
-| 사내 기준자료 | 입찰 도메인의 회사별 기준자료 파일함에 영구 보관한다. 프로젝트에 귀속되지 않으며 동일 회사의 여러 공고 검토에서 재사용할 수 있다 |
-| 문서 역할 | 공고 첨부는 `BID_ATTACHMENT`, 사내 문서는 `INTERNAL_REFERENCE`로 저장한다 |
-| 기준자료 저장 | 기준자료 메타데이터는 `bid_reference_file`, 바이너리는 회사별 S3 prefix에 저장하며 `storageKey`를 외부 응답에 노출하지 않는다 |
+| 사내 기준자료 | 입찰 도메인의 회사별 기준자료 파일함(`bid_reference_file`)에 영구 보관한다. 프로젝트에 귀속되지 않으며 동일 회사의 여러 공고 검토에서 재사용할 수 있다 |
+| 사내 문서함 참조 (2026-08-13 추가) | 별도 업로드 없이 사내 문서함(`companydocument`)의 완료된 최신 버전을 버전 고정(`companyDocumentVersionId`)으로 참조한다. 조회는 `CompanyDocumentReferenceUseCase`(김동현 소유 포트)로만 하며 직접 SQL 조회는 금지한다. 사내 기준자료 파일함과 병행 운영하며, FE 전환이 확인되면 기존 파일함 API를 단계적으로 폐기할 예정이다(`.ai/local/STATE.md` 참고) |
+| 문서 역할 | 공고 첨부는 `BID_ATTACHMENT`, 사내 기준자료 파일함 문서는 `INTERNAL_REFERENCE`, 사내 문서함 참조는 `COMPANY_DOCUMENT_REFERENCE`로 저장한다 |
+| 기준자료 저장 | 기준자료 메타데이터는 `bid_reference_file`, 바이너리는 회사별 S3 prefix에 저장하며 `storageKey`를 외부 응답에 노출하지 않는다. 사내 문서함 참조는 `company_document_version_id`만 저장하고 바이너리는 `companydocument`가 소유한다 |
 | 임시 저장 | 공고 첨부 원본은 프로젝트 파일과 분리된 임시 저장소 prefix에 저장한다. 임시 `storageKey`는 외부 응답에 노출하지 않는다 |
 | 보관 시간 | 검토가 `COMPLETED` 또는 `FAILED`로 종료된 시각부터 3시간 동안 보관한다. 처리 중에는 만료 정리하지 않는다 |
 | 화면 이탈 | 뒤로 가기나 브라우저 종료는 별도 요청을 보내지 않는다. 임시파일은 만료 시각까지 유지한다 |
@@ -1456,7 +1457,8 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 |------|------|
 | 공고 첨부 개수 | 1개 이상 10개 이하 |
 | 사내 기준자료 개수 | 0개 이상 10개 이하 |
-| 전체 문서 개수 | 최대 20개 |
+| 사내 문서함 참조 개수 (2026-08-13 추가) | 0개 이상 10개 이하. 사내 기준자료 개수와 별도 상한(합산 제한 없음) |
+| 전체 문서 개수 | 최대 30개(공고 첨부 10 + 사내 기준자료 10 + 사내 문서함 참조 10, 2026-08-13 20→30 조정) |
 | 프롬프트 | 공백 불가, 최대 3,000자 |
 | 지원 확장자 | `pdf`, `docx`, `xlsx`, `csv`, `txt`, `hwp`, `hwpx` |
 | 파일 크기 | 파일당 최대 50MB, 공고 첨부 합계 최대 200MB |
@@ -1572,20 +1574,24 @@ Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인
 
 ## 입찰 문서 검토 요청 `POST /api/v1/bidding/notices/{noticeId}/reviews`
 
-**상태**: ✅ 확정
+**상태**: ✅ 확정 (2026-08-13 추가 — `companyDocumentVersionIds` 신설. 사내 문서함(`companydocument`)
+참조 선택 새 경로 병행 지원. `referenceFileIds`(기존 `bid_reference_file` 파일함)는 폐기 전까지 그대로 유지 —
+FE가 새 경로로 전환했는지 확인되면 별도 PR로 폐기한다. FE에 신규 필드 추가를 공유해야 한다.)
 
 ### Request Body
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `bidAttachmentIds` | Long[] | Y | 검토할 공고 첨부 ID. 1~10개, 중복 불가 |
-| `referenceFileIds` | Long[] | N | 비교 기준으로 사용할 입찰 기준자료 ID. 최대 10개, 중복 불가 |
+| `referenceFileIds` | Long[] | N | 비교 기준으로 사용할 입찰 기준자료(`bid_reference_file`) ID. 최대 10개, 중복 불가 |
+| `companyDocumentVersionIds` | Long[] | N | 비교 기준으로 사용할 사내 문서함 참조 버전(`company_document_version`) ID. 최대 10개, 중복 불가. `GET /api/v1/company-documents/selectable`로 조회한 `companyDocumentVersionId`를 사용 |
 | `prompt` | String | Y | 사용자가 직접 입력한 검토 지시. 공백 불가, 최대 3,000자 |
 
 ```json
 {
   "bidAttachmentIds": [31, 32],
   "referenceFileIds": [501, 502],
+  "companyDocumentVersionIds": [9001, 9002],
   "prompt": "우리 회사의 재정 상태와 보유 인력으로 수행 가능한지, 부족한 자격과 실적을 근거와 함께 검토해줘."
 }
 ```
@@ -1607,10 +1613,11 @@ Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인
 ### 처리 규칙
 
 1. 공고와 선택 첨부가 현재 회사에서 조회 가능한 활성 데이터인지 검증한다.
-2. 입찰 기준자료가 현재 회사에 속하고 업로드와 인덱싱이 완료됐는지 검증한다.
-3. 검토 요청, 선택 문서 스냅샷과 Outbox를 같은 DB 트랜잭션에서 저장한다.
-4. Worker가 선택된 공고 첨부만 다운로드하며 선택하지 않은 첨부에는 접근하지 않는다.
-5. 같은 회사·공고·요청자에 `PENDING` 또는 `PROCESSING` 검토가 있으면 새 요청을 거부한다.
+2. 입찰 기준자료(`bid_reference_file`)가 현재 회사에 속하고 업로드와 인덱싱이 완료됐는지 검증한다.
+3. 사내 문서함 참조(`companyDocumentVersionIds`)가 현재 회사의 참조 대상으로 유효한지 검증한다(완료 최신 버전만, `CompanyDocumentReferenceUseCase` 경유 — 직접 SQL 조회 금지).
+4. 검토 요청, 선택 문서 스냅샷과 Outbox를 같은 DB 트랜잭션에서 저장한다.
+5. Worker가 선택된 공고 첨부만 다운로드하며 선택하지 않은 첨부에는 접근하지 않는다.
+6. 같은 회사·공고·요청자에 `PENDING` 또는 `PROCESSING` 검토가 있으면 새 요청을 거부한다.
 
 ### Status Code
 
@@ -1620,11 +1627,11 @@ Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인
 | 400 | `BIDDING_INVALID_REVIEW_REQUEST` | ID, 개수, 중복 또는 프롬프트 형식 오류 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
-| 403 | `BIDDING_REVIEW_DOCUMENT_ACCESS_DENIED` | 입찰 기준자료에 접근할 수 없음 |
+| 403 | `BIDDING_REVIEW_DOCUMENT_ACCESS_DENIED` | 입찰 기준자료 또는 사내 문서함 참조에 접근할 수 없음(`companyDocumentVersionIds`는 다른 회사 문서·미완료 버전도 이 코드로 묶인다 — 사내 문서함 조회 포트가 완료 최신 버전만 노출해 세분화된 사유를 구분하지 않음) |
 | 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
 | 404 | `BIDDING_NOTICE_ATTACHMENT_NOT_FOUND` | 선택한 공고 첨부가 없거나 해당 공고 소속이 아님 |
 | 409 | `BIDDING_REVIEW_ALREADY_PROCESSING` | 같은 요청자에게 진행 중인 검토가 있음 |
-| 409 | `BIDDING_REVIEW_DOCUMENT_NOT_READY` | 입찰 기준자료 업로드 또는 인덱싱이 완료되지 않음 |
+| 409 | `BIDDING_REVIEW_DOCUMENT_NOT_READY` | 입찰 기준자료(`bid_reference_file`) 업로드 또는 인덱싱이 완료되지 않음. `companyDocumentVersionIds`에는 해당하지 않음(위 403 참고) |
 | 422 | `BIDDING_REVIEW_UNSUPPORTED_FILE` | 지원하지 않는 공고 첨부 형식 |
 
 ---
@@ -1669,11 +1676,13 @@ Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인
 | `documents` | List | 요청 당시 선택한 문서 목록과 처리 상태 |
 | `citations` | List | 검토 결과의 근거 목록 |
 
-`documents[]`는 `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`, `processingStatus`를 반환한다.
-두 ID 중 문서 역할에 해당하지 않는 값은 `null`이다.
+`documents[]`는 `documentRole`, `bidAttachmentId`, `referenceFileId`, `companyDocumentVersionId`, `fileName`,
+`processingStatus`를 반환한다(2026-08-13 `companyDocumentVersionId` 추가). `documentRole`은 `BID_ATTACHMENT`·
+`INTERNAL_REFERENCE`·`COMPANY_DOCUMENT_REFERENCE` 중 하나이며, 세 ID 중 문서 역할에 해당하지 않는 값은 `null`이다.
 
-`citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`,
-`pageNumber`, `sheetName`, `excerpt`를 반환한다. 페이지 또는 시트가 없는 형식은 해당 필드가 `null`이다.
+`citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `companyDocumentVersionId`,
+`fileName`, `pageNumber`, `sheetName`, `excerpt`를 반환한다(2026-08-13 `companyDocumentVersionId` 추가).
+페이지 또는 시트가 없는 형식은 해당 필드가 `null`이다.
 
 ### Status Code
 
@@ -1712,8 +1721,9 @@ Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인
 **상태**: ✅ 확정
 
 Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `attemptId`, `prompt`, 공고 기본 정보,
-선택한 공고 첨부의 `attachmentId`, `fileName`, 내부 원본 `sourceUrl`과 선택한 입찰 기준자료의
-`referenceFileId`, `fileName`, 단명 내부 다운로드 URL을 포함한다. 프론트용 API에서는 이 URL들을 제공하지 않는다.
+선택한 공고 첨부의 `attachmentId`, `fileName`, 내부 원본 `sourceUrl`, 선택한 입찰 기준자료(`referenceFiles[]`)의
+`referenceFileId`, `fileName`, 단명 내부 다운로드 URL, 선택한 사내 문서함 참조(`companyDocuments[]`, 2026-08-13 추가)의
+`companyDocumentVersionId`, `fileName`, 단명 내부 다운로드 URL을 포함한다. 프론트용 API에서는 이 URL들을 제공하지 않는다.
 
 현재 `attemptId`와 일치하는 `PENDING` 또는 `PROCESSING` 작업만 반환한다.
 
@@ -1749,8 +1759,9 @@ Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `
 `temporaryStorageKey`는 Spring DB 저장용 내부 값이며 외부 조회 응답에서는 제거한다. `PROCESSING` 콜백에서도
 문서별 중간 진행 상태를 갱신하기 위해 `documents[]`만 담아 보낼 수 있다(`result`·`citations` 없이).
 
-`citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`,
-`pageNumber`, `sheetName`, `excerpt`를 전달한다.
+`citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `companyDocumentVersionId`,
+`fileName`, `pageNumber`, `sheetName`, `excerpt`를 전달한다(2026-08-13 `companyDocumentVersionId` 추가,
+`documentRole=COMPANY_DOCUMENT_REFERENCE`일 때 사용).
 
 재시도 대상은 다운로드 연결 실패·Timeout·Gemini 429·5xx 등 일시적 오류만 `retryable=true`로 전달한다.
 잘못된 요청·지원하지 않는 형식·설정 오류 등 복구 불가능한 오류는 `retryable=false`로 전달하고 `FAILED`로 종료한다.
@@ -1784,14 +1795,16 @@ Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 �
 
 ## 공고 프로젝트 전환 `POST /api/v1/bidding/notices/{noticeId}/projects`
 
-**상태**: ✅ 확정
+**상태**: ✅ 확정 (2026-08-13 정정 — `reviewId`/`summaryId` 필수·선택 관계가 실제 사용 흐름과 반대로 적혀 있었음.
+실제 흐름은 "문서 검토(bidreview) 완료 후 프로젝트 전환"이 주 경로이며, AI 요약(summaryId) 연결은 있으면 같이
+하는 선택 사항이다. 프론트에 이 필드 관계 변경을 공유해야 한다.)
 
 **Request Body**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---------|------|------|------|
-| `summaryId` | Long | Y | 현재 회사에서 확정된 `COMPLETED` AI 요약 ID. 누락 시 `COMMON_INVALID_REQUEST` |
-| `reviewId` | Long | N | 같은 공고·회사의 `COMPLETED` 문서 검토 ID. 지정하면 실제 사용한 공고 첨부를 프로젝트 파일로 귀속 |
+| `reviewId` | Long | Y | 같은 공고·회사·요청자의 `COMPLETED` 문서 검토 ID. 만료·포기되지 않았어야 함. 누락 시 `COMMON_INVALID_REQUEST`. 검토에서 실제 사용한 공고 첨부를 프로젝트 파일로 귀속 |
+| `summaryId` | Long | N | 현재 회사에서 확정된 `COMPLETED` AI 요약 ID. 지정하면 `bid_notice_summary.project_id`에 연결, 생략하면 연결 없이 진행 |
 | `name` | String | Y | 프로젝트명 |
 | `description` | String | N | 설명 |
 | `businessCategoryId` | Long | Y | 사업 카테고리 ID |
@@ -1802,21 +1815,20 @@ Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 �
 서버 처리:
 
 1. 공고 존재 여부와 현재 회사의 접근 권한 확인
-2. `summaryId`가 같은 공고·회사에 속한 `COMPLETED`·확정 요약인지 확인
-3. 해당 요약이 아직 프로젝트에 연결되지 않았는지 확인
-4. `reviewId`가 있으면 같은 공고·회사·요청자의 `COMPLETED` 검토이며 만료·포기되지 않았는지 확인
-5. 기존 프로젝트 전환 여부 확인
-6. 요청자가 `BIDDING` 권한을 갖는지 확인
-7. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
-8. 하나의 DB 트랜잭션 시작
-9. 프로젝트 생성과 `project.bid_notice_id` 저장
-10. `bid_notice_summary.project_id`에 생성된 프로젝트 ID 저장
-11. `reviewId`가 있으면 검토에 사용한 공고 첨부의 정식 파일 귀속 요청을 기록하고 `bid_review.project_id`를 저장
-12. 인증된 전환 요청자를 `project_member`에 자동 등록
-13. 추가 `memberIds`를 `project_member`에 등록
-14. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
-15. 입찰용 블록은 생성하지 않음
-16. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
+2. `reviewId`가 같은 공고·회사·요청자의 `COMPLETED` 검토이며 만료·포기되지 않았는지 확인
+3. `summaryId`가 있으면 같은 공고·회사에 속한 `COMPLETED`·확정 요약이며 아직 프로젝트에 연결되지 않았는지 확인
+4. 기존 프로젝트 전환 여부 확인
+5. 요청자가 `BIDDING` 권한을 갖는지 확인
+6. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
+7. 하나의 DB 트랜잭션 시작
+8. 프로젝트 생성과 `project.bid_notice_id` 저장
+9. `summaryId`가 있으면 `bid_notice_summary.project_id`에 생성된 프로젝트 ID 저장
+10. 검토에서 실제 사용한 공고 첨부의 정식 파일 귀속 요청을 기록하고 `bid_review.project_id`를 저장
+11. 인증된 전환 요청자를 `project_member`에 자동 등록
+12. 추가 `memberIds`를 `project_member`에 등록
+13. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
+14. 입찰용 블록은 생성하지 않음
+15. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
 
 권한 정책:
 
@@ -1831,7 +1843,7 @@ Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 �
 
 | 항목 | 규칙 |
 |------|------|
-| 원자성 | 프로젝트 생성부터 `project.bid_notice_id`, `bid_notice_summary.project_id`, 참여자 등록과 기본 단계 생성까지 하나의 DB 트랜잭션 |
+| 원자성 | 프로젝트 생성부터 `project.bid_notice_id`, `bid_review.project_id`, (있으면) `bid_notice_summary.project_id`, 참여자 등록과 기본 단계 생성까지 하나의 DB 트랜잭션 |
 | 중간 실패 | 전체 롤백. 불완전한 프로젝트를 남기지 않음 |
 | 이미 전환된 공고 | 새 트랜잭션을 시작하지 않고 409 반환 |
 | 재시도 | 이전 요청이 롤백됐다면 재시도 가능. 이미 커밋됐다면 409 |
@@ -1842,8 +1854,8 @@ Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 �
 |------|------|
 | 공고 하나당 프로젝트 | 1개만 생성 |
 | 중복 방지 | `UNIQUE(project.bid_notice_id)` |
-| 확정 요약 연결 | `UNIQUE(bid_notice_summary.project_id)`로 한 프로젝트의 근거 요약을 하나로 고정 |
-| 검토 파일 귀속 | `reviewId`가 있으면 해당 검토에서 선택하고 실제 다운로드에 성공한 공고 첨부만 정식 프로젝트 파일로 귀속 |
+| 확정 요약 연결 | `summaryId`가 있으면 `UNIQUE(bid_notice_summary.project_id)`로 한 프로젝트의 근거 요약을 하나로 고정. 없으면 연결 생략 |
+| 검토 파일 귀속 | `reviewId`(필수)로 지정한 검토에서 선택하고 실제 다운로드에 성공한 공고 첨부만 정식 프로젝트 파일로 귀속 |
 | 귀속 멱등성 | `bidReviewDocumentId`를 파일 도메인 멱등키로 전달하여 재시도 시 파일을 중복 생성하지 않음 |
 | 귀속 완료 | 파일 도메인이 정식 `fileVersionId`를 반환한 뒤 문서 상태를 `PROMOTED`로 저장하고 임시 객체를 삭제 |
 | 스냅샷 | 저장하지 않음 |

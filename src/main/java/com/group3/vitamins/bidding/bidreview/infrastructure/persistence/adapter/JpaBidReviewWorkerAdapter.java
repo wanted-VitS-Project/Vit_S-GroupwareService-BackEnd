@@ -29,6 +29,7 @@ import java.util.UUID;
 public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
 
     private static final String BID_ATTACHMENT = "BID_ATTACHMENT";
+    private static final String COMPANY_DOCUMENT_REFERENCE = "COMPANY_DOCUMENT_REFERENCE";
     private static final String FAILED_STATUS = "FAILED";
     private static final String REVIEW_REQUESTED_EVENT = "BID_REVIEW_REQUESTED";
     private static final String DEFAULT_DOCUMENT_FAILURE_MESSAGE = "문서 처리에 실패했습니다.";
@@ -66,6 +67,7 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
                                     document.getDocumentRole().name(),
                                     document.getBidAttachmentId(),
                                     document.getReferenceFileId(),
+                                    document.getCompanyDocumentVersionId(),
                                     document.getFileName()
                             ))
                             .toList();
@@ -206,8 +208,8 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
         };
     }
 
-    // documents[]의 각 항목을 해당 공고 첨부 문서에 반영한다. INTERNAL_REFERENCE 문서는
-    // bidAttachmentId가 없어 조회에 걸리지 않으므로 자연히 건너뛴다.
+    // documents[]의 각 항목을 해당 공고 첨부 문서에 반영한다. INTERNAL_REFERENCE·COMPANY_DOCUMENT_REFERENCE
+    // 문서는 bidAttachmentId가 없어 조회에 걸리지 않으므로 자연히 건너뛴다.
     private void applyDocumentOutcomes(
             Long reviewId,
             List<DocumentOutcome> documents,
@@ -266,9 +268,15 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
     }
 
     private Long resolveReviewDocumentId(Long reviewId, CitationInput citation) {
-        Optional<BidReviewDocumentJpaEntity> document = BID_ATTACHMENT.equals(citation.documentRole())
-                ? documentRepository.findByReviewIdAndBidAttachmentId(reviewId, citation.bidAttachmentId())
-                : documentRepository.findByReviewIdAndReferenceFileId(reviewId, citation.referenceFileId());
+        Optional<BidReviewDocumentJpaEntity> document;
+        if (BID_ATTACHMENT.equals(citation.documentRole())) {
+            document = documentRepository.findByReviewIdAndBidAttachmentId(reviewId, citation.bidAttachmentId());
+        } else if (COMPANY_DOCUMENT_REFERENCE.equals(citation.documentRole())) {
+            document = documentRepository.findByReviewIdAndCompanyDocumentVersionId(
+                    reviewId, citation.companyDocumentVersionId());
+        } else {
+            document = documentRepository.findByReviewIdAndReferenceFileId(reviewId, citation.referenceFileId());
+        }
 
         return document
                 .map(BidReviewDocumentJpaEntity::getReviewDocumentId)

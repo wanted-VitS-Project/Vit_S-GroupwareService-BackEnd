@@ -17,9 +17,13 @@ public interface BidReviewDocumentJpaRepository
     Optional<BidReviewDocumentJpaEntity>
     findByReviewIdAndBidAttachmentId(Long reviewId, Long bidAttachmentId);
 
-    // Worker callback의 citations[]가 가리키는 근거 문서(사내 기준자료)를 찾는다.
+    // Worker callback의 citations[]가 가리키는 근거 문서(사내 기준자료 - bid_reference_file)를 찾는다.
     Optional<BidReviewDocumentJpaEntity>
     findByReviewIdAndReferenceFileId(Long reviewId, Long referenceFileId);
+
+    // Worker callback의 citations[]가 가리키는 근거 문서(사내 문서함 - company_document_version)를 찾는다.
+    Optional<BidReviewDocumentJpaEntity>
+    findByReviewIdAndCompanyDocumentVersionId(Long reviewId, Long companyDocumentVersionId);
 
     List<BidReviewDocumentJpaEntity> findAllByReviewIdAndDocumentRoleAndDeletedAtIsNull(
             Long reviewId,

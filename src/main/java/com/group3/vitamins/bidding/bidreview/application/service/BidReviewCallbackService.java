@@ -116,6 +116,7 @@ public class BidReviewCallbackService implements HandleBidReviewCallbackUseCase 
                         citation.documentRole(),
                         citation.bidAttachmentId(),
                         citation.referenceFileId(),
+                        citation.companyDocumentVersionId(),
                         citation.fileName(),
                         citation.pageNumber(),
                         citation.sheetName(),
