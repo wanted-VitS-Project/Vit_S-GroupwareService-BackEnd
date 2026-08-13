@@ -257,6 +257,9 @@ public class StepCommandService implements StepCommandUseCase {
      * cascade 경로로 부른다 — 스텝 EDITOR 를 재요구하면 이 스텝에 NONE·VIEWER 오버라이드를 가진
      * 프로젝트 EDITOR 가 명세상 허용된 삭제를 403 으로 거부당한다.
      *
+     * <p>{@code step_permission} 은 함께 하드 삭제한다 — D-3 예외다
+     * ({@code .ai/docs/global/DELETE.md} §2-2). 근거는 {@code StepPermissionRepository#deleteByStepId}.
+     *
      * <p>⚠️ 재무 연결 해제(BLK-013)는 아직 없다. 입출금·계산서가 연결된 정산 블록도 그냥 삭제되며
      * {@code cash_flow.settle_block_id}·{@code tax_invoice.settle_block_id} 가 삭제된 블록을 계속 가리킨다.
      * 옛 {@code payment}·{@code tax_invoice_confirm} 은 정산 재설계에서 테이블째 사라졌다
@@ -285,6 +288,7 @@ public class StepCommandService implements StepCommandUseCase {
         List<Long> issueIds = issueStatLookupPort.findAllIssueIds(step.getStepId());
         issueDeleteCommandPort.delete(issueIds);
 
+        stepPermissionRepository.deleteByStepId(step.getStepId());
         stepRepository.save(step.delete(LocalDateTime.now()));
 
         return new StepDeleteResult(step.getStepId(),

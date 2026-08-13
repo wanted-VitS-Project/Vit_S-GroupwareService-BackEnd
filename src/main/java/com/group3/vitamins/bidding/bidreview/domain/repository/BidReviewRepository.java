@@ -8,23 +8,8 @@ import java.util.Optional;
 
 public interface BidReviewRepository {
 
-    // 입찰 문서 검토를 저장합니다.
-    BidReview save(BidReview review);
-
-    // 검토에 선택된 문서 목록을 저장합니다.
-    List<BidReviewDocument> saveDocuments(
-            Long reviewId,
-            List<BidReviewDocument> documents
-    );
-
-    // 회사와 요청자 소유권을 확인하여 검토를 조회합니다.
-    Optional<BidReview> findByIdAndCompanyIdAndRequestedBy(
-            Long reviewId,
-            Long companyId,
-            String requestedBy
-    );
-
-    // 소유권과 무관하게 검토 존재 여부만 확인합니다.
+    // 소유권과 무관하게 검토 존재 여부만 확인합니다. 소유권 검증은 호출자가 직접 한다
+    // (404 대신 403을 내려야 하는 곳이 있어, 스코프를 걸어 존재 자체를 숨기지 않는다).
     Optional<BidReview> findById(Long reviewId);
 
     // 검토에 저장된 문서 목록을 조회합니다.

@@ -27,4 +27,10 @@ public interface StagePermissionDefaultRepository {
      * 안 지우면 재초대 후 새 스텝에서 죽은 기본값이 되살아난다.
      */
     void deleteByProjectIdAndUserId(Long projectId, String userId);
+
+    /**
+     * 프로젝트 삭제 시 그 프로젝트 전 스테이지의 기본값을 지운다 (PRJ-014).
+     * {@link #deleteByStageId} 를 스테이지마다 도는 대신 서브쿼리 한 번으로 끝낸다.
+     */
+    void deleteByProjectId(Long projectId);
 }

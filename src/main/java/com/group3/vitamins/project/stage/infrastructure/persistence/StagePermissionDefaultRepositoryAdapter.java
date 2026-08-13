@@ -46,4 +46,9 @@ public class StagePermissionDefaultRepositoryAdapter implements StagePermissionD
     public void deleteByProjectIdAndUserId(Long projectId, String userId) {
         springDataRepository.deleteByProjectIdAndUserId(projectId, userId);
     }
+
+    @Override
+    public void deleteByProjectId(Long projectId) {
+        springDataRepository.deleteByProjectId(projectId);
+    }
 }

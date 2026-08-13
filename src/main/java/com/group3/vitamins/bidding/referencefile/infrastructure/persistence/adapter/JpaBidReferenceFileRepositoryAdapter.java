@@ -50,6 +50,14 @@ public class JpaBidReferenceFileRepositoryAdapter implements BidReferenceFileRep
     }
 
     @Override
+    @Transactional
+    public Optional<BidReferenceFile> findActiveByIdAndCompanyIdForDeletion(Long referenceFileId, Long companyId) {
+        return repository
+                .findByReferenceFileIdAndCompanyIdAndDeletedAtIsNullForUpdate(referenceFileId, companyId)
+                .map(BidReferenceFileJpaEntity::toDomain);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<BidReferenceFile> findAllActiveByCompanyId(Long companyId) {
         return repository
