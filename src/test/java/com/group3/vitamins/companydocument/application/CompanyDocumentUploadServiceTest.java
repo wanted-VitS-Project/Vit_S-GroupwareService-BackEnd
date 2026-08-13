@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -191,7 +192,7 @@ class CompanyDocumentUploadServiceTest {
         expectCode(() -> service.completeUpload(new CompleteCompanyDocumentUploadCommand(34L, null, USER, "ADMIN")),
                 CompanyDocumentErrorCode.CDOC_OBJECT_NOT_FOUND);
         verify(failureRecorder).markFailed(uploading);
-        verify(indexTriggerPort, never()).triggerIndexing(anyLong());
+        verify(indexTriggerPort, never()).triggerIndexing(any());
     }
 
     @Test
@@ -209,7 +210,11 @@ class CompanyDocumentUploadServiceTest {
 
         service.completeUpload(new CompleteCompanyDocumentUploadCommand(34L, "abc", USER, "ADMIN"));
 
-        verify(indexTriggerPort).triggerIndexing(34L);
+        // AI 합의 페이로드(versionId·companyId·s3Key)가 그대로 실려야 한다.
+        verify(indexTriggerPort).triggerIndexing(argThat(t ->
+                t.companyDocumentVersionId().equals(34L)
+                        && t.companyId().equals(COMPANY_ID)
+                        && t.s3Key().equals("key")));
         assertThat(uploading.isCompleted()).isTrue();
         assertThat(uploading.getPageCount()).isEqualTo(5);
     }

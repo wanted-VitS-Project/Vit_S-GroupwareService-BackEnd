@@ -11,6 +11,7 @@ public final class CompanyDocumentResponseMessage {
     public static final String DOCUMENT_UPDATED = "문서를 수정했습니다.";
     public static final String DOCUMENT_DELETED = "문서를 삭제했습니다.";
     public static final String DOCUMENT_RESTORED = "문서를 복구했습니다.";
+    public static final String SELECTABLE_LIST = "참조 선택용 사내 문서 목록 조회 성공";
 
     private CompanyDocumentResponseMessage() {
     }
