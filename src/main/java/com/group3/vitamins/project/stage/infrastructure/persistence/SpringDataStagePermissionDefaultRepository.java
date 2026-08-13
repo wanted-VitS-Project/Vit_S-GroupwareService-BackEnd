@@ -23,4 +23,9 @@ public interface SpringDataStagePermissionDefaultRepository
             + "AND d.stageId IN (SELECT s.stageId FROM StageJpaEntity s WHERE s.projectId = :projectId)")
     void deleteByProjectIdAndUserId(@Param("projectId") Long projectId,
                                     @Param("userId") String userId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("DELETE FROM StagePermissionDefaultJpaEntity d "
+            + "WHERE d.stageId IN (SELECT s.stageId FROM StageJpaEntity s WHERE s.projectId = :projectId)")
+    void deleteByProjectId(@Param("projectId") Long projectId);
 }

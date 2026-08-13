@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -48,4 +49,11 @@ public interface SpringDataStageRepository extends JpaRepository<StageJpaEntity,
     int moveIfVersionMatches(@Param("stageId") Long stageId,
                              @Param("sortOrder") int sortOrder,
                              @Param("expectedVersion") int expectedVersion);
+
+    /** 프로젝트의 미삭제 스테이지를 한 번에 논리 삭제한다. version 은 올리지 않는다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update StageJpaEntity s set s.deletedAt = :deletedAt "
+            + "where s.projectId = :projectId and s.deletedAt is null")
+    int deleteByProjectId(@Param("projectId") Long projectId,
+                          @Param("deletedAt") LocalDateTime deletedAt);
 }
