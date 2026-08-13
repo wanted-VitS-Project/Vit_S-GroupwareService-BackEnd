@@ -3,7 +3,7 @@ POST localhost:8080/api/v1/auth/login
 Content-Type: application/json
 
 {
-    "userId": "vitas-EMP006",
+    "userId": "vitas-EMP007",
     "password": ""
 }
 
@@ -222,10 +222,18 @@ GET localhost:8080/api/v1/finance/cash-flows?size=101
 ### sort 허용값 아님 → 400 FINANCE_PAGE_QUERY_INVALID 확인
 GET localhost:8080/api/v1/finance/cash-flows?sort=INVALID_SORT
 
+### startDate > endDate(날짜 역전) → 400 FINANCE_PAGE_QUERY_INVALID 확인 (2026-08-12, CodeRabbit)
+GET localhost:8080/api/v1/finance/cash-flows?startDate=2026-08-10&endDate=2026-08-01
+
 ### 접근 권한 없음 → 403 FINANCE_ACCESS_DENIED 확인용 — FINANCE 페이지 권한 없는 MEMBER 계정으로 로그인 후 호출
 GET localhost:8080/api/v1/finance/cash-flows
 ###
 GET localhost:8080/api/v1/finance/cash-flows/filters
+
+### 권한 없음 + 잘못된 파라미터(page=-1) 동시 → 403 FINANCE_ACCESS_DENIED가 나와야 한다(400 아님).
+### FINANCE 페이지 권한 없는 MEMBER 계정으로 로그인 후 호출 — 권한 검사가 파라미터 검증보다 먼저여야
+### 통과한다(2026-08-12, 정산현황 프로젝트 조회와 동일한 버그 수정)
+GET localhost:8080/api/v1/finance/cash-flows?page=-1
 
 ### [DB 직접 조작] 삭제된 정산 블록은 미연결로 취급되는지 확인 — C가 연결된 settle_id(0-4에서 확인한 값,
 ### 아래는 1로 가정)의 block을 소프트 삭제한 뒤 재조회하면 C의 projectId/settleId/projectName/roundName이

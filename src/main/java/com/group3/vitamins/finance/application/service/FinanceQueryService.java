@@ -65,8 +65,11 @@ public class FinanceQueryService implements FinanceQueryUseCase {
     public CashFlowListView getCashFlows(CashFlowListQuery query) {
         log.info("입출금 내역 조회 요청 - userId={}", query.userId());
 
-        validateCashFlowListQuery(query);
+        // 권한 검사가 파라미터 검증보다 먼저여야 한다 — 순서가 반대면 권한 없는 사용자가 잘못된 파라미터를
+        // 같이 보냈을 때 403 대신 400이 나간다(정산현황 프로젝트 조회에서 CodeRabbit이 잡은 것과 동일한
+        // 버그, 2026-08-12).
         assertFinanceAccess(query.userId(), query.role());
+        validateCashFlowListQuery(query);
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<CashFlowRow> rows = cashFlowMapper.findCashFlows(
