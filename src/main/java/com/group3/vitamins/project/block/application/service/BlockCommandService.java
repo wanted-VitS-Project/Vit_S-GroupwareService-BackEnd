@@ -17,6 +17,8 @@ import com.group3.vitamins.project.block.application.result.BlockOwner;
 import com.group3.vitamins.project.block.application.result.BlockResult;
 import com.group3.vitamins.project.block.application.result.BlockUpdateResult;
 import com.group3.vitamins.project.block.application.usecase.BlockCascadeUseCase;
+import com.group3.vitamins.project.block.application.usecase.BlockCloneUseCase;
+import com.group3.vitamins.project.block.application.usecase.BlockCloneUseCase.BlockCloneCount;
 import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
 import com.group3.vitamins.project.block.domain.exception.BlockErrorCode;
 import com.group3.vitamins.project.block.domain.model.Block;
@@ -41,7 +43,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUseCase {
+public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUseCase, BlockCloneUseCase {
 
     private static final int TITLE_MAX_LENGTH = 200;
     private static final int MIN_COL_SPAN = 1;
@@ -339,6 +341,53 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     @Override
     public void deleteBlocks(Collection<Long> blockIds, String requesterUserId) {
         findBlocks(blockIds).forEach(block -> deleteBlock(block, requesterUserId));
+    }
+
+    @Override
+    public int countByProjectId(Long projectId) {
+        return blockRepository.countByProjectId(projectId);
+    }
+
+    /**
+     * 프로젝트 복제가 부르는 블록 복사 (PRJ-018). 권한은 호출자가 원본 참여자로 이미 판정했다.
+     *
+     * <p>배치 3종을 <b>원본 값 그대로</b> 옮긴다 — 새 스텝은 비어 있으므로 좌표가 겹칠 수 없고,
+     * {@code resolveRowIndex} 로 다시 계산하면 원본의 그리드 모양이 무너진다.
+     *
+     * <p>⚠️ 상세는 <b>내용을 복사하지 않고</b> {@link #linkDetail} 로 빈 행을 새로 만든다. 이 경로를
+     * 공유하는 것이 핵심이다 — 생성 3단계(`BLOCK.md` §1 규약 5)를 여기서 다시 구현하면 규약이 두 벌로 갈라진다.
+     *
+     * <p>⛔ 활동 로그를 발행하지 않는다. 블록마다 발행하면 복제 한 번에 활동기록이 {@code CREATE} 로 도배된다.
+     */
+    @Override
+    public BlockCloneCount cloneToSteps(Map<Long, Long> stepIdMap, String requesterUserId) {
+        if (stepIdMap.isEmpty()) {
+            return new BlockCloneCount(0, 0);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int copied = 0;
+        int skipped = 0;
+
+        for (Block source : blockRepository.findByStepIds(stepIdMap.keySet())) {
+            // BID_NOTICE 는 공고 전환 API 만 만든다 — 복제본은 원본과 다른 공고(또는 공고 없음)라
+            // 그대로 옮기면 원본 공고를 가리키는 블록이 된다
+            if (!source.getType().userCreatable()) {
+                skipped++;
+                continue;
+            }
+
+            // owner 는 비운다 — 참여자를 복제하지 않으므로 담당자만 남기면 미참여자가 담당자가 된다
+            Block clone = blockRepository.save(Block.create(
+                    stepIdMap.get(source.getStepId()), source.getType(), source.getTitle(),
+                    null, source.getRowIndex(), source.getSortOrder(), source.getColSpan(),
+                    requesterUserId, now));
+
+            linkDetail(clone, clone.getType(), now);
+            copied++;
+        }
+
+        return new BlockCloneCount(copied, skipped);
     }
 
     /**
