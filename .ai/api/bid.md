@@ -1725,6 +1725,14 @@ Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `
 `referenceFileId`, `fileName`, 단명 내부 다운로드 URL, 선택한 사내 문서함 참조(`companyDocuments[]`, 2026-08-13 추가)의
 `companyDocumentVersionId`, `fileName`, 단명 내부 다운로드 URL을 포함한다. 프론트용 API에서는 이 URL들을 제공하지 않는다.
 
+**공고 첨부 임시 저장(2026-08-13 추가)**: `attachments[]`의 각 항목은 `sourceUrl`(외부 원본 다운로드) 외에
+`uploadUrl`(presigned PUT, 만료 10분)과 `temporaryStorageKey`를 함께 받는다. Worker는 ① `sourceUrl`에서
+원본을 내려받고 ② **Content-Type을 `application/octet-stream`으로 고정해서** `uploadUrl`로 그대로 PUT하고
+③ callback의 `documents[]`에 그 `temporaryStorageKey`를 그대로 실어 보낸다(Spring이 새로 생성하지 않고
+Worker가 받은 값을 그대로 돌려주는 왕복 값). Content-Type이 다르면 presigned URL 서명이 안 맞아 PUT이
+403으로 거절된다. 이 임시 복사본은 검토가 프로젝트로 전환될 때 원본 URL을 다시 신뢰하지 않고 그대로
+정식 파일로 승격하는 데 쓴다.
+
 **`qualificationSummary`(2026-08-13 추가)**: 현재 회사의 재직 중(퇴사·삭제 제외, 시스템 계정 제외) 사원 기준
 전공·학력·자격증 보유 현황을 인원수로만 집계한 텍스트("전기공학 5명, 컴퓨터공학 12명" 형태). **이름·사번 등 개인
 식별 정보는 절대 포함하지 않는다** — 개인정보 보호를 위해 전공×학력처럼 교차 집계하지 않고 세 항목을 항상 독립
