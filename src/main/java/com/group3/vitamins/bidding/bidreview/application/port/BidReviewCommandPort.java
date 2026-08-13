@@ -21,5 +21,5 @@ public interface BidReviewCommandPort {
     );
 
     // 종료된 검토 상태와 정리 요청 Outbox를 한 트랜잭션으로 저장합니다.
-    BidReview saveAbandonedWithCleanupOutbox(BidReview review);
+    BidReview saveAbandonedWithCleanupOutbox(Long reviewId, java.time.LocalDateTime now);
 }

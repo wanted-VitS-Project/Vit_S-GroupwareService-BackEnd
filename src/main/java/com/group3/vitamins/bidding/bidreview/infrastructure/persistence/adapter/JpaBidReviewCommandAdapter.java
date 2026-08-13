@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,12 +101,14 @@ public class JpaBidReviewCommandAdapter
 
     @Override
     @Transactional
-    public BidReview saveAbandonedWithCleanupOutbox(BidReview review) {
-        BidReviewJpaEntity entity = reviewRepository.findById(review.reviewId())
+    public BidReview saveAbandonedWithCleanupOutbox(Long reviewId, LocalDateTime now) {
+        BidReviewJpaEntity entity = reviewRepository.findForWorkerUpdate(reviewId)
                 .orElseThrow(() -> new IllegalStateException(
                         "입찰 문서 검토를 찾을 수 없습니다."
                 ));
-        entity.apply(review);
+
+        BidReview abandoned = entity.toDomain().abandon(now);
+        entity.apply(abandoned);
         BidReviewJpaEntity savedReview = reviewRepository.saveAndFlush(entity);
 
         JsonNode payload = objectMapper.createObjectNode()

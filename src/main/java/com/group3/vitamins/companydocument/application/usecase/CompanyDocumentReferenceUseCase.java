@@ -16,4 +16,10 @@ public interface CompanyDocumentReferenceUseCase {
 
     /** 특정 버전이 현재 회사의 참조 대상으로 유효한지 조회한다(입찰 귀속 검증용). */
     Optional<CompanyDocumentReferenceView> getSelectableVersion(Long companyDocumentVersionId);
+
+    /**
+     * 특정 버전이 지정한 회사의 참조 대상으로 유효한지 조회한다.
+     * 비세션 경로(입찰 Worker 내부 콜백)용 — 호출자가 bid_review.company_id 등 신뢰 가능한 출처에서 companyId 를 가져와야 한다.
+     */
+    Optional<CompanyDocumentReferenceView> getSelectableVersion(Long companyDocumentVersionId, Long companyId);
 }

@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface BidReviewJpaRepository
@@ -34,5 +36,21 @@ public interface BidReviewJpaRepository
     @Query("select review from BidReviewJpaEntity review where review.reviewId = :reviewId")
     Optional<BidReviewJpaEntity> findForWorkerUpdate(
             @Param("reviewId") Long reviewId
+    );
+
+    // 만료 후보 — 잠금 없이 가볍게 조회한다. 실제 점유는 findForWorkerUpdate로 한 건씩 한다.
+    @Query(value = """
+        SELECT bid_review_id
+        FROM bid_review
+        WHERE review_status IN ('COMPLETED', 'FAILED')
+          AND project_id IS NULL
+          AND expires_at <= :now
+          AND cleanup_started_at IS NULL
+        ORDER BY expires_at, bid_review_id
+        LIMIT :batchSize
+        """, nativeQuery = true)
+    List<Long> findExpiredCandidateIds(
+            @Param("now") LocalDateTime now,
+            @Param("batchSize") int batchSize
     );
 }

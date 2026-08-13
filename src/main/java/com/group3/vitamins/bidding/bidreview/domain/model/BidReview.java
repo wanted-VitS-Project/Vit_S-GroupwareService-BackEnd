@@ -284,4 +284,24 @@ public record BidReview(
                 updatedAt
         );
     }
+
+    // 정리 스캔이 이 검토를 점유했음을 표시합니다(중복 정리 요청 방지). 상태는 바꾸지 않습니다.
+    public BidReview markCleanupStarted(LocalDateTime now) {
+        Objects.requireNonNull(now, "정리 시작 시각은 필수입니다.");
+        return copy(
+                projectId,
+                reviewStatus,
+                processingAttemptId,
+                retryCount,
+                result,
+                errorCode,
+                errorMessage,
+                completedAt,
+                expiresAt,
+                abandonedAt,
+                now,
+                cleanupCompletedAt,
+                now
+        );
+    }
 }
