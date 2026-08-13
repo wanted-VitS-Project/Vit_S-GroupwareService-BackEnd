@@ -28,7 +28,8 @@ CREATE TABLE employee_education (
     company_id            BIGINT       NOT NULL                            COMMENT '회사(테넌트)',
     user_id               VARCHAR(20)  NOT NULL                            COMMENT '사원(사번) · employee.user_id',
     major_id              BIGINT       NOT NULL                            COMMENT '전공 마스터',
-    degree                VARCHAR(20)  NOT NULL                            COMMENT '학위 enum(BACHELOR·MASTER·DOCTOR)',
+    degree                VARCHAR(20)  NOT NULL
+        CHECK (degree IN ('BACHELOR', 'MASTER', 'DOCTOR'))                  COMMENT '학위 enum(BACHELOR·MASTER·DOCTOR)',
     school                VARCHAR(100) NULL                                COMMENT '학교(선택)',
     created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
     PRIMARY KEY (employee_education_id),

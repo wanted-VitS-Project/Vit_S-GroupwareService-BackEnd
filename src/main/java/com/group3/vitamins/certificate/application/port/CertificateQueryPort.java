@@ -14,5 +14,5 @@ public interface CertificateQueryPort {
     List<CertificateListProjection> findCertificatesWithCount(Long companyId, String keyword);
 
     /** 이 자격증을 참조하는 활성 사원 학력 수(삭제 차단 판정, MAJ-002). */
-    long countActiveReferences(Long certificateId, Long companyId);
+    long countReferences(Long certificateId, Long companyId);
 }

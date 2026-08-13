@@ -12,5 +12,5 @@ public interface MajorQueryMapper {
 
     List<MajorListProjection> findMajorsWithCount(@Param("companyId") Long companyId, @Param("keyword") String keyword);
 
-    long countActiveReferences(@Param("majorId") Long majorId, @Param("companyId") Long companyId);
+    long countReferences(@Param("majorId") Long majorId, @Param("companyId") Long companyId);
 }

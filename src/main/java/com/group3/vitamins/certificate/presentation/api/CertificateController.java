@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Certificate - 자격증 마스터", description = "자격증 마스터 CRUD — 사원 학력의 자격증 원본 (ADMIN 전용 · HR-V1 MAJ)")
+@Tag(name = "Certificate - 자격증 마스터", description = "자격증 마스터 CRUD — 사원 자격증(employee_certificate)의 원본 (ADMIN 전용 · HR-V1 CRT)")
 @RestController
 @RequestMapping("/api/v1/certificates")
 @RequiredArgsConstructor
@@ -90,7 +90,7 @@ public class CertificateController {
     }
 
     @Operation(summary = "자격증 삭제",
-            description = "자격증을 삭제한다(hard delete). 참조하는 사원 학력이 있으면 CERT_IN_USE 로 막는다. ADMIN 전용.")
+            description = "자격증을 삭제한다(hard delete). 참조하는 사원 자격증이 있으면 CERT_IN_USE 로 막는다. ADMIN 전용.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),

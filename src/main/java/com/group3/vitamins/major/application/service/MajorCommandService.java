@@ -15,6 +15,7 @@ import com.group3.vitamins.major.domain.model.Major;
 import com.group3.vitamins.major.domain.repository.MajorRepository;
 import com.group3.vitamins.qualification.application.policy.QualificationAdminPolicy;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,14 +80,20 @@ public class MajorCommandService implements MajorCommandUseCase {
         Major major = majorRepository.findById(command.majorId(), companyId)
                 .orElseThrow(() -> new NotFoundException(MajorErrorCode.MAJOR_NOT_FOUND));
 
-        long references = majorQueryPort.countActiveReferences(major.getMajorId(), companyId);
+        // 삭제 차단은 활성 사원이 아니라 전체 참조로 판정한다 — 퇴사·시스템 사원의 학력도 FK(RESTRICT)로 삭제를 막는다.
+        long references = majorQueryPort.countReferences(major.getMajorId(), companyId);
         if (references > 0) {
             // 코드는 그대로, 메시지에 사원 수를 담는다(qualification.md · 부서 DEPT_HAS_EMPLOYEES 선례).
             throw new ConflictException(MajorErrorCode.MAJOR_IN_USE,
                     "사용 중인 전공은 삭제할 수 없습니다 (사원 " + references + "명).");
         }
 
-        majorRepository.deleteById(major.getMajorId());
+        try {
+            // 선검사~삭제 사이에 학력이 새로 달리는 경합 대비 안전망. deleteById 가 flush 하므로 FK 위반이 여기서 즉시 터진다.
+            majorRepository.deleteById(major.getMajorId());
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(MajorErrorCode.MAJOR_IN_USE, e);
+        }
     }
 
     private String validateName(String name) {

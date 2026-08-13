@@ -19,7 +19,7 @@ public class CertificateQueryAdapter implements CertificateQueryPort {
     }
 
     @Override
-    public long countActiveReferences(Long certificateId, Long companyId) {
-        return mapper.countActiveReferences(certificateId, companyId);
+    public long countReferences(Long certificateId, Long companyId) {
+        return mapper.countReferences(certificateId, companyId);
     }
 }

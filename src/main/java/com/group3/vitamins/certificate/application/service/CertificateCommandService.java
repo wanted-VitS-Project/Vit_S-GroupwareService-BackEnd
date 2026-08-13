@@ -15,6 +15,7 @@ import com.group3.vitamins.certificate.domain.model.Certificate;
 import com.group3.vitamins.certificate.domain.repository.CertificateRepository;
 import com.group3.vitamins.qualification.application.policy.QualificationAdminPolicy;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,14 +80,20 @@ public class CertificateCommandService implements CertificateCommandUseCase {
         Certificate certificate = certificateRepository.findById(command.certificateId(), companyId)
                 .orElseThrow(() -> new NotFoundException(CertificateErrorCode.CERT_NOT_FOUND));
 
-        long references = certificateQueryPort.countActiveReferences(certificate.getCertificateId(), companyId);
+        // 삭제 차단은 활성 사원이 아니라 전체 참조로 판정한다 — 퇴사·시스템 사원의 자격증도 FK(RESTRICT)로 삭제를 막는다.
+        long references = certificateQueryPort.countReferences(certificate.getCertificateId(), companyId);
         if (references > 0) {
             // 코드는 그대로, 메시지에 사원 수를 담는다(qualification.md · 부서 DEPT_HAS_EMPLOYEES 선례).
             throw new ConflictException(CertificateErrorCode.CERT_IN_USE,
                     "사용 중인 자격증은 삭제할 수 없습니다 (사원 " + references + "명).");
         }
 
-        certificateRepository.deleteById(certificate.getCertificateId());
+        try {
+            // 선검사~삭제 사이 경합 대비 안전망. deleteById 가 flush 하므로 FK 위반이 여기서 즉시 터진다.
+            certificateRepository.deleteById(certificate.getCertificateId());
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(CertificateErrorCode.CERT_IN_USE, e);
+        }
     }
 
     private String validateName(String name) {

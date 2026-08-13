@@ -3,9 +3,10 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <!--
-  전공 마스터 조회 (HR-V1 MAJ). 목록은 사용 사원 수(활성)를 함께 세고, 삭제 검사는 참조 수를 센다.
-  ⚠️ 활성 사원만 센다 — employee 를 JOIN 해 is_system=0·미삭제·미퇴사로 거른 뒤 COUNT(DISTINCT e.user_id).
-     (LEFT JOIN 으로 ee.user_id 를 세면 퇴사자·시스템도 세어 카운트가 틀린다.)
+  전공 마스터 조회 (HR-V1 MAJ).
+  목록: employeeCount=활성 사원 수(배지용) · referenceCount=상태 무관 전체 참조 사원 수(deletable 판정용).
+  ⚠️ deletable 은 employeeCount(활성)가 아니라 referenceCount(전체)로 판정해야 한다 —
+     FK(RESTRICT)는 퇴사·시스템 사원의 학력도 삭제를 막으므로, 활성만 보면 "삭제 가능"인데 실제 삭제가 실패한다.
   ⚠️ SELECT alias 순서 = MajorListProjection 필드 순서(위치 기반 매핑).
 -->
 <mapper namespace="com.group3.vitamins.major.infrastructure.adapter.MajorQueryMapper">
@@ -14,7 +15,8 @@
             resultType="com.group3.vitamins.major.application.result.MajorListProjection">
         SELECT m.major_id                 AS majorId,
                m.name                      AS name,
-               COUNT(DISTINCT e.user_id)   AS employeeCount
+               COUNT(DISTINCT e.user_id)   AS employeeCount,
+               COUNT(DISTINCT ee.user_id)  AS referenceCount
           FROM major m
           LEFT JOIN employee_education ee ON ee.major_id = m.major_id AND ee.company_id = #{companyId}
           LEFT JOIN employee e ON e.user_id = ee.user_id AND e.company_id = #{companyId}
@@ -27,11 +29,10 @@
          ORDER BY m.name
     </select>
 
-    <select id="countActiveReferences" resultType="long">
-        SELECT COUNT(DISTINCT e.user_id)
+    <!-- 삭제 차단 판정 — 상태 무관 전체 참조 사원 수. 활성 필터를 걸지 않는다(FK RESTRICT 와 일치). -->
+    <select id="countReferences" resultType="long">
+        SELECT COUNT(DISTINCT ee.user_id)
           FROM employee_education ee
-          JOIN employee e ON e.user_id = ee.user_id AND e.company_id = #{companyId}
-               AND e.is_system = 0 AND e.deleted_at IS NULL AND e.resigned_at IS NULL
          WHERE ee.major_id = #{majorId} AND ee.company_id = #{companyId}
     </select>
 

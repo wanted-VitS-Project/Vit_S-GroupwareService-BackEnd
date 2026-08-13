@@ -58,8 +58,8 @@
 |---|---|---|
 | `data.majors[].majorId` | Long | 전공 번호 |
 | `data.majors[].name` | String | 전공명 |
-| `data.majors[].employeeCount` | int | 참조 사원 수(시스템·퇴사 제외) |
-| `data.majors[].deletable` | boolean | `employeeCount == 0` 이면 true(프론트 삭제 버튼 활성) |
+| `data.majors[].employeeCount` | int | **활성** 참조 사원 수(시스템·퇴사 제외) — 화면 배지용 |
+| `data.majors[].deletable` | boolean | **전체 참조 수**(활성+퇴사+시스템)가 0이면 true. ⚠️ `employeeCount`(활성) 아님 — FK(RESTRICT)는 퇴사 사원 학력도 삭제를 막으므로 활성만 보면 삭제 버튼이 켜졌는데 실제 삭제가 실패한다 |
 
 | 코드 | code | 설명 |
 |---|---|---|
@@ -144,8 +144,8 @@
 |---|---|---|
 | `data.certificates[].certificateId` | Long | 자격증 번호 |
 | `data.certificates[].name` | String | 자격증명 |
-| `data.certificates[].employeeCount` | int | 참조 사원 수 |
-| `data.certificates[].deletable` | boolean | `employeeCount == 0` |
+| `data.certificates[].employeeCount` | int | **활성** 참조 사원 수(시스템·퇴사 제외) — 화면 배지용 |
+| `data.certificates[].deletable` | boolean | **전체 참조 수**(활성+퇴사+시스템)가 0이면 true (전공과 동일 규칙) |
 
 | 코드 | code | 설명 |
 |---|---|---|

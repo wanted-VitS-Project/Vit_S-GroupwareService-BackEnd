@@ -19,7 +19,7 @@ public class MajorQueryAdapter implements MajorQueryPort {
     }
 
     @Override
-    public long countActiveReferences(Long majorId, Long companyId) {
-        return mapper.countActiveReferences(majorId, companyId);
+    public long countReferences(Long majorId, Long companyId) {
+        return mapper.countReferences(majorId, companyId);
     }
 }

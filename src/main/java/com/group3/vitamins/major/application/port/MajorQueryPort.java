@@ -13,6 +13,6 @@ public interface MajorQueryPort {
     /** 전공 목록 + 사용 사원 수(시스템·퇴사 제외, MAJ-003). 이름 오름차순. */
     List<MajorListProjection> findMajorsWithCount(Long companyId, String keyword);
 
-    /** 이 전공을 참조하는 활성 사원 학력 수(삭제 차단 판정, MAJ-002). */
-    long countActiveReferences(Long majorId, Long companyId);
+    /** 이 전공을 참조하는 <b>전체</b> 사원 학력 수(상태 무관, 삭제 차단 판정 MAJ-002). FK RESTRICT 와 일치시킨다. */
+    long countReferences(Long majorId, Long companyId);
 }

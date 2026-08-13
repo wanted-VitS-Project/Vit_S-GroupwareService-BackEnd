@@ -12,5 +12,5 @@ public interface CertificateQueryMapper {
 
     List<CertificateListProjection> findCertificatesWithCount(@Param("companyId") Long companyId, @Param("keyword") String keyword);
 
-    long countActiveReferences(@Param("certificateId") Long certificateId, @Param("companyId") Long companyId);
+    long countReferences(@Param("certificateId") Long certificateId, @Param("companyId") Long companyId);
 }
