@@ -1,7 +1,9 @@
 package com.group3.vitamins.employee.application.usecase;
 
 import com.group3.vitamins.employee.application.query.EmployeeListQuery;
+import com.group3.vitamins.employee.application.result.EmployeeCertificateRow;
 import com.group3.vitamins.employee.application.result.EmployeeDetailRow;
+import com.group3.vitamins.employee.application.result.EmployeeEducationRow;
 import com.group3.vitamins.employee.application.result.EmployeeGroupRow;
 import com.group3.vitamins.employee.application.result.EmployeePage;
 
@@ -18,7 +20,11 @@ public interface EmployeeAdminQueryUseCase {
     /** 사원 상세 조회. 소속 그룹을 함께 담아 반환한다. */
     EmployeeDetail getEmployee(String requesterRole, String userId);
 
-    /** 상세 응답 조립에 필요한 사원 + 그룹 묶음. */
-    record EmployeeDetail(EmployeeDetailRow employee, List<EmployeeGroupRow> groups) {
+    /** 상세 응답 조립에 필요한 사원 + 그룹 + 학력 + 자격증 묶음. */
+    record EmployeeDetail(
+            EmployeeDetailRow employee,
+            List<EmployeeGroupRow> groups,
+            List<EmployeeEducationRow> educations,
+            List<EmployeeCertificateRow> certificates) {
     }
 }

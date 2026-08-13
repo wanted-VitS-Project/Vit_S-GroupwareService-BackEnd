@@ -1,7 +1,9 @@
 package com.group3.vitamins.employee.application.port;
 
 import com.group3.vitamins.employee.application.query.EmployeeListCriteria;
+import com.group3.vitamins.employee.application.result.EmployeeCertificateRow;
 import com.group3.vitamins.employee.application.result.EmployeeDetailRow;
+import com.group3.vitamins.employee.application.result.EmployeeEducationRow;
 import com.group3.vitamins.employee.application.result.EmployeeGroupRow;
 import com.group3.vitamins.employee.application.result.EmployeeListRow;
 
@@ -30,4 +32,10 @@ public interface EmployeeAdminQueryPort {
 
     /** 사원이 속한 그룹 목록 (그룹명 오름차순). */
     List<EmployeeGroupRow> findGroups(String userId);
+
+    /** 사원 학력 목록 (전공 마스터 조인, 등록 순). */
+    List<EmployeeEducationRow> findEducations(String userId);
+
+    /** 사원 자격증 목록 (자격증 마스터 조인, 등록 순). */
+    List<EmployeeCertificateRow> findCertificates(String userId);
 }

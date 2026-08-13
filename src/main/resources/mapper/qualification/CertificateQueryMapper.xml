@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  자격증 마스터 조회 (HR-V1 CRT).
+  목록: employeeCount=활성 사원 수(배지용) · referenceCount=상태 무관 전체 참조 사원 수(deletable 판정용).
+  ⚠️ deletable 은 employeeCount(활성)가 아니라 referenceCount(전체)로 판정해야 한다 —
+     FK(RESTRICT)는 퇴사·시스템 사원의 자격증도 삭제를 막으므로, 활성만 보면 "삭제 가능"인데 실제 삭제가 실패한다.
+  ⚠️ SELECT alias 순서 = CertificateListProjection 필드 순서(위치 기반 매핑).
+-->
+<mapper namespace="com.group3.vitamins.certificate.infrastructure.adapter.CertificateQueryMapper">
+
+    <select id="findCertificatesWithCount"
+            resultType="com.group3.vitamins.certificate.application.result.CertificateListProjection">
+        SELECT m.certificate_id            AS certificateId,
+               m.name                      AS name,
+               COUNT(DISTINCT e.user_id)   AS employeeCount,
+               COUNT(DISTINCT ee.user_id)  AS referenceCount
+          FROM certificate m
+          LEFT JOIN employee_certificate ee ON ee.certificate_id = m.certificate_id AND ee.company_id = #{companyId}
+          LEFT JOIN employee e ON e.user_id = ee.user_id AND e.company_id = #{companyId}
+               AND e.is_system = 0 AND e.deleted_at IS NULL AND e.resigned_at IS NULL
+         WHERE m.company_id = #{companyId}
+        <if test="keyword != null">
+            AND m.name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+         GROUP BY m.certificate_id, m.name
+         ORDER BY m.name
+    </select>
+
+    <!-- 삭제 차단 판정 — 상태 무관 전체 참조 사원 수. 활성 필터를 걸지 않는다(FK RESTRICT 와 일치). -->
+    <select id="countReferences" resultType="long">
+        SELECT COUNT(DISTINCT ee.user_id)
+          FROM employee_certificate ee
+         WHERE ee.certificate_id = #{certificateId} AND ee.company_id = #{companyId}
+    </select>
+
+</mapper>

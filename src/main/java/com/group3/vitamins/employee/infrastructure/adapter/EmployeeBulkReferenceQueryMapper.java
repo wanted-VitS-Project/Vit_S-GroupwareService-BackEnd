@@ -22,6 +22,14 @@ public interface EmployeeBulkReferenceQueryMapper {
     List<NameIdRow> findJobPositionIdsByName(
             @Param("names") Collection<String> names, @Param("companyId") Long companyId);
 
+    /** 전공명(회사 범위 유니크) → (name, id). */
+    List<NameIdRow> findMajorIdsByName(
+            @Param("names") Collection<String> names, @Param("companyId") Long companyId);
+
+    /** 자격증명(회사 범위 유니크) → (name, id). */
+    List<NameIdRow> findCertificateIdsByName(
+            @Param("names") Collection<String> names, @Param("companyId") Long companyId);
+
     /** 요청 사번 중 실재하는(PK 점유) 사번 — soft delete 무관. */
     List<String> findExistingUserIds(@Param("userIds") Collection<String> userIds);
 }

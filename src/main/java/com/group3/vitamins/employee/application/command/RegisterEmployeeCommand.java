@@ -14,6 +14,8 @@ package com.group3.vitamins.employee.application.command;
  * @param jobPositionId 직급 ID (선택)
  * @param email        초기 비밀번호 발송 주소 (선택 — 없으면 계정은 만들되 로그인 불가)
  * @param phone        연락처 (선택)
+ * @param educations   학력 (선택 — 비어 있으면 없음). 전공 마스터 존재검사 후 함께 저장
+ * @param certificates 자격증 (선택 — 비어 있으면 없음)
  */
 public record RegisterEmployeeCommand(
         String actorRole,
@@ -24,6 +26,8 @@ public record RegisterEmployeeCommand(
         String role,
         Long jobPositionId,
         String email,
-        String phone
+        String phone,
+        java.util.List<EducationItem> educations,
+        java.util.List<CertificateItem> certificates
 ) {
 }
