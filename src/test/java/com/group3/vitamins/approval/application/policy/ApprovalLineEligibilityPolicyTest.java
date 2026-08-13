@@ -174,6 +174,10 @@ class ApprovalLineEligibilityPolicyTest {
                 .isInstanceOf(ValidationException.class)
                 .extracting("errorCode")
                 .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+
+        // 참여 가능 검사에서 걸렸는지 확인 — 이게 없으면 참여 가능 검사를 지워도
+        // isProjectMember 기본값(false)이 대신 거부해서 테스트가 통과한다.
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, MEMBER);
     }
 
     @Test
@@ -188,6 +192,9 @@ class ApprovalLineEligibilityPolicyTest {
                 .isInstanceOf(ValidationException.class)
                 .extracting("errorCode")
                 .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+
+        // 면제되지 않아 소속 검증까지 내려갔음을 못 박는다 (거부 사유가 소속이라는 뜻)
+        verify(blockCatalogPort).isProjectMember(PROJECT_ID, MEMBER);
     }
 
     @Test
