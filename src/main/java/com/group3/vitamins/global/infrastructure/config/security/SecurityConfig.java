@@ -191,6 +191,9 @@ public class SecurityConfig {
         config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        // 미리보기(§10 file · §9 사내문서) 응답의 커스텀 헤더를 브라우저 JS 가 읽을 수 있게 노출한다.
+        // 노출하지 않으면 CORS 요청에서 프론트가 이 헤더들에 접근하지 못해 페이지 수 안내 문구를 못 만든다.
+        config.setExposedHeaders(List.of("X-Preview-Page-Count", "X-Total-Page-Count"));
         // 세션 쿠키를 주고받으므로 필수. 이게 true 면 allowedOrigins 에 "*" 를 쓸 수 없다.
         // 프론트도 fetch 에 credentials: 'include' 를 켜야 한다.
         config.setAllowCredentials(true);
