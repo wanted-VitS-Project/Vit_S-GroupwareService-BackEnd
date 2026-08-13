@@ -83,7 +83,7 @@ class BidReviewJobQueryServiceTest {
                 )));
         when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(new BidReviewNoticeDocumentPort.NoticeSnapshot(
-                        NOTICE_ID, "스마트시티 통합관제 용역"
+                        NOTICE_ID, "스마트시티 통합관제 용역", null
                 )));
         when(noticeDocumentPort.findAttachments(COMPANY_ID, NOTICE_ID, List.of(31L)))
                 .thenReturn(List.of(new BidReviewNoticeDocumentPort.AttachmentSnapshot(
@@ -118,7 +118,7 @@ class BidReviewJobQueryServiceTest {
         assertThat(result.attachments().get(0).sourceUrl()).isEqualTo("https://nara.example/31.pdf");
         assertThat(result.attachments().get(0).uploadUrl()).isEqualTo("https://s3.example/upload?sig=...");
         assertThat(result.attachments().get(0).temporaryStorageKey())
-                .startsWith("bidding/reviews/71/attachments/31/");
+                .startsWith("companies/10/bidding/reviews/71/attachments/31/");
         assertThat(result.referenceFiles()).hasSize(1);
         assertThat(result.referenceFiles().get(0).downloadUrl()).isEqualTo("https://s3.example/501.pdf?sig=...");
         assertThat(result.companyDocuments()).hasSize(1);
@@ -138,7 +138,7 @@ class BidReviewJobQueryServiceTest {
                 )));
         when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(new BidReviewNoticeDocumentPort.NoticeSnapshot(
-                        NOTICE_ID, "스마트시티 통합관제 용역"
+                        NOTICE_ID, "스마트시티 통합관제 용역", null
                 )));
         when(qualificationPort.summarizeMajors(COMPANY_ID)).thenReturn(List.of());
         when(qualificationPort.summarizeDegrees(COMPANY_ID)).thenReturn(List.of());

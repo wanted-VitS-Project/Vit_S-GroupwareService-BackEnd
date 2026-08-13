@@ -81,7 +81,7 @@ class CreateBidReviewServiceTest {
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
         when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(new BidReviewNoticeDocumentPort.NoticeSnapshot(
-                        NOTICE_ID, "스마트시티 통합관제 플랫폼 구축 용역"
+                        NOTICE_ID, "스마트시티 통합관제 플랫폼 구축 용역", null
                 )));
         when(noticeDocumentPort.findAttachments(COMPANY_ID, NOTICE_ID, List.of(ATTACHMENT_ID)))
                 .thenReturn(List.of(new BidReviewNoticeDocumentPort.AttachmentSnapshot(

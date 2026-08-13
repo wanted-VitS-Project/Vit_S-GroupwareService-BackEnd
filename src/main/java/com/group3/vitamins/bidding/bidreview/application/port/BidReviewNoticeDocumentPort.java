@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.bidreview.application.port;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,7 +19,8 @@ public interface BidReviewNoticeDocumentPort {
 
     record NoticeSnapshot(
             Long noticeId,
-            String noticeName
+            String noticeName,
+            LocalDateTime bidDeadlineAt
     ) {
     }
 
