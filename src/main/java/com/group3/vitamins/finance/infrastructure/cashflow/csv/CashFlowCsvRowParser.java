@@ -109,6 +109,15 @@ public class CashFlowCsvRowParser {
                 "날짜 형식을 해석할 수 없습니다: " + raw);
     }
 
+    /**
+     * SEPARATE 모드의 시간 컬럼은 **날짜 성분을 무시하고 시각만** 취한다.
+     *
+     * <p>⚠️ 값에 날짜가 붙어 오는 경우가 실제로 있다 (2026-08-13, 프론트 제보) — 엑셀은 시각만 넣은 셀을
+     * "0일차 + 시각"으로 저장해서 읽으면 기준일(1899-12-31)이 따라붙는다. 파서 쪽에서 이미 시각만
+     * 남기도록 고쳤지만, 그 이전에 만들어진 값이나 날짜+시간이 통째로 들어있는 CSV가 이 컬럼으로
+     * 매핑될 수도 있어서 여기서도 한 번 더 흡수한다 — **날짜 컬럼이 따로 있는 모드라 시간 컬럼의
+     * 날짜 성분은 어차피 버리는 값이다.**
+     */
     private LocalTime parseTime(String raw) {
         for (DateTimeFormatter format : TIME_FORMATS) {
             try {
@@ -117,6 +126,27 @@ public class CashFlowCsvRowParser {
                 // 다음 포맷 시도
             }
         }
+
+        // "1899-12-31 11:20:15"처럼 날짜가 앞에 붙은 형태 — 날짜 부분을 떼고 시각만 다시 시도한다.
+        int lastSpace = raw.lastIndexOf(' ');
+        if (lastSpace > 0 && lastSpace < raw.length() - 1) {
+            String timePart = raw.substring(lastSpace + 1);
+            for (DateTimeFormatter format : TIME_FORMATS) {
+                try {
+                    return LocalTime.parse(timePart, format);
+                } catch (DateTimeParseException ignored) {
+                    // 다음 포맷 시도
+                }
+            }
+        }
+        for (DateTimeFormatter format : DATETIME_FORMATS) {
+            try {
+                return LocalDateTime.parse(raw, format).toLocalTime();
+            } catch (DateTimeParseException ignored) {
+                // 다음 포맷 시도
+            }
+        }
+
         throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
                 "시간 형식을 해석할 수 없습니다: " + raw);
     }
