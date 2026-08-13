@@ -277,7 +277,8 @@ public class ApprovalRevisionController {
     @Operation(summary = "결재선 등록·수정",
             description = "DRAFT에서는 결재선 전체를 치환한다. IN_PROGRESS에서는 참여 불가한 ACTIVE·WAITING 결재자만 "
                     + "교체하거나 요청 배열에서 제외한다. 제외하면 뒤 순번을 당기고, 현재 결재자를 제외한 경우 다음 "
-                    + "결재자를 활성화하거나 결재를 완료한다. MASTER만 project member 검증에서 제외되고 ADMIN은 지정할 수 없다.")
+                    + "결재자를 활성화하거나 결재를 완료한다. MASTER와 직급이 대표인 사원만 project member 검증에서 "
+                    + "제외되고 ADMIN은 지정할 수 없다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록·수정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -293,7 +294,8 @@ public class ApprovalRevisionController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "APPROVAL_LINE_ORDER_INVALID — 순서 중복/누락"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "APPROVAL_LINE_APPROVER_NOT_MEMBER — 참여 불가·ADMIN·project member 아님(MASTER만 제외)")
+                    description = "APPROVAL_LINE_APPROVER_NOT_MEMBER — 참여 불가·ADMIN·project member 아님"
+                            + "(MASTER·직급 대표는 소속 검증 제외)")
     })
     @PutMapping("/{approvalId}/revisions/{revisionId}/lines")
     public ApiResponse<UpdateApprovalLinesResponse> updateLines(
