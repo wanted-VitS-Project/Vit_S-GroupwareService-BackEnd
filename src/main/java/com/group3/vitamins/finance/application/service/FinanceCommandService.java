@@ -431,7 +431,11 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         // "상태 조건부 UPDATE"가 경합 지점이 되어주지 못한다. 잠금 없이 EXISTS만 보면 서로 다른
         // 세금계산서 2건이 같은 블록으로 동시에 들어와 둘 다 통과할 수 있다(블록당 1장 규칙 위반).
         // findLinkedTaxInvoiceId가 잠금 읽기(FOR UPDATE)인 이유는 매퍼 XML 주석 참고.
-        taxInvoiceMapper.lockSettlementBlockForUpdate(command.settleId());
+        // 잠금 결과가 null이면 위 조회와 이 잠금 사이에 블록이 소프트 삭제된 것이다 — 삭제된 블록에
+        // 연결하면 안 되므로 중단한다(2026-08-13, CodeRabbit 지적).
+        if (taxInvoiceMapper.lockSettlementBlockForUpdate(command.settleId()) == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_MATCH_TARGET_NOT_FOUND);
+        }
         Long linkedTaxId = taxInvoiceMapper.findLinkedTaxInvoiceId(command.settleId());
         if (linkedTaxId != null) {
             throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
@@ -473,7 +477,11 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_MATCHED);
         }
 
-        taxInvoiceCommandMapper.clearTaxInvoiceMatch(command.taxId());
+        // ⚠️ 영향 행 수를 확인해야 조건부 UPDATE(settle_block_id IS NOT NULL)의 동시성 보장이 응답까지
+        // 이어진다 — 버리면 동시 해제 요청 두 건이 모두 200을 받는다(2026-08-13, CodeRabbit 지적).
+        if (taxInvoiceCommandMapper.clearTaxInvoiceMatch(command.taxId()) == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_MATCHED);
+        }
         taxInvoiceCommandMapper.resetSettlementBlockFromWaiting(taxInvoice.settleBlockId());
     }
 
@@ -593,11 +601,14 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             }
         }
 
-        if (!updatable.isEmpty()) {
-            taxInvoiceCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
-        }
+        // updatable.size()가 아니라 실제 영향 행 수를 쓴다 (2026-08-13, CodeRabbit 지적) — 위 검사와 이
+        // UPDATE 사이에 남이 매칭하면 조건부 UPDATE(settle_block_id IS NULL)가 그 행을 걸러내는데,
+        // size()를 응답하면 처리되지 않은 건까지 "처리됨"으로 보고한다. 배치 삭제(deletedCount)와 동일 기준.
+        int updatedCount = updatable.isEmpty()
+                ? 0
+                : taxInvoiceCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
 
-        return new TaxInvoiceExclusionResultView(updatable.size(), skipped);
+        return new TaxInvoiceExclusionResultView(updatedCount, skipped);
     }
 
     /** cash_flow의 insertWithConcurrentDuplicateRetry와 동일한 이유·동일한 구조. */
@@ -735,7 +746,10 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_MATCHED);
         }
 
-        cashFlowCommandMapper.clearCashFlowMatch(command.cashFlowId());
+        // 세금계산서 해제와 같은 이유로 영향 행 수를 확인한다(동시 해제 요청 중 한쪽만 성공해야 한다).
+        if (cashFlowCommandMapper.clearCashFlowMatch(command.cashFlowId()) == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_MATCHED);
+        }
         // 세금계산서가 아직 붙어 있으면 PENDING이 아니라 WAITING(정산 대기)으로 되돌린다 — 판정은
         // 쿼리 안에서 한다(2026-08-13 규칙 확정, CashFlowCommandMapper.xml 주석 참고). 실적값은 항상 비운다.
         cashFlowCommandMapper.resetSettlementBlockMatch(cashFlow.settleBlockId());
@@ -904,11 +918,12 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             }
         }
 
-        if (!updatable.isEmpty()) {
-            cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
-        }
+        // 세금계산서 쪽과 같은 이유로 실제 영향 행 수를 쓴다(배치 삭제의 deletedCount와 동일 기준).
+        int updatedCount = updatable.isEmpty()
+                ? 0
+                : cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
 
-        return new CashFlowExclusionResultView(updatable.size(), skipped);
+        return new CashFlowExclusionResultView(updatedCount, skipped);
     }
 
     private String validateType(String raw) {

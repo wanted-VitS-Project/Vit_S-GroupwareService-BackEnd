@@ -46,11 +46,13 @@ public record TaxInvoiceCsvPreviewResponse(
             String totalAmountColumn,
             @Schema(description = "품목명 컬럼 추천값 (없으면 null)", example = "품목", nullable = true)
             String itemNameColumn,
-            @Schema(description = "대표자명 컬럼 추천값 (없으면 null)", nullable = true)
+            // 중복 헤더가 있는 파일이면 방향에 따라 " (2)"가 붙은 쪽이 추천된다(매출이면 공급받는자 쪽) —
+            // example은 접미사 없는 형태로 둔다.
+            @Schema(description = "대표자명 컬럼 추천값 (없으면 null)", example = "대표자명", nullable = true)
             String ceoNameColumn,
-            @Schema(description = "종사업장번호 컬럼 추천값 (없으면 null)", nullable = true)
+            @Schema(description = "종사업장번호 컬럼 추천값 (없으면 null)", example = "종사업장번호", nullable = true)
             String subBizNoColumn,
-            @Schema(description = "비고/메모 컬럼 추천값 (없으면 null)", nullable = true)
+            @Schema(description = "비고/메모 컬럼 추천값 (없으면 null)", example = "비고", nullable = true)
             String memoColumn
     ) {
 

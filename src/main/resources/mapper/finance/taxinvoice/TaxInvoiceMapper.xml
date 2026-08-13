@@ -218,8 +218,14 @@
         PARTIAL/COMPLETED 인 블록에 붙을 때 status 를 안 바꾸므로 경합할 행 변경이 없다 — 서로 다른
         세금계산서 2건이 같은 블록으로 동시에 들어오면 둘 다 통과해 "블록당 1장" 규칙이 깨진다.
     -->
+    <!--
+        ⚠️ deleted_at 조건 필수 (2026-08-13, CodeRabbit 지적) — findSettlementBlockForMatch(조인 조회)와 이
+        잠금 사이에 블록이 소프트 삭제될 수 있다. 조건 없이 잠그면 삭제된 블록에 세금계산서가 연결된다.
+        결과가 null이면 호출부가 404로 중단한다.
+    -->
     <select id="lockSettlementBlockForUpdate" resultType="java.lang.Long">
-        SELECT settle_id FROM settlement_block WHERE settle_id = #{settleId}
+        SELECT settle_id FROM settlement_block
+        WHERE settle_id = #{settleId} AND deleted_at IS NULL
         FOR UPDATE
     </select>
 

@@ -275,7 +275,9 @@ public class FinanceController {
                             + "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
                             + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "유효하지 않은 형식입니다. (FINANCE_INVALID_CSV_FILE) — 파일 파트 누락·빈 파일·읽기 실패")
     })
     @PostMapping(value = "/tax-invoices/csv", consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<TaxInvoiceCsvUploadResponse>> uploadTaxInvoiceCsv(
@@ -324,7 +326,10 @@ public class FinanceController {
     }
 
     @Operation(summary = "세금계산서 블록 매칭",
-            description = "세금계산서를 정산 블록에 연결한다. 정산 블록당 매칭은 1번뿐이다 — 이미 매칭된 정산 블록에는 다시 매칭할 수 없다.")
+            description = "세금계산서를 정산 블록에 연결한다. 제한은 원장별로 걸린다 — **세금계산서가 아직 연결되지 않은 "
+                    + "블록이면 입출금 연결 여부와 무관하게 매칭할 수 있다**(입금이 끝난 PARTIAL/COMPLETED 블록도 가능). "
+                    + "같은 블록에 세금계산서 2장은 안 된다. 매칭되면 블록 status가 PENDING일 때만 WAITING(정산 대기)으로 "
+                    + "올라가고, 실적값(actual_amount·actual_date)은 입출금 소관이라 건드리지 않는다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -447,7 +452,13 @@ public class FinanceController {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
         }
         try {
-            return objectMapper.readValue(requestJson, TaxInvoiceCsvUploadRequest.class);
+            TaxInvoiceCsvUploadRequest parsed = objectMapper.readValue(requestJson, TaxInvoiceCsvUploadRequest.class);
+            // ⚠️ 파트 값이 문자열 "null"이면 isBlank()는 통과하고 readValue가 null을 돌려준다 —
+            // 그대로 반환하면 호출부의 toCommand(...)에서 NPE가 나 500이 된다(2026-08-13, CodeRabbit 지적).
+            if (parsed == null) {
+                throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
+            }
+            return parsed;
         } catch (JsonProcessingException e) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, e);
         }
@@ -493,7 +504,9 @@ public class FinanceController {
                             + "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
                             + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "유효하지 않은 형식입니다. (FINANCE_INVALID_CSV_FILE) — 파일 파트 누락·빈 파일·읽기 실패")
     })
     @PostMapping(value = "/cash-flows/csv", consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<CashFlowCsvUploadResponse>> uploadCashFlowCsv(
@@ -686,7 +699,12 @@ public class FinanceController {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
         }
         try {
-            return objectMapper.readValue(requestJson, CashFlowCsvUploadRequest.class);
+            CashFlowCsvUploadRequest parsed = objectMapper.readValue(requestJson, CashFlowCsvUploadRequest.class);
+            // 세금계산서 쪽 parseTaxInvoiceUploadRequest와 동일한 이유 — 문자열 "null"이 오면 NPE→500이 된다.
+            if (parsed == null) {
+                throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
+            }
+            return parsed;
         } catch (JsonProcessingException e) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, e);
         }
