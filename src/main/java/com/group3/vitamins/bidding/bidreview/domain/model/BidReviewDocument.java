@@ -210,6 +210,34 @@ public record BidReviewDocument(
         );
     }
 
+    // 파일 도메인 정식 file/file_version으로 귀속(승격) 완료를 반영합니다. 다운로드가 끝난 공고 첨부만
+    // 귀속 대상입니다 - chk_bid_review_document_promotion 제약과 대응된다.
+    public BidReviewDocument promote(Long fileId, Long fileVersionId, LocalDateTime now) {
+        Objects.requireNonNull(fileId, "귀속된 파일 ID는 필수입니다.");
+        Objects.requireNonNull(fileVersionId, "귀속된 파일 버전 ID는 필수입니다.");
+        Objects.requireNonNull(now, "귀속 완료 시각은 필수입니다.");
+
+        if (documentRole != BidReviewDocumentRole.BID_ATTACHMENT) {
+            throw new IllegalStateException("공고 첨부만 프로젝트 파일로 귀속할 수 있습니다.");
+        }
+        if (processingStatus != BidReviewDocumentStatus.READY) {
+            throw new IllegalStateException("다운로드가 완료된 문서만 귀속할 수 있습니다.");
+        }
+
+        return copy(
+                BidReviewDocumentStatus.PROMOTED,
+                temporaryStorageKey,
+                fileSize,
+                mimeType,
+                processingErrorMessage,
+                fileId,
+                fileVersionId,
+                now,
+                deletedAt,
+                now
+        );
+    }
+
     // 임시 저장소 객체 삭제 완료를 반영합니다. 공고 첨부만 정리 대상입니다.
     public BidReviewDocument cleanup(LocalDateTime now) {
         Objects.requireNonNull(now, "정리 완료 시각은 필수입니다.");

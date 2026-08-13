@@ -18,7 +18,9 @@ public record BidReviewJobResult(
     public record AttachmentJob(
             Long attachmentId,
             String fileName,
-            String sourceUrl
+            String sourceUrl,
+            String uploadUrl,
+            String temporaryStorageKey
     ) {
     }
 

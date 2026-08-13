@@ -50,7 +50,7 @@ class BidReviewHistoryQueryServiceTest {
 
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
         when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
-                .thenReturn(Optional.of(new NoticeSnapshot(NOTICE_ID, "스마트시티 통합관제 용역")));
+                .thenReturn(Optional.of(new NoticeSnapshot(NOTICE_ID, "스마트시티 통합관제 용역", null)));
     }
 
     @Test
