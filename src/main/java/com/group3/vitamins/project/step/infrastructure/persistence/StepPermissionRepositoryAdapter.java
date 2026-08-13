@@ -65,4 +65,9 @@ public class StepPermissionRepositoryAdapter implements StepPermissionRepository
     public void deleteByProjectIdAndUserId(Long projectId, String userId) {
         springDataRepository.deleteByProjectIdAndUserId(projectId, userId);
     }
+
+    @Override
+    public void deleteByStepId(Long stepId) {
+        springDataRepository.deleteByStepId(stepId);
+    }
 }

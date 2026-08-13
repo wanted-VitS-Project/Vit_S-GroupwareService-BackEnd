@@ -76,6 +76,8 @@ class StepDeleteServiceTest {
         Mockito.verify(stepBlockCascadePort).deleteBlocks(List.of(5L, 7L, 9L), REQUESTER);
         Mockito.verify(stepBlockCascadePort, Mockito.never())
                 .moveBlocks(anyCollection(), any());
+        // 스텝은 복구가 없어 오버라이드가 영구히 남는다 — D-3 예외 (DELETE.md §2-2).
+        Mockito.verify(stepPermissionRepository).deleteByStepId(STEP_ID);
     }
 
     @Test

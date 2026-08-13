@@ -35,4 +35,9 @@ public class ProjectMemberRepositoryAdapter implements ProjectMemberRepository {
     public void deleteById(Long projectMemberId) {
         springDataRepository.deleteById(projectMemberId);
     }
+
+    @Override
+    public void deleteByProjectId(Long projectId) {
+        springDataRepository.deleteByProjectId(projectId);
+    }
 }

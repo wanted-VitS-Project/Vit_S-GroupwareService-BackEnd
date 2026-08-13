@@ -12,6 +12,7 @@ import com.group3.vitamins.project.stage.application.port.StepRelocationPort;
 import com.group3.vitamins.project.stage.application.result.StageDeleteResult;
 import com.group3.vitamins.project.stage.application.result.StageOrderResult;
 import com.group3.vitamins.project.stage.application.result.StageResult;
+import com.group3.vitamins.project.stage.application.usecase.StageCascadeUseCase;
 import com.group3.vitamins.project.stage.application.usecase.StageCommandUseCase;
 import com.group3.vitamins.project.stage.domain.exception.StageErrorCode;
 import com.group3.vitamins.project.stage.domain.model.Stage;
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class StageCommandService implements StageCommandUseCase {
+public class StageCommandService implements StageCommandUseCase, StageCascadeUseCase {
 
     private static final int FIRST_SORT_ORDER = 1;
     private static final long UNASSIGNED = 0L;
@@ -140,6 +141,18 @@ public class StageCommandService implements StageCommandUseCase {
         stageRepository.save(stage.delete(LocalDateTime.now()));
 
         return new StageDeleteResult(stage.getStageId(), movedStepCount, moveToStageId);
+    }
+
+    /**
+     * 프로젝트 삭제가 부르는 스테이지 정리 (PRJ-014). 권한은 호출자가 이미 판정했다.
+     *
+     * <p>⚠️ 기본값을 먼저 지운다. {@code stage_permission_default} 는 하드 삭제인데
+     * 스테이지를 먼저 죽여도 행은 그대로 남으므로, 순서를 뒤집으면 지울 근거를 잃는다.
+     */
+    @Override
+    public int deleteByProjectId(Long projectId) {
+        stagePermissionDefaultRepository.deleteByProjectId(projectId);
+        return stageRepository.deleteByProjectId(projectId, LocalDateTime.now());
     }
 
     /** 스테이지를 찾고 요청자가 그 프로젝트 EDITOR 인지 확인한다. */

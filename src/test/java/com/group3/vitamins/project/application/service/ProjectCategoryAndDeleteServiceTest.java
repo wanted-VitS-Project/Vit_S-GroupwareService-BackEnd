@@ -9,6 +9,7 @@ import com.group3.vitamins.project.application.command.LinkBusinessCategoriesCom
 import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
+import com.group3.vitamins.project.application.port.StageCascadePort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
@@ -50,6 +51,7 @@ class ProjectCategoryAndDeleteServiceTest {
     @Mock private BusinessCategoryLookupPort businessCategoryLookupPort;
     @Mock private EmployeeLookupPort employeeLookupPort;
     @Mock private StepStatLookupPort stepStatLookupPort;
+    @Mock private StageCascadePort stageCascadePort;
     @Mock private ProjectAccessUseCase projectAccessUseCase;
     @Mock private CurrentCompanyIdProvider currentCompanyIdProvider;
 
@@ -169,6 +171,27 @@ class ProjectCategoryAndDeleteServiceTest {
         assertThat(saved.getDeletedAt()).isNotNull();
         // 안 비우면 uk_project_bid_notice 때문에 그 공고로 프로젝트를 다시 못 만든다.
         assertThat(saved.getBidNoticeId()).isNull();
+
+        // 스텝이 0개여도 이것들은 남는다 — 프로젝트는 복구가 없으니 전부 죽은 행이다 (DELETE.md §2-2).
+        Mockito.verify(stageCascadePort).deleteByProjectId(PROJECT_ID);
+        Mockito.verify(projectMemberRepository).deleteByProjectId(PROJECT_ID);
+        Mockito.verify(projectBusinessCategoryRepository).deleteByProjectId(PROJECT_ID);
+    }
+
+    @Test
+    @DisplayName("삭제가 409 로 막히면 연결 행을 하나도 건드리지 않는다")
+    void 삭제_거부시_정리_없음() {
+        givenProject(ProjectStatus.NOT_STARTED, null);
+        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
+                .willReturn(new StepStatLookupPort.StepStatView(3, 1));
+
+        assertThatThrownBy(() -> projectCommandService.deleteProject(
+                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
+                .isInstanceOf(ConflictException.class);
+
+        Mockito.verifyNoInteractions(stageCascadePort);
+        Mockito.verify(projectMemberRepository, Mockito.never()).deleteByProjectId(any());
+        Mockito.verify(projectBusinessCategoryRepository, Mockito.never()).deleteByProjectId(any());
     }
 
     @Test
