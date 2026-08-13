@@ -52,32 +52,48 @@ public record BidReferenceFile(
 
     // 업로드 완료를 확인하고 인덱싱 시도 ID를 새로 발급합니다.
     public BidReferenceFile completeUpload(LocalDateTime now) {
-        return new BidReferenceFile(
-                referenceFileId, companyId, fileName, extension, mimeType, sizeBytes, storageKey,
+        return copy(
                 ReferenceFileUploadStatus.COMPLETED, ReferenceFileIndexStatus.PENDING,
                 UUID.randomUUID().toString(), indexRetryCount, null,
-                uploadExpiresAt, now, indexedAt, createdBy, createdAt, now, deletedAt
+                now, indexedAt, now, deletedAt
         );
     }
 
     public BidReferenceFile markUploadFailed(LocalDateTime now) {
-        return new BidReferenceFile(
-                referenceFileId, companyId, fileName, extension, mimeType, sizeBytes, storageKey,
+        return copy(
                 ReferenceFileUploadStatus.FAILED, indexStatus, indexAttemptId, indexRetryCount,
-                indexErrorMessage, uploadExpiresAt, completedAt, indexedAt, createdBy, createdAt, now, deletedAt
+                indexErrorMessage, completedAt, indexedAt, now, deletedAt
         );
     }
 
     public BidReferenceFile delete(LocalDateTime now) {
-        return new BidReferenceFile(
-                referenceFileId, companyId, fileName, extension, mimeType, sizeBytes, storageKey,
+        return copy(
                 uploadStatus, indexStatus, indexAttemptId, indexRetryCount, indexErrorMessage,
-                uploadExpiresAt, completedAt, indexedAt, createdBy, createdAt, now, now
+                completedAt, indexedAt, now, now
         );
     }
 
     public boolean selectable() {
         return uploadStatus == ReferenceFileUploadStatus.COMPLETED
                 && indexStatus == ReferenceFileIndexStatus.COMPLETED;
+    }
+
+    // 상태 전이마다 바뀌는 필드만 받아 나머지는 현재 값을 그대로 옮긴다 (19-arg 생성자 직접 호출 방지).
+    private BidReferenceFile copy(
+            ReferenceFileUploadStatus uploadStatus,
+            ReferenceFileIndexStatus indexStatus,
+            String indexAttemptId,
+            int indexRetryCount,
+            String indexErrorMessage,
+            LocalDateTime completedAt,
+            LocalDateTime indexedAt,
+            LocalDateTime updatedAt,
+            LocalDateTime deletedAt
+    ) {
+        return new BidReferenceFile(
+                referenceFileId, companyId, fileName, extension, mimeType, sizeBytes, storageKey,
+                uploadStatus, indexStatus, indexAttemptId, indexRetryCount, indexErrorMessage,
+                uploadExpiresAt, completedAt, indexedAt, createdBy, createdAt, updatedAt, deletedAt
+        );
     }
 }

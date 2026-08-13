@@ -17,6 +17,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -82,7 +83,13 @@ class CompleteReferenceFileUploadServiceTest {
         assertThat(result.referenceFileId()).isEqualTo(REFERENCE_FILE_ID);
         assertThat(result.uploadStatus()).isEqualTo("COMPLETED");
         assertThat(result.indexStatus()).isEqualTo("PENDING");
-        verify(referenceFileRepository).saveCompletedWithIndexOutbox(any());
+
+        ArgumentCaptor<BidReferenceFile> captor = ArgumentCaptor.forClass(BidReferenceFile.class);
+        verify(referenceFileRepository).saveCompletedWithIndexOutbox(captor.capture());
+        BidReferenceFile saved = captor.getValue();
+        assertThat(saved.indexAttemptId()).isNotBlank();
+        assertThat(saved.completedAt()).isEqualTo(NOW);
+        assertThat(saved.deletedAt()).isNull();
         verifyNoInteractions(failureRecorder);
     }
 
