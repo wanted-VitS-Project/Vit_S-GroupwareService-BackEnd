@@ -28,7 +28,8 @@ public final class FileVersionPersistenceMapper {
                 e.getUploaderDepartment(),
                 e.getUploaderPosition(),
                 e.getCompletedAt(),
-                e.getDeletedAt()
+                e.getDeletedAt(),
+                e.getIdempotencyKey()
         );
     }
 
@@ -51,7 +52,8 @@ public final class FileVersionPersistenceMapper {
                 d.getUploaderDepartment(),
                 d.getUploaderPosition(),
                 d.getCompletedAt(),
-                d.getDeletedAt()
+                d.getDeletedAt(),
+                d.getIdempotencyKey()
         );
     }
 }

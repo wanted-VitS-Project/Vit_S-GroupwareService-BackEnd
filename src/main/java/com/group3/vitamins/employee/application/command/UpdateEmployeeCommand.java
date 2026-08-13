@@ -19,6 +19,10 @@ package com.group3.vitamins.employee.application.command;
  * @param jobPositionId        직급 ID ({@code null} + 전달됨 = 직급 미지정으로 변경)
  * @param hiredAtProvided      입사일 전달 여부
  * @param hiredAt              입사일 {@code yyyy-MM-dd}
+ * @param educationsProvided   학력 전달 여부 — 전체 교체(QUAL-004). 미전송·명시적 null 은 false(유지)
+ * @param educations           학력 (전달됐을 때만 유효). {@code []} = 전부 삭제
+ * @param certificatesProvided 자격증 전달 여부
+ * @param certificates         자격증 (전달됐을 때만 유효). {@code []} = 전부 삭제
  */
 public record UpdateEmployeeCommand(
         String actorRole,
@@ -34,12 +38,17 @@ public record UpdateEmployeeCommand(
         boolean jobPositionIdProvided,
         Long jobPositionId,
         boolean hiredAtProvided,
-        String hiredAt
+        String hiredAt,
+        boolean educationsProvided,
+        java.util.List<EducationItem> educations,
+        boolean certificatesProvided,
+        java.util.List<CertificateItem> certificates
 ) {
 
     /** 수정할 필드가 하나라도 전달됐는가 (아무것도 없으면 EMP_INVALID_REQUEST). */
     public boolean hasNoFields() {
         return !(nameProvided || phoneProvided || emailProvided
-                || departmentIdProvided || jobPositionIdProvided || hiredAtProvided);
+                || departmentIdProvided || jobPositionIdProvided || hiredAtProvided
+                || educationsProvided || certificatesProvided);
     }
 }

@@ -20,6 +20,10 @@ public record EmployeeUpdateRequest(
         @Schema(description = "직급 ID (null 을 보내면 직급 미지정으로 변경)", example = "10")
         Long jobPositionId,
         @Schema(description = "입사일 yyyy-MM-dd", example = "2024-03-02")
-        String hiredAt
+        String hiredAt,
+        @Schema(description = "학력 — 전체 교체. 생략/null 이면 유지, [] 면 전부 삭제")
+        java.util.List<EmployeeRegisterRequest.EducationRequest> educations,
+        @Schema(description = "자격증 — 전체 교체. 생략/null 이면 유지, [] 면 전부 삭제")
+        java.util.List<EmployeeRegisterRequest.CertificateRequest> certificates
 ) {
 }

@@ -1,7 +1,10 @@
 package com.group3.vitamins.file.infrastructure.adapter;
 
+import com.group3.vitamins.file.application.query.CompanyFileCriteria;
+import com.group3.vitamins.file.application.query.MyProjectFileCriteria;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
+import com.group3.vitamins.file.application.result.FileViewProjection;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
@@ -31,4 +34,10 @@ public interface FileQueryMapper {
     List<ProjectFileProjection> findProjectFiles(@Param("projectId") Long projectId);
 
     List<ProjectTrashFileProjection> findProjectTrashFiles(@Param("projectId") Long projectId);
+
+    long countCompanyFiles(CompanyFileCriteria criteria);
+
+    List<FileViewProjection> findCompanyFiles(CompanyFileCriteria criteria);
+
+    List<FileViewProjection> findMyProjectFiles(MyProjectFileCriteria criteria);
 }

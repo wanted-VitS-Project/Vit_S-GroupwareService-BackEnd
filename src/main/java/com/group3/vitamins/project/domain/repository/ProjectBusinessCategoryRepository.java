@@ -11,4 +11,10 @@ public interface ProjectBusinessCategoryRepository {
 
     /** 연결 행을 지운다. 지울 행이 없었으면 false. 연결 행이라 하드 삭제다. */
     boolean unlink(Long projectId, Long businessCategoryId);
+
+    /**
+     * 프로젝트 삭제 시 연결 행을 전부 지운다 (PRJ-014).
+     * D-3 예외 근거는 {@code ProjectMemberRepository#deleteByProjectId} 와 같다.
+     */
+    void deleteByProjectId(Long projectId);
 }

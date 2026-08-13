@@ -5,7 +5,9 @@ import com.group3.vitamins.employee.application.policy.EmployeeAdminPolicy;
 import com.group3.vitamins.employee.application.port.EmployeeAdminQueryPort;
 import com.group3.vitamins.employee.application.query.EmployeeListCriteria;
 import com.group3.vitamins.employee.application.query.EmployeeListQuery;
+import com.group3.vitamins.employee.application.result.EmployeeCertificateRow;
 import com.group3.vitamins.employee.application.result.EmployeeDetailRow;
+import com.group3.vitamins.employee.application.result.EmployeeEducationRow;
 import com.group3.vitamins.employee.application.result.EmployeeGroupRow;
 import com.group3.vitamins.employee.application.result.EmployeeListRow;
 import com.group3.vitamins.employee.application.result.EmployeePage;
@@ -72,7 +74,9 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
         }
 
         List<EmployeeGroupRow> groups = employeeAdminQueryPort.findGroups(userId);
-        return new EmployeeDetail(employee, groups);
+        List<EmployeeEducationRow> educations = employeeAdminQueryPort.findEducations(userId);
+        List<EmployeeCertificateRow> certificates = employeeAdminQueryPort.findCertificates(userId);
+        return new EmployeeDetail(employee, groups, educations, certificates);
     }
 
     /**

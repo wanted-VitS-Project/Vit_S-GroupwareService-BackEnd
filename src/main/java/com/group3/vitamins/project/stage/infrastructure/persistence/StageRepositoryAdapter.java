@@ -5,6 +5,7 @@ import com.group3.vitamins.project.stage.domain.repository.StageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -63,5 +64,10 @@ public class StageRepositoryAdapter implements StageRepository {
     @Override
     public int moveIfVersionMatches(Long stageId, int sortOrder, int expectedVersion) {
         return springDataRepository.moveIfVersionMatches(stageId, sortOrder, expectedVersion);
+    }
+
+    @Override
+    public int deleteByProjectId(Long projectId, LocalDateTime deletedAt) {
+        return springDataRepository.deleteByProjectId(projectId, deletedAt);
     }
 }

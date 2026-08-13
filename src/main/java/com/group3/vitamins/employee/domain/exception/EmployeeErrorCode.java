@@ -32,6 +32,14 @@ public enum EmployeeErrorCode implements ErrorCode {
     EMP_JOB_POSITION_NOT_FOUND("EMP_JOB_POSITION_NOT_FOUND",
             "직급을 찾을 수 없습니다."),
 
+    // ── 학력/자격증 마스터 참조 (employee.md §3·§4 · qualification.md) ──
+    // 사원 학력/자격증이 참조하는 전공·자격증이 이 회사 마스터에 없을 때. 접두어는 마스터 도메인(MAJOR/CERT)을 따른다.
+    MAJOR_NOT_FOUND("MAJOR_NOT_FOUND",
+            "전공을 찾을 수 없습니다."),
+
+    CERT_NOT_FOUND("CERT_NOT_FOUND",
+            "자격증을 찾을 수 없습니다."),
+
     EMP_USER_ID_DUPLICATED("EMP_USER_ID_DUPLICATED",
             "이미 등록된 사번입니다."),
 

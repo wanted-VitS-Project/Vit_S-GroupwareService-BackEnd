@@ -20,7 +20,10 @@ import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
 import com.group3.vitamins.employee.application.result.ResolvedEmployeeRow;
 import com.group3.vitamins.employee.application.usecase.EmployeeBulkUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.employee.domain.model.Degree;
 import com.group3.vitamins.employee.domain.model.Employee;
+import com.group3.vitamins.employee.domain.model.EmployeeCertificate;
+import com.group3.vitamins.employee.domain.model.EmployeeEducation;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
@@ -122,7 +125,9 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             Employee employee = Employee.register(row.userId(), row.name(), row.departmentId(),
                     row.jobPositionId(), row.email(), row.phone(), row.hiredAt(), companyId);
             try {
-                registrationWriter.register(employee, row.role(), encodedPassword); // 행별 독립 트랜잭션
+                // 학력·자격증은 analyze 에서 마스터 ID·학위로 해석해둔 것을 사원과 한 트랜잭션으로 저장한다.
+                registrationWriter.register(employee, row.role(), encodedPassword,
+                        row.educations(), row.certificates()); // 행별 독립 트랜잭션
             } catch (DataIntegrityViolationException e) {
                 // 검증~INSERT 레이스로 사번이 늦게 겹친 경우. 이 행만 실패로 두고 계속 진행한다.
                 errors.add(new BulkRowError(row.rowNumber(), row.userId(), row.name(),
@@ -187,15 +192,19 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
                         .filter(Objects::nonNull)
                         .map(base -> prefixUserId(companyCode, base))
                         .collect(Collectors.toSet()));
+        // 전공명·자격증명도 배치로 해석한다(N+1 회피). 파일 전체 셀에서 이름을 뽑아 회사 범위로 한 번에 조회.
+        Map<String, Long> majorIds = bulkReferenceQueryPort.resolveMajorIdsByName(majorNamesIn(rows), companyId);
+        Map<String, Long> certIds = bulkReferenceQueryPort.resolveCertificateIdsByName(certificateNamesIn(rows), companyId);
 
         List<ResolvedEmployeeRow> validRows = new ArrayList<>();
         List<BulkRowError> errors = new ArrayList<>();
         for (ParsedEmployeeRow row : rows) {
-            BulkRowError error = validateRow(row, userIdCounts, firstRowByUserId, deptIds, existingUserIds, companyCode);
+            BulkRowError error = validateRow(row, userIdCounts, firstRowByUserId, deptIds, existingUserIds,
+                    companyCode, majorIds, certIds);
             if (error != null) {
                 errors.add(error);
             } else {
-                validRows.add(toResolved(row, deptIds, posIds, companyCode));
+                validRows.add(toResolved(row, deptIds, posIds, companyCode, companyId, majorIds, certIds));
             }
         }
 
@@ -206,7 +215,8 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
     /** 행 하나를 우선순위대로 검증해 첫 오류를 돌려준다(없으면 null = 유효). */
     private BulkRowError validateRow(ParsedEmployeeRow row, Map<String, Long> counts,
                                      Map<String, Integer> firstRow, Map<String, Long> deptIds,
-                                     Set<String> existingUserIds, String companyCode) {
+                                     Set<String> existingUserIds, String companyCode,
+                                     Map<String, Long> majorIds, Map<String, Long> certIds) {
         // 1) 필수값·길이·형식 (REQUIRED_COLUMN 버킷)
         if (row.userId() == null) {
             return err(row, BulkValidation.REQUIRED_COLUMN, "필수 컬럼 누락: 사번");
@@ -264,17 +274,109 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             return err(row, BulkValidation.DEPARTMENT_NOT_FOUND, "부서를 찾을 수 없습니다: " + row.department());
         }
 
+        // 6) 학력 — "전공:학위" 형식·학위 표기(학사/석사/박사)·전공 마스터 존재
+        for (EducationSegment seg : parseEducationSegments(row.education())) {
+            if (seg.majorName() == null || seg.degreeLabel() == null) {
+                return err(row, BulkValidation.REQUIRED_COLUMN, "학력 형식 오류 (전공:학위)");
+            }
+            if (Degree.fromKoreanLabel(seg.degreeLabel()) == null) {
+                return err(row, BulkValidation.REQUIRED_COLUMN, "학위 표기 오류 (학사/석사/박사): " + seg.degreeLabel());
+            }
+            if (!majorIds.containsKey(seg.majorName())) {
+                return err(row, BulkValidation.EDU_NOT_FOUND, "전공을 찾을 수 없습니다: " + seg.majorName());
+            }
+        }
+
+        // 7) 자격증 — 자격증 마스터 존재
+        for (String certName : parseCertificateNames(row.certificate())) {
+            if (!certIds.containsKey(certName)) {
+                return err(row, BulkValidation.CERT_NOT_FOUND, "자격증을 찾을 수 없습니다: " + certName);
+            }
+        }
+
         return null; // 유효
     }
 
     /** 유효 행 → 등록 가능한 값으로 변환. 사번은 접두사를 붙인 최종 user_id 로 굳힌다. 직급명은 불일치·미지정이면 null(오류 아님). */
     private ResolvedEmployeeRow toResolved(ParsedEmployeeRow row, Map<String, Long> deptIds,
-                                           Map<String, Long> posIds, String companyCode) {
+                                           Map<String, Long> posIds, String companyCode, Long companyId,
+                                           Map<String, Long> majorIds, Map<String, Long> certIds) {
         Long jobPositionId = row.jobPosition() == null ? null : posIds.get(row.jobPosition());
+        String userId = prefixUserId(companyCode, row.userId());
+
+        // 셀은 이미 검증을 통과했다 — 마스터 ID·학위로 해석해 도메인 객체로 굳힌다(엑셀엔 학교·취득일 없음 → null).
+        List<EmployeeEducation> educations = parseEducationSegments(row.education()).stream()
+                .map(seg -> new EmployeeEducation(companyId, userId, majorIds.get(seg.majorName()),
+                        Degree.fromKoreanLabel(seg.degreeLabel()), null))
+                .toList();
+        List<EmployeeCertificate> certificates = parseCertificateNames(row.certificate()).stream()
+                .map(name -> new EmployeeCertificate(companyId, userId, certIds.get(name), null))
+                .toList();
+
         return new ResolvedEmployeeRow(
-                row.rowNumber(), prefixUserId(companyCode, row.userId()), row.name(),
+                row.rowNumber(), userId, row.name(),
                 deptIds.get(row.department()), jobPositionId, parseDate(row.hiredAt()),
-                row.email(), row.phone(), row.role().toUpperCase(Locale.ROOT));
+                row.email(), row.phone(), row.role().toUpperCase(Locale.ROOT),
+                educations, certificates);
+    }
+
+    // ── 학력/자격증 셀 파싱 (employee.md §6 · HR-V1 QUAL-005) ──────────────
+
+    /** 파일 전체 학력 셀에서 전공명을 뽑는다(배치 마스터 조회용). 형식 불량 세그먼트는 majorName 이 null 이라 자연히 빠진다. */
+    private Set<String> majorNamesIn(List<ParsedEmployeeRow> rows) {
+        return rows.stream()
+                .flatMap(r -> parseEducationSegments(r.education()).stream())
+                .map(EducationSegment::majorName).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    /** 파일 전체 자격증 셀에서 자격증명을 뽑는다(배치 마스터 조회용). */
+    private Set<String> certificateNamesIn(List<ParsedEmployeeRow> rows) {
+        return rows.stream()
+                .flatMap(r -> parseCertificateNames(r.certificate()).stream())
+                .collect(Collectors.toSet());
+    }
+
+    /** 학력 셀 "전공:학위; 전공:학위" → 세그먼트 목록. 빈 세그먼트는 건너뛰고, 형식 불량(콜론 없음·빈 값)은 null 필드로 표시한다. */
+    private List<EducationSegment> parseEducationSegments(String cell) {
+        if (cell == null) {
+            return List.of();
+        }
+        List<EducationSegment> segments = new ArrayList<>();
+        for (String part : cell.split(";")) {
+            String seg = part.trim();
+            if (seg.isEmpty()) {
+                continue;
+            }
+            int colon = seg.indexOf(':');
+            if (colon < 0) {
+                segments.add(new EducationSegment(null, null)); // 콜론 없음 = 형식 불량
+                continue;
+            }
+            String major = seg.substring(0, colon).trim();
+            String degree = seg.substring(colon + 1).trim();
+            segments.add(new EducationSegment(major.isEmpty() ? null : major, degree.isEmpty() ? null : degree));
+        }
+        return segments;
+    }
+
+    /** 자격증 셀 "자격증명; 자격증명" → 이름 목록. 빈 항목은 건너뛴다. */
+    private List<String> parseCertificateNames(String cell) {
+        if (cell == null) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (String part : cell.split(";")) {
+            String name = part.trim();
+            if (!name.isEmpty()) {
+                names.add(name);
+            }
+        }
+        return names;
+    }
+
+    /** 학력 세그먼트 원시값(전공명·학위표기). 둘 중 하나라도 null 이면 형식 불량이다. */
+    private record EducationSegment(String majorName, String degreeLabel) {
     }
 
     /** 현재 로그인 회사의 코드를 조회한다 (접두사 재료). 등록 배치 전체가 같은 회사라 한 번만 부른다. */

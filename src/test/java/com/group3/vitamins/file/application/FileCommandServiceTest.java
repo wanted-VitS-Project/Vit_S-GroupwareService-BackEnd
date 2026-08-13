@@ -104,7 +104,7 @@ class FileCommandServiceTest {
     private FileVersion version(long versionId, String storageKey) {
         return FileVersion.restore(versionId, FILE_ID, 1, UploadStatus.COMPLETED, storageKey,
                 "제안서.pdf", "pdf", "application/pdf", 100L, null, null, null,
-                USER, "김철수", "사업기획팀", "팀장", LocalDateTime.now(), null);
+                USER, "김철수", "사업기획팀", "팀장", LocalDateTime.now(), null, null);
     }
 
     /** 문서 → 블록 → 스텝 편집 권한(EDITOR) 경로 스텁. */

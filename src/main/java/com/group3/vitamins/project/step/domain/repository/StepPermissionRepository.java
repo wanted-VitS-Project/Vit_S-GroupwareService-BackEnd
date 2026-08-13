@@ -30,4 +30,13 @@ public interface StepPermissionRepository {
 
     /** 프로젝트에 속한 스텝들에서 그 사용자의 오버라이드를 전부 지운다. 참여자 제거 시 호출된다. */
     void deleteByProjectIdAndUserId(Long projectId, String userId);
+
+    /**
+     * 스텝 삭제 시 그 스텝의 오버라이드를 전부 지운다.
+     *
+     * <p>⚠️ <b>D-3 위반이 아니다</b> ({@code .ai/docs/global/DELETE.md} §2-2 예외).
+     * 스텝은 복구가 없고(§6-5), 이 행은 판정 체인에서 살아있는 스텝만 조회하므로(INV-01)
+     * 남겨도 아무것도 하지 않는다. {@code StageCommandService.deleteStage} 와 같은 구조다.
+     */
+    void deleteByStepId(Long stepId);
 }
