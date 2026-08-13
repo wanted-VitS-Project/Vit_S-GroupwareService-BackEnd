@@ -1,7 +1,7 @@
 # 🧩 블록 정보 — 카탈로그 (**enum 10값 / 실사용 8종**)
 
 **최종 업데이트**
-- 2026-08-12 — §8 예외 1건 등재: 결재 **상신 이후 직접 삭제 차단**(`DEL-016`). 스텝 삭제 cascade 는 현행 유지 — 잠금 부활이 아니다
+- 2026-08-12 — §8 예외 1건 등재: 결재 상신 이후 직접 삭제 시 **확인 요구**(`DEL-016`) — 막지 않는다. 스텝 삭제 cascade 는 현행 유지
 - 2026-08-10 — 결재 삭제 경계 정합화·1차 구현: 상태 무관 동기 전파 후 미종결 상태 `CANCELED`, 결재 4테이블 soft delete, 삭제분 명령/조회 차단
 - 2026-08-10 — ⭐ **정산 재설계 반영 + 등록표 전수 재확인.** `SETTLEMENT` 등재(`settlement_block`) · `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 는 **상세 테이블 DROP** 으로 빈 껍데기가 됐다 · `IMAGE`·`APPROVAL` 어댑터 실재 확인
 - 2026-08-05 — ⛔ **`PERFORMANCE_VIEW` 폐기** — 상세 테이블이 없는 채 T2 미결이던 타입을 enum 에서 제거(10종 → **9종**). `MEMO` 폐기(2026-08-03)와 같은 처리 · DB 는 `V20260805170000` 로 ALTER
@@ -141,8 +141,8 @@ Block 도메인이 남의 컬럼명을 들고 있으면 **남의 스키마 변�
 **8·9 가 실수하기 쉽다.** 특히 9번 — 1:N 타입은 쿼리 결과가 아니라 **요청 PK 를 순회**해야 한다.
 `ChecklistBlockDetailAdapter.loadDetails` 가 그 참조 구현이다 (항목 0개 블록도 `0/0 · items:[]` 로 내린다).
 
-> 📌 **선택 확장점 `assertDeletable(Long typeId)`** (2026-08-12 신설 · `DEL-016`).
-> 상태에 따라 **블록 직접 삭제를 막아야 하는 타입**만 오버라이드한다. 기본 구현이 no-op 이라
+> 📌 **선택 확장점 `assertDeletable(typeId, blockTitle, confirmed)`** (2026-08-12 신설 · `DEL-016`).
+> 상태에 따라 **블록 직접 삭제 전에 되물어야 하는 타입**만 오버라이드한다. `confirmed=true` 면 반드시 통과시킨다 — 막는 게 아니라 모르고 지우는 것만 막는다. 기본 구현이 no-op 이라
 > 구현하지 않으면 지금과 똑같이 동작하므로 **기존 어댑터는 손댈 필요가 없다.**
 > 참조 구현은 `ApprovalBlockDetailAdapter` 다.
 >
@@ -228,7 +228,7 @@ public Long create(Long blockId) {
 | `CHECKLIST` | ✅ `checklist/infrastructure/blockdetail/` | 값 | 참조 구현 (1:N) |
 | `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail(welcomeMessage)` 조회. 내부 `vitamate_block_id`는 응답에 노출하지 않음 |
 | `IMAGE` | ✅ `image/infrastructure/blockdetail/` | 값 | 1:N (`image_block` → `image`) |
-| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | **cascade(스텝 삭제)** 는 `IN_PROGRESS` 포함 상태 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다. ⚠️ **직접 삭제는 `assertDeletable`이 상신 이후를 409로 막는다** (2026-08-12 · `DEL-016` · §4-7·§8) |
+| `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | **cascade(스텝 삭제)** 는 `IN_PROGRESS` 포함 상태 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다. ⚠️ **직접 삭제는 `assertDeletable`이 상신 이후에 확인을 요구한다**(확인하면 삭제) (2026-08-12 · `DEL-016` · §4-7·§8) |
 | ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block` |
 | `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환. 🚨 **조회 `detail` 도 안 채워진다** (명세는 `{fileCount}`) |
 | ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | ❌ | **NULL** | ⛔ **상세 테이블이 DROP 됐다** (`V20260809130000`) — `SETTLEMENT` 로 통합. enum 값만 남은 빈 껍데기이며 **정리는 Block 도메인 소관** |
@@ -365,7 +365,7 @@ public Long create(Long blockId) {
 | 대상 지정 ⚠️ | 결재 블록에서 공용 파일 업로드 API로 업로드한 `file_version_id`를 직접 연결한다. 파일 블록 경유 방식은 폐기됐다 |
 | 버전 고정 | 상신 시점 `file_version_id` 를 박는다. 새 버전 업로드는 허용하되 `대상보다 새 버전 있음` 경고 배지 |
 | 권한 | 상신은 스텝 편집 권한자. 승인·반려는 **결재선에 있는 사람만** (role 무관) |
-| **삭제 잠금** ⚠️ | **직접 삭제만 차단** (2026-08-12 · `DEL-016`). `DRAFT`·`CANCELED` 는 허용, **`IN_PROGRESS`·`REJECTED`·`COMPLETED` 는 409 `APPROVAL_ALREADY_SUBMITTED`** (`message` 는 상태별로 다르다). ⛔ **스텝 삭제 cascade 는 예외** — 상태 무관 삭제 후 `deleteDetail()` 로 같은 트랜잭션에 전파(현행 유지). 상세 → **§8** |
+| **삭제 잠금** ⚠️ | **없음 — 직접 삭제 시 「확인 요구」** (2026-08-12 · `DEL-016`). `DRAFT`·`CANCELED` 는 그대로 삭제, **`IN_PROGRESS`·`REJECTED`·`COMPLETED` 는 409 `APPROVAL_DELETE_CONFIRM_REQUIRED`** 후 `confirmApprovalCancel=true` 재요청이면 삭제(`message` 는 상태별로 잃는 것을 알린다). ⛔ **스텝 삭제 cascade 는 확인 없이** 상태 무관 삭제 후 `deleteDetail()` 로 같은 트랜잭션에 전파(현행 유지). 상세 → **§8** |
 | 템플릿 | 담김: **결재선** / 안 담김: 진행 상태 · 대상 지목 |
 | 담당 | 이강욱 |
 
@@ -429,7 +429,7 @@ public Long create(Long blockId) {
 | `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | — | 김동현 | — |
 | `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | — (폐기) | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
 | `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | — (폐기) | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
-| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ **직접만** (§4-7) | 이강욱 | [`APR-V1.md`](../domain/결재·알림/APR-V1.md) |
+| `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ **확인 요구** (§4-7) | 이강욱 | [`APR-V1.md`](../domain/결재·알림/APR-V1.md) |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
 | **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
@@ -499,7 +499,7 @@ public Long create(Long blockId) {
 |------|------|
 | 입금이 연결된 입금확인 블록 | `detachFinanceLinks=true` 를 요구한다. 없으면 400 `FINANCE_LINK_DETACH_REQUIRED` + 연결 건수. 확인하면 `payment.block_id = NULL` 로 끊고 삭제. **입금 행은 남는다** |
 | 계산서가 연결된 조회 블록 | 같은 확인 요구. 확인하면 `tax_invoice_confirm` 행을 **하드 삭제**하고 블록 삭제. 계산서는 재연결 가능해진다 |
-| 진행 중인 결재 블록 | **스텝 삭제 cascade** 는 같은 트랜잭션에서 `ApprovalBlockDetailAdapter.deleteDetail()`을 호출한다. 미종결 결재는 `CANCELED`로 종결하고 문서 연결을 포함한 하위 행을 논리 삭제한다. ⚠️ **직접 삭제는 2026-08-12 부터 409 로 막힌다** — 아래 「예외 1건」 참고 |
+| 진행 중인 결재 블록 | **스텝 삭제 cascade** 는 같은 트랜잭션에서 `ApprovalBlockDetailAdapter.deleteDetail()`을 호출한다. 미종결 결재는 `CANCELED`로 종결하고 문서 연결을 포함한 하위 행을 논리 삭제한다. ⚠️ **직접 삭제는 2026-08-12 부터 확인을 요구한다**(409 → 확인 후 삭제) — 아래 「예외 1건」 참고 |
 | 결재 대상 파일 블록 | 그냥 삭제한다 |
 
 **스텝을 지울 때 살리고 싶은 블록은 다른 스텝으로 옮긴다** (STP-013 · BLK-014) — 그게 잠금을 대신하는 탈출구다.
@@ -507,23 +507,23 @@ public Long create(Long blockId) {
 ⛔ **`BlockDeleteLockPort` · `BlockDeleteLockRegistry` 도 함께 철거했다.** 어댑터는 하나도 만들어지지 않은 상태였다.
 **잠금을 다시 만들지 마라.** 막는 대신 **옮길 수단**을 준다는 것이 이 도메인의 결론이다.
 
-> 📌 **예외 1건 — 결재 상신 이후 직접 삭제 차단 (2026-08-12 · `DEL-016`).**
-> 위 결론의 **핵심은 유지된다** — 폐기 이유가 "진행 중인 것을 막는 게 나쁘다"가 아니라
-> **"막힌 사람에게 탈출구가 없었다"** 였기 때문이다. 그래서 이 예외는 범위를 좁혀 적용한다.
+> 📌 **결재 확인 요구 (2026-08-12 · `DEL-016`) — 잠금이 아니다.**
+> ⭐ **위 표의 「확인 요구」 방식을 결재에도 적용한 것이다.** 입금·계산서 블록에 처방한
+> *"확인을 요구하고, 확인하면 삭제한다"* 와 같은 형태다 — 새 종류의 잠금이 아니라 **이 결론의 적용**이다.
 >
-> | 경로 | 잠금 |
+> | 경로 | 확인 요구 |
 > |---|:---:|
-> | 블록 **직접** 삭제 (`DELETE /api/v1/blocks/{blockId}`) | ✅ 상신된 결재는 409 |
+> | 블록 **직접** 삭제 (`DELETE /api/v1/blocks/{blockId}`) | ✅ 상신 이후면 409 → `confirmApprovalCancel=true` 재요청이면 삭제 |
 > | **스텝 삭제 cascade** (STP-013) | ⛔ **적용 안 함** — 상태 무관 삭제 현행 유지 |
 >
-> 즉 스텝·프로젝트 삭제가 결재 때문에 롤백되는 일은 **없다.** 폐기된 잠금과 결정적으로 다른 점이다.
+> 즉 **아무것도 영구히 막지 않는다.** 스텝·프로젝트 삭제가 결재 때문에 롤백되는 일도 **없다.**
 > `BlockDeleteLockPort` 를 되살리지도 않는다 — 판정은 기존 `BlockDetailPort` 확장점에 붙인다.
 >
 > ⚠️ 구현 시 함정: 직접 삭제와 cascade 가 `BlockCommandService` 의 private `deleteBlock(block, userId)`
-> **본체를 공유한다.** 판정을 그 본체에 넣으면 cascade 도 막혀 스텝 삭제가 죽는다 — 반드시 public
-> `deleteBlock(DeleteBlockCommand)` 쪽에만 넣는다.
+> **본체를 공유한다.** 판정을 그 본체에 넣으면 cascade 도 409 로 막혀 스텝 삭제가 죽는다 — 반드시 public
+> `deleteBlock(DeleteBlockCommand)` 쪽에만 넣는다. (판정을 공유 본체에 일부러 넣어 테스트가 실패하는 것까지 확인했다)
 >
-> 근거·상태별 판정: [`../domain/결재·알림/APR-DELETE-DRAFT.md`](../domain/결재·알림/APR-DELETE-DRAFT.md) §11
+> 근거·상태별 판정·문구: [`../domain/결재·알림/APR-DELETE-DRAFT.md`](../domain/결재·알림/APR-DELETE-DRAFT.md) §11
 
 ### 8-1. ⭐ 블록 계열 삭제 방식 — soft 가 전부는 아니다
 

@@ -42,20 +42,30 @@ public class ApprovalHandlerService {
     private static final String CANCELED_NOTIFICATION_TYPE = "APPROVAL_CANCELED";
     private static final String CANCELED_NOTIFICATION_TITLE = "결재 취소";
 
+    /** 제목을 못 찾았을 때 문구에 넣을 대체어 */
+    private static final String TITLE_FALLBACK = "결재";
+
     /**
-     * DEL-016 — 블록 직접 삭제를 막는 상태와 그때 사용자에게 보일 문구. 상신 이후는 전부 여기 든다.
+     * DEL-016 — 블록 직접 삭제 전에 <b>확인을 요구하는</b> 상태와 그때 보일 문구. 상신 이후는 전부 여기 든다.
      *
-     * <p>막는 상태 목록과 문구를 <b>한 맵에 둔다</b> — 따로 두면 상태를 추가할 때 문구를 빠뜨려
-     * "이미 상신된 결재는…"이라는 엉뚱한 기본 문구가 나간다. 여기 넣으면 문구가 강제된다.
+     * <p>확인 요구 상태 목록과 문구를 <b>한 맵에 둔다</b> — 따로 두면 상태를 추가할 때 문구를 빠뜨려
+     * 엉뚱한 기본 문구가 나간다. 여기 넣으면 문구가 강제된다.
      *
-     * <p>⚠️ 문구가 상태마다 다른 이유: 사용자는 <b>지금 화면의 상태</b>를 기준으로 읽는다. 반려 블록에
-     * "상신된 결재"라고 하면 다른 것을 가리키는 것처럼 읽힌다. <b>코드는 하나로 유지한다</b> —
-     * 처리 방식이 셋 다 같아서 쪼개면 프론트가 같은 분기를 세 번 짠다 ({@code DomainException} 참고).
+     * <p>⚠️ <b>문구는 상태마다 다르고, 각자 그 상태에서 실제로 잃는 것을 말한다.</b> 사용자는 지금 화면의
+     * 상태를 기준으로 읽는다 — 완료 결재에 "취소됩니다"라고 하면 틀린 말이다(취소가 아니라 이력 열람을
+     * 잃는다). <b>코드는 하나로 유지한다</b> — 처리가 셋 다 같아 쪼개면 프론트가 같은 분기를 세 번 짠다.
+     *
+     * <p>{@code %s}는 결재 제목이다. ⛔ <b>결재자 이름은 넣지 않는다</b> — ① 결재선의 사람 정보는
+     * {@code ApprovalViewPolicy}가 기안자·{@code ACTIVE} 이상 결재자·{@code MASTER}로 제한하는데
+     * 삭제 권한자는 스텝 EDITOR라, 조회로 막아둔 정보를 에러 메시지로 흘리게 된다(블록 카드도 집계만
+     * 내려주고 이름은 안 준다) ② 퇴사·계정 비활성 사원이 {@code ACTIVE}로 남아 있을 수 있어 없는 사람을
+     * 지목한다 ③ 확인 다이얼로그를 띄운 뒤 확정까지 사이에 승인이 나면 이미 틀린 값이 된다.
+     * 제목은 블록 카드에 이미 나가는 값이라 새로 노출되는 것이 없다.
      */
-    private static final Map<ApprovalStatus, String> LOCKED_MESSAGES = new EnumMap<>(Map.of(
-            ApprovalStatus.IN_PROGRESS, "진행 중인 결재는 삭제할 수 없습니다.",
-            ApprovalStatus.REJECTED, "반려된 결재는 삭제할 수 없습니다.",
-            ApprovalStatus.COMPLETED, "완료된 결재는 삭제할 수 없습니다."));
+    private static final Map<ApprovalStatus, String> CONFIRM_MESSAGES = new EnumMap<>(Map.of(
+            ApprovalStatus.IN_PROGRESS, "%s 결재가 진행 중입니다. 삭제하면 결재가 취소됩니다.",
+            ApprovalStatus.REJECTED, "%s 결재는 반려된 상태입니다. 삭제하면 재상신할 수 없습니다.",
+            ApprovalStatus.COMPLETED, "%s 결재는 완료된 상태입니다. 삭제하면 승인 이력을 다시 볼 수 없습니다."));
 
     private final ApprovalRepository approvalRepository;
     private final BlockCatalogPort blockCatalogPort;
@@ -83,30 +93,37 @@ public class ApprovalHandlerService {
     }
 
     /**
-     * DEL-016 — <b>블록 직접 삭제</b>가 허용되는지 판정한다. 한 번 상신된 결재는 막는다.
+     * DEL-016 — <b>블록 직접 삭제</b> 전에 확인이 필요한지 판정한다. 상신 이후 결재는 <b>막지 않고
+     * 되묻는다</b> — {@code confirmed}가 {@code false}면 409로 무엇을 잃는지 알리고, 사용자가 확인해
+     * 다시 요청하면({@code confirmed=true}) 그대로 삭제한다.
      *
-     * <p>{@code DRAFT}는 아직 아무에게도 요청이 가지 않아 통과하고, {@code CANCELED}는 이미 종결된
-     * 건이라 통과한다. 대상이 없거나 이미 삭제됐으면 {@link #deleteByBlock}과 같은 멱등 판정으로 통과한다.
+     * <p>{@code DRAFT}는 아직 아무에게도 요청이 가지 않아, {@code CANCELED}는 이미 종결돼 확인 없이
+     * 통과한다. 대상이 없거나 이미 삭제됐으면 {@link #deleteByBlock}과 같은 멱등 판정으로 통과한다.
      *
      * <p>회차({@code approval_revision.status})가 아니라 <b>부모 결재 상태</b>로 판정한다 — 재상신 중이면
-     * 회차는 {@code DRAFT}인데 결재는 {@code REJECTED}라, 회차로 보면 반려 결재가 삭제 가능해진다.
+     * 회차는 {@code DRAFT}인데 결재는 {@code REJECTED}라, 회차로 보면 반려 결재가 확인 없이 지워진다.
      *
      * <p>⛔ 스텝 삭제 cascade 는 이 메서드를 부르지 않는다 (DEL-017).
      */
-    public void assertDeletableByBlock(Long approvalId) {
+    public void assertDeletableByBlock(Long approvalId, String blockTitle, boolean confirmed) {
+        if (confirmed) {
+            return;
+        }
+
         Optional<Approval> found = approvalRepository.findApprovalIncludingDeletedForUpdate(approvalId);
         if (found.isEmpty() || found.get().getDeletedAt() != null) {
             return;
         }
 
         ApprovalStatus status = found.get().getStatus();
-        String message = LOCKED_MESSAGES.get(status);
-        if (message == null) {
+        String template = CONFIRM_MESSAGES.get(status);
+        if (template == null) {
             return;
         }
 
-        log.info("상신된 결재의 블록 직접 삭제 거부 - approvalId={}, status={}", approvalId, status);
-        throw new ConflictException(ApprovalErrorCode.APPROVAL_ALREADY_SUBMITTED, message);
+        log.info("상신된 결재의 블록 직접 삭제 - 확인 요구 approvalId={}, status={}", approvalId, status);
+        throw new ConflictException(ApprovalErrorCode.APPROVAL_DELETE_CONFIRM_REQUIRED,
+                template.formatted(resolveApprovalTitle(approvalId, blockTitle)));
     }
 
     /**
@@ -176,7 +193,7 @@ public class ApprovalHandlerService {
         if (revisionTitle != null) {
             return revisionTitle;
         }
-        return (blockTitle == null || blockTitle.isBlank()) ? "결재" : blockTitle;
+        return (blockTitle == null || blockTitle.isBlank()) ? TITLE_FALLBACK : blockTitle;
     }
 
     /**
