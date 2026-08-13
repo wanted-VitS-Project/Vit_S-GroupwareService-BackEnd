@@ -122,7 +122,9 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             Employee employee = Employee.register(row.userId(), row.name(), row.departmentId(),
                     row.jobPositionId(), row.email(), row.phone(), row.hiredAt(), companyId);
             try {
-                registrationWriter.register(employee, row.role(), encodedPassword); // 행별 독립 트랜잭션
+                // 학력·자격증 엑셀 컬럼은 블록3에서 붙인다 — 지금은 없이 등록한다(빈 목록).
+                registrationWriter.register(employee, row.role(), encodedPassword,
+                        java.util.List.of(), java.util.List.of()); // 행별 독립 트랜잭션
             } catch (DataIntegrityViolationException e) {
                 // 검증~INSERT 레이스로 사번이 늦게 겹친 경우. 이 행만 실패로 두고 계속 진행한다.
                 errors.add(new BulkRowError(row.rowNumber(), row.userId(), row.name(),

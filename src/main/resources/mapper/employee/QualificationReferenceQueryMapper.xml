@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  등록·수정 시 전공·자격증 마스터 존재 확인 (employee.md §3·§4 · qualification.md).
+  namespace = Mapper 인터페이스 FQN · id = 메서드명 (팀 MyBatis 컨벤션).
+  회사 스코프 — 타사 마스터는 결과에서 빠져 호출자가 MAJOR/CERT_NOT_FOUND 로 막는다.
+  빈 컬렉션은 어댑터가 걸러내므로 foreach 가 IN () 을 만들지 않는다.
+-->
+<mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.QualificationReferenceQueryMapper">
+
+    <select id="findExistingMajorIds" resultType="long">
+        SELECT major_id FROM major
+        WHERE company_id = #{companyId}
+          AND major_id IN
+        <foreach collection="majorIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="findExistingCertificateIds" resultType="long">
+        SELECT certificate_id FROM certificate
+        WHERE company_id = #{companyId}
+          AND certificate_id IN
+        <foreach collection="certificateIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+</mapper>

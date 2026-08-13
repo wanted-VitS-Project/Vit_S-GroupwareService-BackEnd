@@ -283,7 +283,7 @@ class EmployeeBulkServiceTest {
 
             assertThatThrownBy(() -> service.register(registerCmd(rows, false)))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_HAS_ERRORS));
-            verify(registrationWriter, never()).register(any(), anyString(), anyString());
+            verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
         }
 
         @Test
@@ -303,7 +303,7 @@ class EmployeeBulkServiceTest {
             assertThat(r.emailNotRegistered()).extracting("userId").containsExactly("vitas-EMP101");
 
             ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
-            verify(registrationWriter, times(2)).register(captor.capture(), anyString(), anyString());
+            verify(registrationWriter, times(2)).register(captor.capture(), anyString(), anyString(), any(), any());
             assertThat(captor.getAllValues()).extracting(Employee::getCompanyId).containsOnly(1L); // 등록된 전원 회사 스탬핑
         }
 
@@ -315,7 +315,7 @@ class EmployeeBulkServiceTest {
                     valid(3, "EMP101", "c@d.com"));
             // 두 번째 행에서만 무결성 위반
             Mockito.doNothing().doThrow(new DataIntegrityViolationException("dup"))
-                    .when(registrationWriter).register(any(), anyString(), anyString());
+                    .when(registrationWriter).register(any(), anyString(), anyString(), any(), any());
 
             BulkRegisterResult r = service.register(registerCmd(rows, false));
 
@@ -337,7 +337,7 @@ class EmployeeBulkServiceTest {
             assertThat(r.registeredCount()).isEqualTo(1);   // 사원·계정은 만들어졌다
             assertThat(r.failedCount()).isZero();
             assertThat(r.emailSentCount()).isZero();        // 메일만 실패
-            verify(registrationWriter, times(1)).register(any(), anyString(), anyString());
+            verify(registrationWriter, times(1)).register(any(), anyString(), anyString(), any(), any());
         }
     }
 }
