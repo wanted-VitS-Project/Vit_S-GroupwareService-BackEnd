@@ -99,4 +99,122 @@
         ORDER BY p.name ASC
     </select>
 
+    <!-- 매칭 추천 조회의 기준값(type/totalAmount/taxAmount/issuedNo/buyerName)만 뽑는다. -->
+    <select id="findBasicById" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceBasicRow">
+        SELECT type AS type, total_amount AS totalAmount, tax_amount AS taxAmount,
+        issued_no AS issuedNo, buyer_name AS buyerName
+        FROM tax_invoice
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <!--
+        매칭 추천 후보 — cash_flow의 findMatchCandidates와 동일한 사고방식이나, 세금계산서는 세액 기준을
+        추가하고 일자는 약한 신호로만 둔다(2026-08-13, 사용자 확인 — 발행일(issued_no)은 cash_flow의
+        거래일시(traded_at)처럼 "돈이 실제로 움직인 날"이 아니라 "세금계산서가 발행된 날"이라 신뢰도가
+        낮지만, 결제 예정일 근처에 발행되는 경우가 많아 완전히 버리진 않는다).
+
+        같은 타입(INCOME/OUTCOME)의 PENDING(미연결) 정산 블록만 대상으로, 금액/세액/상호명/일자 네
+        기준을 각각 EXACT(정확히 일치)/SIMILAR(유사)/NULL(불일치)로 판정한다 —
+        금액: total_amount 기준 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
+        세액: tax_amount 기준 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
+        상호명: buyer_name(거래상대방) 기준 완전 동일이면 EXACT, 한쪽이 다른 쪽을 포함하면 SIMILAR.
+        일자: issued_no 기준 같은 날짜면 EXACT, ±7일 이내면 SIMILAR.
+        네 기준 다 NULL(전부 불일치)인 행은 바깥 WHERE에서 제외한다. 정렬은 매칭 개수 많은 순 →
+        발행일 가까운 순, 최대 5건(cash_flow와 동일 — 페이지네이션 없음, 필요해지면 추가).
+    -->
+    <select id="findMatchCandidates"
+            resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchCandidateRow">
+        SELECT settleId, roundName, projectName, plannedAmount, plannedTaxAmount, plannedDate, traderName,
+        amountMatchType, taxAmountMatchType, traderMatchType, dateMatchType
+        FROM (
+        SELECT
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        p.name AS projectName,
+        sb.planned_amount AS plannedAmount,
+        sb.planned_tax_amount AS plannedTaxAmount,
+        sb.planned_date AS plannedDate,
+        sb.trader_name AS traderName,
+        CASE
+        WHEN sb.planned_amount = #{totalAmount} THEN 'EXACT'
+        WHEN sb.planned_amount BETWEEN #{totalAmount} * 0.95 AND #{totalAmount} * 1.05 THEN 'SIMILAR'
+        ELSE NULL
+        END AS amountMatchType,
+        CASE
+        WHEN sb.planned_tax_amount = #{taxAmount} THEN 'EXACT'
+        WHEN sb.planned_tax_amount BETWEEN #{taxAmount} * 0.95 AND #{taxAmount} * 1.05 THEN 'SIMILAR'
+        ELSE NULL
+        END AS taxAmountMatchType,
+        CASE
+        WHEN sb.trader_name = #{buyerName} THEN 'EXACT'
+        WHEN sb.trader_name LIKE CONCAT('%', #{buyerName}, '%')
+        OR #{buyerName} LIKE CONCAT('%', sb.trader_name, '%') THEN 'SIMILAR'
+        ELSE NULL
+        END AS traderMatchType,
+        CASE
+        WHEN sb.planned_date = #{issuedNo} THEN 'EXACT'
+        WHEN ABS(DATEDIFF(sb.planned_date, #{issuedNo})) &lt;= 7 THEN 'SIMILAR'
+        ELSE NULL
+        END AS dateMatchType
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        WHERE sb.deleted_at IS NULL
+        AND sb.status = 'PENDING'
+        AND sb.type = #{type}
+        AND p.company_id = #{companyId}
+        ) candidates
+        WHERE amountMatchType IS NOT NULL OR taxAmountMatchType IS NOT NULL
+        OR traderMatchType IS NOT NULL OR dateMatchType IS NOT NULL
+        ORDER BY
+        (CASE WHEN amountMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN taxAmountMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN traderMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN dateMatchType IS NOT NULL THEN 1 ELSE 0 END) DESC,
+        ABS(DATEDIFF(plannedDate, #{issuedNo})) ASC
+        LIMIT 5
+    </select>
+
+    <!-- 매칭/매칭 해제 검증용 — settleBlockId(현재 연결된 정산 블록)로 "이미 매칭됨" 여부를 판정한다. -->
+    <select id="findMatchLookup" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchLookupRow">
+        SELECT type AS type, total_amount AS totalAmount, issued_no AS issuedNo, settle_block_id AS settleBlockId
+        FROM tax_invoice
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <!--
+        매칭 대상 정산 블록 검증용 — cash_flow의 findSettlementBlockForMatch와 완전히 동일(같은
+        settlement_block 테이블, 도메인 무관 검증). 회사 스코프는 block→step→project로 타고 올라가
+        project.company_id를 확인한다.
+    -->
+    <select id="findSettlementBlockForMatch" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.SettlementBlockMatchRow">
+        SELECT sb.type AS type, sb.status AS status, sb.planned_amount AS plannedAmount
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        WHERE sb.settle_id = #{settleId} AND sb.deleted_at IS NULL
+        AND p.company_id = #{companyId}
+    </select>
+
+    <!-- 매칭 UPDATE 직후 같은 트랜잭션 안에서 응답 조립용으로 다시 조회한다(커밋 전에도 같은 커넥션이라 보임). -->
+    <select id="findMatchResultById" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchResultRow">
+        SELECT
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        p.name AS projectName,
+        ti.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        ti.linked_at AS linkedAt
+        FROM tax_invoice ti
+        JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id
+        JOIN employee e ON e.user_id = ti.linked_by
+        WHERE ti.tax_id = #{taxId}
+        AND ti.company_id = #{companyId}
+    </select>
+
 </mapper>

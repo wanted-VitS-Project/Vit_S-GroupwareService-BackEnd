@@ -6,6 +6,7 @@ import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceMatchCandidatesQuery;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,6 +32,9 @@ public interface FinanceQueryUseCase {
 
     //세금계산서 필터 옵션(매칭된 프로젝트 목록) 조회
     TaxInvoiceFilterView getTaxInvoiceFilters(TaxInvoiceFilterQuery query);
+
+    //세금계산서 매칭 추천 조회
+    TaxInvoiceMatchCandidatesView getTaxInvoiceMatchCandidates(TaxInvoiceMatchCandidatesQuery query);
 
     record FinanceSummaryView(
             long cashFlowUnlinkedCount,
@@ -119,6 +123,21 @@ public interface FinanceQueryUseCase {
             String roundName,
             String projectName,
             BigDecimal plannedAmount,
+            LocalDate plannedDate,
+            String traderName,
+            List<String> matchTags
+    ) {
+    }
+
+    record TaxInvoiceMatchCandidatesView(List<TaxInvoiceMatchCandidateView> candidates) {
+    }
+
+    record TaxInvoiceMatchCandidateView(
+            Long settleId,
+            String roundName,
+            String projectName,
+            BigDecimal plannedAmount,
+            BigDecimal plannedTaxAmount,
             LocalDate plannedDate,
             String traderName,
             List<String> matchTags

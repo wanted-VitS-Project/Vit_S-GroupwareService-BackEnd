@@ -10,6 +10,8 @@ import com.group3.vitamins.finance.application.command.UpdateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvUploadCommand;
+import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -47,6 +49,12 @@ public interface FinanceCommandUseCase {
 
     //확정된 컬럼 매핑으로 CSV를 파싱해 세금계산서로 저장
     TaxInvoiceCsvUploadView uploadTaxInvoiceCsv(TaxInvoiceCsvUploadCommand command);
+
+    //세금계산서를 정산 블록에 매칭
+    TaxInvoiceMatchView matchTaxInvoice(MatchTaxInvoiceCommand command);
+
+    //세금계산서의 정산 블록 매칭 해제
+    void unmatchTaxInvoice(UnmatchTaxInvoiceCommand command);
 
     record CashFlowCsvPreviewView(
             List<String> columns,
@@ -166,6 +174,17 @@ public interface FinanceCommandUseCase {
     record TaxInvoiceDuplicateRowView(
             String approvalNo,
             String reason
+    ) {
+    }
+
+    record TaxInvoiceMatchView(
+            Long taxId,
+            Long settleId,
+            String roundName,
+            String projectName,
+            String linkedBy,
+            String linkedByName,
+            LocalDateTime linkedAt
     ) {
     }
 }

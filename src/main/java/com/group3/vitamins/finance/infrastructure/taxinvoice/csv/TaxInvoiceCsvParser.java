@@ -49,6 +49,7 @@ public class TaxInvoiceCsvParser {
             if (headers.isEmpty()) {
                 throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
             }
+            headers = disambiguateHeaders(headers);
 
             List<Map<String, String>> rows = new ArrayList<>();
             for (int i = headerRowIndex + 1; i < allRecords.size(); i++) {
@@ -61,10 +62,40 @@ public class TaxInvoiceCsvParser {
                 rows.add(row);
             }
 
-            return new TaxInvoiceCsvTable(headers, rows);
+            return new TaxInvoiceCsvTable(headers, rows, extractTitleText(allRecords, headerRowIndex));
         } catch (IOException | IllegalArgumentException e) {
             throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE, e);
         }
+    }
+
+    /**
+     * 같은 이름 헤더가 여러 번 나오면(세금계산서의 공급자/공급받는자 블록이 "상호"/"대표자명"/"종사업장번호"를
+     * 각자 갖고 있어서 이름이 겹친다) 두 번째부터 " (2)", " (3)"... 을 붙여 구분한다. 이름이 같으면 아래
+     * 행 파싱 단계에서 Map 키가 겹쳐 값이 서로 덮어써지는 문제(2026-08-13, 실제 파일로 발견)를 막는다.
+     */
+    private List<String> disambiguateHeaders(List<String> rawHeaders) {
+        Map<String, Integer> occurrenceCount = new java.util.HashMap<>();
+        List<String> result = new ArrayList<>();
+        for (String header : rawHeaders) {
+            int occurrence = occurrenceCount.merge(header, 1, Integer::sum);
+            result.add(occurrence == 1 ? header : header + " (" + occurrence + ")");
+        }
+        return result;
+    }
+
+    /** 헤더 위 제목 줄(들)의 실제 값을 공백으로 이어붙인다 — recommendedType이 "매출"/"매입" 키워드를 찾는 데 쓴다. */
+    private String extractTitleText(List<CSVRecord> records, int headerRowIndex) {
+        StringBuilder titleText = new StringBuilder();
+        for (int i = 0; i < headerRowIndex; i++) {
+            CSVRecord record = records.get(i);
+            for (int c = 0; c < record.size(); c++) {
+                String value = record.get(c);
+                if (value != null && !value.isBlank()) {
+                    titleText.append(value).append(' ');
+                }
+            }
+        }
+        return titleText.isEmpty() ? null : titleText.toString().trim();
     }
 
     /** "실제 값이 채워진 칸의 개수"가 가장 많은 행을 헤더로 판정한다 — cash_flow의 CashFlowCsvParser와 동일. */

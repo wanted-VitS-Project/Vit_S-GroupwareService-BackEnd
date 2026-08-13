@@ -8,12 +8,15 @@ import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceMatchCandidatesQuery;
 import com.group3.vitamins.finance.application.command.CashFlowCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
 import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowCsvPreviewView;
@@ -24,6 +27,7 @@ import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.Cas
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowMatchView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvPreviewView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvUploadView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceMatchView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowListView;
@@ -31,6 +35,7 @@ import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.Finan
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.MatchCandidatesView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceListView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceMatchCandidatesView;
 import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
 import com.group3.vitamins.finance.presentation.api.request.CashFlowCsvUploadRequest;
 import com.group3.vitamins.finance.presentation.api.response.CashFlowCsvPreviewResponse;
@@ -48,12 +53,15 @@ import com.group3.vitamins.finance.presentation.api.response.CashFlowMatchCandid
 import com.group3.vitamins.finance.presentation.api.response.CashFlowMatchResponse;
 import com.group3.vitamins.finance.presentation.api.response.CashFlowUpdateResponse;
 import com.group3.vitamins.finance.presentation.api.request.MatchCashFlowRequest;
+import com.group3.vitamins.finance.presentation.api.request.MatchTaxInvoiceRequest;
 import com.group3.vitamins.finance.presentation.api.response.FinanceSummaryResponse;
 import com.group3.vitamins.finance.presentation.api.request.TaxInvoiceCsvUploadRequest;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceCsvPreviewResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceCsvUploadResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceFilterResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceListResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMatchCandidatesResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMatchResponse;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -270,6 +278,73 @@ public class FinanceController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created("세금계산서(CSV 기반) 업로드 성공", TaxInvoiceCsvUploadResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 매칭 추천 조회",
+            description = "세금계산서의 발행일·금액·세액·공급받는자 상호명을 기준으로 매칭할 만한 정산 블록 후보를 추천한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "매칭 추천 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @GetMapping("/tax-invoices/{taxId}/match-candidates")
+    public ResponseEntity<ApiResponse<TaxInvoiceMatchCandidatesResponse>> getTaxInvoiceMatchCandidates(
+            @Parameter(description = "매칭할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            Authentication authentication
+    ) {
+        TaxInvoiceMatchCandidatesView view = financeQueryUseCase.getTaxInvoiceMatchCandidates(
+                new TaxInvoiceMatchCandidatesQuery(taxId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("매칭 추천 조회 성공", TaxInvoiceMatchCandidatesResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 블록 매칭",
+            description = "세금계산서를 정산 블록에 연결한다. 정산 블록당 매칭은 1번뿐이다 — 이미 매칭된 정산 블록에는 다시 매칭할 수 없다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "이미 매칭된 항목입니다. (FINANCE_TAX_INVOICE_ALREADY_MATCHED) / "
+                            + "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다. (FINANCE_TAX_TYPE_MISMATCH) / "
+                            + "이미 매칭된 정산 블록입니다. (FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서 또는 정산 블록입니다. (FINANCE_TAX_MATCH_TARGET_NOT_FOUND)")
+    })
+    @PatchMapping("/tax-invoices/{taxId}/match")
+    public ResponseEntity<ApiResponse<TaxInvoiceMatchResponse>> matchTaxInvoice(
+            @Parameter(description = "매칭할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            @RequestBody MatchTaxInvoiceRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceMatchView view = financeCommandUseCase.matchTaxInvoice(new MatchTaxInvoiceCommand(
+                taxId, request.settleId(), authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 블록 매칭 성공", TaxInvoiceMatchResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 블록 매칭 해제",
+            description = "세금계산서와 정산 블록의 연결을 해제하고, 그 정산 블록을 미연결(PENDING) 상태로 되돌린다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 해제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "매칭되지 않은 항목입니다. (FINANCE_TAX_INVOICE_NOT_MATCHED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @PatchMapping("/tax-invoices/{taxId}/unmatch")
+    public ResponseEntity<ApiResponse<Void>> unmatchTaxInvoice(
+            @Parameter(description = "매칭 해제할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            Authentication authentication
+    ) {
+        financeCommandUseCase.unmatchTaxInvoice(
+                new UnmatchTaxInvoiceCommand(taxId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 블록 매칭 해제 성공", null));
     }
 
     private TaxInvoiceCsvUploadRequest parseTaxInvoiceUploadRequest(String requestJson) {

@@ -4,9 +4,11 @@ import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.ParsedTaxInvoic
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
-/** 세금계산서 CSV 업로드 전용 — 쓰기(등록)만 담당한다. 매칭/삭제 등은 아직 이 도메인에 없다. */
+/** 세금계산서 CSV 업로드·매칭/매칭 해제 전용. 조회는 TaxInvoiceMapper 소관, 이쪽은 쓰기만 담당한다. */
 @Mapper
 public interface TaxInvoiceCommandMapper {
 
@@ -23,4 +25,24 @@ public interface TaxInvoiceCommandMapper {
             @Param("companyId") Long companyId,
             @Param("type") String type,
             @Param("rows") List<ParsedTaxInvoiceRow> rows);
+
+    /** tax_invoice 쪽 연결 정보 저장. */
+    int updateTaxInvoiceMatch(
+            @Param("taxId") Long taxId,
+            @Param("settleId") Long settleId,
+            @Param("linkedBy") String linkedBy,
+            @Param("linkedAt") LocalDateTime linkedAt);
+
+    /** 정산 블록 쪽 결과 반영 — status(PARTIAL/COMPLETED)·actual_amount·actual_date. */
+    int updateSettlementBlockMatchResult(
+            @Param("settleId") Long settleId,
+            @Param("status") String status,
+            @Param("actualAmount") BigDecimal actualAmount,
+            @Param("actualDate") LocalDateTime actualDate);
+
+    /** tax_invoice 쪽 연결 정보 해제. */
+    int clearTaxInvoiceMatch(@Param("taxId") Long taxId);
+
+    /** 정산 블록을 PENDING으로 되돌리고 실적값을 비운다. */
+    int resetSettlementBlockMatch(@Param("settleId") Long settleId);
 }

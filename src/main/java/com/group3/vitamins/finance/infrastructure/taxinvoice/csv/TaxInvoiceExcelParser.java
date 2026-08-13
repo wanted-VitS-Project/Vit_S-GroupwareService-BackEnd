@@ -75,13 +75,33 @@ public class TaxInvoiceExcelParser {
                 rows.add(parsedRow);
             }
 
-            return new TaxInvoiceCsvTable(headerColumns.headers(), rows);
+            return new TaxInvoiceCsvTable(headerColumns.headers(), rows, extractTitleText(sheet, headerRowIndex));
         } catch (DomainException e) {
             throw e;
         } catch (IOException | RuntimeException e) {
             log.warn("세금계산서 엑셀 파싱 실패 - 유효하지 않은 파일로 변환", e);
             throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE, e);
         }
+    }
+
+    /** 헤더 위 제목 줄(들)의 실제 값을 공백으로 이어붙인다 — CSV의 extractTitleText와 동일 목적. */
+    private String extractTitleText(Sheet sheet, int headerRowIndex) {
+        StringBuilder titleText = new StringBuilder();
+        for (int r = 0; r < headerRowIndex; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) {
+                continue;
+            }
+            int lastCellNum = Math.max(row.getLastCellNum(), 0);
+            for (int c = 0; c < lastCellNum; c++) {
+                Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                String value = cell == null ? null : cellValue(cell);
+                if (value != null) {
+                    titleText.append(value).append(' ');
+                }
+            }
+        }
+        return titleText.isEmpty() ? null : titleText.toString().trim();
     }
 
     private Workbook openWorkbook(byte[] fileBytes, String password) {
@@ -158,7 +178,22 @@ public class TaxInvoiceExcelParser {
             String value = raw.get(c);
             headers.add(value == null ? ("컬럼" + (c + 1)) : value);
         }
-        return new HeaderColumns(headers, firstNonBlank);
+        return new HeaderColumns(disambiguateHeaders(headers), firstNonBlank);
+    }
+
+    /**
+     * 같은 이름 헤더가 여러 번 나오면(공급자/공급받는자 블록이 "상호"/"대표자명"/"종사업장번호"를 각자 갖고
+     * 있어서 이름이 겹친다) 두 번째부터 " (2)", " (3)"... 을 붙여 구분한다 — CSV의 disambiguateHeaders와
+     * 동일 목적(2026-08-13, 실제 파일로 발견).
+     */
+    private List<String> disambiguateHeaders(List<String> rawHeaders) {
+        Map<String, Integer> occurrenceCount = new java.util.HashMap<>();
+        List<String> result = new ArrayList<>();
+        for (String header : rawHeaders) {
+            int occurrence = occurrenceCount.merge(header, 1, Integer::sum);
+            result.add(occurrence == 1 ? header : header + " (" + occurrence + ")");
+        }
+        return result;
     }
 
     private Map<String, String> readRow(Row row, HeaderColumns headerColumns) {

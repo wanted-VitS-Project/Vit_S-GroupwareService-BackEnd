@@ -1,5 +1,6 @@
 # 재무 관리 API 명세
 
+**최종 동기화**: 2026-08-13 (세금계산서 매칭 추천 조회·블록 매칭·매칭 해제 3종 추가, 상단 표에 세금계산서 API 전체 등재)
 **최종 동기화**: 2026-08-10 (재무 관리 요약 조회 최초 작성)
 **도메인 담당**: (미기재 — 작업자 본인 이름으로 채워주세요)
 
@@ -12,6 +13,13 @@
 | ✅ 확정 | 재무 관리 요약 조회 | GET | `/api/v1/finance/summary` | 접근 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역 조회 | GET | `/api/v1/finance/cash-flows` | 접근 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역 필터 옵션 조회 | GET | `/api/v1/finance/cash-flows/filters` | 접근 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 조회 | GET | `/api/v1/finance/tax-invoices` | 접근 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 필터 옵션 조회 | GET | `/api/v1/finance/tax-invoices/filters` | 접근 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 CSV 컬럼 추천 조회 | POST | `/api/v1/finance/tax-invoices/csv/preview` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서(CSV 기반) 업로드 | POST | `/api/v1/finance/tax-invoices/csv` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 매칭 추천 조회 | GET | `/api/v1/finance/tax-invoices/{taxId}/match-candidates` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 블록 매칭 | PATCH | `/api/v1/finance/tax-invoices/{taxId}/match` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 블록 매칭 해제 | PATCH | `/api/v1/finance/tax-invoices/{taxId}/unmatch` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역 CSV 컬럼 추천 조회 | POST | `/api/v1/finance/cash-flows/csv/preview` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역(CSV 기반) 업로드 | POST | `/api/v1/finance/cash-flows/csv` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역 매칭 추천 조회 | GET | `/api/v1/finance/cash-flows/{cashFlowId}/match-candidates` | 편집 권한 보유자(재무 관리 페이지) |
@@ -510,7 +518,7 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 | --- | --- | --- |
 | `httpStatus` | int | HTTP 상태 코드 |
 | `message` | String | 응답 메시지 |
-| `data.columns` | List\<String\> | CSV에 있는 전체 컬럼명 목록 |
+| `data.columns` | List\<String\> | CSV에 있는 전체 컬럼명 목록. 같은 이름이 여러 번 나오면(공급자/공급받는자 블록 각각의 "상호"/"대표자명"/"종사업장번호") 두 번째부터 " (2)", " (3)"... 접미사가 붙어 구분된다 |
 | `data.sampleRows` | List\<Object\> | 상위 5행 미리보기 (컬럼명: 값) |
 | `data.recommendedType` | String | 추천 구분(INCOME/OUTCOME). 판단 불가하면 null |
 | `data.recommendedMapping.*` | String | 추천 컬럼 매핑 12종(원 명세와 동일) — `itemNameColumn`/`ceoNameColumn`/`subBizNoColumn`/`memoColumn`은 없으면 null |
@@ -526,12 +534,25 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 | 404 | Not Found | `FINANCE_INVALID_CSV_FILE` | "유효하지 않은 형식입니다." — 원 명세는 code 빈칸, 입출금 내역과 동일 코드 재사용 |
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
-- **`recommendedType` 판단 기준 (2026-08-12, 사용자 확인)** — 공급자 사업자번호 컬럼에 실제 값이 채워져
-  있으면 매입(`OUTCOME`), 공급받는자 사업자번호 컬럼에 값이 채워져 있으면 매출(`INCOME`)로 추천한다.
-  "우리 회사 사업자번호"를 저장하는 곳이 코드베이스에 없어서(company 테이블에도 없음) 절대비교는
-  불가능 — 대신 "홈택스 매출/매입 목록 내보내기는 상대방(카운터파티) 정보만 채워서 나온다"는 실무
-  관행을 이용해, 첫 데이터 행 기준으로 어느 쪽이 채워져 있는지만 본다. 둘 다 비어있거나 둘 다 채워져
-  있으면 null(사용자가 라디오 버튼으로 직접 선택).
+- **`recommendedType` 판단 기준 — 헤더 위 제목 줄의 "매출"/"매입" 키워드 (2026-08-13 정정)** — 처음엔
+  공급자/공급받는자 사업자번호 컬럼 중 어느 쪽에 값이 채워져 있는지로 추천했는데(2026-08-12), **실제
+  세금계산서는 둘 다 항상 채워져 있어서**(사업자번호는 법적으로 양쪽 다 필수 기재 항목) 그 기준으로는
+  구분이 안 된다는 걸 사용자가 실제 홈택스 발급목록 샘플로 재확인했다. "우리 회사 사업자번호"를 저장하는
+  곳이 코드베이스에 없어서(company 테이블에도 없음) 절대비교는 여전히 불가능 — 대신 홈택스 발급목록
+  CSV/엑셀 상단에 "2022년도 매출세금계산서"처럼 종류가 적힌 제목 줄이 있는 경우가 많다는 점을 이용해,
+  **헤더 판정용으로만 훑고 버려지던 그 제목 줄의 텍스트**(`TaxInvoiceCsvTable.titleText`)에 "매출"이
+  있으면 `INCOME`, "매입"이 있으면 `OUTCOME`으로 추천한다. 제목 줄이 없거나 둘 다 없으면 null(사용자가
+  라디오 버튼으로 직접 선택).
+- **중복 헤더(공급자/공급받는자 "상호"·"대표자명"·"종사업장번호") 구분 + 방향에 맞는 컬럼 추천
+  (2026-08-13, 실제 파일로 발견·사용자 확인)** — 세금계산서는 공급자·공급받는자 블록이 각각 상호/
+  대표자명/종사업장번호를 갖고 있어서 헤더 이름이 겹친다. 이름이 같으면 행 파싱 시 `Map` 키가 겹쳐
+  나중 값이 앞 값을 덮어써 버리는 문제가 있어(공급자 쪽 값이 조용히 사라짐), 파서가 두 번째 occurrence
+  부터 `" (2)"`를 붙여 구분하도록 고쳤다. 이제 `buyerNameColumn`/`ceoNameColumn`/`subBizNoColumn` 추천은
+  **`recommendedType`이 `OUTCOME`(매입)이면 공급자 쪽(접미사 없는 첫 occurrence), `INCOME`(매출)이거나
+  판단 불가면 공급받는자 쪽(마지막 occurrence)**을 고른다 — "매입이면 외주업체(공급자) 정보가, 매출이면
+  우리에게 돈을 주는 업체(공급받는자) 정보가 저장돼야 한다"는 사용자 확인에 따른 것. `supplierBizNoColumn`/
+  `buyerBizNoColumn`은 이름이 겹치지 않아(각각 "공급자사업자등록번호"/"공급받는자사업자등록번호") 이 로직과
+  무관하게 항상 그대로 매핑된다.
 - **엑셀/비밀번호 지원 — 입출금 내역과 동일 (2026-08-12 정정)** — 처음엔 원 명세 문구("CSV 파일")를
   그대로 좁혀서 CSV 전용으로 만들었는데, "컬럼만 명세대로 하고 나머지는 입출금 양식에 맞추라"는 지시와
   맞지 않아 바로 잡았다. 여러 시트가 있는 엑셀은 첫 번째 시트만 읽는다(cash_flow와 동일 — 시트 자동
@@ -610,6 +631,278 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
   전용에서 바로잡았다.
 - **400 `code` — 원 명세엔 빈칸이었다.** `FINANCE_CSV_MAPPING_REQUIRED` 재사용(입출금 내역 CSV 업로드와
   동일한 성격의 에러).
+
+---
+
+## ⭐ 정산 블록 status 규칙 — 입출금·세금계산서 공통 (2026-08-13 확정, 🚧 미구현)
+
+**상태**: ✅ 확정 (규칙) / 🚧 **코드는 아직 이 규칙대로가 아니다**
+
+정산 블록 하나에는 **입출금 1건 + 세금계산서 1장**이 각각 따로 붙을 수 있다. 두 원장은 서로를 막지
+않는다. `settlement_block.status`는 그 둘의 조합으로 결정된다.
+
+| 입출금(`cash_flow`) | 세금계산서(`tax_invoice`) | status | 화면 표기 |
+|---|---|---|---|
+| ✗ | ✗ | `PENDING` | 미연결 |
+| ✗ | ✓ | `WAITING` | 정산 대기 |
+| ✓ | ✗ 또는 ✓ | `PARTIAL` / `COMPLETED` | 부분 정산 / 정산 완료 |
+
+- **입출금이 붙으면 세금계산서 유무와 무관하게 `PARTIAL`/`COMPLETED`다.** 세금계산서가 먼저 붙어
+  `WAITING`이던 블록에 입출금이 붙어도, 입출금이 먼저 붙은 블록에 세금계산서가 나중에 붙어도 결과는 같다.
+- `PARTIAL`/`COMPLETED` 판정은 지금과 동일하게 `cash_flow.amount` vs `settlement_block.planned_amount`.
+- **실적값(`actual_amount`/`actual_date`)은 입출금 전용이다** — 실제로 돈이 움직인 기록이라, 세금계산서
+  매칭은 이 두 컬럼을 건드리지 않는다(사용자 확정: "실제로 정산이 된 건 입출금이니까"). 세금계산서는
+  정산 현황 화면에서 `taxLinkedBy*`로만 보인다.
+- **원장별 1건 제한은 유지** — 한 블록에 입출금 2건이나 세금계산서 2장은 안 된다. 부족분은 기존 규칙대로
+  실무팀이 새 회차를 만들어 매칭한다.
+- `WAITING`은 `settlement_block.status` ENUM에 **처음부터 있었지만 아무도 안 쓰던 값**이다
+  (2026-08-09 스키마, 컬럼 주석 `미연결|정산 대기|부분 정산|정산 완료`). 이 규칙으로 처음 쓰이게 된다.
+
+**⛔ 지금 코드와의 차이 — 다음 작업에서 고칠 것**
+
+| 지점 | 현재 구현 | 확정 규칙 |
+|---|---|---|
+| 세금계산서 매칭 가능 조건 | 블록 `status = PENDING` | 그 블록에 **세금계산서가 안 붙어 있으면** 가능 (입출금 매칭 여부 무관) |
+| 세금계산서 매칭 후 status | `PARTIAL`/`COMPLETED` | `PENDING`이었으면 `WAITING`, 이미 `PARTIAL`/`COMPLETED`면 **그대로** |
+| 세금계산서 매칭 후 실적값 | `actual_amount`/`actual_date` 갱신 | **건드리지 않음** |
+| 입출금 매칭 가능 조건 | 블록 `status = PENDING` | `PENDING` **또는 `WAITING`** (세금계산서가 먼저 붙은 블록에도 가능) |
+| 세금계산서 매칭 해제 후 status | 무조건 `PENDING` + 실적값 NULL | 입출금이 남아 있으면 `PARTIAL`/`COMPLETED` **유지**, 없으면 `PENDING`. 실적값 안 건드림 |
+| 입출금 매칭 해제 후 status | 무조건 `PENDING` + 실적값 NULL | 세금계산서가 남아 있으면 `WAITING`, 없으면 `PENDING`. 실적값은 NULL로 |
+| 매칭 추천 후보 | 양쪽 다 `status = PENDING` 블록만 | 세금계산서용 = 세금계산서 안 붙은 블록 / 입출금용 = `status IN ('PENDING','WAITING')` |
+
+> 판정을 `status` 하나로 하던 걸 **"그 원장이 이미 붙어 있나"(`cash_flow`/`tax_invoice`의
+> `settle_block_id` EXISTS)** 로 바꿔야 한다는 게 이 변경의 핵심이다.
+
+**보류 — 나중에 다시 볼 것 (사용자 지시, 2026-08-13)**
+- 정산현황 요약 문구(`settlementStatusSummary`)는 지금 "정산완료" / "미연결 N건" 두 가지뿐이고 미연결은
+  `PENDING`만 센다. `WAITING`을 "정산대기 N건"으로 같이 보여주는 게 좋겠다는 방향이지만 **이번엔 손대지
+  않는다**(프론트에 나가는 문자열 계약이라 협의 필요).
+- 재무 요약(`GET /finance/summary`)의 `settlement.unlinkedCount`도 `PENDING`만 센다 — 위와 같이 재검토.
+- ⚠️ 위 두 가지를 안 바꾸면, 세금계산서만 붙은 블록(`WAITING`)은 "미연결" 카운트에서 **조용히 빠진다.**
+  정산 현황 블록 조회 응답의 `status` 값으로는 `WAITING`이 프론트에 새로 나가기 시작한다.
+
+---
+
+## 세금계산서 매칭 추천 조회 `GET /api/v1/finance/tax-invoices/{taxId}/match-candidates`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+세금계산서 하나를 골랐을 때, 금액·세액·상호명·발행일이 비슷한 정산 블록을 추천한다. 권한은 입출금 내역
+매칭 추천 조회와 동일한 편집 권한(`PagePermissionPort.hasEditAccess`, `FINANCE` 페이지).
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxId` | Long | Y | 매칭할 세금계산서 ID |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.candidates[].settleId` | Long | 정산 블록 ID |
+| `data.candidates[].roundName` | String | 정산 블록명(회차명) |
+| `data.candidates[].projectName` | String | 프로젝트명 |
+| `data.candidates[].plannedAmount` | BigDecimal | 예정 금액 |
+| `data.candidates[].plannedTaxAmount` | BigDecimal | 예정 세금 금액 (입출금 매칭 추천에는 없는 필드 — 아래 메모 참고) |
+| `data.candidates[].plannedDate` | LocalDate | 예정일 |
+| `data.candidates[].traderName` | String | 거래처명 |
+| `data.candidates[].matchTags` | List\<String\> | 추천 이유 태그 (예: "금액 일치", "세액 일치", "상호명 유사", "일자 유사") |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "매칭 추천 조회 성공",
+  "data": {
+    "candidates": [
+      {
+        "settleId": 11,
+        "roundName": "2차 기성(중도금)",
+        "projectName": "한강 생태교육 환경개선사업",
+        "plannedAmount": 90000000,
+        "plannedTaxAmount": 9000000,
+        "plannedDate": "2026-09-10",
+        "traderName": "환경부",
+        "matchTags": ["금액 일치", "세액 일치", "상호명 일치"]
+      }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "매칭 추천 조회 성공" |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- ⚠️ **원 명세(노션)가 없는 API다 (2026-08-13)** — 세금계산서 쪽 매칭 3종은 명세가 따로 없어서,
+  **이미 확정·구현된 입출금 내역 매칭 3종을 세금계산서 컬럼으로 그대로 옮겼다**(사용자 확정). 경로·응답
+  구조·에러 처리 방식이 전부 입출금 쪽과 1:1 대응이다. 노션에 세금계산서 매칭 명세가 따로 올라오면
+  이 문서와 대조해서 차이를 먼저 확인할 것.
+- **매칭 기준 4종 (입출금은 3종)** — 세금계산서는 세액(`tax_amount`)이 따로 있어서 기준이 하나 늘었다.
+  - 대상 정산 블록: **PENDING(미연결)만**, **같은 타입(INCOME/OUTCOME)만** — 입출금과 동일.
+    🚧 **확정 규칙에서는 "세금계산서가 아직 안 붙은 블록"으로 바뀐다**(입출금이 이미 매칭된
+    `PARTIAL`/`COMPLETED` 블록도 후보에 들어와야 한다) — 위 "⭐ 정산 블록 status 규칙" 참고, 미구현
+  - 금액: `tax_invoice.total_amount` ↔ `settlement_block.planned_amount`, 완전 동일 = `EXACT`("금액 일치"),
+    ±5% 이내 = `SIMILAR`("금액 유사")
+  - 세액: `tax_invoice.tax_amount` ↔ `settlement_block.planned_tax_amount`, 판정 규칙은 금액과 동일
+    ("세액 일치"/"세액 유사")
+  - 상호명: `tax_invoice.buyer_name` ↔ `settlement_block.trader_name`, 완전 동일 = `EXACT`, 한쪽이 다른
+    쪽을 포함하면(양방향) `SIMILAR` — 입출금의 `depositorName` 자리에 `buyerName`이 들어간 것
+  - 일자: `tax_invoice.issued_no`(발행일) ↔ `settlement_block.planned_date`, 같은 날 = `EXACT`, ±7일 이내
+    = `SIMILAR`. ⚠️ 발행일은 입출금의 `traded_at`("돈이 실제로 움직인 날")과 달리 **세금계산서가 발행된
+    날**이라 신뢰도가 낮지만, 결제 예정일 근처에 발행되는 경우가 많아 약한 신호로는 유지한다
+  - 네 기준 중 **하나도 안 걸리면 후보에서 제외** / 정렬은 걸린 기준 개수 많은 순 → 발행일 가까운 순 /
+    **최대 5건**(페이지네이션 없음) — 전부 입출금과 동일
+- **`taxId`가 다른 회사 소속이거나 삭제됐으면 404** — `company_id`·`deleted_at IS NULL`까지 걸어서 조회.
+  후보 조회도 `project.company_id`로 회사 스코프를 건다(입출금 쪽 크로스테넌트 유출 수정과 동일).
+- **404 코드는 신규 `FINANCE_TAX_INVOICE_NOT_FOUND`** — 입출금의 `FINANCE_CASH_FLOW_NOT_FOUND`는 메시지가
+  "존재하지 않는 입출금 내역입니다."라 재사용할 수 없어서 세금계산서용으로 새로 만들었다.
+
+---
+
+## 세금계산서 블록 매칭 `PATCH /api/v1/finance/tax-invoices/{taxId}/match`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+세금계산서 하나를 정산 블록 하나에 연결한다. 매칭 추천 조회가 준 후보 중 하나를 고르거나, 프론트가 임의의
+`settleId`를 보내도 동일하게 동작한다.
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxId` | Long | Y | 매칭할 세금계산서 ID |
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `settleId` | Long | Y | 연결할 정산 블록 ID |
+
+**Request Example**
+
+```json
+{
+  "settleId": 11
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.taxId` | Long | 세금계산서 ID |
+| `data.settleId` | Long | 연결된 정산 블록 ID |
+| `data.roundName` | String | 연결된 정산 블록명 |
+| `data.projectName` | String | 연결된 프로젝트명 |
+| `data.linkedBy` | String | 매칭 처리자 사번 |
+| `data.linkedByName` | String | 매칭 처리자 이름 |
+| `data.linkedAt` | LocalDateTime | 매칭 일시 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 블록 매칭 성공",
+  "data": {
+    "taxId": 3,
+    "settleId": 11,
+    "roundName": "2차 기성(중도금)",
+    "projectName": "한강 생태교육 환경개선사업",
+    "linkedBy": "vitas-EMP004",
+    "linkedByName": "김재무",
+    "linkedAt": "2026-08-13T15:30:00"
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 블록 매칭 성공" |
+| 400 | Bad Request | `FINANCE_TAX_INVOICE_ALREADY_MATCHED` | "이미 매칭된 항목입니다." (이 세금계산서가 이미 다른 정산 블록에 연결돼 있음) |
+| 400 | Bad Request | `FINANCE_TAX_TYPE_MISMATCH` | "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다." |
+| 400 | Bad Request | `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED` | "이미 매칭된 정산 블록입니다." (입출금 매칭과 **동일 코드 재사용** — 메시지가 도메인 중립이라 그대로 씀) |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_TAX_MATCH_TARGET_NOT_FOUND` | "존재하지 않는 세금계산서 또는 정산 블록입니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **에러코드 3개는 신규, 1개는 재사용** — `FINANCE_MATCH_TYPE_MISMATCH`/`FINANCE_MATCH_TARGET_NOT_FOUND`는
+  메시지가 "입출금 구분…"/"존재하지 않는 입출금 내역 또는…"으로 도메인 특정 문구라 재사용하지 않고
+  `FINANCE_TAX_TYPE_MISMATCH`/`FINANCE_TAX_MATCH_TARGET_NOT_FOUND`를 새로 만들었다. 반대로
+  `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED`는 메시지가 "이미 매칭된 정산 블록입니다."로 중립이라 재사용.
+- 🚨 **`status` 규칙 — 확정본과 현재 구현이 다르다 (2026-08-13 사용자 확정, 아직 미구현)**
+  아래 "⭐ 정산 블록 status 규칙" 절이 **확정본**이다. 지금 코드는 입출금 매칭을 그대로 이식해서
+  "정산 블록 하나에 원장 하나(어느 쪽이든)"로 동작하므로, **입출금이 이미 매칭된 블록에 세금계산서를
+  못 붙인다.** 이건 틀린 동작이고 다음 작업에서 양쪽 매칭 코드를 같이 고친다.
+- **매칭 시 정산 블록 상태·실적값 갱신 (현재 구현 — 확정본과 다름)** — 지금은 입출금과 동일하게
+  `settlement_block.status`(PARTIAL/COMPLETED)·`actual_amount`(= 합계금액)·`actual_date`(= 발행일
+  00:00:00)를 전부 갱신한다. 확정본에서는 **세금계산서가 실적값을 건드리지 않는다**(아래 절 참고).
+- **동시성 방어도 입출금과 동일** — 정산 블록 쪽을 `status = 'PENDING'` 조건부 UPDATE로 먼저 확정하고,
+  성공했을 때만 `tax_invoice` 쪽을 `settle_block_id IS NULL` 조건부로 확정한다. 각 UPDATE의 영향 행이
+  0이면 그 시점에 남이 먼저 매칭한 것이므로 400으로 되돌린다.
+- **빈 블록(`type IS NULL`) 처리도 동일** — `Objects.equals`로 비교해 null이면 타입 불일치(400)로 막는다.
+
+---
+
+## 세금계산서 블록 매칭 해제 `PATCH /api/v1/finance/tax-invoices/{taxId}/unmatch`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxId` | Long | Y | 매칭 해제할 세금계산서 ID |
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data` | null | 항상 null |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 블록 매칭 해제 성공",
+  "data": null
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 블록 매칭 해제 성공" |
+| 400 | Bad Request | `FINANCE_TAX_INVOICE_NOT_MATCHED` | "매칭되지 않은 항목입니다." |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **정산 블록을 `PENDING`으로 되돌리고 실적값도 비운다 (현재 구현 — 확정본과 다름)** — 지금은 입출금
+  매칭 해제와 완전히 같은 처리(`status = PENDING`, `actual_amount`/`actual_date = NULL`)를 한다.
+  🚧 **확정 규칙에서는 입출금이 아직 붙어 있으면 `PARTIAL`/`COMPLETED`를 유지하고 실적값도 건드리지
+  않는다**(입출금이 없을 때만 `PENDING`으로) — 위 "⭐ 정산 블록 status 규칙" 참고, 미구현.
 
 ---
 
@@ -1049,6 +1342,11 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
   `NullPointerException`(500)이 났다(2026-08-10, 실제 테스트로 발견). `Objects.equals`로 바꿔서 null도
   안전하게 "타입 불일치"(400 `FINANCE_MATCH_TYPE_MISMATCH`)로 처리한다 — 빈 블록은 애초에 타입이 안
   정해졌으니 매칭 대상이 될 수 없는 게 맞다.
+- 🚧 **2026-08-13 규칙 변경 확정 (미구현)** — 세금계산서 매칭이 붙으면서 "블록 1건당 매칭 1번"의 의미가
+  **"원장별로 1건씩"**(입출금 1건 + 세금계산서 1장)으로 바뀐다. 이 API도 대상 조건이 `status = PENDING`
+  에서 **`status IN ('PENDING','WAITING')`**(세금계산서가 먼저 붙은 블록도 허용)으로, 매칭 해제 후
+  상태가 무조건 `PENDING`에서 **"세금계산서가 남아 있으면 `WAITING`"**으로 바뀌어야 한다.
+  상세는 아래 "⭐ 정산 블록 status 규칙" 절 참고. **아래 항목들은 그 변경 전 기준의 설명이다.**
 - **⭐ 정산 블록 1건당 매칭은 1번뿐 (명세에 없음, 사용자 확정, 핵심 설계 결정)** — 정산 블록에 실제
   입금액이 예정보다 부족해도(부분 정산), **같은 블록에 두 번째 입출금 내역을 매칭해서 채우지 않는다.**
   실무팀이 부족분을 위한 **새 회차(블록)를 만들어서 그 블록에 다시 매칭**하는 방식으로 처리한다.

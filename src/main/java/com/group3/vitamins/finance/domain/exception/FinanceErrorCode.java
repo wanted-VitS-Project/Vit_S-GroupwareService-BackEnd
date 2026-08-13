@@ -28,7 +28,12 @@ public enum FinanceErrorCode implements ErrorCode {
     FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE("FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE",
             "이미 매칭된 항목은 제외 처리할 수 없습니다."),
     FINANCE_CASH_FLOW_AMOUNT_INVALID("FINANCE_CASH_FLOW_AMOUNT_INVALID", "금액은 0보다 커야 합니다."),
-    FINANCE_PAGE_QUERY_INVALID("FINANCE_PAGE_QUERY_INVALID", "페이지 조회 조건이 올바르지 않습니다.");
+    FINANCE_PAGE_QUERY_INVALID("FINANCE_PAGE_QUERY_INVALID", "페이지 조회 조건이 올바르지 않습니다."),
+    FINANCE_TAX_INVOICE_NOT_FOUND("FINANCE_TAX_INVOICE_NOT_FOUND", "존재하지 않는 세금계산서입니다."),
+    FINANCE_TAX_INVOICE_ALREADY_MATCHED("FINANCE_TAX_INVOICE_ALREADY_MATCHED", "이미 매칭된 항목입니다."),
+    FINANCE_TAX_MATCH_TARGET_NOT_FOUND("FINANCE_TAX_MATCH_TARGET_NOT_FOUND", "존재하지 않는 세금계산서 또는 정산 블록입니다."),
+    FINANCE_TAX_TYPE_MISMATCH("FINANCE_TAX_TYPE_MISMATCH", "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다."),
+    FINANCE_TAX_INVOICE_NOT_MATCHED("FINANCE_TAX_INVOICE_NOT_MATCHED", "매칭되지 않은 항목입니다.");
     // 401(미인증)·500(예상 못한 서버 오류)은 도메인 코드로 안 만든다 — GlobalExceptionHandler 가
     // AUTH_UNAUTHENTICATED/COMMON_INTERNAL_ERROR 로 공통 처리한다.
 

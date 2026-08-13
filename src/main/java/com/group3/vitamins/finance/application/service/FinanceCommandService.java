@@ -5,9 +5,11 @@ import com.group3.vitamins.finance.application.command.CashFlowCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
 import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.port.PagePermissionPort;
@@ -32,6 +34,9 @@ import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowDateTimeM
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowUploadFileReader;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.ParsedCashFlowRow;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceCommandMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchLookupRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchResultRow;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.ParsedTaxInvoiceRow;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvColumnRecommender;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvMapping;
@@ -83,6 +88,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
     private final TaxInvoiceCsvColumnRecommender taxInvoiceCsvColumnRecommender;
     private final TaxInvoiceCsvRowParser taxInvoiceCsvRowParser;
     private final TaxInvoiceCommandMapper taxInvoiceCommandMapper;
+    private final TaxInvoiceMapper taxInvoiceMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -298,7 +304,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         TaxInvoiceCsvTable table =
                 taxInvoiceUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
         TaxInvoiceCsvRecommendation recommendation =
-                taxInvoiceCsvColumnRecommender.recommend(table.headers(), table.rows());
+                taxInvoiceCsvColumnRecommender.recommend(table.headers(), table.titleText());
 
         List<Map<String, String>> sampleRows = table.rows().stream()
                 .limit(SAMPLE_ROW_LIMIT)
@@ -367,6 +373,87 @@ public class FinanceCommandService implements FinanceCommandUseCase {
                 : insertTaxInvoicesWithConcurrentDuplicateRetry(companyId, type, toInsert, duplicateRows);
 
         return new TaxInvoiceCsvUploadView(table.rows().size(), savedCount, duplicateRows.size(), duplicateRows);
+    }
+
+    // cash_flow의 matchCashFlow와 완전히 동일한 구조·검증 순서(2026-08-13). 세금계산서 전용 에러코드로
+    // 바꾼 것만 다르다 — FINANCE_MATCH_TYPE_MISMATCH 메시지가 "입출금 구분"이라고 도메인 특정 문구를
+    // 쓰고 있어 그대로 재사용하지 않고 FINANCE_TAX_TYPE_MISMATCH를 신설했다. FINANCE_SETTLEMENT_BLOCK_
+    // ALREADY_MATCHED는 메시지가 도메인 중립("이미 매칭된 정산 블록입니다")이라 그대로 재사용한다.
+    @Override
+    @Transactional
+    public TaxInvoiceMatchView matchTaxInvoice(MatchTaxInvoiceCommand command) {
+        log.info("세금계산서 블록 매칭 요청 - taxId={}, settleId={}, userId={}",
+                command.taxId(), command.settleId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        TaxInvoiceMatchLookupRow taxInvoice = taxInvoiceMapper.findMatchLookup(command.taxId(), companyId);
+        if (taxInvoice == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_MATCH_TARGET_NOT_FOUND);
+        }
+        if (taxInvoice.settleBlockId() != null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_ALREADY_MATCHED);
+        }
+
+        // 회사 스코프 확인 — companyId 없이는 타사 settleId를 그대로 매칭시킬 수 있다(cash_flow와 동일 이유).
+        com.group3.vitamins.finance.infrastructure.taxinvoice.SettlementBlockMatchRow settlementBlock =
+                taxInvoiceMapper.findSettlementBlockForMatch(command.settleId(), companyId);
+        if (settlementBlock == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_MATCH_TARGET_NOT_FOUND);
+        }
+        // settlementBlock.type()은 아직 항목이 작성된 적 없는 빈 블록이면 null이다 — Objects.equals로
+        // null도 안전하게 "불일치"로 처리한다(cash_flow의 matchCashFlow와 동일 이유).
+        if (!Objects.equals(settlementBlock.type(), taxInvoice.type())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_TYPE_MISMATCH);
+        }
+        // 정산 블록 1건당 매칭은 1번뿐이다(cash_flow와 동일 규칙) — 부족분은 실무팀이 새 회차를 만들어 매칭한다.
+        if (!"PENDING".equals(settlementBlock.status())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
+        }
+
+        // 위 확인(조회)과 아래 저장 사이에 남이 먼저 매칭할 수 있다 — 정산 블록 쪽을 status = 'PENDING'
+        // 조건부 UPDATE로 먼저 확정하고, 성공했을 때만 tax_invoice 쪽을 settle_block_id IS NULL
+        // 조건부로 확정한다(cash_flow의 matchCashFlow와 동일한 동시성 방어).
+        LocalDateTime linkedAt = LocalDateTime.now();
+        String status = taxInvoice.totalAmount().compareTo(settlementBlock.plannedAmount()) >= 0
+                ? "COMPLETED" : "PARTIAL";
+        int blockUpdated = taxInvoiceCommandMapper.updateSettlementBlockMatchResult(
+                command.settleId(), status, taxInvoice.totalAmount(), taxInvoice.issuedNo().atStartOfDay());
+        if (blockUpdated == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
+        }
+
+        int taxInvoiceUpdated = taxInvoiceCommandMapper.updateTaxInvoiceMatch(
+                command.taxId(), command.settleId(), command.userId(), linkedAt);
+        if (taxInvoiceUpdated == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_ALREADY_MATCHED);
+        }
+
+        TaxInvoiceMatchResultRow result = taxInvoiceMapper.findMatchResultById(command.taxId(), companyId);
+        return new TaxInvoiceMatchView(
+                command.taxId(), result.settleId(), result.roundName(), result.projectName(),
+                result.linkedBy(), result.linkedByName(), result.linkedAt());
+    }
+
+    @Override
+    @Transactional
+    public void unmatchTaxInvoice(UnmatchTaxInvoiceCommand command) {
+        log.info("세금계산서 블록 매칭 해제 요청 - taxId={}, userId={}", command.taxId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        TaxInvoiceMatchLookupRow taxInvoice =
+                taxInvoiceMapper.findMatchLookup(command.taxId(), currentCompanyIdProvider.currentCompanyId());
+        if (taxInvoice == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
+        }
+        if (taxInvoice.settleBlockId() == null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_MATCHED);
+        }
+
+        taxInvoiceCommandMapper.clearTaxInvoiceMatch(command.taxId());
+        taxInvoiceCommandMapper.resetSettlementBlockMatch(taxInvoice.settleBlockId());
     }
 
     /** cash_flow의 insertWithConcurrentDuplicateRetry와 동일한 이유·동일한 구조. */

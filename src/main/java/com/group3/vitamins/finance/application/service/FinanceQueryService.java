@@ -7,6 +7,7 @@ import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceMatchCandidatesQuery;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
 import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowBasicRow;
@@ -16,8 +17,10 @@ import com.group3.vitamins.finance.infrastructure.cashflow.CashFlowRow;
 import com.group3.vitamins.finance.infrastructure.cashflow.MatchCandidateRow;
 import com.group3.vitamins.finance.infrastructure.status.FinanceSummaryMapper;
 import com.group3.vitamins.finance.infrastructure.status.FinanceSummaryRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceBasicRow;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceFilterProjectRow;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchCandidateRow;
 import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceRow;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
@@ -159,8 +162,11 @@ public class FinanceQueryService implements FinanceQueryUseCase {
     public TaxInvoiceListView getTaxInvoices(TaxInvoiceListQuery query) {
         log.info("세금계산서 조회 요청 - userId={}", query.userId());
 
-        validateTaxInvoiceListQuery(query);
+        // 권한 검사가 파라미터 검증보다 먼저여야 한다 — 순서가 반대면 권한 없는 사용자가 잘못된 파라미터를
+        // 같이 보냈을 때 403 대신 400이 나간다(정산현황 프로젝트 조회·입출금 내역 조회에서 이미 고친
+        // 것과 동일한 버그, 2026-08-13).
         assertFinanceAccess(query.userId(), query.role());
+        validateTaxInvoiceListQuery(query);
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<TaxInvoiceRow> rows = taxInvoiceMapper.findTaxInvoices(
@@ -228,6 +234,38 @@ public class FinanceQueryService implements FinanceQueryUseCase {
         return new TaxInvoiceFilterView(rows.stream()
                 .map(row -> new TaxInvoiceProjectOptionView(row.projectId(), row.projectName()))
                 .toList());
+    }
+
+    @Override
+    public TaxInvoiceMatchCandidatesView getTaxInvoiceMatchCandidates(TaxInvoiceMatchCandidatesQuery query) {
+        log.info("세금계산서 매칭 추천 조회 요청 - taxId={}, userId={}", query.taxId(), query.userId());
+
+        assertFinanceEditAccess(query.userId(), query.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        TaxInvoiceBasicRow taxInvoice = taxInvoiceMapper.findBasicById(query.taxId(), companyId);
+        if (taxInvoice == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
+        }
+
+        List<TaxInvoiceMatchCandidateRow> rows = taxInvoiceMapper.findMatchCandidates(
+                taxInvoice.type(), taxInvoice.totalAmount(), taxInvoice.taxAmount(), taxInvoice.issuedNo(),
+                taxInvoice.buyerName(), companyId);
+
+        return new TaxInvoiceMatchCandidatesView(rows.stream().map(this::toTaxInvoiceMatchCandidateView).toList());
+    }
+
+    private TaxInvoiceMatchCandidateView toTaxInvoiceMatchCandidateView(TaxInvoiceMatchCandidateRow row) {
+        List<String> matchTags = new ArrayList<>();
+        addMatchTag(matchTags, row.amountMatchType(), "금액");
+        addMatchTag(matchTags, row.taxAmountMatchType(), "세액");
+        addMatchTag(matchTags, row.traderMatchType(), "상호명");
+        addMatchTag(matchTags, row.dateMatchType(), "일자");
+
+        return new TaxInvoiceMatchCandidateView(
+                row.settleId(), row.roundName(), row.projectName(),
+                row.plannedAmount(), row.plannedTaxAmount(), row.plannedDate(), row.traderName(), matchTags
+        );
     }
 
     private void assertFinanceAccess(String userId, String role) {
