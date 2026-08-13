@@ -19,7 +19,13 @@ public class CashFlowCsvColumnRecommender {
     private static final List<String> OUTCOME_KEYWORDS = List.of("출금액", "출금");
     private static final List<String> AMOUNT_KEYWORDS = List.of("거래금액", "금액");
     private static final List<String> TYPE_KEYWORDS = List.of("입출금구분", "거래구분", "구분");
-    private static final List<String> MEMO_KEYWORDS = List.of("적요", "메모", "내용");
+    // ⚠️ "내용"은 여기 넣지 않는다 (2026-08-13 정정) — DEPOSITOR_KEYWORDS에도 있어서, "적요"가 없고
+    // "내용"만 있는 파일(카카오뱅크 등)이면 memoColumn·depositorColumn이 같은 컬럼으로 추천됐다.
+    // 그러면 bank_memo와 depositor_name에 똑같은 문자열이 중복 저장된다. depositorName은 필수(NOT NULL)고
+    // 메모는 선택이라, 후보가 하나뿐이면 필수인 쪽에 주고 메모는 비워두는 게 맞다.
+    // (프론트에서 사용자가 메모를 같은 컬럼으로 직접 지정하는 건 여전히 가능하다 — 추천값만 바뀐 것이다.)
+    // "비고"는 실제 은행 파일에서 쓰이는데 빠져 있어 같이 추가했다(세금계산서 쪽 목록엔 이미 있었다).
+    private static final List<String> MEMO_KEYWORDS = List.of("적요", "메모", "비고");
     // "내용"은 맨 뒤 — 은행 CSV에서 거래처(예금주) 정보가 별도 컬럼 없이 "내용" 컬럼에 실려오는 경우가
     // 흔하다(2026-08-10, 실제 파일로 확인). "거래처"/"입금자" 등 더 명확한 컬럼이 있으면 그게 우선이고,
     // 없을 때만 "내용"을 대체 후보로 추천한다.
