@@ -13,7 +13,8 @@ public interface StageCascadeUseCase {
     /**
      * 프로젝트의 스테이지를 권한 기본값과 함께 정리한다. 논리 삭제한 스테이지 수를 돌려준다.
      *
-     * <p>하위 스텝은 건드리지 않는다 — 프로젝트 삭제는 <b>스텝 0개</b>일 때만 허용되므로 대상이 없다.
+     * <p>하위 스텝은 건드리지 않는다 — 프로젝트 삭제가 {@code StepCascadeUseCase} 로 <b>먼저</b>
+     * 정리하고 부른다. 스테이지 단건 삭제(STG-003)도 스텝을 지우지 않는 것과 같은 규칙이다.
      */
     int deleteByProjectId(Long projectId);
 }
