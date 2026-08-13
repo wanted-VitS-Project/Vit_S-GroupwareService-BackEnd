@@ -12,6 +12,7 @@ import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCom
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.port.StageCascadePort;
+import com.group3.vitamins.project.application.port.StepCascadePort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
@@ -54,23 +55,29 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final BusinessCategoryLookupPort businessCategoryLookupPort;
     private final EmployeeLookupPort employeeLookupPort;
     private final StepStatLookupPort stepStatLookupPort;
+    private final StepCascadePort stepCascadePort;
     private final StageCascadePort stageCascadePort;
     private final ProjectAccessUseCase projectAccessUseCase;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     public ProjectResult createProject(CreateProjectCommand command) {
+
         validateDateRange(command.startedOn(), command.endedOn());
         Long companyId = currentCompanyIdProvider.currentCompanyId();
+
         if (command.bidNoticeId() != null) {
             checkBidNoticeNotLinked(command.bidNoticeId(), companyId);
         }
 
         List<Long> categoryIds = command.businessCategoryIds() == null
                 ? List.of() : command.businessCategoryIds().stream().distinct().toList();
+
         List<BusinessCategorySummary> categories = resolveCategories(categoryIds);
 
         LocalDateTime now = LocalDateTime.now();
+
+
         Project saved = projectRepository.save(Project.create(
                 command.bidNoticeId(), command.name(), command.description(), command.clientName(),
                 command.startedOn(), command.endedOn(), command.contractAmount(),
@@ -264,17 +271,21 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     }
 
     /**
-     * 논리 삭제한다 (PRJ-014). <b>진행 전 + 스텝 0개</b> 일 때만 허용한다 —
-     * 이미 굴러간 프로젝트는 삭제가 아니라 종결(close)로 남긴다.
+     * 논리 삭제한다 (PRJ-014). <b>스텝이 남아 있어도 지운다</b> — 하위 스텝·블록·이슈까지 전파한다.
      *
-     * <p>블록 수는 따로 세지 않는다. {@code block.step_id} 가 NOT NULL 이라
-     * <b>스텝이 0개면 블록도 0개</b>다 — 두 번 세면 쿼리만 늘고 판정은 같다.
+     * <p>진행 전 + 스텝 0개면 그대로 지우고, 그 밖에는 {@link #requireDeleteConfirmed} 가 한 번
+     * 되묻는다. ⚠️ <b>되묻기는 금지가 아니다</b> — {@code confirm=true} 재요청이면 통과한다.
+     * 종결(close)은 「기록으로 남기는 마무리」로 남고, 삭제는 「없애기」다.
      *
-     * <p><b>계층 전파는 없지만 정리는 있다.</b> 스텝과 무관하게 존재하는 것들이 남는다 —
+     * <p><b>정리 대상은 계층 전파 + 스텝과 무관한 것</b> 두 갈래다. 후자는 스텝이 0개여도 남는다 —
      * 참여자(생성자 1건은 항상 있다) · 사업분류 연결 · 스테이지 · 스테이지 권한 기본값.
      * 프로젝트는 복구가 없으므로(§6-5) 전부 죽은 행이다. 연결 3종의 하드 삭제는
      * <b>D-3 예외</b>다 ({@code .ai/docs/global/DELETE.md} §2-2).
      * ⛔ {@code activity_log} 는 지우지 않는다 (D-5).
+     *
+     * <p>⚠️ <b>재무·결재 연결은 아직 안 끊는다.</b> {@code cash_flow.settle_block_id} ·
+     * {@code tax_invoice.settle_block_id} 가 삭제된 정산 블록을 계속 가리키고, 진행 중 결재도
+     * 그대로 남는다 (BLK-013 미구현 · STATE.md 백로그). 스텝 단건 삭제와 같은 상태다.
      */
     @Override
     public void deleteProject(DeleteProjectCommand command) {
@@ -283,19 +294,35 @@ public class ProjectCommandService implements ProjectCommandUseCase {
 
         Project project = requireProject(command.projectId());
 
-        if (project.getStatus() != ProjectStatus.NOT_STARTED
-                || stepStatLookupPort.countByProjectId(command.projectId()).totalCount() > 0) {
-            throw new ConflictException(ProjectErrorCode.PROJECT_DELETE_NOT_ALLOWED);
-        }
+        requireDeleteConfirmed(project,
+                stepStatLookupPort.countByProjectId(command.projectId()).totalCount(),
+                command.confirm());
 
-        // ⚠️ 프로젝트 save() 를 맨 뒤에 둔다. 스테이지 정리가 @Modifying(clearAutomatically = true)
+        // ⚠️ 프로젝트 save() 를 맨 뒤에 둔다. 스텝·스테이지 정리가 @Modifying(clearAutomatically = true)
         //    벌크 UPDATE 라, 먼저 save() 하면 그 pending UPDATE 를 flush 하지 않고 영속성 컨텍스트를
-        //    비운다. 커밋해도 프로젝트는 안 지워지고 스테이지만 지워진다 (DELETE.md §3-1).
+        //    비운다. 커밋해도 프로젝트는 안 지워지고 하위만 지워진다 (DELETE.md §3-1).
+        stepCascadePort.deleteByProjectId(command.projectId(), command.requesterUserId());
         stageCascadePort.deleteByProjectId(command.projectId());
         projectMemberRepository.deleteByProjectId(command.projectId());
         projectBusinessCategoryRepository.deleteByProjectId(command.projectId());
 
         projectRepository.save(project.delete(LocalDateTime.now()));
+    }
+
+    /**
+     * 지울 게 남은 프로젝트면 한 번 되묻는다 (DEL-016 패턴). 진행 전 + 스텝 0개면 확인 없이 통과한다 —
+     * 빈 껍데기라 사용자가 잃을 게 없다.
+     *
+     * <p>블록·이슈 수는 세지 않는다. {@code block.step_id}·{@code issue.step_id} 가 NOT NULL 이라
+     * 스텝 수가 곧 규모의 척도이고, 두 번 더 세면 <b>확인만 하고 취소할 요청에도</b> 쿼리가 붙는다.
+     */
+    private void requireDeleteConfirmed(Project project, int stepCount, boolean confirm) {
+        if (confirm || (project.getStatus() == ProjectStatus.NOT_STARTED && stepCount == 0)) {
+            return;
+        }
+        throw new ConflictException(ProjectErrorCode.PROJECT_DELETE_CONFIRM_REQUIRED,
+                "스텝 %d개와 그 안의 블록·이슈가 함께 삭제되며 되돌릴 수 없습니다. 삭제하려면 확인이 필요합니다."
+                        .formatted(stepCount));
     }
 
     /** 빈 목록은 거부한다. 중복은 제거해 같은 카테고리를 두 번 넣는 요청을 그대로 통과시킨다. */
