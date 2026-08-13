@@ -1,5 +1,9 @@
 package com.group3.vitamins.project.block.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -36,6 +40,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -51,11 +56,18 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     private static final int DEFAULT_COL_SPAN = 1;
     private static final int FIRST_INDEX = 0;
 
+    /** 생성·삭제는 변경 필드가 특정되지 않아 null change 1개를 보낸다 (`activity-log.md` §3). */
+    private static final List<ActivityFieldChange> NULL_CHANGE =
+            List.of(new ActivityFieldChange(null, null, null));
+
+    private static final String FIELD_TITLE = "title";
+
     private final BlockRepository blockRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
     private final IssueBlockUnlinkPort issueBlockUnlinkPort;
     private final StepAccessUseCase stepAccessUseCase;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public BlockResult createBlock(CreateBlockCommand command) {
@@ -89,6 +101,9 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
         //2. 1)상세 테이블 조회, 2)행 추가, 3)TYPE ID 조회, 4) TYPE ID 삽입
         linkDetail(block, type, now);
 
+        publishBlockActivity(ActivityLogAction.CREATE, block.getBlockId(),
+                command.requesterUserId(), NULL_CHANGE);
+
         return new BlockResult(
                 block.getBlockId(), block.getStepId(), step.projectId(), type.name(),
                 block.getTitle(), owner, block.getRowIndex(), block.getSortOrder(),
@@ -117,6 +132,7 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         int expected = command.overwrite() ? block.getVersion() : command.version();
         LocalDateTime now = LocalDateTime.now();
+        String beforeTitle = block.getTitle();
 
         if (command.titleProvided()) {
             validateTitle(command.title());
@@ -137,6 +153,12 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         if (updated == 0) {
             throw new ConflictException(BlockErrorCode.BLOCK_VERSION_CONFLICT);
+        }
+
+        if (!Objects.equals(beforeTitle, block.getTitle())) {
+            publishBlockActivity(ActivityLogAction.MODIFY, block.getBlockId(),
+                    command.requesterUserId(),
+                    List.of(new ActivityFieldChange(FIELD_TITLE, beforeTitle, block.getTitle())));
         }
 
         //담당자를 안 건드렸으면 기존 담당자를 그대로 내려야 한다 — 이름은 관대하게 조회한다
@@ -301,8 +323,20 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         deleteBlock(block, command.requesterUserId());
 
-        // 블록 삭제 활동 로그(§5.1)는 여기서 발행해야 하지만 활동기록 공통 컴포넌트(#43)가
-        // 아직 없다. 타입별 도메인에서 발행하면 어댑터 없는 타입(FILE·APPROVAL)이 영구 누락된다.
+        // ⚠️ cascade 와 공유하는 deleteBlock(block, ...) 본체가 아니라 이 경로에서만 발행한다.
+        //    본체로 옮기면 스텝 삭제 한 번에 블록 수만큼 DELETE 로그가 쌓인다.
+        publishBlockActivity(ActivityLogAction.DELETE, block.getBlockId(),
+                command.requesterUserId(), NULL_CHANGE);
+    }
+
+    /**
+     * 부모 Block 활동 로그를 발행한다 (`activity-log.md` §5.1).
+     * Block 자체 활동이라 resourceId·resourceName 은 항상 없다.
+     */
+    private void publishBlockActivity(ActivityLogAction action, Long blockId, String actorId,
+                                      List<ActivityFieldChange> changes) {
+        domainEventPublisher.publish(ActivityOccurredEvent.of(
+                action, blockId, null, actorId, changes));
     }
 
     /** 삭제 본체. 권한 판정이 끝난 뒤의 처리라 cascade 경로와 공유한다. */
