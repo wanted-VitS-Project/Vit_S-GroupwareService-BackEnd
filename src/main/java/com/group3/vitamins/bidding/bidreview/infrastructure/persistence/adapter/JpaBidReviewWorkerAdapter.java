@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocument;
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewCitationJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewJpaEntity;
@@ -267,15 +268,22 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
         citationRepository.saveAll(entities);
     }
 
+    // documentRole도 조회 조건에 함께 걸어, 식별자 값이 다른 역할의 컬럼과 우연히 겹쳐도
+    // 잘못된 문서로 연결되지 않게 한다(CodeRabbit 2026-08-13 피드백). 역할 자체는
+    // BidReviewCallbackService가 이미 3개 값 중 하나로만 검증하므로 valueOf가 안전하다.
     private Long resolveReviewDocumentId(Long reviewId, CitationInput citation) {
+        BidReviewDocumentRole role = BidReviewDocumentRole.valueOf(citation.documentRole());
+
         Optional<BidReviewDocumentJpaEntity> document;
         if (BID_ATTACHMENT.equals(citation.documentRole())) {
-            document = documentRepository.findByReviewIdAndBidAttachmentId(reviewId, citation.bidAttachmentId());
+            document = documentRepository.findByReviewIdAndDocumentRoleAndBidAttachmentId(
+                    reviewId, role, citation.bidAttachmentId());
         } else if (COMPANY_DOCUMENT_REFERENCE.equals(citation.documentRole())) {
-            document = documentRepository.findByReviewIdAndCompanyDocumentVersionId(
-                    reviewId, citation.companyDocumentVersionId());
+            document = documentRepository.findByReviewIdAndDocumentRoleAndCompanyDocumentVersionId(
+                    reviewId, role, citation.companyDocumentVersionId());
         } else {
-            document = documentRepository.findByReviewIdAndReferenceFileId(reviewId, citation.referenceFileId());
+            document = documentRepository.findByReviewIdAndDocumentRoleAndReferenceFileId(
+                    reviewId, role, citation.referenceFileId());
         }
 
         return document

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocument;
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewStatus;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewCitationJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
@@ -155,7 +156,8 @@ class JpaBidReviewWorkerAdapterTest {
         List<BidReviewCitationJpaEntity> citations = citationRepository.findAll();
         assertThat(citations).hasSize(1);
         Long referenceDocumentId = documentRepository
-                .findByReviewIdAndReferenceFileId(reviewId, 501L)
+                .findByReviewIdAndDocumentRoleAndReferenceFileId(
+                        reviewId, BidReviewDocumentRole.INTERNAL_REFERENCE, 501L)
                 .orElseThrow()
                 .getReviewDocumentId();
         assertThat(citations.get(0).getReviewDocumentId()).isEqualTo(referenceDocumentId);
@@ -188,7 +190,8 @@ class JpaBidReviewWorkerAdapterTest {
         List<BidReviewCitationJpaEntity> citations = citationRepository.findAll();
         assertThat(citations).hasSize(1);
         Long companyDocumentId = documentRepository
-                .findByReviewIdAndCompanyDocumentVersionId(reviewId, 9001L)
+                .findByReviewIdAndDocumentRoleAndCompanyDocumentVersionId(
+                        reviewId, BidReviewDocumentRole.COMPANY_DOCUMENT_REFERENCE, 9001L)
                 .orElseThrow()
                 .getReviewDocumentId();
         assertThat(citations.get(0).getReviewDocumentId()).isEqualTo(companyDocumentId);

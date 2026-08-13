@@ -7,6 +7,7 @@ import com.group3.vitamins.employee.infrastructure.persistence.EmployeeCertifica
 import com.group3.vitamins.employee.infrastructure.persistence.EmployeeEducationJpaEntity;
 import com.group3.vitamins.employee.infrastructure.persistence.EmployeeJpaEntity;
 import com.group3.vitamins.major.infrastructure.persistence.MajorJpaEntity;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,16 @@ class BidReviewQualificationAdapterTest {
 
     @Autowired
     private TestEntityManager entityManager;
+
+    // EmployeeJpaEntity는 deleted_at을 매핑하지 않는다(다른 경로가 관리 - EmployeeJpaEntity 주석 참고).
+    // 그래서 ddl-auto=create-drop이 만드는 이 테스트 스키마엔 그 컬럼이 없는데, 어댑터 SQL은
+    // 실제 MySQL 스키마(Flyway)에 있는 deleted_at을 그대로 참조한다. 테스트 스키마에만 보강한다.
+    @BeforeEach
+    void patchEmployeeSchemaForDeletedAt() {
+        entityManager.getEntityManager()
+                .createNativeQuery("ALTER TABLE employee ADD COLUMN IF NOT EXISTS deleted_at DATETIME NULL")
+                .executeUpdate();
+    }
 
     @Test
     @DisplayName("전공별 인원수를 재직 중·비시스템·현재 회사 기준으로만 집계한다")
