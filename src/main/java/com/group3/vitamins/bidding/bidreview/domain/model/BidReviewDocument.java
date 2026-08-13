@@ -183,4 +183,25 @@ public record BidReviewDocument(
                 updatedAt
         );
     }
+
+    // 임시 저장소 객체 삭제 완료를 반영합니다. 공고 첨부만 정리 대상입니다.
+    public BidReviewDocument cleanup(LocalDateTime now) {
+        Objects.requireNonNull(now, "정리 완료 시각은 필수입니다.");
+        if (documentRole != BidReviewDocumentRole.BID_ATTACHMENT) {
+            throw new IllegalStateException("공고 첨부만 정리 대상입니다.");
+        }
+
+        return copy(
+                BidReviewDocumentStatus.DELETED,
+                temporaryStorageKey,
+                fileSize,
+                mimeType,
+                processingErrorMessage,
+                promotedFileId,
+                promotedFileVersionId,
+                promotedAt,
+                now,
+                now
+        );
+    }
 }

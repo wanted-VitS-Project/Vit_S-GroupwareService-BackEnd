@@ -47,17 +47,16 @@ public class AbandonBidReviewService implements AbandonBidReviewUseCase {
             );
         }
 
-        BidReview abandoned;
+        BidReview saved;
         try {
-            abandoned = review.abandon(LocalDateTime.now(clock));
+            saved = bidReviewCommandPort.saveAbandonedWithCleanupOutbox(
+                    command.reviewId(), LocalDateTime.now(clock)
+            );
         } catch (IllegalStateException exception) {
             throw new ConflictException(
                     BidReviewErrorCode.BIDDING_REVIEW_NOT_ABANDONABLE
             );
         }
-
-        BidReview saved = bidReviewCommandPort
-                .saveAbandonedWithCleanupOutbox(abandoned);
 
         return AbandonBidReviewResult.from(saved);
     }
