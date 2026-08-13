@@ -22,6 +22,20 @@ public interface BlockRepository {
     /** rowIndex → sortOrder 오름차순 목록. 블록 일괄 조회에 쓴다. */
     List<Block> findByStepId(Long stepId);
 
+    /**
+     * 여러 스텝의 블록을 한 번에 읽는다 (프로젝트 복제 · PRJ-018).
+     * {@code stepId → rowIndex → sortOrder} 오름차순이라 스텝별로 잘라 쓰면 배치 순서가 유지된다.
+     */
+    List<Block> findByStepIds(Collection<Long> stepIds);
+
+    /**
+     * 프로젝트의 살아있는 블록 수. 복제 상한(300) 판정에 쓴다 — 세려고 전부 읽지 않는다.
+     *
+     * <p>{@code block} 은 {@code project_id} 를 갖지 않으므로 {@code step} 을 조인해서 센다
+     * (`BLOCK.md` §1 — <i>"프로젝트를 알아야 하면 step 을 조인한다"</i>).
+     */
+    int countByProjectId(Long projectId);
+
     /** 배치 변경에서 요청에 담긴 블록을 한 번에 읽는다. 개수가 다르면 404 판정. */
     List<Block> findAllByIds(Collection<Long> blockIds);
 

@@ -7,15 +7,20 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.project.application.command.CreateProjectCommand;
 import com.group3.vitamins.project.application.command.DeleteProjectCommand;
+import com.group3.vitamins.project.application.command.DuplicateProjectCommand;
 import com.group3.vitamins.project.application.command.LinkBusinessCategoriesCommand;
 import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
+import com.group3.vitamins.project.application.port.BlockClonePort;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.port.StageCascadePort;
+import com.group3.vitamins.project.application.port.StageClonePort;
 import com.group3.vitamins.project.application.port.StepCascadePort;
+import com.group3.vitamins.project.application.port.StepClonePort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
+import com.group3.vitamins.project.application.result.ProjectDuplicateResult;
 import com.group3.vitamins.project.application.result.ProjectResult;
 import com.group3.vitamins.project.application.usecase.ProjectCommandUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
@@ -31,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import com.group3.vitamins.project.application.command.UpdateProjectCommand;
 import com.group3.vitamins.project.application.result.ProjectUpdateResult;
@@ -48,6 +54,8 @@ import com.group3.vitamins.project.domain.model.ProjectStatus;
 @Transactional
 public class ProjectCommandService implements ProjectCommandUseCase {
 
+    /** 복제 한 번에 허용하는 블록 수. 통짜 트랜잭션의 상한이다 (PRJ-018). */
+    private static final int MAX_DUPLICATE_BLOCKS = 300;
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
@@ -57,6 +65,9 @@ public class ProjectCommandService implements ProjectCommandUseCase {
     private final StepStatLookupPort stepStatLookupPort;
     private final StepCascadePort stepCascadePort;
     private final StageCascadePort stageCascadePort;
+    private final StageClonePort stageClonePort;
+    private final StepClonePort stepClonePort;
+    private final BlockClonePort blockClonePort;
     private final ProjectAccessUseCase projectAccessUseCase;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
@@ -98,6 +109,64 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 saved.getContractAmount(), categories, saved.getBidNoticeId(),
                 new ProjectResult.CreatedBy(command.requesterUserId(), createdByName),
                 saved.getCreatedAt());
+    }
+
+    /**
+     * 원본의 골격만 복제해 새 프로젝트를 만든다 (PRJ-018).
+     *
+     * <p>원본에는 <b>참여자 자격만</b> 요구한다 — 복제는 원본을 한 글자도 바꾸지 않으므로
+     * 편집 권한을 요구할 근거가 없다. 복제되는 스텝명·블록 제목은 VIEWER 가 원본에서 이미 보는 값이다.
+     *
+     * <p>⚠️ <b>상한 검사를 복사 시작 전에</b> 한다. 블록 1개당 쿼리 3번(block INSERT → 상세 INSERT →
+     * type_id UPDATE)이 한 트랜잭션에서 도는데, 다 만든 뒤에 거절하면 그만큼을 헛일하고 롤백한다.
+     *
+     * <p>⛔ 활동 로그를 남기지 않는다. 프로젝트 생성도 남기지 않고, {@code ActivityOccurredEvent} 가
+     * {@code blockId} 를 필수로 요구해 <b>프로젝트 단위 로그를 낼 수단이 아직 없다</b>.
+     * 프로젝트 계층 로그가 생길 때 생성과 함께 붙인다.
+     */
+    @Override
+    public ProjectDuplicateResult duplicateProject(DuplicateProjectCommand command) {
+
+        //원본을 볼 수 있는 사람인가 — 404(없음)가 403(권한)보다 먼저다
+        projectAccessUseCase.requireAccess(
+                command.sourceProjectId(), command.requesterUserId(), command.role());
+
+        checkDuplicateSize(command.sourceProjectId());
+
+        //복제본은 생성 경로를 그대로 탄다 — 이름 길이·날짜 범위·카테고리 존재·공고 중복 검증이 여기 있다
+        ProjectResult created = createProject(command.toCreateCommand());
+
+        // ⚠️ 순서가 곧 의존이다. 스텝은 새 stageId 를, 블록은 새 stepId 를 알아야 소속을 정한다.
+        Map<Long, Long> stageIdMap =
+                stageClonePort.cloneStages(command.sourceProjectId(), created.projectId());
+
+        Map<Long, Long> stepIdMap = stepClonePort.cloneSteps(
+                command.sourceProjectId(), created.projectId(), stageIdMap);
+
+        BlockClonePort.ClonedBlocks blocks =
+                blockClonePort.cloneBlocks(stepIdMap, command.requesterUserId());
+
+        return new ProjectDuplicateResult(
+                created,
+                command.sourceProjectId(),
+                new ProjectDuplicateResult.Copied(stageIdMap.size(), stepIdMap.size(), blocks.copied()),
+                new ProjectDuplicateResult.Skipped(blocks.skipped()));
+    }
+
+    /**
+     * 통짜 트랜잭션이라 원본이 크면 그만큼 오래 잡는다. 사람이 손으로 만든 프로젝트가 이 선을
+     * 넘는 일은 사실상 없으므로, 넘었다면 복제가 아니라 원본을 손봐야 한다는 신호다.
+     *
+     * <p>메시지에 실제 개수를 담아 덮어쓴다 — 코드가 바뀌면 프론트 분기가 깨지므로 <b>메시지만</b> 바꾼다.
+     */
+    private void checkDuplicateSize(Long sourceProjectId) {
+        int blocks = blockClonePort.countBlocks(sourceProjectId);
+        if (blocks <= MAX_DUPLICATE_BLOCKS) {
+            return;
+        }
+        throw new ValidationException(ProjectErrorCode.PROJECT_DUPLICATE_TOO_LARGE,
+                "블록이 %d개라 복제할 수 없습니다. 한 번에 %d개까지 복제할 수 있습니다."
+                        .formatted(blocks, MAX_DUPLICATE_BLOCKS));
     }
 
     /**

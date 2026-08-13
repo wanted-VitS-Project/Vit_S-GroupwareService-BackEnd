@@ -60,6 +60,12 @@ public enum ProjectErrorCode implements ErrorCode {
             "참여자를 찾을 수 없습니다."),
     MEMBER_SELF_EDIT_DENIED("MEMBER_SELF_EDIT_DENIED",
             "자기 자신의 권한 행은 변경할 수 없습니다."),
+    /**
+     * 복제 대상이 너무 커서 거부한다 (PRJ-018). 메시지는 실제 블록 수를 담아
+     * {@code ValidationException(code, message)} 로 덮어쓴다 — 코드가 바뀌면 프론트 분기가 깨진다.
+     */
+    PROJECT_DUPLICATE_TOO_LARGE("PROJECT_DUPLICATE_TOO_LARGE",
+            "복제할 블록이 너무 많습니다. 원본의 블록을 줄여 주세요."),
     PROJECT_VERSION_REQUIRED("PROJECT_VERSION_REQUIRED",
             "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
     PROJECT_VERSION_CONFLICT("PROJECT_VERSION_CONFLICT",
