@@ -1,7 +1,9 @@
 package com.group3.vitamins.employee.infrastructure.adapter;
 
 import com.group3.vitamins.employee.application.query.EmployeeListCriteria;
+import com.group3.vitamins.employee.application.result.EmployeeCertificateRow;
 import com.group3.vitamins.employee.application.result.EmployeeDetailRow;
+import com.group3.vitamins.employee.application.result.EmployeeEducationRow;
 import com.group3.vitamins.employee.application.result.EmployeeGroupRow;
 import com.group3.vitamins.employee.application.result.EmployeeListRow;
 import org.apache.ibatis.annotations.Mapper;
@@ -26,4 +28,8 @@ public interface EmployeeAdminQueryMapper {
     Optional<EmployeeDetailRow> findDetail(@Param("userId") String userId, @Param("companyId") Long companyId);
 
     List<EmployeeGroupRow> findGroups(@Param("userId") String userId);
+
+    List<EmployeeEducationRow> findEducations(@Param("userId") String userId);
+
+    List<EmployeeCertificateRow> findCertificates(@Param("userId") String userId);
 }

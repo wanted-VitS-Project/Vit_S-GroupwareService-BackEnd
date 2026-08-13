@@ -13,6 +13,8 @@ public record ParsedEmployeeRow(
         String hiredAt,
         String email,
         String phone,
-        String role
+        String role,
+        String education,   // 원시 셀 "전공:학위; ..." (선택 · null 허용)
+        String certificate  // 원시 셀 "자격증명; ..." (선택 · null 허용)
 ) {
 }
