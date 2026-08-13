@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.bidreview.infrastructure.persistence.adapter
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCleanupStorePort;
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewJpaEntity;
@@ -59,9 +60,21 @@ public class JpaBidReviewCleanupStoreAdapter
         BidReviewOutboxJpaEntity outbox = outboxRepository.findById(outboxId)
                 .orElseThrow(() -> new IllegalStateException("정리 Outbox를 찾을 수 없습니다."));
 
+        // ⚠️ 점유 확인과 만료 전이 가능 여부를 S3 삭제보다 먼저 검증한다 — deleteObjects는 되돌릴 수
+        // 없는데, DB 트랜잭션은 그 뒤에 실패해도 롤백되므로 "삭제는 됐지만 DB는 롤백"인 상태가 남을 수 있다.
+        if (!outbox.isCurrentlyOwnedBy(lockOwner)) {
+            throw new IllegalStateException("이 서버가 점유하지 않은 정리 Outbox입니다.");
+        }
+
         CleanupPayload payload = objectMapper.convertValue(
                 outbox.getPayload(), CleanupPayload.class
         );
+
+        BidReviewJpaEntity review = reviewRepository.findForWorkerUpdate(payload.reviewId())
+                .orElseThrow(() -> new IllegalStateException("입찰 문서 검토를 찾을 수 없습니다."));
+
+        // 프로젝트로 귀속된 검토라면 여기서 예외가 나야 한다 — 아직 아무 부수효과도 없는 시점이다.
+        BidReview expired = review.toDomain().expire(now);
 
         List<BidReviewDocumentJpaEntity> documents = documentRepository
                 .findAllByReviewIdAndDocumentRoleAndDeletedAtIsNull(
@@ -79,10 +92,7 @@ public class JpaBidReviewCleanupStoreAdapter
 
         documents.forEach(document ->
                 document.apply(document.toDomain().cleanup(now)));
-
-        BidReviewJpaEntity review = reviewRepository.findForWorkerUpdate(payload.reviewId())
-                .orElseThrow(() -> new IllegalStateException("입찰 문서 검토를 찾을 수 없습니다."));
-        review.apply(review.toDomain().expire(now));
+        review.apply(expired);
 
         if (!outbox.markPublished(lockOwner, now)) {
             throw new IllegalStateException("정리 Outbox 완료 상태 전이에 실패했습니다.");

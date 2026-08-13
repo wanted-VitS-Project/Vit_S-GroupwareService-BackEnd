@@ -136,9 +136,29 @@ class JpaBidReviewCleanupStoreAdapterTest {
         Long outboxId = seedOutbox(
                 reviewId, "BID_REVIEW_CLEANUP_REQUESTED", "expire-" + reviewId, cleanupPayload(reviewId)
         );
+        outboxRepository.findById(outboxId)
+                .ifPresent(outbox -> outbox.claim("server-1", NOW.plusMinutes(5), NOW));
 
         assertThatThrownBy(() -> cleanupAdapter.execute(outboxId, "server-1", NOW))
                 .isInstanceOf(IllegalStateException.class);
+
+        verifyNoInteractions(fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("이 서버가 점유하지 않은 Outbox는 실행 전에 거부하고 임시 파일도 지우지 않는다")
+    void rejectsExecutionWhenNotOwned() {
+        Long reviewId = seedCompletedReview();
+        seedAttachmentDocument(reviewId, 31L, "tmp/reviews/" + reviewId + "/31.pdf");
+        Long outboxId = seedOutbox(
+                reviewId, "BID_REVIEW_CLEANUP_REQUESTED", "expire-" + reviewId, cleanupPayload(reviewId)
+        );
+        // claim을 안 해서 lockOwner가 비어있는 상태 — execute가 삭제 전에 이걸 먼저 막아야 한다.
+
+        assertThatThrownBy(() -> cleanupAdapter.execute(outboxId, "server-1", NOW))
+                .isInstanceOf(IllegalStateException.class);
+
+        verifyNoInteractions(fileStoragePort);
     }
 
     @Test

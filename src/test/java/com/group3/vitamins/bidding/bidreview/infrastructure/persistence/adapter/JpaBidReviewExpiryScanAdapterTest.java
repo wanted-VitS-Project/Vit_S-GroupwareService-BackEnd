@@ -120,6 +120,27 @@ class JpaBidReviewExpiryScanAdapterTest {
         assertThat(claimed).isFalse();
     }
 
+    @Test
+    @DisplayName("FAILED로 끝난 검토도 만료 후보에 포함된다")
+    void includesFailedReviewsAsCandidates() {
+        Long failedEligible = seedFailedReview(NOW.minusHours(4));
+
+        List<Long> candidates = scanAdapter.findExpiredCandidateIds(NOW, 10);
+
+        assertThat(candidates).contains(failedEligible);
+    }
+
+    @Test
+    @DisplayName("PENDING 검토는 claimAndRequestCleanup으로도 점유하지 않는다")
+    void doesNotClaimPendingReview() {
+        Long reviewId = seedPendingReview();
+
+        boolean claimed = scanAdapter.claimAndRequestCleanup(reviewId, NOW);
+
+        assertThat(claimed).isFalse();
+        assertThat(outboxRepository.findAll()).isEmpty();
+    }
+
     // completedAt을 받아 expiresAt = completedAt + 3시간으로 계산되는 완료 검토를 만든다.
     private Long seedCompletedReview(LocalDateTime completedAt) {
         BidReview pending = BidReview.createPending(
@@ -128,6 +149,16 @@ class JpaBidReviewExpiryScanAdapterTest {
         );
         BidReview completed = pending.complete("검토 결과", completedAt);
         return reviewRepository.saveAndFlush(BidReviewJpaEntity.from(completed)).getReviewId();
+    }
+
+    // failedAt을 받아 expiresAt = failedAt + 3시간으로 계산되는 실패 검토를 만든다.
+    private Long seedFailedReview(LocalDateTime failedAt) {
+        BidReview pending = BidReview.createPending(
+                COMPANY_ID, NOTICE_ID, USER_ID, PROMPT,
+                UUID.randomUUID().toString(), failedAt.minusMinutes(1)
+        );
+        BidReview failed = pending.fail("DOWNLOAD_FAILED", "첨부 다운로드에 실패했습니다.", failedAt);
+        return reviewRepository.saveAndFlush(BidReviewJpaEntity.from(failed)).getReviewId();
     }
 
     private Long seedPendingReview() {

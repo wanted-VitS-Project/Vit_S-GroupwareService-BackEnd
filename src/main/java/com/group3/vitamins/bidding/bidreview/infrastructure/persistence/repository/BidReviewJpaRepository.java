@@ -46,7 +46,7 @@ public interface BidReviewJpaRepository
           AND project_id IS NULL
           AND expires_at <= :now
           AND cleanup_started_at IS NULL
-        ORDER BY expires_at
+        ORDER BY expires_at, bid_review_id
         LIMIT :batchSize
         """, nativeQuery = true)
     List<Long> findExpiredCandidateIds(
