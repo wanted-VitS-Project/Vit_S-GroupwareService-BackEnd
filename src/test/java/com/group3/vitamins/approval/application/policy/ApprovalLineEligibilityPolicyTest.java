@@ -14,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,8 @@ class ApprovalLineEligibilityPolicyTest {
     private static final String MEMBER = "vitas-1234567";
     private static final String OTHER_COMPANY_MEMBER = "acme-1234567";
     private static final String OTHER_COMPANY_MASTER = "acme-7654321";
+    /** 대표는 전역 role 이 아니라 직급(job_position)이다 — 시드 직급명과 같아야 면제가 걸린다 */
+    private static final String REPRESENTATIVE = "대표";
 
     @Mock
     private EmployeeCatalogPort employeeCatalogPort;
@@ -129,6 +132,65 @@ class ApprovalLineEligibilityPolicyTest {
     }
 
     @Test
+    @DisplayName("직급이 대표면 role 이 MEMBER 여도 project member 가 아니어도 통과한다")
+    void sameCompanyRepresentativeIsExemptFromMembership() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(MEMBER, "MEMBER", MY_COMPANY, REPRESENTATIVE);
+
+        List<EmployeeSummary> result = policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER));
+
+        assertThat(result).singleElement()
+                .extracting(EmployeeSummary::userId)
+                .isEqualTo(MEMBER);
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, MEMBER);
+    }
+
+    @Test
+    @DisplayName("타 회사 대표는 거부된다 — 소속 면제가 회사 경계까지 열어주지 않는다")
+    void otherCompanyRepresentativeIsRejected() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(OTHER_COMPANY_MEMBER, "MEMBER", OTHER_COMPANY, REPRESENTATIVE);
+
+        assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(OTHER_COMPANY_MEMBER)))
+                .isInstanceOf(ValidationException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, OTHER_COMPANY_MEMBER);
+    }
+
+    @Test
+    @DisplayName("퇴사한 대표는 거부된다 — 소속 면제는 참여 가능 검사를 면제하지 않는다")
+    void resignedRepresentativeIsRejected() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(MEMBER)).thenReturn(Optional.of(new EmployeeSummary(
+                MEMBER, "홍길동", REPRESENTATIVE, null, "MEMBER", MY_COMPANY, "ACTIVE",
+                LocalDate.of(2026, 8, 12), null)));
+
+        assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER)))
+                .isInstanceOf(ValidationException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+    }
+
+    @Test
+    @DisplayName("직급명이 '대표'가 아니면 면제되지 않는다 — 소속 검증을 그대로 받는다")
+    void nonRepresentativePositionIsNotExempt() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(MEMBER, "MEMBER", MY_COMPANY, "대표이사");
+        when(blockCatalogPort.isProjectMember(PROJECT_ID, MEMBER)).thenReturn(false);
+
+        assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER)))
+                .isInstanceOf(ValidationException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+    }
+
+    @Test
     @DisplayName("같은 회사 일반 사원은 project member 여야 통과한다 (기존 동작 유지)")
     void sameCompanyMemberPassesWhenProjectMember() {
         givenBlock();
@@ -180,8 +242,13 @@ class ApprovalLineEligibilityPolicyTest {
     }
 
     private void givenEmployee(String userId, String role, Long companyId) {
+        givenEmployee(userId, role, companyId, null);
+    }
+
+    /** position = 직급명. 대표 판정이 직급명으로 이뤄지므로 테스트에서도 이 인자로 대표를 만든다. */
+    private void givenEmployee(String userId, String role, Long companyId, String position) {
         when(employeeCatalogPort.findEmployee(userId))
                 .thenReturn(Optional.of(new EmployeeSummary(
-                        userId, "홍길동", null, null, role, companyId, "ACTIVE", null, null)));
+                        userId, "홍길동", position, null, role, companyId, "ACTIVE", null, null)));
     }
 }

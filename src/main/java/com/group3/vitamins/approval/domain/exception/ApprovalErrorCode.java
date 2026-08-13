@@ -36,8 +36,8 @@ public enum ApprovalErrorCode implements ErrorCode {
     /** APR-011 — 순서(1부터 연속)가 중복·누락되면 400 */
     APPROVAL_LINE_ORDER_INVALID("APPROVAL_LINE_ORDER_INVALID", "결재 순서는 1부터 중복·누락 없이 연속되어야 합니다."),
     /**
-     * APR-012 — 일반 결재자가 project member 아니면 400. {@code MASTER}만 제외하며
-     * {@code ADMIN}은 인사 전용이라 결재자로 지정할 수 없다.
+     * APR-012 — 일반 결재자가 project member 아니면 400. {@code MASTER}와 <b>직급이 대표</b>인 사원만
+     * 제외하며 {@code ADMIN}은 인사 전용이라 결재자로 지정할 수 없다.
      *
      * <p>결재선 등록(#91)뿐 아니라 <b>상신(#7)</b>에서도 난다 — 결재자가 그 사이 프로젝트에서 제거되면
      * 재상신이 복사한 결재선에 비멤버가 남기 때문이다. 그때 사용자가 할 일은 결재선 재지정이라
