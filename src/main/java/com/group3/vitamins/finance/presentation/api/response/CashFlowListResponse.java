@@ -9,12 +9,27 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record CashFlowListResponse(
-        @Schema(description = "입출금 내역 목록")
+        @Schema(description = "현재 페이지 번호 (0-base)", example = "0")
+        int page,
+
+        @Schema(description = "페이지당 개수", example = "20")
+        int size,
+
+        @Schema(description = "전체 항목 수", example = "5")
+        long totalElements,
+
+        @Schema(description = "전체 페이지 수", example = "1")
+        int totalPages,
+
+        @Schema(description = "입출금 내역 목록 (현재 페이지분만)")
         List<CashFlowItem> cashFlows
 ) {
 
     public static CashFlowListResponse from(CashFlowListView view) {
-        return new CashFlowListResponse(view.cashFlows().stream().map(CashFlowItem::from).toList());
+        return new CashFlowListResponse(
+                view.page(), view.size(), view.totalElements(), view.totalPages(),
+                view.cashFlows().stream().map(CashFlowItem::from).toList()
+        );
     }
 
     public record CashFlowItem(

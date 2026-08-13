@@ -11,13 +11,6 @@ public interface BidReviewJpaRepository
         extends JpaRepository<BidReviewJpaEntity, Long> {
 
     Optional<BidReviewJpaEntity>
-    findByReviewIdAndCompanyIdAndRequestedBy(
-            Long reviewId,
-            Long companyId,
-            String requestedBy
-    );
-
-    Optional<BidReviewJpaEntity>
     findByReviewIdAndProcessingAttemptId(
             Long reviewId,
             String processingAttemptId
