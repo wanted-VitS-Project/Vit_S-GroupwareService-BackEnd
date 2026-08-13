@@ -363,9 +363,11 @@ public class ProjectController {
     }
 
     @Operation(summary = "프로젝트 삭제",
-            description = "진행 전이고 스텝이 0개일 때만 논리 삭제한다 (PRJ-014). "
-                    + "이미 굴러간 프로젝트는 삭제가 아니라 종결(POST /close)로 남긴다. "
-                    + "블록 수는 따로 보지 않는다 — 블록은 스텝에만 붙으므로 스텝이 0개면 블록도 0개다. "
+            description = "프로젝트를 논리 삭제한다 (PRJ-014). 하위 스테이지·스텝·블록·이슈까지 함께 지워지며 "
+                    + "되돌릴 수 없다. "
+                    + "📌 진행 전이 아니거나 스텝이 남아 있으면 첫 요청을 409 로 되묻는다 — "
+                    + "confirm=true 로 재요청하면 삭제된다. "
+                    + "기록으로 남기려면 삭제가 아니라 종결(POST /close)을 쓴다. "
                     + "삭제 시 연결된 공고를 비운다 — 안 그러면 그 공고로 프로젝트를 다시 못 만든다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
@@ -377,16 +379,20 @@ public class ProjectController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "PROJECT_DELETE_NOT_ALLOWED — 진행 전이 아니거나 스텝이 남아 있음")
+                    description = "PROJECT_DELETE_CONFIRM_REQUIRED — 지울 범위 확인이 필요하다. "
+                            + "⚠️ 금지가 아니다 — confirm=true 로 재요청하면 삭제된다. "
+                            + "message 에 삭제될 스텝 수가 담긴다")
     })
     @DeleteMapping("/{projectId}")
     public ResponseEntity<ApiResponse<Void>> deleteProject(
             @Parameter(description = "삭제할 프로젝트 ID")
             @PathVariable Long projectId,
+            @Parameter(description = "지울 범위를 사용자가 확인했다는 표시. 409 를 받은 뒤 true 로 재요청한다")
+            @RequestParam(defaultValue = "false") boolean confirm,
             Authentication authentication
     ) {
         projectCommandUseCase.deleteProject(new DeleteProjectCommand(
-                projectId, authentication.getName(), RequesterRole.from(authentication)));
+                projectId, authentication.getName(), RequesterRole.from(authentication), confirm));
 
         return ResponseEntity.ok(ApiResponse.success(ProjectResponseMessage.SUCCESS));
     }
