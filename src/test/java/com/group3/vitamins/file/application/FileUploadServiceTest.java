@@ -17,6 +17,7 @@ import com.group3.vitamins.file.application.result.FileUploadStartResult;
 import com.group3.vitamins.file.application.result.FileVersionDetailResult;
 import com.group3.vitamins.file.application.service.FileUploadService;
 import com.group3.vitamins.file.application.service.FileVersionFailureRecorder;
+import com.group3.vitamins.file.application.service.StorageKeyBuilder;
 import com.group3.vitamins.file.domain.exception.FileErrorCode;
 import com.group3.vitamins.file.domain.model.File;
 import com.group3.vitamins.file.domain.model.FileVersion;
@@ -91,7 +92,8 @@ class FileUploadServiceTest {
         service = new FileUploadService(
                 blockCatalogPort, stepAccessUseCase, fileRepository, fileVersionRepository,
                 blockFileRepository, fileQueryPort, uploaderLookupPort, fileStoragePort, pdfPageCounterPort,
-                failureRecorder, fileIndexTriggerPort, currentCompanyIdProvider, domainEventPublisher);
+                failureRecorder, fileIndexTriggerPort, currentCompanyIdProvider, domainEventPublisher,
+                new StorageKeyBuilder());
     }
 
     private void stubBlockAndEditable() {
@@ -114,7 +116,7 @@ class FileUploadServiceTest {
         return FileVersion.restore(id, fileId, versionNo, UploadStatus.UPLOADING,
                 "companies/1/projects/100/files/31/versions/" + versionNo + "/uuid." + ext,
                 "제안서_v" + versionNo + "." + ext, ext, "application/pdf", 5000L, null, null, "초안",
-                USER, "이영희", "제안팀", "선임연구원", null, null);
+                USER, "이영희", "제안팀", "선임연구원", null, null, null);
     }
 
     private Consumer<Throwable> hasCode(Object expected) {
@@ -267,7 +269,7 @@ class FileUploadServiceTest {
         @DisplayName("이미 완료된 버전이면 FILE_ALREADY_COMPLETED")
         void alreadyCompleted() {
             FileVersion completed = FileVersion.restore(74L, 31L, 1, UploadStatus.COMPLETED,
-                    "k", "a.pdf", "pdf", null, 5000L, null, 3, null, USER, "이영희", null, null, null, null);
+                    "k", "a.pdf", "pdf", null, 5000L, null, 3, null, USER, "이영희", null, null, null, null, null);
             when(fileVersionRepository.findById(74L)).thenReturn(Optional.of(completed));
 
             assertThatThrownBy(() -> service.completeUpload(completeCmd()))

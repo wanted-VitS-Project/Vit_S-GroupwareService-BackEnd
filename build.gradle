@@ -123,6 +123,14 @@ tasks.named('test') {
         // 아래 benchmark 태스크로만 돌린다.
         excludeTags 'benchmark'
     }
+    // 테스트마다 조금씩 다른 @DataJpaTest 설정(H2 DB명, @Import 조합)이 늘어날수록
+    // Spring이 ApplicationContext를 매번 새로 캐시에 쌓는다. 기본 힙(512MB)으로는
+    // 테스트 스위트가 1000개를 넘으면서 OutOfMemoryError로 죽는다(무관한 테스트들이
+    // "컨텍스트 로드 실패 재시도 안 함" 정책으로 연쇄 실패하는 형태로 나타남).
+    maxHeapSize = "2g"
+    // 힙을 늘려도 컨텍스트 캐시가 계속 쌓이면 재발할 수 있어, 200개 클래스마다
+    // 테스트 JVM을 새로 띄워 누적 캐시를 비운다.
+    forkEvery = 200
     // 테스트가 끝나면 커버리지 리포트를 자동 생성한다.
     // 덕분에 ./gradlew build 한 번으로 리포트까지 만들어진다.
     finalizedBy tasks.named('jacocoTestReport')

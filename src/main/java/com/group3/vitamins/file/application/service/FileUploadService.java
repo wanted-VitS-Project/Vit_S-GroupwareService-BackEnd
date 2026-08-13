@@ -29,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * 파일 업로드 서비스 (§1 시작). 파일은 블록에 붙지만 스텝 권한을 따르므로
@@ -62,6 +61,7 @@ public class FileUploadService implements FileUploadUseCase {
     private final FileIndexTriggerPort fileIndexTriggerPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final DomainEventPublisher domainEventPublisher;
+    private final StorageKeyBuilder storageKeyBuilder;
 
     @Override
     public FileUploadStartResult startUpload(StartFileUploadCommand command) {
@@ -98,14 +98,15 @@ public class FileUploadService implements FileUploadUseCase {
                 uploaderLookupPort.findByUserId(command.requesterUserId())
                         .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_INVALID_REQUEST));
 
-        String storageKey = buildStorageKey(
+        String storageKey = storageKeyBuilder.build(
                 currentCompanyIdProvider.currentCompanyId(), projectId, fileId, versionNo, extension);
 
         FileVersion version = fileVersionRepository.save(FileVersion.startUpload(
                 fileId, versionNo, storageKey,
                 command.originalFileName(), extension, command.mimeType(), command.sizeBytes(),
                 command.comment(),
-                command.requesterUserId(), uploader.name(), uploader.department(), uploader.position()));
+                command.requesterUserId(), uploader.name(), uploader.department(), uploader.position(),
+                null));
 
         if (newDocument) {
             blockFileRepository.link(command.blockId(), fileId, command.requesterUserId());
@@ -222,19 +223,5 @@ public class FileUploadService implements FileUploadUseCase {
         }
         int dot = originalFileName.lastIndexOf('.');
         return dot > 0 ? originalFileName.substring(0, dot) : originalFileName;
-    }
-
-    /**
-     * 저장 키: {@code companies/{companyId}/projects/{projectId}/files/{fileId}/versions/{versionNo}/{uuid}[.ext]}.
-     * ⚠️ 멀티테넌트 — 최상위에 {@code companies/{companyId}/} 를 두어 회사별로 S3 접두사(prefix)를 분리한다.
-     * IAM 정책·수명주기·감사·삭제를 회사 단위로 걸 수 있고, 키만 봐도 어느 회사 객체인지 드러난다.
-     * ⚠️ 경로에 fileVersionId 대신 versionNo 를 쓴다 — fileVersionId 는 INSERT 전에 알 수 없고
-     * storageKey 는 버전 생성 시 확정돼야 하며, uuid 가 유일성을 보장하므로 안전하다(2026-08-06).
-     */
-    private String buildStorageKey(long companyId, long projectId, long fileId, int versionNo, String extension) {
-        String uuid = UUID.randomUUID().toString();
-        String suffix = extension.isEmpty() ? "" : "." + extension;
-        return "companies/%d/projects/%d/files/%d/versions/%d/%s%s"
-                .formatted(companyId, projectId, fileId, versionNo, uuid, suffix);
     }
 }
