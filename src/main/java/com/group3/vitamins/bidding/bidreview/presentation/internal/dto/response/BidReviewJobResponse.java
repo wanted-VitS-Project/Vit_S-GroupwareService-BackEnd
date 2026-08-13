@@ -29,7 +29,13 @@ public record BidReviewJobResponse(
         List<AttachmentJobResponse> attachments,
 
         @Schema(description = "선택한 사내 기준자료 목록")
-        List<ReferenceFileJobResponse> referenceFiles
+        List<ReferenceFileJobResponse> referenceFiles,
+
+        @Schema(description = "선택한 사내 문서함 참조 목록")
+        List<CompanyDocumentJobResponse> companyDocuments,
+
+        @Schema(description = "회사 보유 전공·학력·자격증 현황(인원수만, 개인 식별 정보 없음)")
+        String qualificationSummary
 ) {
 
     public static BidReviewJobResponse from(BidReviewJobResult result) {
@@ -45,7 +51,11 @@ public record BidReviewJobResponse(
                         .toList(),
                 result.referenceFiles().stream()
                         .map(ReferenceFileJobResponse::from)
-                        .toList()
+                        .toList(),
+                result.companyDocuments().stream()
+                        .map(CompanyDocumentJobResponse::from)
+                        .toList(),
+                result.qualificationSummary()
         );
     }
 
@@ -83,6 +93,26 @@ public record BidReviewJobResponse(
         static ReferenceFileJobResponse from(BidReviewJobResult.ReferenceFileJob job) {
             return new ReferenceFileJobResponse(
                     job.referenceFileId(),
+                    job.fileName(),
+                    job.downloadUrl()
+            );
+        }
+    }
+
+    public record CompanyDocumentJobResponse(
+            @Schema(description = "검토 요청에서 사용한 사내 문서함 참조 버전 ID")
+            Long companyDocumentVersionId,
+
+            @Schema(description = "원본 파일명")
+            String fileName,
+
+            @Schema(description = "단명 내부 다운로드 URL. 프론트용 API에서는 제공하지 않는다")
+            String downloadUrl
+    ) {
+
+        static CompanyDocumentJobResponse from(BidReviewJobResult.CompanyDocumentJob job) {
+            return new CompanyDocumentJobResponse(
+                    job.companyDocumentVersionId(),
                     job.fileName(),
                     job.downloadUrl()
             );

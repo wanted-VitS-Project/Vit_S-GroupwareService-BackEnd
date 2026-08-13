@@ -32,6 +32,7 @@ public interface BidReviewDetailQueryPort {
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             String processingStatus
     ) {
@@ -42,6 +43,7 @@ public interface BidReviewDetailQueryPort {
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             Integer pageNumber,
             String sheetName,

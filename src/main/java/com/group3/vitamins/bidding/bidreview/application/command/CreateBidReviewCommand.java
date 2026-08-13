@@ -6,6 +6,7 @@ public record CreateBidReviewCommand(
         Long noticeId,
         List<Long> bidAttachmentIds,
         List<Long> referenceFileIds,
+        List<Long> companyDocumentVersionIds,
         String prompt,
         String userId,
         String role
@@ -19,5 +20,9 @@ public record CreateBidReviewCommand(
         referenceFileIds = referenceFileIds == null
                 ? List.of()
                 : List.copyOf(referenceFileIds);
+
+        companyDocumentVersionIds = companyDocumentVersionIds == null
+                ? List.of()
+                : List.copyOf(companyDocumentVersionIds);
     }
 }

@@ -51,6 +51,7 @@ public class BidReviewDetailQueryService implements GetBidReviewDetailUseCase {
                         row.documentRole(),
                         row.bidAttachmentId(),
                         row.referenceFileId(),
+                        row.companyDocumentVersionId(),
                         row.fileName(),
                         row.processingStatus()
                 ))
@@ -64,6 +65,7 @@ public class BidReviewDetailQueryService implements GetBidReviewDetailUseCase {
                         row.documentRole(),
                         row.bidAttachmentId(),
                         row.referenceFileId(),
+                        row.companyDocumentVersionId(),
                         row.fileName(),
                         row.pageNumber(),
                         row.sheetName(),

@@ -24,6 +24,12 @@ public record CreateBidReviewRequest(
              @Positive(message = "BIDDING_INVALID_REVIEW_REQUEST|입찰 기준자료 ID가 올바르지 않습니다.")
              Long> referenceFileIds,
 
+        @Size(max = 10, message = "BIDDING_INVALID_REVIEW_REQUEST|사내 문서함 참조는 최대 10개까지 선택할 수 있습니다.")
+        @Schema(description = "비교 기준으로 사용할 사내 문서함 참조 버전 ID 목록", example = "[9001, 9002]", nullable = true)
+        List<@NotNull(message = "BIDDING_INVALID_REVIEW_REQUEST|사내 문서함 참조 버전 ID가 올바르지 않습니다.")
+             @Positive(message = "BIDDING_INVALID_REVIEW_REQUEST|사내 문서함 참조 버전 ID가 올바르지 않습니다.")
+             Long> companyDocumentVersionIds,
+
         @NotBlank(message = "BIDDING_INVALID_REVIEW_REQUEST|검토 지시를 입력해 주세요.")
         @Size(max = 3000, message = "BIDDING_INVALID_REVIEW_REQUEST|검토 지시는 3,000자를 넘을 수 없습니다.")
         @Schema(
@@ -35,7 +41,7 @@ public record CreateBidReviewRequest(
 
     public CreateBidReviewCommand toCommand(Long noticeId, String userId, String role) {
         return new CreateBidReviewCommand(
-                noticeId, bidAttachmentIds, referenceFileIds, prompt, userId, role
+                noticeId, bidAttachmentIds, referenceFileIds, companyDocumentVersionIds, prompt, userId, role
         );
     }
 }

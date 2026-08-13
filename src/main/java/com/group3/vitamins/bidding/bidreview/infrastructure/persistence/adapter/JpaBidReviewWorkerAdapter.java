@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocument;
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewCitationJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewJpaEntity;
@@ -29,6 +30,7 @@ import java.util.UUID;
 public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
 
     private static final String BID_ATTACHMENT = "BID_ATTACHMENT";
+    private static final String COMPANY_DOCUMENT_REFERENCE = "COMPANY_DOCUMENT_REFERENCE";
     private static final String FAILED_STATUS = "FAILED";
     private static final String REVIEW_REQUESTED_EVENT = "BID_REVIEW_REQUESTED";
     private static final String DEFAULT_DOCUMENT_FAILURE_MESSAGE = "문서 처리에 실패했습니다.";
@@ -66,6 +68,7 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
                                     document.getDocumentRole().name(),
                                     document.getBidAttachmentId(),
                                     document.getReferenceFileId(),
+                                    document.getCompanyDocumentVersionId(),
                                     document.getFileName()
                             ))
                             .toList();
@@ -206,8 +209,8 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
         };
     }
 
-    // documents[]의 각 항목을 해당 공고 첨부 문서에 반영한다. INTERNAL_REFERENCE 문서는
-    // bidAttachmentId가 없어 조회에 걸리지 않으므로 자연히 건너뛴다.
+    // documents[]의 각 항목을 해당 공고 첨부 문서에 반영한다. INTERNAL_REFERENCE·COMPANY_DOCUMENT_REFERENCE
+    // 문서는 bidAttachmentId가 없어 조회에 걸리지 않으므로 자연히 건너뛴다.
     private void applyDocumentOutcomes(
             Long reviewId,
             List<DocumentOutcome> documents,
@@ -265,10 +268,23 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
         citationRepository.saveAll(entities);
     }
 
+    // documentRole도 조회 조건에 함께 걸어, 식별자 값이 다른 역할의 컬럼과 우연히 겹쳐도
+    // 잘못된 문서로 연결되지 않게 한다(CodeRabbit 2026-08-13 피드백). 역할 자체는
+    // BidReviewCallbackService가 이미 3개 값 중 하나로만 검증하므로 valueOf가 안전하다.
     private Long resolveReviewDocumentId(Long reviewId, CitationInput citation) {
-        Optional<BidReviewDocumentJpaEntity> document = BID_ATTACHMENT.equals(citation.documentRole())
-                ? documentRepository.findByReviewIdAndBidAttachmentId(reviewId, citation.bidAttachmentId())
-                : documentRepository.findByReviewIdAndReferenceFileId(reviewId, citation.referenceFileId());
+        BidReviewDocumentRole role = BidReviewDocumentRole.valueOf(citation.documentRole());
+
+        Optional<BidReviewDocumentJpaEntity> document;
+        if (BID_ATTACHMENT.equals(citation.documentRole())) {
+            document = documentRepository.findByReviewIdAndDocumentRoleAndBidAttachmentId(
+                    reviewId, role, citation.bidAttachmentId());
+        } else if (COMPANY_DOCUMENT_REFERENCE.equals(citation.documentRole())) {
+            document = documentRepository.findByReviewIdAndDocumentRoleAndCompanyDocumentVersionId(
+                    reviewId, role, citation.companyDocumentVersionId());
+        } else {
+            document = documentRepository.findByReviewIdAndDocumentRoleAndReferenceFileId(
+                    reviewId, role, citation.referenceFileId());
+        }
 
         return document
                 .map(BidReviewDocumentJpaEntity::getReviewDocumentId)

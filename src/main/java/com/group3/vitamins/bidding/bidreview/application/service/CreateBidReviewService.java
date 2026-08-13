@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.bidreview.application.service;
 
 import com.group3.vitamins.bidding.bidreview.application.command.CreateBidReviewCommand;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCommandPort;
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCompanyDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewReferenceFilePort;
 import com.group3.vitamins.bidding.bidreview.application.result.CreateBidReviewResult;
@@ -35,6 +36,7 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
 
     private static final int MAX_ATTACHMENT_COUNT = 10;
     private static final int MAX_REFERENCE_FILE_COUNT = 10;
+    private static final int MAX_COMPANY_DOCUMENT_COUNT = 10;
     private static final int MAX_PROMPT_LENGTH = 3000;
     private static final String ACTIVE_PROCESSING_CONSTRAINT =
             "uk_bid_review_active_processing";
@@ -42,6 +44,7 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
     private final BidReviewCommandPort commandPort;
     private final BidReviewNoticeDocumentPort noticeDocumentPort;
     private final BidReviewReferenceFilePort referenceFilePort;
+    private final BidReviewCompanyDocumentPort companyDocumentPort;
     private final BiddingAccessPolicy biddingAccessPolicy;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final Clock clock;
@@ -74,6 +77,9 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
         List<BidReviewReferenceFilePort.ReferenceFileSnapshot> references =
                 findReferenceFiles(command, companyId);
 
+        List<BidReviewCompanyDocumentPort.CompanyDocumentReferenceSnapshot> companyDocuments =
+                findCompanyDocuments(command);
+
         LocalDateTime now = LocalDateTime.now(clock);
         String attemptId = UUID.randomUUID().toString();
 
@@ -87,7 +93,7 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
         );
 
         List<BidReviewDocument> documents =
-                createDocuments(attachments, references, now);
+                createDocuments(attachments, references, companyDocuments, now);
 
         BidReview saved = savePending(review, documents);
         return CreateBidReviewResult.from(saved);
@@ -142,9 +148,34 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
         return references;
     }
 
+    // 사내 문서함 참조 - CompanyDocumentReferenceUseCase가 이미 회사 스코프·완료 최신 버전만 노출하므로,
+    // 반환 개수가 요청 개수와 다르면 다른 회사 문서거나 완료되지 않은 버전이다(둘을 구분할 근거가 없어
+    // 기준자료 경로의 1단계 접근 거부와 동일하게 묶어서 403으로 처리한다).
+    private List<BidReviewCompanyDocumentPort.CompanyDocumentReferenceSnapshot> findCompanyDocuments(
+            CreateBidReviewCommand command
+    ) {
+        if (command.companyDocumentVersionIds().isEmpty()) {
+            return List.of();
+        }
+
+        List<BidReviewCompanyDocumentPort.CompanyDocumentReferenceSnapshot> documents =
+                companyDocumentPort.findAccessibleDocuments(
+                        command.companyDocumentVersionIds()
+                );
+
+        if (documents.size() != command.companyDocumentVersionIds().size()) {
+            throw new ForbiddenException(
+                    BidReviewErrorCode.BIDDING_REVIEW_DOCUMENT_ACCESS_DENIED
+            );
+        }
+
+        return documents;
+    }
+
     private List<BidReviewDocument> createDocuments(
             List<BidReviewNoticeDocumentPort.AttachmentSnapshot> attachments,
             List<BidReviewReferenceFilePort.ReferenceFileSnapshot> references,
+            List<BidReviewCompanyDocumentPort.CompanyDocumentReferenceSnapshot> companyDocuments,
             LocalDateTime now
     ) {
         List<BidReviewDocument> documents = new ArrayList<>();
@@ -161,6 +192,14 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
                 documents.add(BidReviewDocument.createInternalReference(
                         reference.referenceFileId(),
                         reference.fileName(),
+                        now
+                ))
+        );
+
+        companyDocuments.forEach(document ->
+                documents.add(BidReviewDocument.createCompanyDocumentReference(
+                        document.companyDocumentVersionId(),
+                        document.fileName(),
                         now
                 ))
         );
@@ -209,6 +248,11 @@ public class CreateBidReviewService implements CreateBidReviewUseCase {
                 command.referenceFileIds(),
                 0,
                 MAX_REFERENCE_FILE_COUNT
+        )
+                || !validIds(
+                command.companyDocumentVersionIds(),
+                0,
+                MAX_COMPANY_DOCUMENT_COUNT
         )) {
             throw new ValidationException(
                     BidReviewErrorCode.BIDDING_INVALID_REVIEW_REQUEST

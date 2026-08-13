@@ -59,11 +59,13 @@ public interface BidReviewWorkerPort {
     ) {
     }
 
-    // documentRole은 "BID_ATTACHMENT" 또는 "INTERNAL_REFERENCE"이며 역할에 맞는 ID만 채워진다.
+    // documentRole은 "BID_ATTACHMENT"·"INTERNAL_REFERENCE"·"COMPANY_DOCUMENT_REFERENCE"이며
+    // 역할에 맞는 ID만 채워진다.
     record JobDocument(
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName
     ) {
     }
@@ -82,6 +84,7 @@ public interface BidReviewWorkerPort {
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             Integer pageNumber,
             String sheetName,

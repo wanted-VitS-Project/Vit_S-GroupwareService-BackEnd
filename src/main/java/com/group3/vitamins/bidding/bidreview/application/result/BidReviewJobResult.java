@@ -10,7 +10,9 @@ public record BidReviewJobResult(
         Long noticeId,
         String noticeName,
         List<AttachmentJob> attachments,
-        List<ReferenceFileJob> referenceFiles
+        List<ReferenceFileJob> referenceFiles,
+        List<CompanyDocumentJob> companyDocuments,
+        String qualificationSummary
 ) {
 
     public record AttachmentJob(
@@ -22,6 +24,13 @@ public record BidReviewJobResult(
 
     public record ReferenceFileJob(
             Long referenceFileId,
+            String fileName,
+            String downloadUrl
+    ) {
+    }
+
+    public record CompanyDocumentJob(
+            Long companyDocumentVersionId,
             String fileName,
             String downloadUrl
     ) {
