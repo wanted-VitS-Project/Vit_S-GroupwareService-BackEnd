@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  자격증 마스터 조회 (HR-V1 MAJ). 목록은 사용 사원 수(활성)를 함께 세고, 삭제 검사는 참조 수를 센다.
+  ⚠️ 활성 사원만 센다 — employee 를 JOIN 해 is_system=0·미삭제·미퇴사로 거른 뒤 COUNT(DISTINCT e.user_id).
+     (LEFT JOIN 으로 ee.user_id 를 세면 퇴사자·시스템도 세어 카운트가 틀린다.)
+  ⚠️ SELECT alias 순서 = CertificateListProjection 필드 순서(위치 기반 매핑).
+-->
+<mapper namespace="com.group3.vitamins.certificate.infrastructure.adapter.CertificateQueryMapper">
+
+    <select id="findCertificatesWithCount"
+            resultType="com.group3.vitamins.certificate.application.result.CertificateListProjection">
+        SELECT m.certificate_id                 AS certificateId,
+               m.name                      AS name,
+               COUNT(DISTINCT e.user_id)   AS employeeCount
+          FROM certificate m
+          LEFT JOIN employee_certificate ee ON ee.certificate_id = m.certificate_id AND ee.company_id = #{companyId}
+          LEFT JOIN employee e ON e.user_id = ee.user_id AND e.company_id = #{companyId}
+               AND e.is_system = 0 AND e.deleted_at IS NULL AND e.resigned_at IS NULL
+         WHERE m.company_id = #{companyId}
+        <if test="keyword != null">
+            AND m.name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+         GROUP BY m.certificate_id, m.name
+         ORDER BY m.name
+    </select>
+
+    <select id="countActiveReferences" resultType="long">
+        SELECT COUNT(DISTINCT e.user_id)
+          FROM employee_certificate ee
+          JOIN employee e ON e.user_id = ee.user_id AND e.company_id = #{companyId}
+               AND e.is_system = 0 AND e.deleted_at IS NULL AND e.resigned_at IS NULL
+         WHERE ee.certificate_id = #{certificateId} AND ee.company_id = #{companyId}
+    </select>
+
+</mapper>
