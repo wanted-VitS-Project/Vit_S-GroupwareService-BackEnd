@@ -21,6 +21,8 @@ public record CompanyDocumentReferenceResponse(
         String indexStatus
 ) {
 
+    // ⚠️ v.storageKey() 는 의도적으로 매핑하지 않는다 — S3 원본 키는 입찰 Worker presign 전용(findSelectableVersion 포트로만
+    //    획득)이고, 프론트(MEMBER) 응답에 내부 키를 흘리지 않는다(2026-08-13 결정). 여기에 필드를 추가하지 말 것.
     public static CompanyDocumentReferenceResponse from(CompanyDocumentReferenceView v) {
         return new CompanyDocumentReferenceResponse(
                 v.companyDocumentId(), v.companyDocumentVersionId(), v.category(),
