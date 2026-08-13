@@ -1,7 +1,8 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
-**최종 동기화**: 2026-08-12 (입찰 AI 요약 개정 요청과 이전 요약 Worker 전달 계약 구현)
+**최종 동기화**: 2026-08-13 (문서 검토 Worker 401 코드를 `AUTH_UNAUTHENTICATED`로 통일 — 공용 `BiddingWorkerTokenAuthenticationFilter` 실제 동작과 일치)
+**최종 동기화**: 2026-08-12 (입찰 공고 첨부·사내 문서 비교 검토와 임시파일 생명주기 계약 확정)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -31,6 +32,17 @@
 | ✅ 확정 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
 | ✔️ 완료 | Python 입찰 요약 작업 조회 | GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | 내부 서버 |
 | ✅ 확정 | Python 입찰 요약 결과 callback | POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | 내부 서버 |
+| ✅ 확정 | 입찰 문서 검토 요청 | POST | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
+| ✅ 확정 | 입찰 문서 검토 자료 조회 | GET | `/api/v1/bidding/notices/{noticeId}/review-sources` | `BIDDING` |
+| ✅ 확정 | 입찰 기준자료 파일함 조회 | GET | `/api/v1/bidding/reference-files` | `BIDDING` |
+| ✅ 확정 | 입찰 기준자료 업로드 시작 | POST | `/api/v1/bidding/reference-files/uploads` | `BIDDING` |
+| ✅ 확정 | 입찰 기준자료 업로드 완료 | POST | `/api/v1/bidding/reference-files/uploads/{referenceFileId}/complete` | `BIDDING` |
+| ✅ 확정 | 입찰 기준자료 삭제 | DELETE | `/api/v1/bidding/reference-files/{referenceFileId}` | `BIDDING` |
+| ✅ 확정 | 공고별 입찰 문서 검토 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
+| ✅ 확정 | 입찰 문서 검토 조회 | GET | `/api/v1/bidding/reviews/{reviewId}` | `BIDDING` |
+| ✅ 확정 | 입찰 문서 검토 포기 | PATCH | `/api/v1/bidding/reviews/{reviewId}/abandon` | `BIDDING` |
+| ✅ 확정 | Python 입찰 문서 검토 작업 조회 | GET | `/internal/v1/bidding/reviews/{reviewId}/jobs/{attemptId}` | 내부 서버 |
+| ✅ 확정 | Python 입찰 문서 검토 결과 callback | POST | `/internal/v1/bidding/reviews/{reviewId}/callback` | 내부 서버 |
 | ✅ 확정 | 공고 프로젝트 전환 | POST | `/api/v1/bidding/notices/{noticeId}/projects` | `BIDDING` |
 
 ---
@@ -689,11 +701,12 @@ Outbox는 최소한 아래 정보를 관리한다.
 | 일정 | `announcedAt`, `bidStartAt`, `questionDeadlineAt`, `applicationDeadlineAt`, `bidDeadlineAt`, `openingAt`, `dDay` |
 | 금액 | `baseAmount`, `estimatedAmount`, `priceRangeText`, `minimumBidRateText` |
 | 계약 및 제한 | `participationQualificationText`, `regionLimitText`, `businessLimitText`, `jointContractAllowed`, `jointContractText`, `contractMethod`, `evaluationMethod` |
-| 첨부파일 | `attachments[].attachmentOrder`, `attachments[].fileName`, `attachments[].sourceUrl` |
+| 첨부파일 | `attachments[].attachmentId`, `attachments[].attachmentOrder`, `attachments[].fileName`, `attachments[].sourceType`, `attachments[].supported` |
 
 `dDay`는 DB에 저장하지 않고 서버에서 계산한다.
 
 첨부파일은 삭제되지 않은 항목만 순서 오름차순으로 반환한다. 파일 크기는 수집 원천에 일관된 값이 없어 반환하지 않는다.
+원본 `sourceUrl`은 프론트에 반환하지 않고 입찰 문서 검토 Worker의 내부 작업 조회에서만 사용한다.
 
 **Status Code**
 
@@ -974,7 +987,7 @@ Request Body는 없다.
 | 수정·확정 권한 | 미확정 `COMPLETED` 요약은 최초 요청자만 수정하고 확정할 수 있다 |
 | 회사 확정본 | 확정된 요약은 같은 회사의 `BIDDING` 권한 사용자가 조회하고 프로젝트 생성에 사용할 수 있다 |
 | 분석 입력 | 공고 기본 정보, 금액, 일정, 참가 자격, 계약·평가 방식과 첨부파일 메타데이터를 사용한다 |
-| 첨부 본문 | 입찰 AI 요약에서는 다운로드하거나 본문을 분석하지 않는다. 첨부 문서 본문 검토는 프로젝트 전환 후 비타메이트가 담당한다 |
+| 첨부 본문 | 입찰 AI 요약에서는 다운로드하거나 본문을 분석하지 않는다. 프로젝트 전 공고 첨부와 사내 문서 비교는 별도 입찰 문서 검토 API가 담당한다 |
 | 사용자 프롬프트 | 사용자가 `prompt`를 직접 입력한다. 서버 기본 업무 프롬프트나 도메인별 프롬프트 템플릿을 앞뒤에 추가하지 않는다 |
 | 출력 형식 | Python worker는 사용자 프롬프트를 바꾸지 않고 Gemini 구조화 응답 스키마로 결과 필드만 구분한다 |
 | 안전 정책 | 인증, 회사 격리, 입력 데이터 경계, 민감 정보 차단과 출력 형식 검증은 사용자 프롬프트와 분리된 실행 정책으로 적용한다 |
@@ -1407,6 +1420,368 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 
 ---
 
+## 입찰 문서 비교 검토
+
+**상태**: ✅ 확정
+
+입찰 문서 비교 검토는 공고의 구조화 정보만 사용하는 입찰 AI 요약과 별개의 기능이다.
+사용자가 선택한 공고 첨부파일을 검토 시작 시점에 내려받고, 선택한 사내 문서를 기준 자료로 사용하여
+참가 조건, 인력·자격·실적, 재무 조건, 일정과 수행 위험을 비교한다.
+
+### 공통 정책
+
+| 항목 | 규칙 |
+|------|------|
+| 회사 격리 | `bid_review.company_id`를 요청 시점에 저장하며 다른 회사의 검토는 조회하거나 사용할 수 없다 |
+| 요청자 권한 | 요청·조회·포기 모두 현재 회사의 `BIDDING` 권한이 필요하다 |
+| 공고 첨부 표시 | 검토 전에는 `attachmentId`, `fileName`, `sourceType`과 선택 여부 판단에 필요한 메타데이터만 프론트에 반환한다 |
+| 원본 URL | 프론트에 반환하지 않는다. Spring DB에 보관하고 내부 Worker 작업 조회에서만 전달한다 |
+| 실제 다운로드 | 사용자가 검토 요청 API를 호출한 뒤 Python Worker가 선택된 `bidAttachmentIds`만 다운로드한다 |
+| 사내 기준자료 | 입찰 도메인의 회사별 기준자료 파일함에 영구 보관한다. 프로젝트에 귀속되지 않으며 동일 회사의 여러 공고 검토에서 재사용할 수 있다 |
+| 문서 역할 | 공고 첨부는 `BID_ATTACHMENT`, 사내 문서는 `INTERNAL_REFERENCE`로 저장한다 |
+| 기준자료 저장 | 기준자료 메타데이터는 `bid_reference_file`, 바이너리는 회사별 S3 prefix에 저장하며 `storageKey`를 외부 응답에 노출하지 않는다 |
+| 임시 저장 | 공고 첨부 원본은 프로젝트 파일과 분리된 임시 저장소 prefix에 저장한다. 임시 `storageKey`는 외부 응답에 노출하지 않는다 |
+| 보관 시간 | 검토가 `COMPLETED` 또는 `FAILED`로 종료된 시각부터 3시간 동안 보관한다. 처리 중에는 만료 정리하지 않는다 |
+| 화면 이탈 | 뒤로 가기나 브라우저 종료는 별도 요청을 보내지 않는다. 임시파일은 만료 시각까지 유지한다 |
+| 검토 포기 | 포기 API는 검토만 `ABANDONED`로 전이하고 정리 작업을 즉시 요청한다. 입찰 공고 자체는 제외하거나 삭제하지 않는다 |
+| 프로젝트 귀속 | 프로젝트 생성 요청에 `reviewId`가 있으면 해당 검토에서 실제 사용한 공고 첨부만 파일 도메인으로 정식 귀속한다 |
+| 정리 실패 | 임시 객체와 파생 데이터 삭제는 재시도하며 최종 실패 작업은 DLQ로 분리한다 |
+| 결과 근거 | 결과는 문서명, 페이지 또는 시트, 발췌문을 citation으로 남긴다. 근거가 없으면 추정으로 단정하지 않는다 |
+| 처리 방식 | 검토 요청과 Outbox를 같은 DB 트랜잭션에 저장하고 Redis Stream을 통해 Python Worker가 비동기로 처리한다 |
+| 시도 격리 | 매 처리 시도마다 UUID 형식 `attemptId`를 발급하며 현재 시도와 다른 callback은 저장하지 않는다 |
+
+### 입력 제한과 다운로드 안전 정책
+
+| 항목 | 규칙 |
+|------|------|
+| 공고 첨부 개수 | 1개 이상 10개 이하 |
+| 사내 기준자료 개수 | 0개 이상 10개 이하 |
+| 전체 문서 개수 | 최대 20개 |
+| 프롬프트 | 공백 불가, 최대 3,000자 |
+| 지원 확장자 | `pdf`, `docx`, `xlsx`, `csv`, `txt`, `hwp`, `hwpx` |
+| 파일 크기 | 파일당 최대 50MB, 공고 첨부 합계 최대 200MB |
+| URL 검증 | `http` 또는 `https`만 허용하고 loopback, private, link-local 주소를 차단한다. redirect 대상도 매번 다시 검증한다 |
+| 다운로드 제한 | 연결·응답 timeout과 최대 응답 크기를 강제하고 파일명은 경로 문자를 제거하여 저장한다 |
+| 미지원·손상 파일 | 해당 문서를 실패로 기록한다. 선택한 공고 첨부를 하나도 분석할 수 없으면 검토 전체를 `FAILED`로 종료한다 |
+
+### 상태값
+
+| 상태 | 설명 |
+|------|------|
+| `PENDING` | 검토 요청과 Outbox가 저장되어 Worker 처리를 기다림 |
+| `PROCESSING` | 현재 `attemptId`의 Worker가 다운로드·추출·비교 중 |
+| `COMPLETED` | 비교 결과와 citation 저장 완료 |
+| `FAILED` | 복구 불가능한 오류 또는 재시도 초과로 종료 |
+| `ABANDONED` | 사용자가 검토를 포기하여 즉시 정리 대상으로 전환 |
+| `EXPIRED` | 프로젝트로 귀속되지 않고 보관 시간이 지나 정리 완료 |
+
+문서 처리 상태는 `PENDING`, `DOWNLOADING`, `READY`, `FAILED`, `PROMOTED`, `DELETED`를 사용한다.
+
+---
+
+## 입찰 문서 검토 자료 조회 `GET /api/v1/bidding/notices/{noticeId}/review-sources`
+
+**상태**: ✅ 확정
+
+검토 화면에 표시할 공고 첨부파일 메타데이터를 조회한다. 사내 기준자료 목록은
+`GET /api/v1/bidding/reference-files`를 별도로 호출하며 이 API에서 합쳐 반환하지 않는다.
+
+### Response Data
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `noticeId` | Long | 입찰 공고 ID |
+| `attachments` | List | 삭제되지 않은 공고 첨부 목록 |
+| `attachments[].attachmentId` | Long | 검토 요청에서 사용하는 첨부 ID |
+| `attachments[].fileName` | String | 화면 표시용 원본 파일명 |
+| `attachments[].sourceType` | String | `NARA` 또는 `MANUAL` 등 수집 출처 코드 |
+| `attachments[].supported` | Boolean | 현재 문서 추출 지원 형식 여부 |
+
+`sourceUrl`, 인증 정보와 임시 저장 키는 반환하지 않는다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 조회 성공 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
+
+---
+
+## 입찰 기준자료 파일함 조회 `GET /api/v1/bidding/reference-files`
+
+**상태**: ✅ 확정
+
+현재 회사가 입찰 문서 검토에 반복 사용할 기준자료를 조회한다. 다른 회사의 파일과 삭제된 파일은 반환하지 않는다.
+
+### Response Data
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `referenceFileId` | Long | 검토 요청에서 사용할 기준자료 ID |
+| `fileName` | String | 원본 파일명 |
+| `extension` | String | 소문자 확장자 |
+| `mimeType` | String | 업로드 시 확인한 MIME 타입 |
+| `sizeBytes` | Long | 파일 크기 |
+| `uploadStatus` | String | `UPLOADING`, `COMPLETED`, `FAILED` |
+| `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
+| `selectable` | Boolean | 업로드와 인덱싱이 모두 완료되어 검토에 사용할 수 있는지 |
+| `createdAt` | LocalDateTime | 등록 시각 |
+
+---
+
+## 입찰 기준자료 업로드 시작 `POST /api/v1/bidding/reference-files/uploads`
+
+**상태**: ✅ 확정
+
+### Request Body
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `fileName` | String | Y | 경로 문자를 제거한 원본 파일명, 최대 255자 |
+| `mimeType` | String | Y | 파일 MIME 타입, 최대 100자 |
+| `sizeBytes` | Long | Y | 1바이트 이상 50MB 이하 |
+
+### Success Response
+
+`201 Created`로 `referenceFileId`, 10분 유효한 `uploadUrl`, `expiresAt`을 반환한다. 클라이언트는 `uploadUrl`로 바이너리를 직접 `PUT`한 뒤 완료 API를 호출한다.
+
+---
+
+## 입찰 기준자료 업로드 완료 `POST /api/v1/bidding/reference-files/uploads/{referenceFileId}/complete`
+
+**상태**: ✅ 확정
+
+Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인한 뒤 `uploadStatus=COMPLETED`, `indexStatus=PENDING`으로 저장하고 비동기 인덱싱 Outbox를 생성한다.
+
+### Success Response
+
+`200 OK`로 `referenceFileId`, `fileName`, `uploadStatus`, `indexStatus`, `completedAt`을 반환한다.
+
+---
+
+## 입찰 기준자료 삭제 `DELETE /api/v1/bidding/reference-files/{referenceFileId}`
+
+**상태**: ✅ 확정
+
+현재 회사의 기준자료를 삭제한다. `PENDING` 또는 `PROCESSING` 검토가 해당 파일을 사용 중이면 `409 BIDDING_REFERENCE_FILE_IN_USE`로 거절한다. 삭제가 허용되면 DB 논리 삭제와 S3·임베딩 파생 데이터 정리 Outbox를 같은 트랜잭션에 저장한다. 기존 완료 검토의 문서명·결과·citation 스냅샷은 유지한다.
+
+---
+
+## 입찰 문서 검토 요청 `POST /api/v1/bidding/notices/{noticeId}/reviews`
+
+**상태**: ✅ 확정
+
+### Request Body
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `bidAttachmentIds` | Long[] | Y | 검토할 공고 첨부 ID. 1~10개, 중복 불가 |
+| `referenceFileIds` | Long[] | N | 비교 기준으로 사용할 입찰 기준자료 ID. 최대 10개, 중복 불가 |
+| `prompt` | String | Y | 사용자가 직접 입력한 검토 지시. 공백 불가, 최대 3,000자 |
+
+```json
+{
+  "bidAttachmentIds": [31, 32],
+  "referenceFileIds": [501, 502],
+  "prompt": "우리 회사의 재정 상태와 보유 인력으로 수행 가능한지, 부족한 자격과 실적을 근거와 함께 검토해줘."
+}
+```
+
+### Success Response
+
+```json
+{
+  "httpStatus": 202,
+  "message": "입찰 문서 검토 요청이 접수되었습니다.",
+  "data": {
+    "reviewId": 71,
+    "reviewStatus": "PENDING",
+    "requestedAt": "2026-08-12T14:00:00"
+  }
+}
+```
+
+### 처리 규칙
+
+1. 공고와 선택 첨부가 현재 회사에서 조회 가능한 활성 데이터인지 검증한다.
+2. 입찰 기준자료가 현재 회사에 속하고 업로드와 인덱싱이 완료됐는지 검증한다.
+3. 검토 요청, 선택 문서 스냅샷과 Outbox를 같은 DB 트랜잭션에서 저장한다.
+4. Worker가 선택된 공고 첨부만 다운로드하며 선택하지 않은 첨부에는 접근하지 않는다.
+5. 같은 회사·공고·요청자에 `PENDING` 또는 `PROCESSING` 검토가 있으면 새 요청을 거부한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 202 | - | 요청 접수 성공 |
+| 400 | `BIDDING_INVALID_REVIEW_REQUEST` | ID, 개수, 중복 또는 프롬프트 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 403 | `BIDDING_REVIEW_DOCUMENT_ACCESS_DENIED` | 입찰 기준자료에 접근할 수 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
+| 404 | `BIDDING_NOTICE_ATTACHMENT_NOT_FOUND` | 선택한 공고 첨부가 없거나 해당 공고 소속이 아님 |
+| 409 | `BIDDING_REVIEW_ALREADY_PROCESSING` | 같은 요청자에게 진행 중인 검토가 있음 |
+| 409 | `BIDDING_REVIEW_DOCUMENT_NOT_READY` | 입찰 기준자료 업로드 또는 인덱싱이 완료되지 않음 |
+| 422 | `BIDDING_REVIEW_UNSUPPORTED_FILE` | 지원하지 않는 공고 첨부 형식 |
+
+---
+
+## 공고별 입찰 문서 검토 이력 조회 `GET /api/v1/bidding/notices/{noticeId}/reviews`
+
+**상태**: ✅ 확정
+
+현재 회사에서 본인이 요청한 검토 이력을 최신순으로 조회한다. 최대 20건을 반환하며 임시파일의 원본 URL과 저장 키는 포함하지 않는다.
+
+각 항목은 `reviewId`, `reviewStatus`, `prompt`, `requestedAt`, `completedAt`, `expiresAt`, `projectId`를 반환한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 조회 성공. 이력이 없으면 빈 배열 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |
+
+---
+
+## 입찰 문서 검토 조회 `GET /api/v1/bidding/reviews/{reviewId}`
+
+**상태**: ✅ 확정
+
+### Response Data
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `reviewId` | Long | 검토 ID |
+| `noticeId` | Long | 입찰 공고 ID |
+| `prompt` | String | 요청 당시 사용자 프롬프트 |
+| `reviewStatus` | String | 검토 상태 |
+| `result` | String | 근거 번호를 포함한 검토 결과. 완료 전에는 `null` |
+| `errorMessage` | String | 실패 사유. 실패가 아니면 `null` |
+| `requestedAt` | LocalDateTime | 요청 시각 |
+| `completedAt` | LocalDateTime | 완료 또는 실패 시각 |
+| `expiresAt` | LocalDateTime | 임시파일 정리 예정 시각. 처리 중이거나 귀속 완료면 `null` |
+| `projectId` | Long | 정식 프로젝트로 귀속됐으면 프로젝트 ID |
+| `documents` | List | 요청 당시 선택한 문서 목록과 처리 상태 |
+| `citations` | List | 검토 결과의 근거 목록 |
+
+`documents[]`는 `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`, `processingStatus`를 반환한다.
+두 ID 중 문서 역할에 해당하지 않는 값은 `null`이다.
+
+`citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`,
+`pageNumber`, `sheetName`, `excerpt`를 반환한다. 페이지 또는 시트가 없는 형식은 해당 필드가 `null`이다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 조회 성공 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_REVIEW_ACCESS_DENIED` | 다른 회사 또는 다른 요청자의 검토 |
+| 404 | `BIDDING_REVIEW_NOT_FOUND` | 검토가 존재하지 않음 |
+
+---
+
+## 입찰 문서 검토 포기 `PATCH /api/v1/bidding/reviews/{reviewId}/abandon`
+
+**상태**: ✅ 확정
+
+현재 요청자가 프로젝트로 전환하지 않은 검토를 포기하고 임시파일 정리를 즉시 요청한다. Request Body는 없다.
+
+`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 상태에서만 포기할 수 있다. 이미 `ABANDONED`, `EXPIRED`이거나
+프로젝트로 귀속된 검토는 변경하지 않는다. 처리 중 Worker의 이후 callback은 `accepted=false`로 거절한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 포기 접수 및 정리 요청 성공 |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_REVIEW_ACCESS_DENIED` | 다른 회사 또는 다른 요청자의 검토 |
+| 404 | `BIDDING_REVIEW_NOT_FOUND` | 검토가 존재하지 않음 |
+| 409 | `BIDDING_REVIEW_NOT_ABANDONABLE` | 이미 정리됐거나 프로젝트에 귀속됨 |
+
+---
+
+## Python 입찰 문서 검토 작업 조회 `GET /internal/v1/bidding/reviews/{reviewId}/jobs/{attemptId}`
+
+**상태**: ✅ 확정
+
+Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `attemptId`, `prompt`, 공고 기본 정보,
+선택한 공고 첨부의 `attachmentId`, `fileName`, 내부 원본 `sourceUrl`과 선택한 입찰 기준자료의
+`referenceFileId`, `fileName`, 단명 내부 다운로드 URL을 포함한다. 프론트용 API에서는 이 URL들을 제공하지 않는다.
+
+현재 `attemptId`와 일치하는 `PENDING` 또는 `PROCESSING` 작업만 반환한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 작업 조회 성공 |
+| 400 | `BIDDING_INVALID_REVIEW_REQUEST` | ID 또는 UUID 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | worker 토큰 누락 또는 불일치 |
+| 404 | `BIDDING_REVIEW_JOB_NOT_FOUND` | 현재 시도와 일치하는 작업 없음 |
+
+---
+
+## Python 입찰 문서 검토 결과 callback `POST /internal/v1/bidding/reviews/{reviewId}/callback`
+
+**상태**: ✅ 확정
+
+### Request Body
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `attemptId` | String(UUID) | Y | 현재 처리 시도 ID |
+| `reviewStatus` | String | Y | `PROCESSING`, `COMPLETED`, `FAILED` |
+| `result` | String | 조건부 | `COMPLETED`이면 필수 |
+| `errorCode` | String | 조건부 | `FAILED`이면 오류 분류 코드 |
+| `errorMessage` | String | 조건부 | `FAILED`이면 필수, 최대 500자 |
+| `retryable` | Boolean | N | `FAILED` 오류의 일시 장애 여부. 생략 시 `false`로 처리하며 `PROCESSING`·`COMPLETED`에서는 `false`여야 함 |
+| `documents` | List | N | 공고 첨부별 임시 저장·처리 결과 |
+| `citations` | List | N | `COMPLETED` 검토 근거 목록 |
+
+`documents[]`는 `bidAttachmentId`, `processingStatus`, `temporaryStorageKey`, `fileSize`, `mimeType`을 전달한다.
+`temporaryStorageKey`는 Spring DB 저장용 내부 값이며 외부 조회 응답에서는 제거한다. `PROCESSING` 콜백에서도
+문서별 중간 진행 상태를 갱신하기 위해 `documents[]`만 담아 보낼 수 있다(`result`·`citations` 없이).
+
+`citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`,
+`pageNumber`, `sheetName`, `excerpt`를 전달한다.
+
+재시도 대상은 다운로드 연결 실패·Timeout·Gemini 429·5xx 등 일시적 오류만 `retryable=true`로 전달한다.
+잘못된 요청·지원하지 않는 형식·설정 오류 등 복구 불가능한 오류는 `retryable=false`로 전달하고 `FAILED`로 종료한다.
+
+Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 응답으로 `accepted`, `reviewId`,
+`reviewStatus`, `reason`을 반환한다. `COMPLETED` 또는 `FAILED`(재시도 아님) 저장 시 `expiresAt = 완료 시각 + 3시간`으로 계산한다.
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | callback 접수. 멱등 거절도 `accepted=false`로 200 반환 |
+| 400 | `BIDDING_INVALID_REVIEW_CALLBACK` | 상태별 필수값 또는 UUID 형식 오류 |
+| 401 | `AUTH_UNAUTHENTICATED` | worker 토큰 누락 또는 불일치 |
+| 404 | `BIDDING_REVIEW_NOT_FOUND` | 검토가 존재하지 않음 |
+
+### 비동기 신뢰성 및 정리 규칙
+
+| 항목 | 규칙 |
+|------|------|
+| 재시도 | 일시적 다운로드·Spring·Gemini 오류는 최대 3회 재시도한다 |
+| 새 시도 | 재시도마다 새 `attemptId`를 발급하고 이전 callback은 거절한다 |
+| ACK | callback에서 수락 또는 멱등 거절을 확인한 뒤 Redis 메시지를 ACK한다 |
+| 만료 스캔 | Spring 스케줄러가 `expiresAt <= now`이고 프로젝트에 귀속되지 않은 검토를 원자적으로 점유해 정리 Outbox를 저장한다 |
+| 정리 범위 | 임시 S3 객체와 해당 검토 전용 임시 파생 데이터만 삭제하며 입찰 기준자료와 공고 첨부 메타데이터는 삭제하지 않는다 |
+| 포기 | 포기 트랜잭션에서 상태 전이와 즉시 정리 Outbox를 함께 저장한다 |
+| 정리 완료 | 모든 임시 데이터 삭제 성공 후 `EXPIRED`로 전이한다. 포기 이력은 별도 포기 시각으로 보존한다 |
+| DLQ | 최대 재시도 초과 정리 작업은 reviewId와 attemptId 기준 중복 제거 후 DLQ에 기록한다 |
+
+---
+
 ## 공고 프로젝트 전환 `POST /api/v1/bidding/notices/{noticeId}/projects`
 
 **상태**: ✅ 확정
@@ -1416,6 +1791,7 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 | 파라미터 | 타입 | 필수 | 설명 |
 |---------|------|------|------|
 | `summaryId` | Long | Y | 현재 회사에서 확정된 `COMPLETED` AI 요약 ID. 누락 시 `COMMON_INVALID_REQUEST` |
+| `reviewId` | Long | N | 같은 공고·회사의 `COMPLETED` 문서 검토 ID. 지정하면 실제 사용한 공고 첨부를 프로젝트 파일로 귀속 |
 | `name` | String | Y | 프로젝트명 |
 | `description` | String | N | 설명 |
 | `businessCategoryId` | Long | Y | 사업 카테고리 ID |
@@ -1428,17 +1804,19 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 1. 공고 존재 여부와 현재 회사의 접근 권한 확인
 2. `summaryId`가 같은 공고·회사에 속한 `COMPLETED`·확정 요약인지 확인
 3. 해당 요약이 아직 프로젝트에 연결되지 않았는지 확인
-4. 기존 프로젝트 전환 여부 확인
-5. 요청자가 `BIDDING` 권한을 갖는지 확인
-6. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
-7. 하나의 DB 트랜잭션 시작
-8. 프로젝트 생성과 `project.bid_notice_id` 저장
-9. `bid_notice_summary.project_id`에 생성된 프로젝트 ID 저장
-10. 인증된 전환 요청자를 `project_member`에 자동 등록
-11. 추가 `memberIds`를 `project_member`에 등록
-12. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
-13. 입찰용 블록은 생성하지 않음
-14. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
+4. `reviewId`가 있으면 같은 공고·회사·요청자의 `COMPLETED` 검토이며 만료·포기되지 않았는지 확인
+5. 기존 프로젝트 전환 여부 확인
+6. 요청자가 `BIDDING` 권한을 갖는지 확인
+7. 추가 `memberIds`가 초대 가능한 사용자이며 프로젝트 참여자로 등록 가능한지 확인
+8. 하나의 DB 트랜잭션 시작
+9. 프로젝트 생성과 `project.bid_notice_id` 저장
+10. `bid_notice_summary.project_id`에 생성된 프로젝트 ID 저장
+11. `reviewId`가 있으면 검토에 사용한 공고 첨부의 정식 파일 귀속 요청을 기록하고 `bid_review.project_id`를 저장
+12. 인증된 전환 요청자를 `project_member`에 자동 등록
+13. 추가 `memberIds`를 `project_member`에 등록
+14. 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성
+15. 입찰용 블록은 생성하지 않음
+16. 전체 성공 시 커밋, 중간 실패 시 전체 롤백
 
 권한 정책:
 
@@ -1465,6 +1843,9 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 | 공고 하나당 프로젝트 | 1개만 생성 |
 | 중복 방지 | `UNIQUE(project.bid_notice_id)` |
 | 확정 요약 연결 | `UNIQUE(bid_notice_summary.project_id)`로 한 프로젝트의 근거 요약을 하나로 고정 |
+| 검토 파일 귀속 | `reviewId`가 있으면 해당 검토에서 선택하고 실제 다운로드에 성공한 공고 첨부만 정식 프로젝트 파일로 귀속 |
+| 귀속 멱등성 | `bidReviewDocumentId`를 파일 도메인 멱등키로 전달하여 재시도 시 파일을 중복 생성하지 않음 |
+| 귀속 완료 | 파일 도메인이 정식 `fileVersionId`를 반환한 뒤 문서 상태를 `PROMOTED`로 저장하고 임시 객체를 삭제 |
 | 스냅샷 | 저장하지 않음 |
 | 정정공고 | 변경 감지와 자동 반영은 v1 범위 밖 |
 

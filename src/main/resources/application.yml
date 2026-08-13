@@ -99,6 +99,17 @@ server:
   # 프록시(ALB/nginx) 뒤에서 원래 스킴·호스트를 인식한다. Secure 쿠키 판정에 필요하다.
   forward-headers-strategy: framework
 
+# ── 모니터링 (그라파나 Phase4/5) ──────────────────────────
+# health 는 배포 헬스체크(.github/workflows/deploy.yml)가 쓴다. prometheus 는 Grafana 스크랩용.
+# ⚠️ 둘 다 앱 메인 포트(8080)에 그대로 열린다 — SecurityConfig 에서 permitAll 이라 이 포트에
+#    닿는 누구나 지표를 볼 수 있다. 별도 인증을 안 거는 이유는 기존 node-exporter/cAdvisor 와
+#    동일하게 "SG 로 포트 접근을 막는다"는 이 프로젝트의 기존 방식을 따르기 때문이다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
 # ── 비밀번호 해시 ────────────────────────────────────────
 # 2026-08-03 실측 기반 잠정값. 근거·실측표는 .ai/local/STATE.md `🔐 인증·보안 확정값` 참고.
 # ⚠️ EC2(t3.medium) 에서 `./gradlew benchmark` 를 다시 돌려 iterations·permits 를 최종 확정할 것.
@@ -174,6 +185,18 @@ settlement:
   account-number:
     encryption-key: ${SETTLEMENT_ACCOUNT_ENC_KEY}
 
+
+# ── 알림 실시간 수신 (SSE · .ai/api/notification.md §5) ──
+# timeout: 연결을 이만큼 유지하고 정상 종료한다. 브라우저(EventSource)가 자동 재연결하므로
+#          사용자에게 보이는 영향은 없고, 좀비 커넥션을 주기적으로 회수하는 효과가 있다(RT-006).
+# heartbeat-interval: 유휴 커넥션이 끊기지 않게 보내는 주석(:ping) 주기.
+#   🚨 중간 프록시(nginx/ALB)의 유휴 타임아웃보다 **짧아야** 한다. 길면 연결이 조용히 죽는다 —
+#      예외도 로그도 없이 알림만 안 오고, 재현에 수십 초가 걸려서 늦게 발견된다.
+#      ALB 기본 유휴 타임아웃이 60초라 15초는 그 1/4 로 여유를 둔 값이다.
+notification:
+  sse:
+    timeout: ${NOTIFICATION_SSE_TIMEOUT:30m}
+    heartbeat-interval: ${NOTIFICATION_SSE_HEARTBEAT_INTERVAL:15s}
 
 #나라장터
 bidding:

@@ -16,10 +16,12 @@ public final class EmployeeBulkColumns {
     public static final int EMAIL = 5;
     public static final int PHONE = 6;
     public static final int ROLE = 7;
+    public static final int EDUCATION = 8;   // 학력 — "전공:학위" 세미콜론 구분 (선택)
+    public static final int CERTIFICATE = 9; // 자격증 — 자격증명 세미콜론 구분 (선택)
 
     /** 헤더 라벨 — 인덱스 순서가 위 상수와 일치한다. */
     public static final List<String> HEADERS = List.of(
-            "사번", "이름", "부서명", "직급명", "입사일", "이메일", "연락처", "권한");
+            "사번", "이름", "부서명", "직급명", "입사일", "이메일", "연락처", "권한", "학력", "자격증");
 
     /** 데이터가 시작되는 행(0-base) — 0행은 헤더. */
     public static final int FIRST_DATA_ROW = 1;

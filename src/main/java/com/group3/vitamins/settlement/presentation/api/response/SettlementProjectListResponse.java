@@ -8,12 +8,27 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record SettlementProjectListResponse(
-        @Schema(description = "프로젝트별 정산 현황 목록")
+        @Schema(description = "현재 페이지 번호 (0-base)", example = "0")
+        int page,
+
+        @Schema(description = "페이지당 개수", example = "20")
+        int size,
+
+        @Schema(description = "전체 항목 수", example = "1")
+        long totalElements,
+
+        @Schema(description = "전체 페이지 수", example = "1")
+        int totalPages,
+
+        @Schema(description = "프로젝트별 정산 현황 목록 (현재 페이지분만)")
         List<SettlementProjectItem> projects
 ) {
 
     public static SettlementProjectListResponse from(SettlementProjectListView view) {
-        return new SettlementProjectListResponse(view.projects().stream().map(SettlementProjectItem::from).toList());
+        return new SettlementProjectListResponse(
+                view.page(), view.size(), view.totalElements(), view.totalPages(),
+                view.projects().stream().map(SettlementProjectItem::from).toList()
+        );
     }
 
     public record SettlementProjectItem(

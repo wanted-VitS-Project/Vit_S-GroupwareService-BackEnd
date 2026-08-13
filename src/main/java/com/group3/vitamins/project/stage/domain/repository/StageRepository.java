@@ -2,6 +2,7 @@ package com.group3.vitamins.project.stage.domain.repository;
 
 import com.group3.vitamins.project.stage.domain.model.Stage;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -39,4 +40,12 @@ public interface StageRepository {
 
     /** 기대 버전이 같을 때만 정렬 순서를 바꾸고 version 을 올린다. 0 이면 충돌이다. */
     int moveIfVersionMatches(Long stageId, int sortOrder, int expectedVersion);
+
+    /**
+     * 프로젝트의 미삭제 스테이지를 전부 논리 삭제한다 (PRJ-014). 지운 행 수를 돌려준다.
+     *
+     * <p>⚠️ {@code version} 은 올리지 않는다 — {@code Stage#delete} 도 올리지 않는다.
+     * 삭제된 스테이지는 낙관적 락의 대상이 아니고, 여기서 올리면 규칙이 두 벌이 된다.
+     */
+    int deleteByProjectId(Long projectId, LocalDateTime deletedAt);
 }

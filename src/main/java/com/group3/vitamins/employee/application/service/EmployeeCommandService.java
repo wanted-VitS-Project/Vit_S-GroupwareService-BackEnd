@@ -3,6 +3,8 @@ package com.group3.vitamins.employee.application.service;
 import com.group3.vitamins.account.application.port.MailDeliveryException;
 import com.group3.vitamins.account.domain.TempPasswordGenerator;
 import com.group3.vitamins.account.domain.exception.AccountErrorCode;
+import com.group3.vitamins.employee.application.command.CertificateItem;
+import com.group3.vitamins.employee.application.command.EducationItem;
 import com.group3.vitamins.employee.application.command.RegisterEmployeeCommand;
 import com.group3.vitamins.employee.application.command.ResignEmployeeCommand;
 import com.group3.vitamins.employee.application.command.UpdateEmployeeCommand;
@@ -11,11 +13,17 @@ import com.group3.vitamins.employee.application.port.AccountDeactivationPort;
 import com.group3.vitamins.employee.application.port.CompanyCodeQueryPort;
 import com.group3.vitamins.employee.application.port.EmployeeReferenceQueryPort;
 import com.group3.vitamins.employee.application.port.InitialPasswordMailPort;
+import com.group3.vitamins.employee.application.port.QualificationReferenceQueryPort;
 import com.group3.vitamins.employee.application.result.EmployeeRegisterResult;
 import com.group3.vitamins.employee.application.result.EmployeeResignResult;
 import com.group3.vitamins.employee.application.usecase.EmployeeCommandUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.employee.domain.model.Degree;
 import com.group3.vitamins.employee.domain.model.Employee;
+import com.group3.vitamins.employee.domain.model.EmployeeCertificate;
+import com.group3.vitamins.employee.domain.model.EmployeeEducation;
+import com.group3.vitamins.employee.domain.repository.EmployeeCertificateRepository;
+import com.group3.vitamins.employee.domain.repository.EmployeeEducationRepository;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
 import com.group3.vitamins.employee.contract.EmployeeParticipationUnavailableEvent;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
@@ -33,6 +41,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -59,6 +71,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private static final int MAX_NAME_LENGTH = 50;
     private static final int MAX_EMAIL_LENGTH = 100;
     private static final int MAX_PHONE_LENGTH = 20;
+    private static final int MAX_SCHOOL_LENGTH = 100; // employee_education.school 컬럼 폭
 
     // 형식만 거르는 가벼운 검사(RFC 전체 준수 아님) — "local@label.label(.label…)" 최소 형태를 확인한다.
     // ⚠️ 도메인 라벨은 점을 제외한 문자({@code [^@\s.]})로 잡는다 — 라벨 문자에 점이 포함되면 뒤의 `\.` 와
@@ -69,6 +82,9 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
     private final EmployeeAdminPolicy employeeAdminPolicy;
     private final EmployeeRepository employeeRepository;
     private final EmployeeReferenceQueryPort referenceQueryPort;
+    private final QualificationReferenceQueryPort qualificationReferenceQueryPort;
+    private final EmployeeEducationRepository employeeEducationRepository;
+    private final EmployeeCertificateRepository employeeCertificateRepository;
     private final EmployeeRegistrationWriter registrationWriter;
     private final TempPasswordGenerator tempPasswordGenerator;
     private final ThrottledPasswordEncoder passwordEncoder;
@@ -108,6 +124,9 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         if (command.jobPositionId() != null && !referenceQueryPort.jobPositionExists(command.jobPositionId(), companyId)) {
             throw new NotFoundException(EmployeeErrorCode.EMP_JOB_POSITION_NOT_FOUND);
         }
+        // 학력/자격증은 형식 검증 + 마스터 존재검사까지 여기서 끝낸다 — 해싱(비싼 연산) 전에 실패시키기 위해.
+        List<EmployeeEducation> educations = toEducations(command.educations(), userId, companyId);
+        List<EmployeeCertificate> certificates = toCertificates(command.certificates(), userId, companyId);
 
         // ── 2 초기 비밀번호 생성 + 해싱 (트랜잭션 밖) ──
         // 이메일이 없어도 계정에는 비밀번호가 필요하므로 항상 발급한다 — 다만 전달할 수 없어 로그인만 불가하다.
@@ -118,7 +137,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         Employee employee = Employee.register(
                 userId, name, departmentId, command.jobPositionId(), email, phone, hiredAt, companyId);
         try {
-            registrationWriter.register(employee, role, encodedPassword);
+            registrationWriter.register(employee, role, encodedPassword, educations, certificates);
         } catch (DataIntegrityViolationException e) {
             // 사전 존재 검사와 INSERT 사이의 레이스로 PK/UNIQUE 가 늦게 터진 경우.
             throw new ConflictException(EmployeeErrorCode.EMP_USER_ID_DUPLICATED, e);
@@ -201,6 +220,18 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         }
 
         employeeRepository.updateInfo(current.withInfo(name, phone, email, departmentId, jobPositionId, hiredAt));
+
+        // 학력·자격증은 전체 교체(QUAL-004) — 전달됐을 때만 손댄다(미전송이면 유지). [] 면 삭제만, 값이 있으면 삭제 후 재삽입.
+        if (command.educationsProvided()) {
+            List<EmployeeEducation> educations = toEducations(command.educations(), command.userId(), companyId);
+            employeeEducationRepository.deleteByUserId(command.userId());
+            employeeEducationRepository.saveAll(educations);
+        }
+        if (command.certificatesProvided()) {
+            List<EmployeeCertificate> certificates = toCertificates(command.certificates(), command.userId(), companyId);
+            employeeCertificateRepository.deleteByUserId(command.userId());
+            employeeCertificateRepository.saveAll(certificates);
+        }
         log.info("사원 수정 - userId={}", command.userId());
     }
 
@@ -311,6 +342,83 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
             throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
         }
         return email;
+    }
+
+    /**
+     * 학력 목록을 검증·변환한다. 전공 필수·학위 enum·학교 길이를 먼저 보고, 참조 전공이 이 회사 마스터에
+     * 모두 있는지 배치로 확인한다(하나라도 없으면 {@code MAJOR_NOT_FOUND}). 비었으면 빈 목록.
+     */
+    private List<EmployeeEducation> toEducations(List<EducationItem> items, String userId, Long companyId) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        List<EmployeeEducation> educations = new ArrayList<>(items.size());
+        Set<Long> majorIds = new LinkedHashSet<>();
+        for (EducationItem item : items) {
+            if (item.majorId() == null) {
+                throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+            }
+            Degree degree = parseDegree(item.degree());
+            String school = optionalWithMax(normalize(item.school()), MAX_SCHOOL_LENGTH);
+            majorIds.add(item.majorId());
+            educations.add(new EmployeeEducation(companyId, userId, item.majorId(), degree, school));
+        }
+        Set<Long> existing = qualificationReferenceQueryPort.findExistingMajorIds(majorIds, companyId);
+        if (!existing.containsAll(majorIds)) {
+            throw new NotFoundException(EmployeeErrorCode.MAJOR_NOT_FOUND);
+        }
+        return educations;
+    }
+
+    /**
+     * 자격증 목록을 검증·변환한다. 자격증 필수·취득일(선택) 파싱 후, 참조 자격증이 이 회사 마스터에 모두
+     * 있는지 배치로 확인한다(하나라도 없으면 {@code CERT_NOT_FOUND}). 비었으면 빈 목록.
+     */
+    private List<EmployeeCertificate> toCertificates(List<CertificateItem> items, String userId, Long companyId) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        List<EmployeeCertificate> certificates = new ArrayList<>(items.size());
+        Set<Long> certificateIds = new LinkedHashSet<>();
+        for (CertificateItem item : items) {
+            if (item.certificateId() == null) {
+                throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+            }
+            LocalDate acquiredDate = parseOptionalDate(item.acquiredDate());
+            certificateIds.add(item.certificateId());
+            certificates.add(new EmployeeCertificate(companyId, userId, item.certificateId(), acquiredDate));
+        }
+        Set<Long> existing = qualificationReferenceQueryPort.findExistingCertificateIds(certificateIds, companyId);
+        if (!existing.containsAll(certificateIds)) {
+            throw new NotFoundException(EmployeeErrorCode.CERT_NOT_FOUND);
+        }
+        return certificates;
+    }
+
+    /** 학위 코드({@code BACHELOR}·{@code MASTER}·{@code DOCTOR})를 enum 으로. 누락·미지원 값은 EMP_INVALID_REQUEST. */
+    private Degree parseDegree(String raw) {
+        String normalized = normalize(raw);
+        if (normalized == null) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        try {
+            return Degree.valueOf(normalized.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST, e);
+        }
+    }
+
+    /** 취득일 선택 파싱 — null 은 그대로, 형식이 틀리면 EMP_INVALID_REQUEST. */
+    private LocalDate parseOptionalDate(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(normalized); // ISO yyyy-MM-dd
+        } catch (DateTimeParseException e) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST, e);
+        }
     }
 
     /** 앞뒤 공백 제거 후 빈 문자열은 null 로 눕힌다. */

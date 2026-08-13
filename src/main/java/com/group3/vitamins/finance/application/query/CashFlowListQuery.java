@@ -8,6 +8,9 @@ public record CashFlowListQuery(
         Boolean unlinked,
         Long projectId,
         String keyword,
+        int page,
+        int size,
+        String sort,
         String userId,
         String role
 ) {

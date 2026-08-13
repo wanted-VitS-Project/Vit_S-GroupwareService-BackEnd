@@ -1,5 +1,7 @@
 package com.group3.vitamins.notification.application.service;
 
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.notification.domain.event.NotificationCreatedEvent;
 import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
 import com.group3.vitamins.notification.domain.model.Notification;
 import com.group3.vitamins.notification.domain.repository.NotificationRepository;
@@ -23,14 +25,26 @@ import java.time.LocalDateTime;
 public class NotificationRequestedEventListener {
 
     private final NotificationRepository notificationRepository;
+    private final DomainEventPublisher domainEventPublisher;
 
+    /**
+     * ⚠️ <b>여기서 SSE 를 직접 보내지 마라.</b> 이 메서드는 {@code REQUIRES_NEW} 트랜잭션 안이라
+     * 아직 커밋 전이다 — 이 자리에서 푸시하면 클라이언트가 알림을 받고 곧바로 목록을 조회했을 때
+     * 그 알림이 <b>없는</b> 경우가 생긴다(레이스). 대신 {@link NotificationCreatedEvent} 를 발행해
+     * 이 트랜잭션의 {@code AFTER_COMMIT} 으로 한 단계 미룬다 — 받는 쪽은
+     * {@code NotificationPushEventListener} 다 (§5 RT-002).
+     */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(NotificationRequestedEvent event) {
-        notificationRepository.save(Notification.create(
+        Notification saved = notificationRepository.save(Notification.create(
                 event.recipientUserId(), event.notificationType(),
                 event.title(), event.message(),
                 event.targetType(), event.targetId(), event.targetContext(),
                 LocalDateTime.now()));
+
+        domainEventPublisher.publish(new NotificationCreatedEvent(
+                saved.getNotificationId(), saved.getUserId(), saved.getNotificationType(),
+                saved.getTitle(), saved.getMessage(), saved.getCreatedAt()));
     }
 }

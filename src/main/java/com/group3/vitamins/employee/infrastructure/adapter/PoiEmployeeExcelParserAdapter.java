@@ -72,7 +72,9 @@ public class PoiEmployeeExcelParserAdapter implements EmployeeExcelParserPort {
                 cell(row, EmployeeBulkColumns.HIRED_AT),
                 cell(row, EmployeeBulkColumns.EMAIL),
                 cell(row, EmployeeBulkColumns.PHONE),
-                cell(row, EmployeeBulkColumns.ROLE));
+                cell(row, EmployeeBulkColumns.ROLE),
+                cell(row, EmployeeBulkColumns.EDUCATION),
+                cell(row, EmployeeBulkColumns.CERTIFICATE));
     }
 
     /** 셀을 문자열로 읽어 trim 한다. 빈 값은 null. 숫자 사번은 정수 문자열로, 엑셀 날짜는 yyyy-MM-dd 로 정규화한다. */
@@ -108,6 +110,7 @@ public class PoiEmployeeExcelParserAdapter implements EmployeeExcelParserPort {
     private boolean isEmpty(ParsedEmployeeRow r) {
         return r.userId() == null && r.name() == null && r.department() == null
                 && r.jobPosition() == null && r.hiredAt() == null && r.email() == null
-                && r.phone() == null && r.role() == null;
+                && r.phone() == null && r.role() == null
+                && r.education() == null && r.certificate() == null;
     }
 }

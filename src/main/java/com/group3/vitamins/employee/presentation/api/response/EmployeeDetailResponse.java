@@ -1,6 +1,8 @@
 package com.group3.vitamins.employee.presentation.api.response;
 
+import com.group3.vitamins.employee.application.result.EmployeeCertificateRow;
 import com.group3.vitamins.employee.application.result.EmployeeDetailRow;
+import com.group3.vitamins.employee.application.result.EmployeeEducationRow;
 import com.group3.vitamins.employee.application.result.EmployeeGroupRow;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -47,12 +49,25 @@ public record EmployeeDetailResponse(
         @Schema(description = "마지막 로그인 (null 허용)", example = "2026-08-05T09:12:33")
         String lastLoginAt,
         @Schema(description = "소속 그룹")
-        List<GroupResponse> groups
+        List<GroupResponse> groups,
+        @Schema(description = "학력")
+        List<EducationResponse> educations,
+        @Schema(description = "자격증")
+        List<CertificateResponse> certificates
 ) {
 
-    public static EmployeeDetailResponse from(EmployeeDetailRow row, List<EmployeeGroupRow> groups) {
+    public static EmployeeDetailResponse from(EmployeeDetailRow row,
+                                              List<EmployeeGroupRow> groups,
+                                              List<EmployeeEducationRow> educations,
+                                              List<EmployeeCertificateRow> certificates) {
         List<GroupResponse> groupResponses = groups.stream()
                 .map(GroupResponse::from)
+                .toList();
+        List<EducationResponse> educationResponses = educations.stream()
+                .map(EducationResponse::from)
+                .toList();
+        List<CertificateResponse> certificateResponses = certificates.stream()
+                .map(CertificateResponse::from)
                 .toList();
 
         return new EmployeeDetailResponse(
@@ -72,7 +87,9 @@ public record EmployeeDetailResponse(
                 EmployeeSummaryResponse.formatDate(row.hiredAt()),
                 EmployeeSummaryResponse.formatDate(row.resignedAt()),
                 formatDateTime(row.lastLoginAt()),
-                groupResponses);
+                groupResponses,
+                educationResponses,
+                certificateResponses);
     }
 
     private static String formatDateTime(LocalDateTime value) {
@@ -88,6 +105,38 @@ public record EmployeeDetailResponse(
     ) {
         public static GroupResponse from(EmployeeGroupRow row) {
             return new GroupResponse(row.groupId(), row.name());
+        }
+    }
+
+    /** 학력 한 개 (`employee.md` §2 {@code data.educations[]}). */
+    public record EducationResponse(
+            @Schema(description = "전공 마스터 ID", example = "3")
+            Long majorId,
+            @Schema(description = "전공명", example = "컴퓨터공학")
+            String majorName,
+            @Schema(description = "학위 (BACHELOR·MASTER·DOCTOR)", example = "BACHELOR")
+            String degree,
+            @Schema(description = "학교 (null 허용)", example = "한국대학교")
+            String school
+    ) {
+        public static EducationResponse from(EmployeeEducationRow row) {
+            return new EducationResponse(row.majorId(), row.majorName(), row.degree(), row.school());
+        }
+    }
+
+    /** 자격증 한 개 (`employee.md` §2 {@code data.certificates[]}). */
+    public record CertificateResponse(
+            @Schema(description = "자격증 마스터 ID", example = "7")
+            Long certificateId,
+            @Schema(description = "자격증명", example = "정보처리기사")
+            String certificateName,
+            @Schema(description = "취득일 yyyy-MM-dd (null 허용)", example = "2023-05-20")
+            String acquiredDate
+    ) {
+        public static CertificateResponse from(EmployeeCertificateRow row) {
+            return new CertificateResponse(
+                    row.certificateId(), row.certificateName(),
+                    EmployeeSummaryResponse.formatDate(row.acquiredDate()));
         }
     }
 }

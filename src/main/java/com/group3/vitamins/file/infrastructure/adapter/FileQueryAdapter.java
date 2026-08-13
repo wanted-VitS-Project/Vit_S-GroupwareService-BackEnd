@@ -1,8 +1,11 @@
 package com.group3.vitamins.file.infrastructure.adapter;
 
 import com.group3.vitamins.file.application.port.FileQueryPort;
+import com.group3.vitamins.file.application.query.CompanyFileCriteria;
+import com.group3.vitamins.file.application.query.MyProjectFileCriteria;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
+import com.group3.vitamins.file.application.result.FileViewProjection;
 import com.group3.vitamins.file.application.result.ProjectFileProjection;
 import com.group3.vitamins.file.application.result.ProjectFileVersionProjection;
 import com.group3.vitamins.file.application.result.ProjectTrashFileProjection;
@@ -61,5 +64,20 @@ public class FileQueryAdapter implements FileQueryPort {
     @Override
     public List<ProjectTrashFileProjection> findProjectTrashFiles(Long projectId) {
         return fileQueryMapper.findProjectTrashFiles(projectId);
+    }
+
+    @Override
+    public long countCompanyFiles(CompanyFileCriteria criteria) {
+        return fileQueryMapper.countCompanyFiles(criteria);
+    }
+
+    @Override
+    public List<FileViewProjection> findCompanyFiles(CompanyFileCriteria criteria) {
+        return fileQueryMapper.findCompanyFiles(criteria);
+    }
+
+    @Override
+    public List<FileViewProjection> findMyProjectFiles(MyProjectFileCriteria criteria) {
+        return fileQueryMapper.findMyProjectFiles(criteria);
     }
 }

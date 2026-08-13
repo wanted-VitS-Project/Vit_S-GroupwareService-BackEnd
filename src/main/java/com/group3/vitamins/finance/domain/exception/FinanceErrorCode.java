@@ -27,7 +27,8 @@ public enum FinanceErrorCode implements ErrorCode {
             "매칭된 항목은 삭제할 수 없습니다. 먼저 매칭을 해제해주세요."),
     FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE("FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE",
             "이미 매칭된 항목은 제외 처리할 수 없습니다."),
-    FINANCE_CASH_FLOW_AMOUNT_INVALID("FINANCE_CASH_FLOW_AMOUNT_INVALID", "금액은 0보다 커야 합니다.");
+    FINANCE_CASH_FLOW_AMOUNT_INVALID("FINANCE_CASH_FLOW_AMOUNT_INVALID", "금액은 0보다 커야 합니다."),
+    FINANCE_PAGE_QUERY_INVALID("FINANCE_PAGE_QUERY_INVALID", "페이지 조회 조건이 올바르지 않습니다.");
     // 401(미인증)·500(예상 못한 서버 오류)은 도메인 코드로 안 만든다 — GlobalExceptionHandler 가
     // AUTH_UNAUTHENTICATED/COMMON_INTERNAL_ERROR 로 공통 처리한다.
 

@@ -20,6 +20,8 @@ public interface SpringDataStepPermissionRepository
 
     long deleteByStepIdAndUserId(Long stepId, String userId);
 
+    void deleteByStepId(Long stepId);
+
     @Modifying
     @Query("DELETE FROM StepPermissionJpaEntity sp "
             + "WHERE sp.userId = :userId "

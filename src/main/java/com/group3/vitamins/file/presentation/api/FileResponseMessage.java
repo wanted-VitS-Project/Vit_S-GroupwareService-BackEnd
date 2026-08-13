@@ -16,6 +16,8 @@ public final class FileResponseMessage {
     public static final String PROJECT_FILE_VERSIONS = "파일 버전 목록 조회 성공";
     public static final String PROJECT_FILES = "프로젝트 파일 목록 조회 성공";
     public static final String PROJECT_TRASH_FILES = "프로젝트 휴지통 목록 조회 성공";
+    public static final String COMPANY_FILES = "전사 파일 목록 조회 성공";
+    public static final String MY_PROJECT_FILES = "내 프로젝트 파일 목록 조회 성공";
 
     private FileResponseMessage() {
     }
