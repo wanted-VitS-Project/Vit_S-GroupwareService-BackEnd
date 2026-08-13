@@ -33,9 +33,9 @@ public class DeleteReferenceFileService implements DeleteReferenceFileUseCase {
         biddingAccessPolicy.assertAccess(command.userId(), command.role());
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
-        // 조회와 함께 행을 잠가, 이 트랜잭션이 끝날 때까지 검토 생성이 같은 파일을 선택하지 못하게 막는다.
+        // 삭제를 위한 배타적 조회 — 이 트랜잭션이 끝날 때까지 검토 생성이 같은 파일을 선택하지 못하게 막는다.
         BidReferenceFile referenceFile = referenceFileRepository
-                .findByIdAndCompanyIdForUpdate(command.referenceFileId(), companyId)
+                .findActiveByIdAndCompanyIdForDeletion(command.referenceFileId(), companyId)
                 .orElseThrow(() -> new NotFoundException(
                         BidReferenceFileErrorCode.BIDDING_REFERENCE_FILE_NOT_FOUND
                 ));

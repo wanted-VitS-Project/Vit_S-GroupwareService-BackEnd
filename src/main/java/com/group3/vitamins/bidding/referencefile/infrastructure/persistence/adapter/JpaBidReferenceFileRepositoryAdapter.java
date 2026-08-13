@@ -51,7 +51,7 @@ public class JpaBidReferenceFileRepositoryAdapter implements BidReferenceFileRep
 
     @Override
     @Transactional
-    public Optional<BidReferenceFile> findByIdAndCompanyIdForUpdate(Long referenceFileId, Long companyId) {
+    public Optional<BidReferenceFile> findActiveByIdAndCompanyIdForDeletion(Long referenceFileId, Long companyId) {
         return repository
                 .findByReferenceFileIdAndCompanyIdAndDeletedAtIsNullForUpdate(referenceFileId, companyId)
                 .map(BidReferenceFileJpaEntity::toDomain);

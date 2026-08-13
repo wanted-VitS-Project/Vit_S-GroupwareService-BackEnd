@@ -59,7 +59,7 @@ class DeleteReferenceFileServiceTest {
         );
 
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
-        when(referenceFileRepository.findByIdAndCompanyIdForUpdate(REFERENCE_FILE_ID, COMPANY_ID))
+        when(referenceFileRepository.findActiveByIdAndCompanyIdForDeletion(REFERENCE_FILE_ID, COMPANY_ID))
                 .thenReturn(Optional.of(completedFile()));
     }
 
@@ -97,7 +97,7 @@ class DeleteReferenceFileServiceTest {
     @Test
     @DisplayName("존재하지 않거나 다른 회사의 기준자료면 404를 던진다")
     void rejectsWhenNotFound() {
-        when(referenceFileRepository.findByIdAndCompanyIdForUpdate(REFERENCE_FILE_ID, COMPANY_ID))
+        when(referenceFileRepository.findActiveByIdAndCompanyIdForDeletion(REFERENCE_FILE_ID, COMPANY_ID))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.delete(

@@ -25,7 +25,7 @@ public class BidReviewReferenceFileAdapter
         }
 
         // FOR UPDATE로 잠가, 이 검토 생성 트랜잭션이 끝날 때까지 해당 파일의 삭제를 막는다
-        // (DeleteReferenceFileService.findByIdAndCompanyIdForUpdate와 같은 행을 잠근다).
+        // (BidReferenceFileRepository.findActiveByIdAndCompanyIdForDeletion과 같은 행을 잠근다).
         String sql = """
                 SELECT
                     file.bid_reference_file_id,
