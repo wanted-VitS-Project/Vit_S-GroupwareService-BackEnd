@@ -31,8 +31,12 @@ public class CompanyDocumentReferenceService implements CompanyDocumentReference
 
     @Override
     public Optional<CompanyDocumentReferenceView> getSelectableVersion(Long companyDocumentVersionId) {
-        return referenceQueryPort.findSelectableVersion(
-                companyDocumentVersionId, currentCompanyIdProvider.currentCompanyId());
+        return getSelectableVersion(companyDocumentVersionId, currentCompanyIdProvider.currentCompanyId());
+    }
+
+    @Override
+    public Optional<CompanyDocumentReferenceView> getSelectableVersion(Long companyDocumentVersionId, Long companyId) {
+        return referenceQueryPort.findSelectableVersion(companyDocumentVersionId, companyId);
     }
 
     /** 앞뒤 공백 제거 후 빈 문자열은 null 로 눕힌다(필터 미적용과 동일 취급). */
