@@ -98,6 +98,15 @@ public class CashFlowCsvRowParser {
     }
 
     private LocalDate parseDate(String raw) {
+        LocalDate date = parseDateOrNull(raw);
+        if (date == null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
+                    "날짜 형식을 해석할 수 없습니다: " + raw);
+        }
+        return date;
+    }
+
+    private LocalDate parseDateOrNull(String raw) {
         for (DateTimeFormatter format : DATE_FORMATS) {
             try {
                 return LocalDate.parse(raw, format);
@@ -105,11 +114,10 @@ public class CashFlowCsvRowParser {
                 // 다음 포맷 시도
             }
         }
-        throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
-                "날짜 형식을 해석할 수 없습니다: " + raw);
+        return null;
     }
 
-    private LocalTime parseTime(String raw) {
+    private LocalTime parseTimeOrNull(String raw) {
         for (DateTimeFormatter format : TIME_FORMATS) {
             try {
                 return LocalTime.parse(raw, format);
@@ -117,6 +125,46 @@ public class CashFlowCsvRowParser {
                 // 다음 포맷 시도
             }
         }
+        return null;
+    }
+
+    /**
+     * SEPARATE 모드의 시간 컬럼은 **날짜 성분을 무시하고 시각만** 취한다.
+     *
+     * <p>값에 날짜가 붙어 오는 경우가 실제로 있다 (2026-08-13, 프론트 제보) — 엑셀은 시각만 넣은 셀을
+     * "0일차 + 시각"으로 저장해서 읽으면 기준일(1899-12-31)이 따라붙는다. 파서 쪽에서 이미 시각만
+     * 남기도록 고쳤지만, 날짜+시간이 통째로 들어있는 CSV가 이 컬럼으로 매핑될 수도 있어 여기서도 한 번
+     * 더 흡수한다 — 날짜 컬럼이 따로 있는 모드라 시간 컬럼의 날짜 성분은 어차피 버리는 값이다.
+     *
+     * <p>⚠️ **접두부는 "실제로 날짜로 해석되는 경우"에만 떼어낸다** (2026-08-13, CodeRabbit 지적으로 보강).
+     * 처음엔 마지막 공백 뒤를 무조건 시각으로 읽었는데, 그러면 {@code "잘못된 날짜 11:20:15"} 같은 깨진
+     * 값도 조용히 통과해서 정상 거래 시각으로 저장된다. 접두부가 {@link #DATE_FORMATS}로 안 읽히면
+     * 흡수하지 않고 {@code FINANCE_CSV_MAPPING_REQUIRED}로 거부한다.
+     */
+    private LocalTime parseTime(String raw) {
+        LocalTime time = parseTimeOrNull(raw);
+        if (time != null) {
+            return time;
+        }
+
+        // "1899-12-31 11:20:15"처럼 날짜가 앞에 붙은 형태 — 접두부가 날짜로 확인될 때만 떼어낸다.
+        int lastSpace = raw.lastIndexOf(' ');
+        if (lastSpace > 0 && lastSpace < raw.length() - 1 && parseDateOrNull(raw.substring(0, lastSpace)) != null) {
+            time = parseTimeOrNull(raw.substring(lastSpace + 1));
+            if (time != null) {
+                return time;
+            }
+        }
+
+        // 날짜·시각 구분자가 공백이 아닌 형태(ISO의 'T' 등) — 포맷 전체가 맞아떨어질 때만 통과한다.
+        for (DateTimeFormatter format : DATETIME_FORMATS) {
+            try {
+                return LocalDateTime.parse(raw, format).toLocalTime();
+            } catch (DateTimeParseException ignored) {
+                // 다음 포맷 시도
+            }
+        }
+
         throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED,
                 "시간 형식을 해석할 수 없습니다: " + raw);
     }
