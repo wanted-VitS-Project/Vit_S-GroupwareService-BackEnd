@@ -1,8 +1,8 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
+**최종 동기화**: 2026-08-13 (입찰 기준자료 파일함 CRUD 4개 API 폐기 — FE 미사용 확인, companydocument 참조로 대체)
 **최종 동기화**: 2026-08-13 (검토 임시파일 보관 정책 변경 — 완료 후 고정 3시간 → 공고 입찰마감일시까지, 마감일 없으면 3시간 fallback)
-**최종 동기화**: 2026-08-13 (문서 검토 Worker 401 코드를 `AUTH_UNAUTHENTICATED`로 통일 — 공용 `BiddingWorkerTokenAuthenticationFilter` 실제 동작과 일치)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -34,10 +34,10 @@
 | ✅ 확정 | Python 입찰 요약 결과 callback | POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | 내부 서버 |
 | ✅ 확정 | 입찰 문서 검토 요청 | POST | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
 | ✅ 확정 | 입찰 문서 검토 자료 조회 | GET | `/api/v1/bidding/notices/{noticeId}/review-sources` | `BIDDING` |
-| ✅ 확정 | 입찰 기준자료 파일함 조회 | GET | `/api/v1/bidding/reference-files` | `BIDDING` |
-| ✅ 확정 | 입찰 기준자료 업로드 시작 | POST | `/api/v1/bidding/reference-files/uploads` | `BIDDING` |
-| ✅ 확정 | 입찰 기준자료 업로드 완료 | POST | `/api/v1/bidding/reference-files/uploads/{referenceFileId}/complete` | `BIDDING` |
-| ✅ 확정 | 입찰 기준자료 삭제 | DELETE | `/api/v1/bidding/reference-files/{referenceFileId}` | `BIDDING` |
+| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 파일함 조회~~ | ~~GET~~ | ~~`/api/v1/bidding/reference-files`~~ | - |
+| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 업로드 시작~~ | ~~POST~~ | ~~`/api/v1/bidding/reference-files/uploads`~~ | - |
+| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 업로드 완료~~ | ~~POST~~ | ~~`/api/v1/bidding/reference-files/uploads/{referenceFileId}/complete`~~ | - |
+| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 삭제~~ | ~~DELETE~~ | ~~`/api/v1/bidding/reference-files/{referenceFileId}`~~ | - |
 | ✅ 확정 | 공고별 입찰 문서 검토 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
 | ✅ 확정 | 입찰 문서 검토 조회 | GET | `/api/v1/bidding/reviews/{reviewId}` | `BIDDING` |
 | ✅ 확정 | 입찰 문서 검토 포기 | PATCH | `/api/v1/bidding/reviews/{reviewId}/abandon` | `BIDDING` |
@@ -1512,71 +1512,37 @@ Python worker가 Gemini 처리 결과를 Spring Boot에 저장한다.
 
 ---
 
-## 입찰 기준자료 파일함 조회 `GET /api/v1/bidding/reference-files`
+## 입찰 기준자료 파일함 CRUD 4개 API 폐기 (2026-08-13)
 
-**상태**: ✅ 확정
+FE가 이 4개 API(조회·업로드 시작·업로드 완료·삭제)를 실제로 사용한 적이 없다는 걸 직접 확인해 폐기했다.
+사내 문서함(`companydocument`) 참조 선택 경로(`companyDocumentVersionIds`)로 대체됐다 — 아래 "입찰 문서
+검토 요청" 참고.
 
-현재 회사가 입찰 문서 검토에 반복 사용할 기준자료를 조회한다. 다른 회사의 파일과 삭제된 파일은 반환하지 않는다.
+폐기 API:
 
-### Response Data
+```text
+GET    /api/v1/bidding/reference-files
+POST   /api/v1/bidding/reference-files/uploads
+POST   /api/v1/bidding/reference-files/uploads/{referenceFileId}/complete
+DELETE /api/v1/bidding/reference-files/{referenceFileId}
+```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `referenceFileId` | Long | 검토 요청에서 사용할 기준자료 ID |
-| `fileName` | String | 원본 파일명 |
-| `extension` | String | 소문자 확장자 |
-| `mimeType` | String | 업로드 시 확인한 MIME 타입 |
-| `sizeBytes` | Long | 파일 크기 |
-| `uploadStatus` | String | `UPLOADING`, `COMPLETED`, `FAILED` |
-| `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
-| `selectable` | Boolean | 업로드와 인덱싱이 모두 완료되어 검토에 사용할 수 있는지 |
-| `createdAt` | LocalDateTime | 등록 시각 |
-
----
-
-## 입찰 기준자료 업로드 시작 `POST /api/v1/bidding/reference-files/uploads`
-
-**상태**: ✅ 확정
-
-### Request Body
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `fileName` | String | Y | 경로 문자를 제거한 원본 파일명, 최대 255자 |
-| `mimeType` | String | Y | 파일 MIME 타입, 최대 100자 |
-| `sizeBytes` | Long | Y | 1바이트 이상 50MB 이하 |
-
-### Success Response
-
-`201 Created`로 `referenceFileId`, 10분 유효한 `uploadUrl`, `expiresAt`을 반환한다. 클라이언트는 `uploadUrl`로 바이너리를 직접 `PUT`한 뒤 완료 API를 호출한다.
-
----
-
-## 입찰 기준자료 업로드 완료 `POST /api/v1/bidding/reference-files/uploads/{referenceFileId}/complete`
-
-**상태**: ✅ 확정
-
-Request Body는 없다. Spring은 저장소 객체의 존재와 크기를 확인한 뒤 `uploadStatus=COMPLETED`, `indexStatus=PENDING`으로 저장하고 비동기 인덱싱 Outbox를 생성한다.
-
-### Success Response
-
-`200 OK`로 `referenceFileId`, `fileName`, `uploadStatus`, `indexStatus`, `completedAt`을 반환한다.
-
----
-
-## 입찰 기준자료 삭제 `DELETE /api/v1/bidding/reference-files/{referenceFileId}`
-
-**상태**: ✅ 확정
-
-현재 회사의 기준자료를 삭제한다. `PENDING` 또는 `PROCESSING` 검토가 해당 파일을 사용 중이면 `409 BIDDING_REFERENCE_FILE_IN_USE`로 거절한다. 삭제가 허용되면 DB 논리 삭제와 S3·임베딩 파생 데이터 정리 Outbox를 같은 트랜잭션에 저장한다. 기존 완료 검토의 문서명·결과·citation 스냅샷은 유지한다.
+**Java 코드는 삭제했지만 `bid_reference_file` 테이블·`bid_review_document.bid_reference_file_id` FK·
+`INTERNAL_REFERENCE` documentRole 경로는 그대로 남아 있다** — `bid_review_document.bid_reference_file_id`가
+`ON DELETE RESTRICT`로 이 테이블을 참조해 테이블을 드롭하려면 `INTERNAL_REFERENCE` 경로 자체를 걷어내는
+훨씬 큰 별도 작업이 필요하다. `referenceFileIds`(검토 요청 파라미터)도 그대로 유지 — 다만 이제 새로
+업로드할 방법이 없으므로 실질적으로 죽은 입력이다. S3에 남은 기존 업로드 객체(`companies/{companyId}/
+bidding/reference-files/*`) 정리는 코드 삭제와 별개의 운영 작업으로 남아 있다.
 
 ---
 
 ## 입찰 문서 검토 요청 `POST /api/v1/bidding/notices/{noticeId}/reviews`
 
 **상태**: ✅ 확정 (2026-08-13 추가 — `companyDocumentVersionIds` 신설. 사내 문서함(`companydocument`)
-참조 선택 새 경로 병행 지원. `referenceFileIds`(기존 `bid_reference_file` 파일함)는 폐기 전까지 그대로 유지 —
-FE가 새 경로로 전환했는지 확인되면 별도 PR로 폐기한다. FE에 신규 필드 추가를 공유해야 한다.)
+참조 선택 새 경로 병행 지원. `referenceFileIds`(기존 `bid_reference_file` 파일함) 파라미터 자체는 그대로
+남아 있으나, 이 파일함에 새로 업로드할 수 있는 CRUD API가 위에서 폐기되어 실질적으로 죽은 입력이다 —
+FE는 원래부터 이 필드를 쓴 적이 없다고 확인됨. FE에 신규 필드(`companyDocumentVersionIds`) 추가를
+공유해야 한다.)
 
 ### Request Body
 
