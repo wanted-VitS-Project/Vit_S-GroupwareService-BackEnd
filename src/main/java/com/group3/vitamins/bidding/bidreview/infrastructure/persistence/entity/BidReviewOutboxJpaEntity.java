@@ -178,6 +178,15 @@ public class BidReviewOutboxJpaEntity {
         return true;
     }
 
+    // 역직렬화할 수 없는 Outbox는 재시도하지 않고 안전한 실패 코드로 종료한다.
+    public void markInvalidPayload(LocalDateTime now) {
+        this.publishStatus = "FAILED";
+        this.lockOwner = null;
+        this.lockExpiresAt = null;
+        this.lastErrorMessage = "INVALID_OUTBOX_PAYLOAD";
+        this.updatedAt = now;
+    }
+
     private boolean isOwnedBy(String expectedLockOwner) {
         return "PENDING".equals(publishStatus)
                 && lockOwner != null
