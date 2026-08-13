@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -87,8 +88,9 @@ public class BlockController {
                     + "타입별 상세 행도 같은 트랜잭션에서 함께 삭제된다. "
                     + "⛔ 삭제 잠금 4종은 폐기됐다(2026-08-09) — 막는 대신 옮길 수단을 준다. "
                     + "입금·계산서 연결 해제는 별도 작업으로 붙는다(BLK-013). "
-                    + "📌 예외 1건: 결재 블록은 상신 이후 이 API 로 삭제할 수 없다(DEL-016). "
-                    + "스텝 삭제(DELETE /api/v1/steps/{stepId})에는 이 제약이 없어 결재 상태와 무관하게 함께 삭제된다.")
+                    + "📌 결재 블록은 상신 이후면 첫 요청을 409 로 되묻는다(DEL-016) — confirmApprovalCancel=true 로 "
+                    + "다시 요청하면 삭제된다. 스텝 삭제(DELETE /api/v1/steps/{stepId})에는 이 확인이 없어 "
+                    + "결재 상태와 무관하게 함께 삭제된다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "삭제 성공"),
@@ -99,19 +101,23 @@ public class BlockController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "BLOCK_NOT_FOUND — 블록이 존재하지 않음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "APPROVAL_ALREADY_SUBMITTED — 상신 이후 결재 블록. "
-                            + "approval.status 가 IN_PROGRESS·REJECTED·COMPLETED 이면 거부한다. "
-                            + "message 는 상태별로 다르다(진행 중인/반려된/완료된 결재는 삭제할 수 없습니다.) — "
-                            + "분기는 code 로 하고 message 는 그대로 노출한다")
+                    description = "APPROVAL_DELETE_CONFIRM_REQUIRED — 상신 이후 결재 블록이라 확인이 필요하다. "
+                            + "⚠️ 금지가 아니다 — confirmApprovalCancel=true 로 재요청하면 삭제된다. "
+                            + "approval.status 가 IN_PROGRESS·REJECTED·COMPLETED 일 때 발생하고 "
+                            + "message 는 상태별로 무엇을 잃는지 알려준다(취소됨 / 재상신 불가 / 승인 이력 열람 불가). "
+                            + "분기는 code 로 하고 message 는 확인 다이얼로그에 그대로 노출한다")
     })
     @DeleteMapping("/{blockId}")
     public ResponseEntity<ApiResponse<Void>> deleteBlock(
             @Parameter(description = "삭제할 블록 ID")
             @PathVariable Long blockId,
+            @Parameter(description = "결재 취소에 동의했는지. 409 를 받은 뒤 사용자가 확인하면 true 로 재요청한다")
+            @RequestParam(defaultValue = "false") boolean confirmApprovalCancel,
             Authentication authentication
     ) {
         blockCommandUseCase.deleteBlock(new DeleteBlockCommand(
-                blockId, authentication.getName(), RequesterRole.from(authentication)));
+                blockId, authentication.getName(), RequesterRole.from(authentication),
+                confirmApprovalCancel));
 
         return ResponseEntity.ok(ApiResponse.success(ProjectResponseMessage.SUCCESS));
     }
