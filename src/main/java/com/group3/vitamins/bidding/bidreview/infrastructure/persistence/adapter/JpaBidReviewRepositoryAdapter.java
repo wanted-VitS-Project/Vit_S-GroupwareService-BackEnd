@@ -30,56 +30,6 @@ public class JpaBidReviewRepositoryAdapter
     private final BidReviewDocumentJpaRepository documentRepository;
 
     @Override
-    @Transactional
-    public BidReview save(BidReview review) {
-        BidReviewJpaEntity entity;
-
-        if (review.reviewId() == null) {
-            entity = BidReviewJpaEntity.from(review);
-        } else {
-            entity = reviewRepository.findById(review.reviewId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "입찰 문서 검토를 찾을 수 없습니다."
-                    ));
-            entity.apply(review);
-        }
-
-        return reviewRepository.save(entity).toDomain();
-    }
-
-    @Override
-    @Transactional
-    public List<BidReviewDocument> saveDocuments(
-            Long reviewId,
-            List<BidReviewDocument> documents
-    ) {
-        List<BidReviewDocumentJpaEntity> entities = documents.stream()
-                .map(document ->
-                        BidReviewDocumentJpaEntity.from(reviewId, document))
-                .toList();
-
-        return documentRepository.saveAll(entities).stream()
-                .map(BidReviewDocumentJpaEntity::toDomain)
-                .toList();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Optional<BidReview> findByIdAndCompanyIdAndRequestedBy(
-            Long reviewId,
-            Long companyId,
-            String requestedBy
-    ) {
-        return reviewRepository
-                .findByReviewIdAndCompanyIdAndRequestedBy(
-                        reviewId,
-                        companyId,
-                        requestedBy
-                )
-                .map(BidReviewJpaEntity::toDomain);
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public Optional<BidReview> findById(Long reviewId) {
         return reviewRepository.findById(reviewId)

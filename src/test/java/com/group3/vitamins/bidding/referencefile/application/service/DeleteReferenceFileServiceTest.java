@@ -16,6 +16,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -58,7 +59,7 @@ class DeleteReferenceFileServiceTest {
         );
 
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
-        when(referenceFileRepository.findByIdAndCompanyId(REFERENCE_FILE_ID, COMPANY_ID))
+        when(referenceFileRepository.findByIdAndCompanyIdForUpdate(REFERENCE_FILE_ID, COMPANY_ID))
                 .thenReturn(Optional.of(completedFile()));
     }
 
@@ -70,7 +71,11 @@ class DeleteReferenceFileServiceTest {
 
         service.delete(new DeleteReferenceFileCommand(REFERENCE_FILE_ID, USER_ID, ROLE));
 
-        verify(referenceFileRepository).saveDeletedWithCleanupOutbox(any());
+        ArgumentCaptor<BidReferenceFile> captor = ArgumentCaptor.forClass(BidReferenceFile.class);
+        verify(referenceFileRepository).saveDeletedWithCleanupOutbox(captor.capture());
+        BidReferenceFile deleted = captor.getValue();
+        assertThat(deleted.deletedAt()).isEqualTo(NOW);
+        assertThat(deleted.indexAttemptId()).isEqualTo("attempt-1");
     }
 
     @Test
@@ -92,7 +97,7 @@ class DeleteReferenceFileServiceTest {
     @Test
     @DisplayName("존재하지 않거나 다른 회사의 기준자료면 404를 던진다")
     void rejectsWhenNotFound() {
-        when(referenceFileRepository.findByIdAndCompanyId(REFERENCE_FILE_ID, COMPANY_ID))
+        when(referenceFileRepository.findByIdAndCompanyIdForUpdate(REFERENCE_FILE_ID, COMPANY_ID))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.delete(

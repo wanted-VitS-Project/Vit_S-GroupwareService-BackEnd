@@ -24,6 +24,8 @@ public class BidReviewReferenceFileAdapter
             return List.of();
         }
 
+        // FOR UPDATE로 잠가, 이 검토 생성 트랜잭션이 끝날 때까지 해당 파일의 삭제를 막는다
+        // (DeleteReferenceFileService.findByIdAndCompanyIdForUpdate와 같은 행을 잠근다).
         String sql = """
                 SELECT
                     file.bid_reference_file_id,
@@ -34,6 +36,7 @@ public class BidReviewReferenceFileAdapter
                 WHERE file.company_id = :companyId
                   AND file.bid_reference_file_id IN (:referenceFileIds)
                   AND file.deleted_at IS NULL
+                FOR UPDATE
                 """;
 
         MapSqlParameterSource parameters = new MapSqlParameterSource()
