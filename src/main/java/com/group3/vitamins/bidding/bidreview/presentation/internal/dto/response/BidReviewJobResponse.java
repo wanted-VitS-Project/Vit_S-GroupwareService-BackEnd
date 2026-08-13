@@ -67,14 +67,23 @@ public record BidReviewJobResponse(
             String fileName,
 
             @Schema(description = "내부 원본 다운로드 URL. 프론트용 API에서는 제공하지 않는다")
-            String sourceUrl
+            String sourceUrl,
+
+            @Schema(description = "다운로드한 원본을 임시 저장소에 올릴 presigned PUT URL(만료 10분). " +
+                    "Worker는 Content-Type을 application/octet-stream으로 고정해 PUT해야 한다")
+            String uploadUrl,
+
+            @Schema(description = "업로드 후 callback documents[]에 그대로 돌려줘야 하는 임시 저장소 키")
+            String temporaryStorageKey
     ) {
 
         static AttachmentJobResponse from(BidReviewJobResult.AttachmentJob job) {
             return new AttachmentJobResponse(
                     job.attachmentId(),
                     job.fileName(),
-                    job.sourceUrl()
+                    job.sourceUrl(),
+                    job.uploadUrl(),
+                    job.temporaryStorageKey()
             );
         }
     }
