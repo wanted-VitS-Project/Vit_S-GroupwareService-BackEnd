@@ -37,7 +37,8 @@ class CompanyDocumentReferenceServiceTest {
     @DisplayName("목록 — 현재 회사로 스코프하고 빈 필터는 null 로 눕혀 위임한다")
     void listScopesToCurrentCompanyAndNormalizesFilters() {
         when(port.findSelectableDocuments(eq(COMPANY_ID), eq("FINANCE"), eq(null)))
-                .thenReturn(List.of(new CompanyDocumentReferenceView(1L, 11L, "FINANCE", "a.pdf", 2, null)));
+                .thenReturn(List.of(new CompanyDocumentReferenceView(
+                        1L, 11L, "FINANCE", "a.pdf", 2, null, "companies/9/documents/1/versions/2/uuid.pdf")));
 
         var result = service.listSelectable("FINANCE", "   "); // 공백 keyword → null
 

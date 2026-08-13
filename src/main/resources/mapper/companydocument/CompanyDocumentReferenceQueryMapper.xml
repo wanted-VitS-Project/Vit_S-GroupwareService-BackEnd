@@ -20,7 +20,8 @@
                cd.category                       AS category,
                lv.original_file_name             AS originalFileName,
                lv.version_no                     AS versionNo,
-               NULL                              AS indexStatus
+               NULL                              AS indexStatus,
+               lv.storage_key                    AS storageKey
           FROM company_document cd
           JOIN (
                 SELECT v.company_document_id, MAX(v.version_no) AS mx
@@ -52,7 +53,8 @@
                cd.category                       AS category,
                v.original_file_name              AS originalFileName,
                v.version_no                      AS versionNo,
-               NULL                              AS indexStatus
+               NULL                              AS indexStatus,
+               v.storage_key                     AS storageKey
           FROM company_document_version v
           JOIN company_document cd ON cd.company_document_id = v.company_document_id
          WHERE v.company_document_version_id = #{versionId}
