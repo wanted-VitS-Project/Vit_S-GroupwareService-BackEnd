@@ -161,6 +161,17 @@ class CompanyDocumentQueryServiceTest {
                 CompanyDocumentErrorCode.CDOC_NOT_FOUND);
     }
 
+    @Test
+    @DisplayName("미리보기 — S3/PDF 처리 중 런타임 예외는 CDOC_PREVIEW_FAILED(500)로 변환")
+    void previewFailedOnRuntimeError() {
+        when(versionRepository.findById(34L)).thenReturn(Optional.of(version(UploadStatus.COMPLETED, "a.pdf")));
+        when(documentRepository.findById(12L)).thenReturn(Optional.of(ownedDoc()));
+        when(fileStoragePort.getObject("key")).thenThrow(new RuntimeException("s3 down"));
+
+        expectCode(() -> service.getPreview(34L, USER, "ADMIN"),
+                CompanyDocumentErrorCode.CDOC_PREVIEW_FAILED);
+    }
+
     private CompanyDocument ownedDoc() {
         return CompanyDocument.restore(12L, COMPANY_ID, DocumentCategory.FINANCE, "재무", USER, null);
     }

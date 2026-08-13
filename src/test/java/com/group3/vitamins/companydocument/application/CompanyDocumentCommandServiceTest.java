@@ -127,4 +127,23 @@ class CompanyDocumentCommandServiceTest {
         assertThat(result.companyDocumentId()).isEqualTo(12L);
         verify(indexTriggerPort).triggerReindex(12L);
     }
+
+    @Test
+    @DisplayName("수정·삭제·복구 — 타 회사 문서면 CDOC_NOT_FOUND, 저장·트리거 안 함(회사 경계)")
+    void rejectsOtherCompany() {
+        // 같은 documentId 지만 companyId 가 다른 회사(999) — 현재 회사 스코프에서 제외되어야 한다.
+        when(documentRepository.findById(12L)).thenReturn(Optional.of(
+                CompanyDocument.restore(12L, 999L, DocumentCategory.FINANCE, "남의문서", "EMPX01", null)));
+
+        expectCode(() -> service.update(new UpdateCompanyDocumentCommand(12L, "새이름", null, USER, "ADMIN")),
+                CompanyDocumentErrorCode.CDOC_NOT_FOUND);
+        expectCode(() -> service.delete(new DeleteCompanyDocumentCommand(12L, USER, "ADMIN")),
+                CompanyDocumentErrorCode.CDOC_NOT_FOUND);
+        expectCode(() -> service.restore(new RestoreCompanyDocumentCommand(12L, USER, "ADMIN")),
+                CompanyDocumentErrorCode.CDOC_NOT_FOUND);
+
+        verify(documentRepository, never()).save(any());
+        verify(indexTriggerPort, never()).triggerRemoval(any());
+        verify(indexTriggerPort, never()).triggerReindex(any());
+    }
 }

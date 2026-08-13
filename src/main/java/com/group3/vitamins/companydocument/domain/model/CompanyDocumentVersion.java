@@ -85,8 +85,12 @@ public class CompanyDocumentVersion {
                 uploaderName, uploaderDepartment, uploaderPosition, completedAt, deletedAt);
     }
 
-    /** 완료 통보(§2) — S3 HEAD 검증 후 COMPLETED 로 확정한다. PDF 페이지 수는 실패해도 null 로 둔다. */
+    /**
+     * 완료 통보(§2) — S3 HEAD 검증 후 COMPLETED 로 확정한다. PDF 페이지 수는 실패해도 null 로 둔다.
+     * ⚠️ UPLOADING 에서만 전이한다 — 중복 완료 통보가 값을 덮어쓰거나 FAILED 를 되살리는 것을 막는다.
+     */
     public void complete(long verifiedSizeBytes, String checksum, Integer pageCount, LocalDateTime completedAt) {
+        requireUploading();
         this.uploadStatus = UploadStatus.COMPLETED;
         this.sizeBytes = verifiedSizeBytes;
         this.checksum = checksum;
@@ -94,9 +98,21 @@ public class CompanyDocumentVersion {
         this.completedAt = completedAt;
     }
 
-    /** 저장소에 객체가 없거나 검증 실패 시 FAILED 로 전환한다(§2). */
+    /** 저장소에 객체가 없거나 검증 실패 시 FAILED 로 전환한다(§2). UPLOADING 에서만 전이한다. */
     public void fail() {
+        requireUploading();
         this.uploadStatus = UploadStatus.FAILED;
+    }
+
+    /** UPLOADING 이 아니면 상태 전이를 거부한다(이미 종료된 버전 보호). 서비스가 먼저 막으므로 방어선이다. */
+    private void requireUploading() {
+        if (uploadStatus != UploadStatus.UPLOADING) {
+            throw new IllegalStateException("업로드 중(UPLOADING) 버전만 상태를 전이할 수 있습니다: " + uploadStatus);
+        }
+    }
+
+    public boolean isUploading() {
+        return uploadStatus == UploadStatus.UPLOADING;
     }
 
     public boolean isCompleted() {

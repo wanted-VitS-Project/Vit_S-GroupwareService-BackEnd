@@ -3,7 +3,6 @@ package com.group3.vitamins.companydocument.presentation.api.response;
 import com.group3.vitamins.companydocument.application.result.CompanyDocumentVersionHistoryResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Schema(description = "사내 문서 버전 이력(§7). 완료 버전만, 차수 내림차순.")
@@ -14,8 +13,6 @@ public record CompanyDocumentVersionHistoryResponse(
         @Schema(description = "완료 버전 수") int versionCount,
         @Schema(description = "버전 목록") List<Item> content
 ) {
-
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Schema(description = "버전 이력 항목")
     public record Item(
@@ -41,7 +38,7 @@ public record CompanyDocumentVersionHistoryResponse(
                         i.versionId(), i.versionNo(), i.latest(), i.originalFileName(), i.extension(),
                         i.sizeBytes(), i.pageCount(), i.previewable(), i.comment(),
                         i.uploaderName(), i.uploaderDepartment(), i.uploaderPosition(),
-                        i.completedAt() == null ? null : i.completedAt().format(FMT)))
+                        CompanyDocumentDateTimeFormat.format(i.completedAt())))
                 .toList();
         return new CompanyDocumentVersionHistoryResponse(
                 r.companyDocumentId(), r.name(), r.category(), r.versionCount(), items);

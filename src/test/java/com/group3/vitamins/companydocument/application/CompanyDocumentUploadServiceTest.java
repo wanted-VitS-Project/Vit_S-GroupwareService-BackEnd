@@ -156,6 +156,18 @@ class CompanyDocumentUploadServiceTest {
     }
 
     @Test
+    @DisplayName("정확히 50MB 는 허용된다(경계 > vs >= 회귀 방지)")
+    void acceptsExactly50MiB() {
+        stubSaves(12L, 34L);
+        when(uploaderLookupPort.findByUserId(USER)).thenReturn(Optional.empty());
+
+        service.startUpload(new StartCompanyDocumentUploadCommand(
+                "FINANCE", "a.pdf", 50L * 1024 * 1024, "application/pdf", null, null, null, USER, "ADMIN"));
+
+        verify(versionRepository).save(any());
+    }
+
+    @Test
     @DisplayName("새 버전인데 대상 문서가 타 회사면 CDOC_NOT_FOUND")
     void startNewVersionRejectsOtherCompany() {
         when(documentRepository.findById(77L)).thenReturn(Optional.of(

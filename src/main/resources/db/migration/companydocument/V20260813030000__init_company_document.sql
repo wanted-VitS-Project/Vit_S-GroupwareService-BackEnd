@@ -42,5 +42,6 @@ CREATE TABLE company_document_version (
     created_at                  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
     PRIMARY KEY (company_document_version_id),
     UNIQUE KEY uk_cdv_doc_version (company_document_id, version_no),
-    KEY idx_cdv_doc (company_document_id)
+    -- 목록(§3)의 최신 완료 버전 집계·조인용 복합 인덱스 — company_document_id 로 좁힌 뒤 상태·삭제·차수로 필터.
+    KEY idx_cdv_doc_completed (company_document_id, upload_status, deleted_at, version_no)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '사내 문서 버전(append-only) · COMPANY-DOC-V1';

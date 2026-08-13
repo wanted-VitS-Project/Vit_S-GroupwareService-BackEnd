@@ -3,8 +3,6 @@ package com.group3.vitamins.companydocument.presentation.api.response;
 import com.group3.vitamins.companydocument.application.result.CompanyDocumentVersionDetailResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.format.DateTimeFormatter;
-
 @Schema(description = "사내 문서 버전 상세 — 완료 통보(§2) 응답. 업로더 스냅샷은 ADMIN 업로드 시 null 일 수 있다(§6-6).")
 public record CompanyDocumentVersionDetailResponse(
         @Schema(description = "문서 번호", example = "12") Long companyDocumentId,
@@ -23,13 +21,11 @@ public record CompanyDocumentVersionDetailResponse(
         @Schema(description = "업로드 완료 시각 yyyy-MM-dd HH:mm:ss", example = "2026-08-13 00:53:02") String completedAt
 ) {
 
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     public static CompanyDocumentVersionDetailResponse from(CompanyDocumentVersionDetailResult r) {
         return new CompanyDocumentVersionDetailResponse(
                 r.companyDocumentId(), r.versionId(), r.versionNo(), r.name(), r.category(),
                 r.originalFileName(), r.extension(), r.sizeBytes(), r.pageCount(), r.comment(),
                 r.uploaderName(), r.uploaderDepartment(), r.uploaderPosition(),
-                r.completedAt() == null ? null : r.completedAt().format(FMT));
+                CompanyDocumentDateTimeFormat.format(r.completedAt()));
     }
 }

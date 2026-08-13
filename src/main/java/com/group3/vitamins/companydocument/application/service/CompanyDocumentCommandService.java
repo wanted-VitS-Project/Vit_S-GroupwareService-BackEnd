@@ -45,13 +45,18 @@ public class CompanyDocumentCommandService implements CompanyDocumentCommandUseC
         adminPolicy.assertAdmin(command.role());
         long companyId = currentCompanyIdProvider.currentCompanyId();
 
-        String name = blankToNull(command.name());
-        String category = blankToNull(command.category());
+        // ⚠️ 미전송(null)만 "변경 없음"이다. 전송된 공백 name 은 무시하지 않고 400 으로 막는다(조용한 무시 방지).
+        //    category 는 원본 값으로 enum 검증한다 — " FINANCE " 처럼 공백이 낀 값을 strip 으로 통과시키지 않는다.
+        String name = command.name();
+        String category = command.category();
         if (name == null && category == null) {
             throw new ValidationException(CompanyDocumentErrorCode.CDOC_INVALID_REQUEST);
         }
-        if (name != null && name.length() > MAX_NAME_LENGTH) {
-            throw new ValidationException(CompanyDocumentErrorCode.CDOC_INVALID_REQUEST);
+        if (name != null) {
+            name = name.strip();
+            if (name.isEmpty() || name.length() > MAX_NAME_LENGTH) {
+                throw new ValidationException(CompanyDocumentErrorCode.CDOC_INVALID_REQUEST);
+            }
         }
         if (category != null && !DocumentCategory.isValid(category)) {
             throw new ValidationException(CompanyDocumentErrorCode.CDOC_INVALID_REQUEST);
@@ -117,9 +122,5 @@ public class CompanyDocumentCommandService implements CompanyDocumentCommandUseC
         return documentRepository.findById(companyDocumentId)
                 .filter(d -> d.getCompanyId() == companyId)
                 .orElseThrow(() -> new NotFoundException(CompanyDocumentErrorCode.CDOC_NOT_FOUND));
-    }
-
-    private String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s.strip();
     }
 }

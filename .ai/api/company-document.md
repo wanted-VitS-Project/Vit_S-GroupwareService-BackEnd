@@ -22,7 +22,7 @@
 | URL 만료 | 업로드 10분 · 다운로드 5분(`file` 과 통일) |
 | 삭제 | **단순 soft delete + 복구.** file 식 휴지통·영구삭제 2단은 **미도입**(COMPANY-DOC-V1 §6-4). 저장소 객체는 유지 |
 | 낙관락 | **미도입**(단순화). 표시명·카테고리 수정은 낙관락 버전 없이 최종 저장 |
-| 업로더 스냅샷 | 완료 시점에 `uploaded_by`(사번)로 조회해 이름·부서·직책을 박는다. **ADMIN 은 employee 행이 없어 스냅샷이 빌 수 있다** → 이름/부서/직책 `nullable`, `uploaded_by` 는 항상 기록 |
+| 업로더 스냅샷 | **업로드 시작(§1) 시점**에 `uploaded_by`(사번)로 조회해 이름·부서·직책을 박는다(file 과 동일). **ADMIN 은 employee 행이 없어 스냅샷이 빌 수 있다** → 이름/부서/직책 `nullable`, `uploaded_by` 는 항상 기록. URL 유효 10분 사이의 인사정보 변경은 수용한다 |
 | AI 인덱싱 | 완료 버전을 **인덱싱 대상으로 등록(트리거 발행만)**. 소비(청킹·임베딩)는 AI(vitamate) 도메인 소관. soft delete 시 인덱스 제외 트리거 |
 | 미리보기 | **PDF 앞 5페이지만**, 서버가 잘라 바이너리 반환(`file` §10 동일). PDF 아니면 다운로드 안내 |
 | 카테고리 | 고정 enum `FINANCE`·`COMPANY_INTRO`·`PERFORMANCE`·`CERTIFICATE`·`ETC`. 한글 표시는 프론트 |
@@ -94,11 +94,11 @@
 | 요구사항 | CDOC-004·005 · INV-03·04·06·07 |
 
 > 🔑 **서버가 저장소를 직접 확인한다**(head). 객체가 없으면 버전을 `실패` 로 전환한다.
-⛔ **업로더 스냅샷이 이 시점에 확정된다**(`uploaded_by` 로 조회). ADMIN 은 employee 가 없어 이름/부서/직책이 `null` 일 수 있다.
+⛔ **업로더 스냅샷은 업로드 시작(§1)에 이미 확정돼 있다**(file 과 동일). 완료 시점에는 조회하지 않는다.
 ⛔ **PDF 면 총 페이지 수를 추출**한다. 실패해도 완료 처리하고 페이지 수만 비운다.
 ⛔ **완료 시 인덱싱 트리거를 발행**한다(AI 도메인이 소비).
 
-**Request Body** — `checksum` String N (보내면 서버가 대조)
+**Request Body** — `checksum` String N (보내면 **기록**한다. ⚠️ 현재 서버는 크기만 검증하고 checksum 대조는 미구현 — file 과 동일. `CDOC_CHECKSUM_MISMATCH` 는 향후 대조 도입 시 발생한다)
 
 **Response** — `companyDocumentId` · `versionId` · `versionNo` · `name` · `category` · `originalFileName` · `extension` · `sizeBytes` · `pageCount`(nullable) · `comment`(nullable) · `uploaderName`(nullable) · `uploaderDepartment`(nullable) · `uploaderPosition`(nullable) · `completedAt`
 
@@ -109,7 +109,7 @@
 | 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
 | 404 | `CDOC_VERSION_NOT_FOUND` | 버전 없음(타 회사 포함) |
 | 409 | `CDOC_OBJECT_NOT_FOUND` | 저장소에 객체 없음. 버전을 `실패` 로 전환 |
-| 409 | `CDOC_SIZE_MISMATCH` / `CDOC_CHECKSUM_MISMATCH` | 크기/체크섬 불일치 |
+| 409 | `CDOC_SIZE_MISMATCH` | 업로드된 크기가 요청과 다름 (`CDOC_CHECKSUM_MISMATCH` 는 향후 대조 도입 시) |
 
 ---
 

@@ -116,7 +116,8 @@ public class CompanyDocumentUploadService implements CompanyDocumentUploadUseCas
         // 회사 스코프 — 버전이 속한 문서가 현재 회사 것인지 확인한다(타 회사 버전은 존재를 노출하지 않는다).
         CompanyDocument document = requireOwnedDocument(version.getCompanyDocumentId(), companyId);
 
-        if (version.isCompleted()) {
+        // UPLOADING 이 아니면 거부 — 이미 COMPLETED 는 중복 통보, FAILED 는 되살리기 시도다(둘 다 종료 상태).
+        if (!version.isUploading()) {
             throw new ValidationException(CompanyDocumentErrorCode.CDOC_ALREADY_COMPLETED);
         }
 
