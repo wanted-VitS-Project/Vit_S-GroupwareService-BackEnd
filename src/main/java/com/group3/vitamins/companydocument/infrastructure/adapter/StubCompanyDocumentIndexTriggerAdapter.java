@@ -1,5 +1,6 @@
 package com.group3.vitamins.companydocument.infrastructure.adapter;
 
+import com.group3.vitamins.companydocument.application.port.CompanyDocumentIndexTarget;
 import com.group3.vitamins.companydocument.application.port.CompanyDocumentIndexTriggerPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,8 +17,9 @@ import org.springframework.stereotype.Component;
 public class StubCompanyDocumentIndexTriggerAdapter implements CompanyDocumentIndexTriggerPort {
 
     @Override
-    public void triggerIndexing(Long versionId) {
-        log.info("[사내문서 인덱싱 스텁] 버전 {} 인덱싱 대상 등록 요청 — AI 도메인 소비 대기(§6-2)", versionId);
+    public void triggerIndexing(CompanyDocumentIndexTarget target) {
+        log.info("[사내문서 인덱싱 스텁] 버전 {} 인덱싱 대상 등록 요청(companyId={}, s3Key={}) — AI 도메인 소비 대기(§6-2)",
+                target.companyDocumentVersionId(), target.companyId(), target.s3Key());
     }
 
     @Override

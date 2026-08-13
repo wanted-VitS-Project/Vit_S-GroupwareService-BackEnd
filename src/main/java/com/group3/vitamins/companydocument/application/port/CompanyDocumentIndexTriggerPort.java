@@ -10,8 +10,11 @@ package com.group3.vitamins.companydocument.application.port;
  */
 public interface CompanyDocumentIndexTriggerPort {
 
-    /** 업로드 완료(§2) 시 이 버전을 인덱싱 대상으로 등록한다(버전 단위). */
-    void triggerIndexing(Long versionId);
+    /**
+     * 업로드 완료(§2) 시 이 버전을 인덱싱 대상으로 등록한다(버전 단위).
+     * 페이로드는 AI 와 합의한 {@link CompanyDocumentIndexTarget}(versionId·companyId·s3Key)를 넘긴다.
+     */
+    void triggerIndexing(CompanyDocumentIndexTarget target);
 
     /** soft delete(§5) 시 이 문서의 파생 인덱스를 제외 대상으로 등록한다(문서 단위). */
     void triggerRemoval(Long companyDocumentId);

@@ -61,6 +61,9 @@ class EmployeeUpdateResignServiceTest {
         // 등록 경로 협력자는 이 테스트에서 안 쓰므로 목만 채운다.
         service = new EmployeeCommandService(
                 new EmployeeAdminPolicy(), employeeRepository, referenceQueryPort,
+                Mockito.mock(com.group3.vitamins.employee.application.port.QualificationReferenceQueryPort.class),
+                Mockito.mock(com.group3.vitamins.employee.domain.repository.EmployeeEducationRepository.class),
+                Mockito.mock(com.group3.vitamins.employee.domain.repository.EmployeeCertificateRepository.class),
                 Mockito.mock(EmployeeRegistrationWriter.class), Mockito.mock(TempPasswordGenerator.class),
                 Mockito.mock(ThrottledPasswordEncoder.class), Mockito.mock(InitialPasswordMailPort.class),
                 accountDeactivationPort,
@@ -81,7 +84,8 @@ class EmployeeUpdateResignServiceTest {
         private UpdateEmployeeCommand onlyName(String actorRole, String name) {
             return new UpdateEmployeeCommand(actorRole, "EMP021",
                     true, name, false, null, false, null,
-                    false, null, false, null, false, null);
+                    false, null, false, null, false, null,
+                    false, null, false, null);
         }
 
         @Test
@@ -96,7 +100,8 @@ class EmployeeUpdateResignServiceTest {
         @DisplayName("수정할 필드가 없으면 EMP_INVALID_REQUEST")
         void rejectsNoFields() {
             UpdateEmployeeCommand empty = new UpdateEmployeeCommand("ADMIN", "EMP021",
-                    false, null, false, null, false, null, false, null, false, null, false, null);
+                    false, null, false, null, false, null, false, null, false, null, false, null,
+                    false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(empty))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
             verify(employeeRepository, never()).findById(anyString());
@@ -128,7 +133,8 @@ class EmployeeUpdateResignServiceTest {
             when(employeeRepository.findById("ADMIN001")).thenReturn(Optional.of(
                     Employee.restore("ADMIN001", "시스템", true, null, null, null, null, null, null, 1L)));
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "ADMIN001",
-                    true, "x", false, null, false, null, false, null, false, null, false, null);
+                    true, "x", false, null, false, null, false, null, false, null, false, null,
+                    false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
                     .satisfies(hasCode(AccountErrorCode.ACC_SYSTEM_ACCOUNT_NOT_ALLOWED));
             verify(employeeRepository, never()).updateInfo(any());
@@ -140,7 +146,8 @@ class EmployeeUpdateResignServiceTest {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
             when(referenceQueryPort.departmentExists(99L, 1L)).thenReturn(false);
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
-                    false, null, false, null, false, null, true, 99L, false, null, false, null);
+                    false, null, false, null, false, null, true, 99L, false, null, false, null,
+                    false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_DEPARTMENT_NOT_FOUND));
         }
@@ -166,7 +173,8 @@ class EmployeeUpdateResignServiceTest {
         void clearsJobPosition() {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
-                    false, null, false, null, false, null, false, null, true, null, false, null);
+                    false, null, false, null, false, null, false, null, true, null, false, null,
+                    false, null, false, null);
 
             service.updateEmployee(cmd);
 
@@ -191,7 +199,8 @@ class EmployeeUpdateResignServiceTest {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
                     false, null, false, null, true, "not-an-email",
-                    false, null, false, null, false, null);
+                    false, null, false, null, false, null,
+                    false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
             verify(employeeRepository, never()).updateInfo(any());
@@ -203,7 +212,8 @@ class EmployeeUpdateResignServiceTest {
             when(employeeRepository.findById("EMP021")).thenReturn(Optional.of(active()));
             UpdateEmployeeCommand cmd = new UpdateEmployeeCommand("ADMIN", "EMP021",
                     false, null, true, "0".repeat(21), false, null,
-                    false, null, false, null, false, null);
+                    false, null, false, null, false, null,
+                    false, null, false, null);
             assertThatThrownBy(() -> service.updateEmployee(cmd))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_INVALID_REQUEST));
             verify(employeeRepository, never()).updateInfo(any());

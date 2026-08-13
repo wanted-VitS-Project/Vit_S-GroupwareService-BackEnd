@@ -3,6 +3,7 @@ package com.group3.vitamins.companydocument.application.service;
 import com.group3.vitamins.companydocument.application.command.CompleteCompanyDocumentUploadCommand;
 import com.group3.vitamins.companydocument.application.command.StartCompanyDocumentUploadCommand;
 import com.group3.vitamins.companydocument.application.policy.CompanyDocumentAdminPolicy;
+import com.group3.vitamins.companydocument.application.port.CompanyDocumentIndexTarget;
 import com.group3.vitamins.companydocument.application.port.CompanyDocumentIndexTriggerPort;
 import com.group3.vitamins.companydocument.application.result.CompanyDocumentUploadStartResult;
 import com.group3.vitamins.companydocument.application.result.CompanyDocumentVersionDetailResult;
@@ -142,7 +143,9 @@ public class CompanyDocumentUploadService implements CompanyDocumentUploadUseCas
 
         version.complete(stored.sizeBytes(), command.checksum(), pageCount, LocalDateTime.now());
         CompanyDocumentVersion saved = versionRepository.save(version);
-        indexTriggerPort.triggerIndexing(saved.getVersionId());
+        // AI 합의 페이로드(versionId·companyId·s3Key) — companyId 는 문서에서, s3Key 는 버전 저장키에서.
+        indexTriggerPort.triggerIndexing(new CompanyDocumentIndexTarget(
+                saved.getVersionId(), document.getCompanyId(), saved.getStorageKey()));
 
         return toDetail(document, saved);
     }

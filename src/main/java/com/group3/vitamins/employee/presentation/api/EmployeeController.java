@@ -1,6 +1,8 @@
 package com.group3.vitamins.employee.presentation.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.group3.vitamins.employee.application.command.CertificateItem;
+import com.group3.vitamins.employee.application.command.EducationItem;
 import com.group3.vitamins.employee.application.command.UpdateEmployeeCommand;
 import com.group3.vitamins.employee.application.query.EmployeeListQuery;
 import com.group3.vitamins.employee.application.query.EmployeeSearchQuery;
@@ -170,7 +172,8 @@ public class EmployeeController {
                 employeeAdminQueryUseCase.getEmployee(currentRole(authentication), userId);
 
         return ApiResponse.success(EmployeeResponseMessage.DETAIL_SUCCESS,
-                EmployeeDetailResponse.from(detail.employee(), detail.groups()));
+                EmployeeDetailResponse.from(detail.employee(), detail.groups(),
+                        detail.educations(), detail.certificates()));
     }
 
     @Operation(summary = "사원 정보 수정 (ADMIN)",
@@ -204,7 +207,8 @@ public class EmployeeController {
         EmployeeAdminQueryUseCase.EmployeeDetail detail =
                 employeeAdminQueryUseCase.getEmployee(role, userId);
         return ApiResponse.success(EmployeeResponseMessage.UPDATED,
-                EmployeeDetailResponse.from(detail.employee(), detail.groups()));
+                EmployeeDetailResponse.from(detail.employee(), detail.groups(),
+                        detail.educations(), detail.certificates()));
     }
 
     @Operation(summary = "퇴사 처리 (ADMIN)",
@@ -243,6 +247,9 @@ public class EmployeeController {
      * {@code null} 값은 "전달됨"으로 취급한다 — jobPositionId 는 null 로 직급을 지울 수 있어야 하기 때문이다.
      */
     private UpdateEmployeeCommand toUpdateCommand(String userId, JsonNode body, String role) {
+        // 학력·자격증은 전체 교체다. 미전송·명시적 null 은 "유지"(provided=false)이고, 배열([] 포함)만 교체 대상이다.
+        List<EducationItem> educations = educationItems(body);
+        List<CertificateItem> certificates = certificateItems(body);
         return new UpdateEmployeeCommand(
                 role, userId,
                 body.has("name"), textOrNull(body, "name"),
@@ -250,7 +257,58 @@ public class EmployeeController {
                 body.has("email"), textOrNull(body, "email"),
                 body.has("departmentId"), longOrNull(body, "departmentId"),
                 body.has("jobPositionId"), longOrNull(body, "jobPositionId"),
-                body.has("hiredAt"), textOrNull(body, "hiredAt"));
+                body.has("hiredAt"), textOrNull(body, "hiredAt"),
+                educations != null, educations,
+                certificates != null, certificates);
+    }
+
+    /** 학력 배열 파싱. 미전송·null 이면 {@code null}(유지), 배열이면 항목 목록([] 은 빈 목록=삭제). 그 외 타입은 400. */
+    private List<EducationItem> educationItems(JsonNode body) {
+        JsonNode arr = arrayOrNull(body, "educations");
+        if (arr == null) {
+            return null;
+        }
+        List<EducationItem> items = new java.util.ArrayList<>();
+        for (JsonNode node : arr) {
+            requireObject(node);
+            items.add(new EducationItem(longOrNull(node, "majorId"), textOrNull(node, "degree"), textOrNull(node, "school")));
+        }
+        return items;
+    }
+
+    /** 자격증 배열 파싱. 규칙은 학력과 같다. */
+    private List<CertificateItem> certificateItems(JsonNode body) {
+        JsonNode arr = arrayOrNull(body, "certificates");
+        if (arr == null) {
+            return null;
+        }
+        List<CertificateItem> items = new java.util.ArrayList<>();
+        for (JsonNode node : arr) {
+            requireObject(node);
+            items.add(new CertificateItem(longOrNull(node, "certificateId"), textOrNull(node, "acquiredDate")));
+        }
+        return items;
+    }
+
+    /** 필드가 배열이면 그 노드를, 미전송·명시적 null 이면 null 을 반환. 배열도 null 도 아니면 400. */
+    private JsonNode arrayOrNull(JsonNode body, String field) {
+        if (!body.has(field)) {
+            return null;
+        }
+        JsonNode node = body.get(field);
+        if (node.isNull()) {
+            return null;
+        }
+        if (!node.isArray()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
+        return node;
+    }
+
+    private void requireObject(JsonNode node) {
+        if (!node.isObject()) {
+            throw new ValidationException(EmployeeErrorCode.EMP_INVALID_REQUEST);
+        }
     }
 
     /** 전달됐다면 문자열이거나 null 이어야 한다. 그 외 타입이면 400. */

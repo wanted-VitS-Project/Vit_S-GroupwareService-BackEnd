@@ -108,4 +108,29 @@
          ORDER BY g.name ASC
     </select>
 
+    <!-- 사원 학력 — 전공 마스터를 조인해 이름을 함께 내려준다(스냅샷 아님). 등록 순 유지. -->
+    <select id="findEducations"
+            resultType="com.group3.vitamins.employee.application.result.EmployeeEducationRow">
+        SELECT e.major_id AS majorId,
+               mj.name    AS majorName,
+               e.degree   AS degree,
+               e.school   AS school
+          FROM employee_education e
+          JOIN major mj ON mj.major_id = e.major_id
+         WHERE e.user_id = #{userId}
+         ORDER BY e.employee_education_id ASC
+    </select>
+
+    <!-- 사원 자격증 — 자격증 마스터를 조인해 이름을 함께 내려준다. 등록 순 유지. -->
+    <select id="findCertificates"
+            resultType="com.group3.vitamins.employee.application.result.EmployeeCertificateRow">
+        SELECT c.certificate_id AS certificateId,
+               ct.name          AS certificateName,
+               c.acquired_date  AS acquiredDate
+          FROM employee_certificate c
+          JOIN certificate ct ON ct.certificate_id = c.certificate_id
+         WHERE c.user_id = #{userId}
+         ORDER BY c.employee_certificate_id ASC
+    </select>
+
 </mapper>
