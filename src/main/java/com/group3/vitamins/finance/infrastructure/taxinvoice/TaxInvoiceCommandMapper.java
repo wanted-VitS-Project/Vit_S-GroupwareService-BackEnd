@@ -33,16 +33,27 @@ public interface TaxInvoiceCommandMapper {
             @Param("linkedBy") String linkedBy,
             @Param("linkedAt") LocalDateTime linkedAt);
 
-    /** 정산 블록 쪽 결과 반영 — status(PARTIAL/COMPLETED)·actual_amount·actual_date. */
-    int updateSettlementBlockMatchResult(
-            @Param("settleId") Long settleId,
-            @Param("status") String status,
-            @Param("actualAmount") BigDecimal actualAmount,
-            @Param("actualDate") LocalDateTime actualDate);
+    /**
+     * 정산 블록을 WAITING(정산 대기)으로 올린다 — PENDING 이었을 때만.
+     * 이미 PARTIAL/COMPLETED(입출금이 붙은 블록)면 0행이 정상이다(그 상태를 유지해야 한다).
+     */
+    int markSettlementBlockWaiting(@Param("settleId") Long settleId);
 
     /** tax_invoice 쪽 연결 정보 해제. */
     int clearTaxInvoiceMatch(@Param("taxId") Long taxId);
 
-    /** 정산 블록을 PENDING으로 되돌리고 실적값을 비운다. */
-    int resetSettlementBlockMatch(@Param("settleId") Long settleId);
+    /**
+     * 정산 블록을 PENDING 으로 되돌린다 — WAITING(세금계산서만 붙어 있던 상태)이었을 때만.
+     * 입출금이 아직 붙어 있으면 PARTIAL/COMPLETED 라 0행이 되고, 그 상태·실적값이 그대로 유지된다.
+     */
+    int resetSettlementBlockFromWaiting(@Param("settleId") Long settleId);
+
+    /** 메모만 수정한다 — 세금계산서 원본 값(승인번호·금액·사업자번호 등)은 고칠 수 없다. */
+    int updateTaxInvoiceMemo(@Param("taxId") Long taxId, @Param("memo") String memo);
+
+    /** 소프트 삭제(배치) — 매칭된 항목은 지우지 않는다(조건을 UPDATE 문에 걸어 확인~삭제 사이의 틈을 없앤다). */
+    int softDeleteBatch(@Param("taxIds") List<Long> taxIds);
+
+    /** 연결 제외/포함 배치 처리. */
+    int updateExcludedBatch(@Param("taxIds") List<Long> taxIds, @Param("isExcluded") Boolean isExcluded);
 }

@@ -53,6 +53,7 @@ public interface SettlementQueryUseCase {
             Integer totalRoundCount,
             LocalDate nextPlannedDate,
             String settlementStatusSummary,
+            Integer taxInvoiceUnlinkedCount,
             String projectStatus,
             LocalDate endedOn
     ) {

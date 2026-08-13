@@ -154,6 +154,8 @@ public class SettlementQueryService implements SettlementQueryUseCase {
         long completedRoundCount = row.completedRoundCount() == null ? 0L : row.completedRoundCount();
         long totalRoundCount = row.totalRoundCount() == null ? 0L : row.totalRoundCount();
         long pendingRoundCount = row.pendingRoundCount() == null ? 0L : row.pendingRoundCount();
+        long taxInvoiceUnlinkedCount =
+                row.taxInvoiceUnlinkedCount() == null ? 0L : row.taxInvoiceUnlinkedCount();
 
         return new SettlementProjectView(
                 row.projectId(),
@@ -168,13 +170,17 @@ public class SettlementQueryService implements SettlementQueryUseCase {
                 (int) totalRoundCount,
                 row.nextPlannedDate(),
                 settlementStatusSummary(totalRoundCount, completedRoundCount, pendingRoundCount),
+                (int) taxInvoiceUnlinkedCount,
                 row.projectStatus(),
                 row.endedOn()
         );
     }
 
     // 회차 하나하나의 예정일까지 따지는 세분화(계산서 미발행·입금 대기 N일 등)는 아직 안 한다 — 지금은
-    // "전부 완료됐는지"와 "미연결(PENDING) 회차가 몇 건인지"만 구분한다. 추후 규칙이 늘어날 수 있다.
+    // "전부 완료됐는지"와 "입출금 미연결 회차가 몇 건인지"만 구분한다. 추후 규칙이 늘어날 수 있다.
+    // ⚠️ 여기 "미연결"은 입출금 기준이다(status IN ('PENDING','WAITING'), 2026-08-13부터 WAITING 포함).
+    // 세금계산서 미연결은 이 문구가 아니라 별도 필드 taxInvoiceUnlinkedCount로 내려간다 — 문자열 계약을
+    // 건드리면 프론트가 깨지고, 두 원장의 미연결은 서로 다른 개념이라 한 문구에 섞으면 안 된다.
     private String settlementStatusSummary(long totalRoundCount, long completedRoundCount, long pendingRoundCount) {
         if (totalRoundCount > 0 && completedRoundCount == totalRoundCount) {
             return "정산완료";

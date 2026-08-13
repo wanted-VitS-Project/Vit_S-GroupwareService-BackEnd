@@ -17,6 +17,9 @@ import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceMemoCommand;
+import com.group3.vitamins.finance.application.command.DeleteTaxInvoicesCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceExclusionCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowCsvPreviewView;
@@ -28,6 +31,9 @@ import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.Cas
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvPreviewView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvUploadView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceMatchView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceMemoView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceDeleteResultView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceExclusionResultView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowListView;
@@ -62,6 +68,12 @@ import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceFilterRes
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceListResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMatchCandidatesResponse;
 import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMatchResponse;
+import com.group3.vitamins.finance.presentation.api.request.UpdateTaxInvoiceMemoRequest;
+import com.group3.vitamins.finance.presentation.api.request.UpdateTaxInvoiceExclusionRequest;
+import com.group3.vitamins.finance.presentation.api.request.DeleteTaxInvoicesRequest;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMemoResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceDeleteResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceExclusionResponse;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -345,6 +357,75 @@ public class FinanceController {
                 new UnmatchTaxInvoiceCommand(taxId, authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("세금계산서 블록 매칭 해제 성공", null));
+    }
+
+    @Operation(summary = "세금계산서 메모 수정",
+            description = "세금계산서의 비고/메모를 수정한다. 세금계산서는 수동 등록이 없어(전부 CSV/엑셀 업로드) "
+                    + "메모만 수정할 수 있다 — 승인번호·금액·사업자번호는 국세청 발급 원본 값이라 고칠 수 없다. "
+                    + "매칭된 항목의 메모도 수정할 수 있다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 메모 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @PatchMapping("/tax-invoices/{taxId}")
+    public ResponseEntity<ApiResponse<TaxInvoiceMemoResponse>> updateTaxInvoiceMemo(
+            @Parameter(description = "수정할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            @RequestBody UpdateTaxInvoiceMemoRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceMemoView view = financeCommandUseCase.updateTaxInvoiceMemo(new UpdateTaxInvoiceMemoCommand(
+                taxId, request.memo(), authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 메모 수정 성공", TaxInvoiceMemoResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 삭제",
+            description = "세금계산서 여러 건을 한 번에 삭제한다(소프트 삭제). 정산 블록에 매칭된 항목은 먼저 매칭을 "
+                    + "해제해야 삭제할 수 있다 — 매칭됐거나 존재하지 않는 항목은 전체를 실패시키지 않고 "
+                    + "skippedItems로 사유와 함께 돌려준다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "삭제할 항목을 선택해주세요. (FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+    })
+    @DeleteMapping("/tax-invoices")
+    public ResponseEntity<ApiResponse<TaxInvoiceDeleteResponse>> deleteTaxInvoices(
+            @RequestBody DeleteTaxInvoicesRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceDeleteResultView view = financeCommandUseCase.deleteTaxInvoices(new DeleteTaxInvoicesCommand(
+                request.taxIds(), authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 삭제 성공", TaxInvoiceDeleteResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 연결 제외/포함 처리",
+            description = "프로젝트와 무관한 세금계산서를 미연결 건수 집계에서 빼거나(제외), 다시 포함시킨다. "
+                    + "이미 매칭된 항목은 제외 처리할 수 없다(제외 취소는 매칭 여부와 무관하게 항상 가능). "
+                    + "처리하지 못한 항목은 전체를 실패시키지 않고 skippedItems로 사유와 함께 돌려준다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 연결 제외 처리 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "필수 항목이 누락되었습니다. (FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+    })
+    @PatchMapping("/tax-invoices/exclude")
+    public ResponseEntity<ApiResponse<TaxInvoiceExclusionResponse>> updateTaxInvoiceExclusion(
+            @RequestBody UpdateTaxInvoiceExclusionRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceExclusionResultView view = financeCommandUseCase.updateTaxInvoiceExclusion(
+                new UpdateTaxInvoiceExclusionCommand(request.taxIds(), request.isExcluded(),
+                        authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success("세금계산서 연결 제외 처리 성공", TaxInvoiceExclusionResponse.from(view)));
     }
 
     private TaxInvoiceCsvUploadRequest parseTaxInvoiceUploadRequest(String requestJson) {

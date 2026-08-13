@@ -137,7 +137,15 @@
         JOIN step st ON st.step_id = b.step_id
         JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
         WHERE sb.deleted_at IS NULL
-        AND sb.status = 'PENDING'
+        <!--
+            ⚠️ status가 아니라 "이 블록에 입출금이 이미 붙었나"로 거른다 (2026-08-13 규칙 확정).
+            세금계산서만 먼저 붙은 블록은 status가 WAITING(정산 대기)인데, 입금을 기다리는 그 블록이야말로
+            정상 후보다 — 예전처럼 status = 'PENDING'만 보면 통째로 빠진다.
+        -->
+        AND NOT EXISTS (
+        SELECT 1 FROM cash_flow cf2
+        WHERE cf2.settle_block_id = sb.settle_id AND cf2.deleted_at IS NULL
+        )
         AND sb.type = #{type}
         AND p.company_id = #{companyId}
         ) candidates

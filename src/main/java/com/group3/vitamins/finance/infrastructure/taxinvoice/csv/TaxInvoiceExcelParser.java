@@ -40,6 +40,7 @@ public class TaxInvoiceExcelParser {
 
     private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter TIME_ONLY = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final DataFormatter dataFormatter = new DataFormatter();
 
@@ -221,9 +222,18 @@ public class TaxInvoiceExcelParser {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * ⚠️ 시각만 있는 셀은 시각("HH:mm:ss")만 남긴다 — 엑셀이 그런 셀을 "0일차 + 시각"인 소수로
+     * 저장하기 때문에, 그대로 읽으면 기준일 1899-12-31이 날짜로 따라붙는다(2026-08-13, 입출금 쪽에서
+     * 프론트 제보로 발견한 것과 동일한 문제. 세금계산서 매핑엔 시각 컬럼이 없어 저장 경로엔 영향이
+     * 없지만, 매핑 안 한 컬럼도 미리보기 sampleRows에는 그대로 실려 나가므로 값이 이상하게 보인다).
+     */
     private String numeric(Cell cell) {
         if (DateUtil.isCellDateFormatted(cell)) {
             LocalDateTime dateTime = cell.getLocalDateTimeCellValue();
+            if (cell.getNumericCellValue() < 1.0d) {
+                return dateTime.toLocalTime().format(TIME_ONLY);
+            }
             return dateTime.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
                     ? dateTime.toLocalDate().format(DATE_ONLY)
                     : dateTime.format(DATE_TIME);

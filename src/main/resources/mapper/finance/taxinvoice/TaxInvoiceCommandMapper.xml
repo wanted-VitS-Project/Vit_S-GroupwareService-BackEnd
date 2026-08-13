@@ -45,13 +45,16 @@
     </update>
 
     <!--
-        cash_flow의 updateSettlementBlockMatchResult와 완전히 동일한 SQL(같은 settlement_block 테이블,
-        도메인 무관 갱신). 정산 블록 1건당 매칭은 1번뿐이라(사용자 확정) status = 'PENDING' 조건을
-        UPDATE 문 자체에 걸어서 동시 매칭 시 한쪽만 성공하게 한다.
+        ⚠️ 실적값(actual_amount·actual_date)은 건드리지 않는다 (2026-08-13 규칙 확정) — 실제로 돈이
+        움직인 기록은 입출금 소관이라, 세금계산서 매칭은 status 만 올린다. 세금계산서 금액을 실적으로
+        넣으면 paidAmountRatio(= actual 합계 ÷ total)가 "실입금 진행률"이 아니게 된다.
+
+        status = 'PENDING' 조건은 "이미 입출금이 붙은 블록의 PARTIAL/COMPLETED 를 WAITING 으로
+        떨어뜨리지 않기" 위한 것이다 — 그 경우 0행이 정상이고, 호출부는 실패로 처리하지 않는다.
     -->
-    <update id="updateSettlementBlockMatchResult">
+    <update id="markSettlementBlockWaiting">
         UPDATE settlement_block
-        SET status = #{status}, actual_amount = #{actualAmount}, actual_date = #{actualDate}
+        SET status = 'WAITING'
         WHERE settle_id = #{settleId} AND status = 'PENDING'
     </update>
 
@@ -61,10 +64,40 @@
         WHERE tax_id = #{taxId}
     </update>
 
-    <update id="resetSettlementBlockMatch">
+    <!--
+        status = 'WAITING' 조건이 "입출금이 아직 붙어 있는지"를 대신 판정한다 — 입출금이 붙어 있으면
+        블록은 PARTIAL/COMPLETED 이므로 0행이 되고 상태·실적값이 그대로 남는다. 별도 EXISTS 조회가 필요 없다.
+    -->
+    <update id="resetSettlementBlockFromWaiting">
         UPDATE settlement_block
-        SET status = 'PENDING', actual_amount = NULL, actual_date = NULL
-        WHERE settle_id = #{settleId}
+        SET status = 'PENDING'
+        WHERE settle_id = #{settleId} AND status = 'WAITING'
+    </update>
+
+    <update id="updateTaxInvoiceMemo">
+        UPDATE tax_invoice SET memo = #{memo}, updated_at = NOW()
+        WHERE tax_id = #{taxId} AND deleted_at IS NULL
+    </update>
+
+    <!--
+        settle_block_id IS NULL 조건을 UPDATE 문 자체에 걸어서 "매칭 확인 후 삭제" 사이의 틈을 없앤다 —
+        확인 직후 남이 매칭하면 0행이 되고, 호출부가 400으로 되돌린다(cash_flow의 softDeleteBatch와 동일).
+    -->
+    <update id="softDeleteBatch">
+        UPDATE tax_invoice SET deleted_at = NOW()
+        WHERE deleted_at IS NULL AND settle_block_id IS NULL
+        AND tax_id IN
+        <foreach collection="taxIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <update id="updateExcludedBatch">
+        UPDATE tax_invoice SET is_excluded = #{isExcluded}, updated_at = NOW()
+        WHERE tax_id IN
+        <foreach collection="taxIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
     </update>
 
 </mapper>

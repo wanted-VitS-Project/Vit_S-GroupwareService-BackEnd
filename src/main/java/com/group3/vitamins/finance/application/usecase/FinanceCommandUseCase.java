@@ -12,6 +12,9 @@ import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewComma
 import com.group3.vitamins.finance.application.command.TaxInvoiceCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
 import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceMemoCommand;
+import com.group3.vitamins.finance.application.command.DeleteTaxInvoicesCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceExclusionCommand;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -55,6 +58,15 @@ public interface FinanceCommandUseCase {
 
     //세금계산서의 정산 블록 매칭 해제
     void unmatchTaxInvoice(UnmatchTaxInvoiceCommand command);
+
+    //세금계산서 메모 수정 — 세금계산서는 수동 등록이 없어 메모만 고칠 수 있다
+    TaxInvoiceMemoView updateTaxInvoiceMemo(UpdateTaxInvoiceMemoCommand command);
+
+    //세금계산서 삭제(배치, 소프트 삭제)
+    TaxInvoiceDeleteResultView deleteTaxInvoices(DeleteTaxInvoicesCommand command);
+
+    //세금계산서 연결 제외/포함 처리(배치)
+    TaxInvoiceExclusionResultView updateTaxInvoiceExclusion(UpdateTaxInvoiceExclusionCommand command);
 
     record CashFlowCsvPreviewView(
             List<String> columns,
@@ -185,6 +197,31 @@ public interface FinanceCommandUseCase {
             String linkedBy,
             String linkedByName,
             LocalDateTime linkedAt
+    ) {
+    }
+
+    record TaxInvoiceMemoView(
+            Long taxId,
+            String memo,
+            LocalDateTime updatedAt
+    ) {
+    }
+
+    record TaxInvoiceDeleteResultView(
+            int deletedCount,
+            List<SkippedTaxInvoiceView> skippedItems
+    ) {
+    }
+
+    record TaxInvoiceExclusionResultView(
+            int updatedCount,
+            List<SkippedTaxInvoiceView> skippedItems
+    ) {
+    }
+
+    record SkippedTaxInvoiceView(
+            Long taxId,
+            String reason
     ) {
     }
 }

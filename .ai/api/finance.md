@@ -20,6 +20,9 @@
 | ✅ 확정 | 세금계산서 매칭 추천 조회 | GET | `/api/v1/finance/tax-invoices/{taxId}/match-candidates` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 세금계산서 블록 매칭 | PATCH | `/api/v1/finance/tax-invoices/{taxId}/match` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 세금계산서 블록 매칭 해제 | PATCH | `/api/v1/finance/tax-invoices/{taxId}/unmatch` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 메모 수정 | PATCH | `/api/v1/finance/tax-invoices/{taxId}` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 삭제(배치) | DELETE | `/api/v1/finance/tax-invoices` | 편집 권한 보유자(재무 관리 페이지) |
+| ✅ 확정 | 세금계산서 연결 제외/포함 처리(배치) | PATCH | `/api/v1/finance/tax-invoices/exclude` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역 CSV 컬럼 추천 조회 | POST | `/api/v1/finance/cash-flows/csv/preview` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역(CSV 기반) 업로드 | POST | `/api/v1/finance/cash-flows/csv` | 편집 권한 보유자(재무 관리 페이지) |
 | ✅ 확정 | 입출금 내역 매칭 추천 조회 | GET | `/api/v1/finance/cash-flows/{cashFlowId}/match-candidates` | 편집 권한 보유자(재무 관리 페이지) |
@@ -85,10 +88,13 @@
   아니라 집계에서 아예 빠진다.
 - **`cashFlow.totalCount`/`taxInvoice.totalCount`는 `is_excluded` 무관 전체 행 개수다** — 미연결
   건수와 달리 제외 여부를 따지지 않는다. 소프트 삭제된 행(`deleted_at IS NOT NULL`)만 제외한다.
-- **`settlement.unlinkedCount` = `status = 'PENDING'`인 활성 정산 블록 개수** — `settlement_block.status`
-  컬럼 정의 자체가 `PENDING`을 "미연결"로 명시하고 있고(`SettlementStatus`), `SETL-007`이 "연결되면
-  status가 PENDING이 아니게 된다"는 전제로 이미 구현돼 있어 별도 연결 여부 컬럼 없이 `status`만으로
-  판정 가능하다. 삭제 판정은 `settlement_block.deleted_at`과 `block.deleted_at` 둘 다 확인한다
+- **`settlement.unlinkedCount` = `status IN ('PENDING','WAITING')`인 활성 정산 블록 개수 (2026-08-13 변경)**
+  — 즉 **입출금이 아직 연결되지 않은 회차** 수다. 처음엔 `PENDING`만 셌는데, 세금계산서 매칭이 붙으면서
+  `WAITING`(세금계산서만 연결되고 입금은 아직)이 실제로 쓰이기 시작해 **그 회차가 어느 카운트에도 안
+  잡히는 문제**가 생겼다. 요약 지표에서는 둘 다 "정산이 아직 안 끝난 회차"로 묶는다(사용자 확정).
+  세금계산서 미연결은 이 카운트와 **별개 개념**이라 여기 섞지 않는다 — 정산 현황 프로젝트 조회의
+  `taxInvoiceUnlinkedCount`로 따로 내려간다(위 "⭐ 정산 블록 status 규칙" 절 참고).
+  삭제 판정은 `settlement_block.deleted_at`과 `block.deleted_at` 둘 다 확인한다
   (정산 현황 블록 조회와 동일 패턴, `block.deleted_at`이 우선이라는 `BLK-007` 규칙 반영).
 - **`settlement.inProgressCount`는 정산 블록 유무와 무관하게 전체 프로젝트를 센다 (사용자 확정)** —
   "프로젝트 상태가 완료나 종료되지 않은 진행 중인 프로젝트의 개수"를 그대로 반영해
@@ -634,9 +640,9 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 
 ---
 
-## ⭐ 정산 블록 status 규칙 — 입출금·세금계산서 공통 (2026-08-13 확정, 🚧 미구현)
+## ⭐ 정산 블록 status 규칙 — 입출금·세금계산서 공통 (2026-08-13 확정·구현 완료)
 
-**상태**: ✅ 확정 (규칙) / 🚧 **코드는 아직 이 규칙대로가 아니다**
+**상태**: ✅ 확정
 
 정산 블록 하나에는 **입출금 1건 + 세금계산서 1장**이 각각 따로 붙을 수 있다. 두 원장은 서로를 막지
 않는다. `settlement_block.status`는 그 둘의 조합으로 결정된다.
@@ -658,28 +664,55 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 - `WAITING`은 `settlement_block.status` ENUM에 **처음부터 있었지만 아무도 안 쓰던 값**이다
   (2026-08-09 스키마, 컬럼 주석 `미연결|정산 대기|부분 정산|정산 완료`). 이 규칙으로 처음 쓰이게 된다.
 
-**⛔ 지금 코드와의 차이 — 다음 작업에서 고칠 것**
+**구현 방식 (2026-08-13 반영 완료)**
 
-| 지점 | 현재 구현 | 확정 규칙 |
+핵심은 **매칭 가능 판정을 `status`에서 "그 원장이 이미 붙어 있나"(`settle_block_id` EXISTS)로 옮긴 것**이다.
+`PARTIAL`은 "입출금이 붙었다"만 말해주고 세금계산서 유무는 알려주지 않으므로, status로는 판정할 수 없다.
+이제 **status는 판정 기준이 아니라 결과값**이다.
+
+| 지점 | 구현 |
+|---|---|
+| 세금계산서 후보 조회 | `tax_invoice` 미부착 블록 (status 무관 — 입금 끝난 블록도 후보) |
+| 세금계산서 매칭 | 미부착이면 허용 → `PENDING`이면 `WAITING`으로, 이미 `PARTIAL`/`COMPLETED`면 그대로. **실적값 미변경** |
+| 세금계산서 해제 | `status = 'WAITING'` 조건부 UPDATE로 `PENDING` 복귀 — 입출금이 남아 있으면 0행이라 상태·실적값 유지 |
+| 입출금 후보 조회 | `cash_flow` 미부착 블록 (`WAITING` 블록 포함) |
+| 입출금 매칭 | `status IN ('PENDING','WAITING')` 조건부 UPDATE → `PARTIAL`/`COMPLETED` + 실적값 채움 |
+| 입출금 해제 | 세금계산서 있으면 `WAITING`, 없으면 `PENDING`(쿼리 안 `CASE WHEN EXISTS`) + 실적값 NULL |
+
+**동시성 — 두 원장의 방어 방식이 다르다** ⚠️
+
+| | 방어 수단 |
+|---|---|
+| 입출금 | **조건부 UPDATE로 충분.** 매칭되면 status가 반드시 `PENDING`/`WAITING` → `PARTIAL`/`COMPLETED`로 바뀌므로 그 UPDATE 자체가 경합 지점이 된다(먼저 온 쪽만 1행 성공) |
+| 세금계산서 | **블록 행 잠금 필요.** 이미 `PARTIAL`인 블록에 붙을 때 status를 안 바꿔서 경합할 행 변경이 없다 → 서로 다른 세금계산서 2건이 동시에 들어오면 둘 다 통과해 "블록당 1장"이 깨진다 |
+
+세금계산서 매칭은 `lockSettlementBlockForUpdate`(조인 없는 단일 테이블 `SELECT ... FOR UPDATE`)로 블록
+행만 잠근 뒤 `findLinkedTaxInvoiceId`로 **다시** 확인한다.
+
+- ⚠️ **조인 쿼리에 `FOR UPDATE`를 붙이지 않는다** — MySQL은 조인이 훑은 모든 테이블의 행을 잠그므로
+  `block`·`step`·`project` 행까지 잠기고, 매칭과 무관한 스텝 수정·블록 생성이 대기한다.
+- ⚠️ **잠금 후 재확인 쿼리도 `FOR UPDATE`여야 한다** — REPEATABLE READ에서 일반 SELECT는 트랜잭션 최초
+  조회 시점의 스냅샷을 보므로, 줄 서서 기다린 뒤에도 옛 값을 볼 수 있다. 정산 도메인이 `SETL-008`에서
+  실제로 겪은 문제다.
+
+**카운트 반영 (2026-08-13 확정·구현 완료)**
+
+`WAITING`이 실제로 쓰이기 시작하면서 "미연결" 집계에서 조용히 빠지는 문제가 있었다. 두 원장의 미연결은
+**서로 다른 개념**이라 아래처럼 갈라서 센다.
+
+| 집계 | 기준 | 위치 |
 |---|---|---|
-| 세금계산서 매칭 가능 조건 | 블록 `status = PENDING` | 그 블록에 **세금계산서가 안 붙어 있으면** 가능 (입출금 매칭 여부 무관) |
-| 세금계산서 매칭 후 status | `PARTIAL`/`COMPLETED` | `PENDING`이었으면 `WAITING`, 이미 `PARTIAL`/`COMPLETED`면 **그대로** |
-| 세금계산서 매칭 후 실적값 | `actual_amount`/`actual_date` 갱신 | **건드리지 않음** |
-| 입출금 매칭 가능 조건 | 블록 `status = PENDING` | `PENDING` **또는 `WAITING`** (세금계산서가 먼저 붙은 블록에도 가능) |
-| 세금계산서 매칭 해제 후 status | 무조건 `PENDING` + 실적값 NULL | 입출금이 남아 있으면 `PARTIAL`/`COMPLETED` **유지**, 없으면 `PENDING`. 실적값 안 건드림 |
-| 입출금 매칭 해제 후 status | 무조건 `PENDING` + 실적값 NULL | 세금계산서가 남아 있으면 `WAITING`, 없으면 `PENDING`. 실적값은 NULL로 |
-| 매칭 추천 후보 | 양쪽 다 `status = PENDING` 블록만 | 세금계산서용 = 세금계산서 안 붙은 블록 / 입출금용 = `status IN ('PENDING','WAITING')` |
+| 입출금 미연결 | `status IN ('PENDING','WAITING')` | 재무 요약 `settlement.unlinkedCount` / 정산 현황 `settlementStatusSummary`의 "미연결 N건" |
+| 세금계산서 미연결 | `tax_invoice` **미부착 블록** (status 무관) | 정산 현황 프로젝트 조회 **신규 필드** `taxInvoiceUnlinkedCount` |
 
-> 판정을 `status` 하나로 하던 걸 **"그 원장이 이미 붙어 있나"(`cash_flow`/`tax_invoice`의
-> `settle_block_id` EXISTS)** 로 바꿔야 한다는 게 이 변경의 핵심이다.
-
-**보류 — 나중에 다시 볼 것 (사용자 지시, 2026-08-13)**
-- 정산현황 요약 문구(`settlementStatusSummary`)는 지금 "정산완료" / "미연결 N건" 두 가지뿐이고 미연결은
-  `PENDING`만 센다. `WAITING`을 "정산대기 N건"으로 같이 보여주는 게 좋겠다는 방향이지만 **이번엔 손대지
-  않는다**(프론트에 나가는 문자열 계약이라 협의 필요).
-- 재무 요약(`GET /finance/summary`)의 `settlement.unlinkedCount`도 `PENDING`만 센다 — 위와 같이 재검토.
-- ⚠️ 위 두 가지를 안 바꾸면, 세금계산서만 붙은 블록(`WAITING`)은 "미연결" 카운트에서 **조용히 빠진다.**
-  정산 현황 블록 조회 응답의 `status` 값으로는 `WAITING`이 프론트에 새로 나가기 시작한다.
+- ⚠️ **`WAITING`을 "세금계산서 미연결"에 넣으면 안 된다** — `WAITING`은 세금계산서가 **이미 붙은** 상태다
+  (붙지 않은 건 입출금). 넣으면 세금계산서를 받아둔 회차가 미수취로 잡힌다.
+- 세금계산서 미연결은 `status`로 판정 불가 — `PARTIAL`/`COMPLETED`는 "입출금이 붙었다"만 말해준다.
+- 요약 문구(`settlementStatusSummary`)는 **문자열 계약이라 형태를 안 바꿨다**. 세금계산서 정보는 문구에
+  섞지 않고 숫자 필드로 따로 내려서, 프론트가 원하는 배지를 직접 조립하게 했다(사용자 확정).
+- 정산 현황 **블록** 조회는 그대로다 — `taxLinkedBy`/`cashFlowLinkedBy`의 null 여부로 이미 회차별 판정이
+  가능해서 파생 필드를 추가하지 않았다.
+- ⚠️ 정산 현황 블록 조회 응답의 `status` 값으로 **`WAITING`이 프론트에 새로 나가기 시작한다.**
 
 ---
 
@@ -749,9 +782,9 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
   구조·에러 처리 방식이 전부 입출금 쪽과 1:1 대응이다. 노션에 세금계산서 매칭 명세가 따로 올라오면
   이 문서와 대조해서 차이를 먼저 확인할 것.
 - **매칭 기준 4종 (입출금은 3종)** — 세금계산서는 세액(`tax_amount`)이 따로 있어서 기준이 하나 늘었다.
-  - 대상 정산 블록: **PENDING(미연결)만**, **같은 타입(INCOME/OUTCOME)만** — 입출금과 동일.
-    🚧 **확정 규칙에서는 "세금계산서가 아직 안 붙은 블록"으로 바뀐다**(입출금이 이미 매칭된
-    `PARTIAL`/`COMPLETED` 블록도 후보에 들어와야 한다) — 위 "⭐ 정산 블록 status 규칙" 참고, 미구현
+  - 대상 정산 블록: **세금계산서가 아직 안 붙은 블록** + **같은 타입(INCOME/OUTCOME)만**.
+    ⚠️ status는 안 본다 — 입출금이 이미 매칭된 `PARTIAL`/`COMPLETED` 블록도 후보에 들어온다(입금은
+    끝났고 세금계산서만 기다리는 정상 대상이다). 위 "⭐ 정산 블록 status 규칙" 참고
   - 금액: `tax_invoice.total_amount` ↔ `settlement_block.planned_amount`, 완전 동일 = `EXACT`("금액 일치"),
     ±5% 이내 = `SIMILAR`("금액 유사")
   - 세액: `tax_invoice.tax_amount` ↔ `settlement_block.planned_tax_amount`, 판정 규칙은 금액과 동일
@@ -846,16 +879,16 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
   메시지가 "입출금 구분…"/"존재하지 않는 입출금 내역 또는…"으로 도메인 특정 문구라 재사용하지 않고
   `FINANCE_TAX_TYPE_MISMATCH`/`FINANCE_TAX_MATCH_TARGET_NOT_FOUND`를 새로 만들었다. 반대로
   `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED`는 메시지가 "이미 매칭된 정산 블록입니다."로 중립이라 재사용.
-- 🚨 **`status` 규칙 — 확정본과 현재 구현이 다르다 (2026-08-13 사용자 확정, 아직 미구현)**
-  아래 "⭐ 정산 블록 status 규칙" 절이 **확정본**이다. 지금 코드는 입출금 매칭을 그대로 이식해서
-  "정산 블록 하나에 원장 하나(어느 쪽이든)"로 동작하므로, **입출금이 이미 매칭된 블록에 세금계산서를
-  못 붙인다.** 이건 틀린 동작이고 다음 작업에서 양쪽 매칭 코드를 같이 고친다.
-- **매칭 시 정산 블록 상태·실적값 갱신 (현재 구현 — 확정본과 다름)** — 지금은 입출금과 동일하게
-  `settlement_block.status`(PARTIAL/COMPLETED)·`actual_amount`(= 합계금액)·`actual_date`(= 발행일
-  00:00:00)를 전부 갱신한다. 확정본에서는 **세금계산서가 실적값을 건드리지 않는다**(아래 절 참고).
-- **동시성 방어도 입출금과 동일** — 정산 블록 쪽을 `status = 'PENDING'` 조건부 UPDATE로 먼저 확정하고,
-  성공했을 때만 `tax_invoice` 쪽을 `settle_block_id IS NULL` 조건부로 확정한다. 각 UPDATE의 영향 행이
-  0이면 그 시점에 남이 먼저 매칭한 것이므로 400으로 되돌린다.
+- **매칭 가능 조건은 `status`가 아니라 "세금계산서 부착 여부"다** — 입출금이 이미 매칭된
+  `PARTIAL`/`COMPLETED` 블록에도 세금계산서를 붙일 수 있다. `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED`
+  (400)는 **그 블록에 세금계산서가 이미 1장 있을 때만** 나간다(입출금이 붙어 있는 것과는 무관).
+  자세한 규칙과 구현 방식은 위 "⭐ 정산 블록 status 규칙" 절 참고.
+- **매칭 시 status만 올리고 실적값은 안 건드린다** — `PENDING`이면 `WAITING`(정산 대기)으로,
+  이미 `PARTIAL`/`COMPLETED`면 그대로 둔다. `actual_amount`/`actual_date`는 입출금 소관이라 손대지
+  않는다(세금계산서 금액을 실적으로 넣으면 `paidAmountRatio`가 실입금 진행률이 아니게 된다).
+- **동시성 방어는 입출금과 방식이 다르다** — `tax_invoice`는 `settle_block_id IS NULL` 조건부 UPDATE로
+  "이 세금계산서가 이미 매칭됐나"를 막고, **블록당 1장** 규칙은 블록 행 잠금(`FOR UPDATE`) + 잠금 후
+  재확인으로 지킨다. 입출금처럼 상태 조건부 UPDATE에 기댈 수 없는 이유는 위 절에 정리해뒀다.
 - **빈 블록(`type IS NULL`) 처리도 동일** — `Objects.equals`로 비교해 null이면 타입 불일치(400)로 막는다.
 
 ---
@@ -899,10 +932,236 @@ CSV 파일 하나를 업로드하면 컬럼 목록·상위 5행 미리보기·�
 | 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." |
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
-- **정산 블록을 `PENDING`으로 되돌리고 실적값도 비운다 (현재 구현 — 확정본과 다름)** — 지금은 입출금
-  매칭 해제와 완전히 같은 처리(`status = PENDING`, `actual_amount`/`actual_date = NULL`)를 한다.
-  🚧 **확정 규칙에서는 입출금이 아직 붙어 있으면 `PARTIAL`/`COMPLETED`를 유지하고 실적값도 건드리지
-  않는다**(입출금이 없을 때만 `PENDING`으로) — 위 "⭐ 정산 블록 status 규칙" 참고, 미구현.
+- **입출금이 남아 있으면 블록 상태를 그대로 둔다** — `status = 'WAITING'` 조건부 UPDATE로 `PENDING`으로
+  되돌리므로, 입출금이 붙어 있는 블록(`PARTIAL`/`COMPLETED`)은 0행이 되어 상태·실적값이 그대로 유지된다.
+  세금계산서만 붙어 있던 블록(`WAITING`)일 때만 `PENDING`(미연결)으로 돌아간다.
+- **실적값은 건드리지 않는다** — 입출금 매칭 해제와 정반대다(그쪽은 항상 `NULL`로 비운다).
+
+---
+
+## 세금계산서 메모 수정 `PATCH /api/v1/finance/tax-invoices/{taxId}`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+세금계산서의 비고/메모를 수정한다. **세금계산서는 수동 등록이 없어(전부 CSV/엑셀 업로드) 수정 대상이
+메모뿐이다** — 승인번호·금액·사업자번호는 국세청 발급 원본 값이라 고치지 않는다.
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxId` | Long | Y | 수정할 세금계산서 ID |
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `memo` | String | Y | 비고/메모. `null`·빈 문자열이면 메모를 지운다 |
+
+**Request Example**
+
+```json
+{
+  "memo": "재입고 관련 확인 필요"
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.taxId` | Long | 세금계산서 ID |
+| `data.memo` | String | 수정된 메모 |
+| `data.updatedAt` | LocalDateTime | 수정일시 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 메모 수정 성공",
+  "data": {
+    "taxId": 1,
+    "memo": "재입고 관련 확인 필요",
+    "updatedAt": "2026-08-07T16:30:00"
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 메모 수정 성공" |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **HTTP 상태 코드 200 (원 명세 Status Code 표는 201)** — Success Example JSON이 200이고, 입출금 내역
+  수정도 200이라 그쪽에 맞췄다(다른 재무 API와 동일한 판단).
+- **403·404 code 신규 부여** — 원 명세에 code가 빈칸이었다. 기존 `FINANCE_EDIT_ACCESS_DENIED`·
+  `FINANCE_TAX_INVOICE_NOT_FOUND` 재사용(원 명세 문구 오타 "존재하지 않는 t세금계산서입니다."도 정정).
+- **`memo` 외 필드를 보낼 경로 자체를 없앴다** — 입출금 수정 API는 전체 필드를 받고 `sourceType != MANUAL`
+  이면 400(`FINANCE_CASH_FLOW_FIELD_EDIT_NOT_ALLOWED`)으로 거부하는데, 세금계산서는 **모든 건이 CSV 유입**
+  이라 그 분기가 항상 같은 결과다. 요청 바디에 `memo` 하나만 둬서 400 케이스 자체를 만들지 않았다.
+- **매칭 여부는 보지 않는다** — 입출금도 매칭된 항목의 메모는 항상 수정 가능하다(같은 규칙).
+- `updated_at`을 `NOW()`로 같이 갱신한다 — 응답의 `updatedAt`이 이 값이다.
+
+---
+
+## 세금계산서 삭제(배치) `DELETE /api/v1/finance/tax-invoices`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+세금계산서 여러 건을 한 번에 삭제한다(소프트 삭제 — `deleted_at`만 채운다). 정산 블록에 매칭된 항목은
+**먼저 매칭을 해제해야** 삭제할 수 있다.
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxIds` | List\<Long\> | Y | 삭제할 세금계산서 ID 목록 |
+
+**Request Example**
+
+```json
+{
+  "taxIds": [1, 2, 3]
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.deletedCount` | Int | 실제 삭제된 건수 |
+| `data.skippedItems[].taxId` | Long | 삭제되지 못한 세금계산서 ID |
+| `data.skippedItems[].reason` | String | 삭제되지 못한 사유 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 삭제 성공",
+  "data": {
+    "deletedCount": 2,
+    "skippedItems": [
+      {
+        "taxId": 3,
+        "reason": "매칭된 항목은 삭제할 수 없습니다. 먼저 매칭을 해제해주세요."
+      }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 삭제 성공" |
+| 400 | Bad Request | `FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING` | "삭제할 항목을 선택해주세요." (`taxIds` 비어있음) |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **단건(`{taxId}`) → 배치로 바꿨다 (사용자 확정)** — 원 명세는 Path Parameter 단건이었지만 입출금 내역
+  삭제가 배치(`DELETE /cash-flows` + `cashFlowIds`)라 형식을 통일했다. 목록에서 여러 건을 골라 지우는
+  화면이라 배치가 맞다.
+- **HTTP 상태 코드 200 (원 명세 Status Code 표는 201)** — 위 메모 수정과 동일 사유.
+- **매칭된 항목·없는 ID는 400/404가 아니라 `skippedItems`** — 배치에서 한 건 때문에 전체를 실패시키면
+  화면을 쓸 수 없다. 처리 가능한 것만 지우고 나머지는 사유와 함께 돌려준다(입출금과 동일).
+  그래서 이 API는 **매칭된 항목 때문에 400이 나가지 않고, 404도 나가지 않는다.**
+- **에러코드 신규 `FINANCE_TAX_INVOICE_LINKED_CANNOT_DELETE`** — `skippedItems`의 `reason` 문구로 쓰인다.
+  메시지는 입출금의 `FINANCE_CASH_FLOW_LINKED_CANNOT_DELETE`와 같지만, **code 문자열 자체가 API 계약**
+  이라(프론트가 이 값으로 분기한다) 세금계산서 전용으로 만들었다. 매칭 3종에서 세운 기조와 동일하다.
+- **중복 ID는 제거하고 센다** — 같은 ID를 두 번 보내면 IN절은 한 행만 지우는데 카운트는 두 번 세는 문제.
+- ⚠️ **`deletedCount`는 실제로 지운 행 수다** — 삭제 가능하다고 판정한 개수가 아니다. 조회~삭제 사이에
+  동시 매칭돼 조건부 UPDATE(`settle_block_id IS NULL`)가 걸러낸 행까지 "삭제 완료"로 보고하면 안 된다
+  (입출금 쪽 CodeRabbit 지적으로 확립된 규칙).
+
+---
+
+## 세금계산서 연결 제외/포함 처리(배치) `PATCH /api/v1/finance/tax-invoices/exclude`
+
+**상태**: ✅ 확정
+**인증 필요 여부**: Y — **편집 권한** 보유자
+
+프로젝트와 무관한 세금계산서를 미연결 건수 집계에서 빼거나(제외), 다시 포함시킨다.
+
+**Request Body**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxIds` | List\<Long\> | Y | 연결 제외 처리할 세금계산서 ID 목록 |
+| `isExcluded` | Boolean | Y | 제외 여부 (true: 제외, false: 제외 취소) |
+
+**Request Example**
+
+```json
+{
+  "taxIds": [30, 31, 32],
+  "isExcluded": true
+}
+```
+
+**Response Parameter**
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.updatedCount` | Int | 처리된 건수 |
+| `data.skippedItems[].taxId` | Long | 처리되지 못한 세금계산서 ID (원 명세엔 없던 필드 — 아래 메모 참고) |
+| `data.skippedItems[].reason` | String | 처리되지 못한 사유 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "세금계산서 연결 제외 처리 성공",
+  "data": {
+    "updatedCount": 2,
+    "skippedItems": [
+      {
+        "taxId": 31,
+        "reason": "이미 매칭된 항목은 제외 처리할 수 없습니다."
+      }
+    ]
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 연결 제외 처리 성공" |
+| 400 | Bad Request | `FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING` | "필수 항목이 누락되었습니다." (`taxIds` 비어있음 또는 `isExcluded` 누락) |
+| 403 | Forbidden | `FINANCE_EDIT_ACCESS_DENIED` | "편집 권한이 없습니다." |
+
+**원 명세와 다르게 처리한 것 / 구현 메모**:
+- **`skippedItems` 추가 (원 명세엔 `updatedCount`만)** — 원 명세는 "이미 매칭된 항목은 제외 처리할 수
+  없습니다"를 400으로 규정했는데, **배치 API에서 한 건 때문에 전체를 실패시키면 목록에서 여러 건을 골라
+  처리하는 화면을 쓸 수 없다.** 입출금 연결 제외 처리와 동일하게 처리 못 한 항목만 사유와 함께 돌려주고
+  나머지는 처리한다. 그래서 이 API는 **매칭된 항목 때문에 400이 나가지 않는다.**
+- **제외 취소(`isExcluded=false`)는 매칭 여부와 무관하게 항상 허용** — "이미 매칭됨"은 제외(true)할 때만
+  막는다(입출금과 동일 규칙). 그래서 취소 요청의 `skippedItems`는 존재하지 않는 ID만 담긴다.
+- **존재하지 않는 ID도 `skippedItems`로 돌려준다** — 사유는 "존재하지 않는 세금계산서입니다."
+- **중복 ID는 제거하고 센다** — 같은 ID를 두 번 보내면 `updatedCount`가 부풀려지는 문제(입출금 쪽
+  CodeRabbit 지적)를 여기서도 처음부터 막았다.
+- **400 code 신규 `FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING`** — 원 명세 code 빈칸. 삭제 API와 같은
+  이유로 세금계산서 전용 코드를 만들었다.
+- **URL이 `{taxId}` 패턴과 겹치는 것처럼 보이지만 문제없다** — `PATCH /tax-invoices/exclude`와
+  `PATCH /tax-invoices/{taxId}`는 Spring이 리터럴 경로를 우선 매칭한다(입출금 `/cash-flows/exclude`와
+  동일한 구조로 이미 검증됨).
 
 ---
 
@@ -1342,11 +1601,14 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
   `NullPointerException`(500)이 났다(2026-08-10, 실제 테스트로 발견). `Objects.equals`로 바꿔서 null도
   안전하게 "타입 불일치"(400 `FINANCE_MATCH_TYPE_MISMATCH`)로 처리한다 — 빈 블록은 애초에 타입이 안
   정해졌으니 매칭 대상이 될 수 없는 게 맞다.
-- 🚧 **2026-08-13 규칙 변경 확정 (미구현)** — 세금계산서 매칭이 붙으면서 "블록 1건당 매칭 1번"의 의미가
-  **"원장별로 1건씩"**(입출금 1건 + 세금계산서 1장)으로 바뀐다. 이 API도 대상 조건이 `status = PENDING`
-  에서 **`status IN ('PENDING','WAITING')`**(세금계산서가 먼저 붙은 블록도 허용)으로, 매칭 해제 후
-  상태가 무조건 `PENDING`에서 **"세금계산서가 남아 있으면 `WAITING`"**으로 바뀌어야 한다.
-  상세는 아래 "⭐ 정산 블록 status 규칙" 절 참고. **아래 항목들은 그 변경 전 기준의 설명이다.**
+- ⭐ **2026-08-13 규칙 변경 반영 완료** — 세금계산서 매칭이 붙으면서 "블록 1건당 매칭 1번"의 의미가
+  **"원장별로 1건씩"**(입출금 1건 + 세금계산서 1장)으로 바뀌었다. 이 API의 실제 변경은 두 가지다.
+  - 대상 조건이 `status = PENDING` → **`status IN ('PENDING','WAITING')`** — 세금계산서가 먼저 붙어
+    `WAITING`(정산 대기)인 블록에도 입금을 매칭할 수 있다. `PARTIAL`/`COMPLETED`면 이미 입출금이
+    붙었다는 뜻이라 계속 `FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED`(400)로 막는다.
+  - 매칭 후보 조회 대상도 `cash_flow`가 안 붙은 블록으로 바뀌었다(`WAITING` 블록 포함).
+  - 상세는 위 "⭐ 정산 블록 status 규칙" 절 참고. **아래 항목들은 이 변경 전에 쓰인 설명이라
+    "PENDING만 허용" 부분만 위 내용으로 읽으면 된다.**
 - **⭐ 정산 블록 1건당 매칭은 1번뿐 (명세에 없음, 사용자 확정, 핵심 설계 결정)** — 정산 블록에 실제
   입금액이 예정보다 부족해도(부분 정산), **같은 블록에 두 번째 입출금 내역을 매칭해서 채우지 않는다.**
   실무팀이 부족분을 위한 **새 회차(블록)를 만들어서 그 블록에 다시 매칭**하는 방식으로 처리한다.
@@ -1412,9 +1674,11 @@ URL·에러 메시지는 원 명세대로 "CSV"라는 이름을 그대로 쓴다
 
 **원 명세와 다르게 처리한 것 / 구현 메모**:
 - **HTTP 상태 코드 200 (원 명세는 201)** — 매칭 API와 동일한 사유.
-- **정산 블록을 `PENDING`으로 되돌리고 실적값도 비운다** — 매칭 1건당 정산 블록 1개가 1:1이라(위 매칭
-  API 메모 참고), 해제하면 그 블록의 `status`를 무조건 `PENDING`으로, `actual_amount`/`actual_date`를
-  `null`로 되돌리면 된다 — 여러 건의 합계를 재계산하는 로직이 필요 없다.
+- **실적값은 항상 비우고, 되돌릴 상태는 세금계산서 유무로 갈린다 (2026-08-13 변경)** — 블록당 입출금이
+  1건이라 합계 재계산은 필요 없고 `actual_amount`/`actual_date`를 `null`로 되돌리면 된다. 다만 `status`는
+  무조건 `PENDING`이 아니라, **세금계산서가 아직 붙어 있으면 `WAITING`(정산 대기)** 으로 간다(쿼리 안에서
+  `CASE WHEN EXISTS`로 판정). 무조건 `PENDING`으로 되돌리면 세금계산서가 연결돼 있는데도 블록이 미연결로
+  보이고 재무 요약의 미연결 카운트에도 잘못 잡힌다.
 
 ---
 
