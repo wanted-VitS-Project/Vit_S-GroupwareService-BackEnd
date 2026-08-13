@@ -32,7 +32,10 @@ public record BidReviewJobResponse(
         List<ReferenceFileJobResponse> referenceFiles,
 
         @Schema(description = "선택한 사내 문서함 참조 목록")
-        List<CompanyDocumentJobResponse> companyDocuments
+        List<CompanyDocumentJobResponse> companyDocuments,
+
+        @Schema(description = "회사 보유 전공·학력·자격증 현황(인원수만, 개인 식별 정보 없음)")
+        String qualificationSummary
 ) {
 
     public static BidReviewJobResponse from(BidReviewJobResult result) {
@@ -51,7 +54,8 @@ public record BidReviewJobResponse(
                         .toList(),
                 result.companyDocuments().stream()
                         .map(CompanyDocumentJobResponse::from)
-                        .toList()
+                        .toList(),
+                result.qualificationSummary()
         );
     }
 

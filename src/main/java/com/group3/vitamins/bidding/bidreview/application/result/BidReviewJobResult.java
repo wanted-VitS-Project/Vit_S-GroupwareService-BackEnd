@@ -11,7 +11,8 @@ public record BidReviewJobResult(
         String noticeName,
         List<AttachmentJob> attachments,
         List<ReferenceFileJob> referenceFiles,
-        List<CompanyDocumentJob> companyDocuments
+        List<CompanyDocumentJob> companyDocuments,
+        String qualificationSummary
 ) {
 
     public record AttachmentJob(

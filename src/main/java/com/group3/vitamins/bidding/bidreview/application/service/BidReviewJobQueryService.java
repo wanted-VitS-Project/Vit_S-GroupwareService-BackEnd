@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.bidreview.application.service;
 
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCompanyDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewQualificationPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewReferenceFilePort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.application.query.GetBidReviewJobQuery;
@@ -36,6 +37,7 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
     private final BidReviewNoticeDocumentPort noticeDocumentPort;
     private final BidReviewReferenceFilePort referenceFilePort;
     private final BidReviewCompanyDocumentPort companyDocumentPort;
+    private final BidReviewQualificationPort qualificationPort;
     private final Clock clock;
 
     @Override
@@ -132,6 +134,8 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
                 ))
                 .toList();
 
+        String qualificationSummary = formatQualificationSummary(job.companyId());
+
         return new BidReviewJobResult(
                 job.reviewId(),
                 job.companyId(),
@@ -141,8 +145,31 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
                 noticeName,
                 attachments,
                 referenceFiles,
-                companyDocuments
+                companyDocuments,
+                qualificationSummary
         );
+    }
+
+    // 개인 식별 정보 없이 인원수만 담은 텍스트를 만든다. 세 집계는 교차하지 않고 독립적으로 낸다
+    // (전공×학력처럼 교차하면 인원수가 줄어 개인 특정 위험이 커짐 - BidReviewQualificationPort 참고).
+    private String formatQualificationSummary(Long companyId) {
+        String majors = formatCounts(qualificationPort.summarizeMajors(companyId));
+        String degrees = formatCounts(qualificationPort.summarizeDegrees(companyId));
+        String certificates = formatCounts(qualificationPort.summarizeCertificates(companyId));
+
+        return "[보유 전공 현황(재직 중)]\n" + majors
+                + "\n\n[보유 학력 현황(재직 중)]\n" + degrees
+                + "\n\n[보유 자격증 현황(재직 중)]\n" + certificates;
+    }
+
+    private String formatCounts(List<BidReviewQualificationPort.NameCount> counts) {
+        if (counts.isEmpty()) {
+            return "등록된 정보 없음";
+        }
+
+        return counts.stream()
+                .map(count -> count.name() + " " + count.headcount() + "명")
+                .collect(Collectors.joining(", "));
     }
 
     private void validate(GetBidReviewJobQuery query) {

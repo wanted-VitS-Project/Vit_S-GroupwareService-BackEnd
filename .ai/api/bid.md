@@ -1725,6 +1725,12 @@ Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `
 `referenceFileId`, `fileName`, 단명 내부 다운로드 URL, 선택한 사내 문서함 참조(`companyDocuments[]`, 2026-08-13 추가)의
 `companyDocumentVersionId`, `fileName`, 단명 내부 다운로드 URL을 포함한다. 프론트용 API에서는 이 URL들을 제공하지 않는다.
 
+**`qualificationSummary`(2026-08-13 추가)**: 현재 회사의 재직 중(퇴사·삭제 제외, 시스템 계정 제외) 사원 기준
+전공·학력·자격증 보유 현황을 인원수로만 집계한 텍스트("전기공학 5명, 컴퓨터공학 12명" 형태). **이름·사번 등 개인
+식별 정보는 절대 포함하지 않는다** — 개인정보 보호를 위해 전공×학력처럼 교차 집계하지 않고 세 항목을 항상 독립
+집계한다. Python Worker가 이 텍스트를 LLM 프롬프트 컨텍스트에 포함해 "보유 인력으로 수행 가능한지"를 판단하는
+데 쓴다(Python 쪽 프롬프트 반영은 별도 작업 — 아직 미착수).
+
 현재 `attemptId`와 일치하는 `PENDING` 또는 `PROCESSING` 작업만 반환한다.
 
 ### Status Code
