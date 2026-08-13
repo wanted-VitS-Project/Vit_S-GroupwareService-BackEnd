@@ -108,6 +108,22 @@ public class BidReviewOutboxJpaEntity {
         return entity;
     }
 
+    // 재시도처럼 발행 가능 시각을 생성 시각보다 뒤로 미뤄야 할 때 쓴다(지연 백오프).
+    public static BidReviewOutboxJpaEntity pending(
+            String eventId,
+            Long reviewId,
+            String attemptId,
+            String eventType,
+            JsonNode payload,
+            LocalDateTime availableAt,
+            LocalDateTime now
+    ) {
+        BidReviewOutboxJpaEntity entity =
+                pending(eventId, reviewId, attemptId, eventType, payload, now);
+        entity.availableAt = availableAt;
+        return entity;
+    }
+
     // 현재 서버가 Outbox 발행 작업을 일정 시간 점유합니다.
     public void claim(
             String lockOwner,

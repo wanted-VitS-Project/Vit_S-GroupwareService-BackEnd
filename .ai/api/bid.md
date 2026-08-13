@@ -1,6 +1,7 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
+**최종 동기화**: 2026-08-13 (문서 검토 Worker 401 코드를 `AUTH_UNAUTHENTICATED`로 통일 — 공용 `BiddingWorkerTokenAuthenticationFilter` 실제 동작과 일치)
 **최종 동기화**: 2026-08-12 (입찰 공고 첨부·사내 문서 비교 검토와 임시파일 생명주기 계약 확정)
 **도메인 담당**: 정현
 
@@ -1722,7 +1723,7 @@ Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `
 |------|------|------|
 | 200 | - | 작업 조회 성공 |
 | 400 | `BIDDING_INVALID_REVIEW_REQUEST` | ID 또는 UUID 형식 오류 |
-| 401 | `BIDDING_WORKER_UNAUTHORIZED` | Worker 토큰 누락 또는 불일치 |
+| 401 | `AUTH_UNAUTHENTICATED` | worker 토큰 누락 또는 불일치 |
 | 404 | `BIDDING_REVIEW_JOB_NOT_FOUND` | 현재 시도와 일치하는 작업 없음 |
 
 ---
@@ -1740,17 +1741,22 @@ Worker 전용 토큰으로 인증한다. 응답에는 `reviewId`, `companyId`, `
 | `result` | String | 조건부 | `COMPLETED`이면 필수 |
 | `errorCode` | String | 조건부 | `FAILED`이면 오류 분류 코드 |
 | `errorMessage` | String | 조건부 | `FAILED`이면 필수, 최대 500자 |
+| `retryable` | Boolean | N | `FAILED` 오류의 일시 장애 여부. 생략 시 `false`로 처리하며 `PROCESSING`·`COMPLETED`에서는 `false`여야 함 |
 | `documents` | List | N | 공고 첨부별 임시 저장·처리 결과 |
 | `citations` | List | N | `COMPLETED` 검토 근거 목록 |
 
 `documents[]`는 `bidAttachmentId`, `processingStatus`, `temporaryStorageKey`, `fileSize`, `mimeType`을 전달한다.
-`temporaryStorageKey`는 Spring DB 저장용 내부 값이며 외부 조회 응답에서는 제거한다.
+`temporaryStorageKey`는 Spring DB 저장용 내부 값이며 외부 조회 응답에서는 제거한다. `PROCESSING` 콜백에서도
+문서별 중간 진행 상태를 갱신하기 위해 `documents[]`만 담아 보낼 수 있다(`result`·`citations` 없이).
 
 `citations[]`는 `rankOrder`, `documentRole`, `bidAttachmentId`, `referenceFileId`, `fileName`,
 `pageNumber`, `sheetName`, `excerpt`를 전달한다.
 
+재시도 대상은 다운로드 연결 실패·Timeout·Gemini 429·5xx 등 일시적 오류만 `retryable=true`로 전달한다.
+잘못된 요청·지원하지 않는 형식·설정 오류 등 복구 불가능한 오류는 `retryable=false`로 전달하고 `FAILED`로 종료한다.
+
 Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 응답으로 `accepted`, `reviewId`,
-`reviewStatus`, `reason`을 반환한다. `COMPLETED` 또는 `FAILED` 저장 시 `expiresAt = 완료 시각 + 3시간`으로 계산한다.
+`reviewStatus`, `reason`을 반환한다. `COMPLETED` 또는 `FAILED`(재시도 아님) 저장 시 `expiresAt = 완료 시각 + 3시간`으로 계산한다.
 
 ### Status Code
 
@@ -1758,7 +1764,7 @@ Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 �
 |------|------|------|
 | 200 | - | callback 접수. 멱등 거절도 `accepted=false`로 200 반환 |
 | 400 | `BIDDING_INVALID_REVIEW_CALLBACK` | 상태별 필수값 또는 UUID 형식 오류 |
-| 401 | `BIDDING_WORKER_UNAUTHORIZED` | Worker 토큰 누락 또는 불일치 |
+| 401 | `AUTH_UNAUTHENTICATED` | worker 토큰 누락 또는 불일치 |
 | 404 | `BIDDING_REVIEW_NOT_FOUND` | 검토가 존재하지 않음 |
 
 ### 비동기 신뢰성 및 정리 규칙
