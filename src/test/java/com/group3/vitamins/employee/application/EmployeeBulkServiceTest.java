@@ -16,7 +16,10 @@ import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
 import com.group3.vitamins.employee.application.service.EmployeeBulkService;
 import com.group3.vitamins.employee.application.service.EmployeeRegistrationWriter;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.employee.domain.model.Degree;
 import com.group3.vitamins.employee.domain.model.Employee;
+import com.group3.vitamins.employee.domain.model.EmployeeCertificate;
+import com.group3.vitamins.employee.domain.model.EmployeeEducation;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.infrastructure.config.security.ThrottledPasswordEncoder;
@@ -81,6 +84,8 @@ class EmployeeBulkServiceTest {
         when(referencePort.resolveDepartmentIdsByName(any(), eq(1L))).thenReturn(Map.of("개발팀", 10L));
         when(referencePort.resolveJobPositionIdsByName(any(), eq(1L))).thenReturn(Map.of("대리", 5L));
         when(referencePort.findExistingUserIds(any())).thenReturn(Set.of());
+        when(referencePort.resolveMajorIdsByName(any(), any())).thenReturn(Map.of());
+        when(referencePort.resolveCertificateIdsByName(any(), any())).thenReturn(Map.of());
         when(companyCodeQueryPort.findCodeByCompanyId(eq(1L))).thenReturn("vitas");
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(1L);
         when(tempPasswordGenerator.generate()).thenReturn("Temp1234!");
@@ -91,7 +96,7 @@ class EmployeeBulkServiceTest {
 
     private ParsedEmployeeRow row(int n, String userId, String name, String dept, String pos,
                                   String hiredAt, String email, String role) {
-        return new ParsedEmployeeRow(n, userId, name, dept, pos, hiredAt, email, null, role);
+        return new ParsedEmployeeRow(n, userId, name, dept, pos, hiredAt, email, null, role, null, null);
     }
 
     private ParsedEmployeeRow valid(int n, String userId, String email) {
@@ -338,6 +343,105 @@ class EmployeeBulkServiceTest {
             assertThat(r.failedCount()).isZero();
             assertThat(r.emailSentCount()).isZero();        // 메일만 실패
             verify(registrationWriter, times(1)).register(any(), anyString(), anyString(), any(), any());
+        }
+    }
+
+    // ---- 학력/자격증 (엑셀 2열 · 블록3) --------------------------------------
+
+    @Nested
+    @DisplayName("학력/자격증")
+    class Qualification {
+
+        private ParsedEmployeeRow rowQ(int n, String userId, String education, String certificate) {
+            return new ParsedEmployeeRow(n, userId, "홍길동", "개발팀", "대리",
+                    "2026-01-01", "a@b.com", null, "MEMBER", education, certificate);
+        }
+
+        @Test
+        @DisplayName("전공·자격증이 마스터에 있으면 학위 한글→enum 으로 해석해 등록한다(다중값 세미콜론)")
+        void resolvesAndRegisters() {
+            when(referencePort.resolveMajorIdsByName(any(), any()))
+                    .thenReturn(Map.of("컴퓨터공학", 3L, "소프트웨어공학", 4L));
+            when(referencePort.resolveCertificateIdsByName(any(), any()))
+                    .thenReturn(Map.of("정보처리기사", 7L));
+            List<ParsedEmployeeRow> rows = List.of(
+                    rowQ(2, "EMP100", "컴퓨터공학:학사; 소프트웨어공학:석사", "정보처리기사"));
+
+            BulkRegisterResult r = service.register(registerCmd(rows, false));
+
+            assertThat(r.registeredCount()).isEqualTo(1);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeEducation>> eduCap = ArgumentCaptor.forClass(List.class);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeCertificate>> certCap = ArgumentCaptor.forClass(List.class);
+            verify(registrationWriter).register(any(), anyString(), anyString(), eduCap.capture(), certCap.capture());
+            assertThat(eduCap.getValue()).extracting(EmployeeEducation::degree)
+                    .containsExactly(Degree.BACHELOR, Degree.MASTER);       // 한글 학위 → enum, 순서 유지
+            assertThat(eduCap.getValue().get(0).majorId()).isEqualTo(3L);
+            assertThat(eduCap.getValue().get(0).userId()).isEqualTo("vitas-EMP100"); // 접두사 붙은 사번
+            assertThat(certCap.getValue()).singleElement()
+                    .satisfies(c -> assertThat(c.certificateId()).isEqualTo(7L));
+        }
+
+        @Test
+        @DisplayName("전공이 마스터에 없으면 EDU_NOT_FOUND")
+        void unknownMajor() {
+            when(referencePort.resolveMajorIdsByName(any(), any())).thenReturn(Map.of()); // 없음
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "없는전공:학사", null));
+
+            BulkValidateResult r = service.validate(validateCmd(rows));
+
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors().get(0).validation()).isEqualTo(BulkValidation.EDU_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("자격증이 마스터에 없으면 CERT_NOT_FOUND")
+        void unknownCertificate() {
+            when(referencePort.resolveCertificateIdsByName(any(), any())).thenReturn(Map.of());
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", null, "없는자격증"));
+
+            BulkValidateResult r = service.validate(validateCmd(rows));
+
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors().get(0).validation()).isEqualTo(BulkValidation.CERT_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("학위 표기가 학사/석사/박사 아니면 REQUIRED_COLUMN(형식 오류 버킷)")
+        void badDegreeLabel() {
+            when(referencePort.resolveMajorIdsByName(any(), any())).thenReturn(Map.of("컴퓨터공학", 3L));
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "컴퓨터공학:학위없음", null));
+
+            BulkValidateResult r = service.validate(validateCmd(rows));
+
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors().get(0).validation()).isEqualTo(BulkValidation.REQUIRED_COLUMN);
+        }
+
+        @Test
+        @DisplayName("학력 형식 오류(콜론 없음)는 REQUIRED_COLUMN — 마스터 조회 전에 막힌다")
+        void malformedEducation() {
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "컴퓨터공학", null)); // 콜론 없음
+
+            BulkValidateResult r = service.validate(validateCmd(rows));
+
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors().get(0).validation()).isEqualTo(BulkValidation.REQUIRED_COLUMN);
+        }
+
+        @Test
+        @DisplayName("학력·자격증이 비면 빈 목록으로 등록한다(선택 컬럼)")
+        void emptyQualificationsRegister() {
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", null, null));
+
+            BulkRegisterResult r = service.register(registerCmd(rows, false));
+
+            assertThat(r.registeredCount()).isEqualTo(1);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeEducation>> eduCap = ArgumentCaptor.forClass(List.class);
+            verify(registrationWriter).register(any(), anyString(), anyString(), eduCap.capture(), any());
+            assertThat(eduCap.getValue()).isEmpty();
         }
     }
 }

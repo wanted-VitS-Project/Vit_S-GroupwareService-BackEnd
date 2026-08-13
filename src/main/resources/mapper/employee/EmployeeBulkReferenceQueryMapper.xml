@@ -37,6 +37,30 @@
         </foreach>
     </select>
 
+    <!-- 전공명은 회사 범위 유니크(uk_major_company_name) → 그대로 조회한다. -->
+    <select id="findMajorIdsByName"
+            resultType="com.group3.vitamins.employee.application.result.NameIdRow">
+        SELECT name AS name, major_id AS id
+          FROM major
+         WHERE company_id = #{companyId}
+           AND name IN
+        <foreach collection="names" item="n" open="(" separator="," close=")">
+            #{n}
+        </foreach>
+    </select>
+
+    <!-- 자격증명은 회사 범위 유니크(uk_certificate_company_name) → 그대로 조회한다. -->
+    <select id="findCertificateIdsByName"
+            resultType="com.group3.vitamins.employee.application.result.NameIdRow">
+        SELECT name AS name, certificate_id AS id
+          FROM certificate
+         WHERE company_id = #{companyId}
+           AND name IN
+        <foreach collection="names" item="n" open="(" separator="," close=")">
+            #{n}
+        </foreach>
+    </select>
+
     <!-- 요청 사번 중 이미 존재하는 사번(DB 기존 판정). PK 조회라 soft delete 무관(deleted_at 안 봄 = existsById 와 동일). -->
     <select id="findExistingUserIds" resultType="string">
         SELECT user_id
