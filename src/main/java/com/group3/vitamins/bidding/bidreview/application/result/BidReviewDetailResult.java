@@ -22,6 +22,7 @@ public record BidReviewDetailResult(
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             String processingStatus
     ) {
@@ -32,6 +33,7 @@ public record BidReviewDetailResult(
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             Integer pageNumber,
             String sheetName,

@@ -157,7 +157,39 @@ class BidReviewCallbackServiceTest {
                 REVIEW_ID, ATTEMPT_ID, "PROCESSING",
                 null, null, null, false, null,
                 List.of(new HandleBidReviewCallbackCommand.CitationInputCommand(
-                        1, "BID_ATTACHMENT", 31L, null, "제안요청서.pdf", 3, null, "발췌문"
+                        1, "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf", 3, null, "발췌문"
+                ))
+        );
+
+        assertInvalid(command);
+    }
+
+    @Test
+    @DisplayName("citation의 documentRole과 실제 채워진 식별자가 어긋나면 거부한다")
+    void rejectsCitationWithMismatchedIdentifier() {
+        var command = new HandleBidReviewCallbackCommand(
+                REVIEW_ID, ATTEMPT_ID, "COMPLETED",
+                "검토 결과", null, null, false,
+                null,
+                List.of(new HandleBidReviewCallbackCommand.CitationInputCommand(
+                        // role은 BID_ATTACHMENT인데 실제로는 referenceFileId만 채워져 있음 - 불일치.
+                        1, "BID_ATTACHMENT", null, 501L, null, "원가계산_기준.pdf", 3, null, "발췌문"
+                ))
+        );
+
+        assertInvalid(command);
+    }
+
+    @Test
+    @DisplayName("citation에 documentRole에 해당하지 않는 식별자가 함께 오면 거부한다")
+    void rejectsCitationWithExtraIdentifier() {
+        var command = new HandleBidReviewCallbackCommand(
+                REVIEW_ID, ATTEMPT_ID, "COMPLETED",
+                "검토 결과", null, null, false,
+                null,
+                List.of(new HandleBidReviewCallbackCommand.CitationInputCommand(
+                        // role은 BID_ATTACHMENT이지만 companyDocumentVersionId까지 같이 채워져 있음 - 불일치.
+                        1, "BID_ATTACHMENT", 31L, null, 9001L, "제안요청서.pdf", 3, null, "발췌문"
                 ))
         );
 
@@ -189,7 +221,7 @@ class BidReviewCallbackServiceTest {
                 "검토 결과", null, null, false,
                 null,
                 List.of(new HandleBidReviewCallbackCommand.CitationInputCommand(
-                        1, "BID_ATTACHMENT", 31L, null, "제안요청서.pdf", 3, null, "발췌문"
+                        1, "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf", 3, null, "발췌문"
                 ))
         );
     }

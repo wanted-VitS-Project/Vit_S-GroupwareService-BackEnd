@@ -187,6 +187,12 @@ public class BidReviewOutboxJpaEntity {
         this.updatedAt = now;
     }
 
+    // 삭제처럼 되돌릴 수 없는 부수효과(S3 삭제 등) 전에, 이 서버가 실제로 점유 중인지 먼저 확인한다.
+    // 상태를 바꾸지 않는 순수 조회다 — markPublished/markPublishFailed와 달리 부수효과 전에 불러야 한다.
+    public boolean isCurrentlyOwnedBy(String expectedLockOwner) {
+        return isOwnedBy(expectedLockOwner);
+    }
+
     private boolean isOwnedBy(String expectedLockOwner) {
         return "PENDING".equals(publishStatus)
                 && lockOwner != null

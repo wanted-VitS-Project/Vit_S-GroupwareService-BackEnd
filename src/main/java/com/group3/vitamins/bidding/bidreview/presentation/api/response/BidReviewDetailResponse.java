@@ -72,6 +72,9 @@ public record BidReviewDetailResponse(
             @Schema(description = "기준자료 ID. 문서 역할이 아니면 null", nullable = true)
             Long referenceFileId,
 
+            @Schema(description = "사내 문서함 참조 버전 ID. 문서 역할이 아니면 null", nullable = true)
+            Long companyDocumentVersionId,
+
             @Schema(description = "검토 요청 당시 파일명 스냅샷")
             String fileName,
 
@@ -86,6 +89,7 @@ public record BidReviewDetailResponse(
                     result.documentRole(),
                     result.bidAttachmentId(),
                     result.referenceFileId(),
+                    result.companyDocumentVersionId(),
                     result.fileName(),
                     result.processingStatus()
             );
@@ -104,6 +108,9 @@ public record BidReviewDetailResponse(
 
             @Schema(description = "기준자료 ID. 문서 역할이 아니면 null", nullable = true)
             Long referenceFileId,
+
+            @Schema(description = "사내 문서함 참조 버전 ID. 문서 역할이 아니면 null", nullable = true)
+            Long companyDocumentVersionId,
 
             @Schema(description = "근거 문서 파일명")
             String fileName,
@@ -126,6 +133,7 @@ public record BidReviewDetailResponse(
                     result.documentRole(),
                     result.bidAttachmentId(),
                     result.referenceFileId(),
+                    result.companyDocumentVersionId(),
                     result.fileName(),
                     result.pageNumber(),
                     result.sheetName(),

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocument;
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewStatus;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewCitationJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
@@ -140,7 +141,7 @@ class JpaBidReviewWorkerAdapterTest {
                         31L, "READY", "tmp/reviews/71/31.pdf", 204800L, "application/pdf"
                 )),
                 List.of(new BidReviewWorkerPort.CitationInput(
-                        1, "INTERNAL_REFERENCE", null, 501L, "원가계산_기준.pdf", 3, null, "발췌문"
+                        1, "INTERNAL_REFERENCE", null, 501L, null, "원가계산_기준.pdf", 3, null, "발췌문"
                 )),
                 NOW
         );
@@ -155,11 +156,45 @@ class JpaBidReviewWorkerAdapterTest {
         List<BidReviewCitationJpaEntity> citations = citationRepository.findAll();
         assertThat(citations).hasSize(1);
         Long referenceDocumentId = documentRepository
-                .findByReviewIdAndReferenceFileId(reviewId, 501L)
+                .findByReviewIdAndDocumentRoleAndReferenceFileId(
+                        reviewId, BidReviewDocumentRole.INTERNAL_REFERENCE, 501L)
                 .orElseThrow()
                 .getReviewDocumentId();
         assertThat(citations.get(0).getReviewDocumentId()).isEqualTo(referenceDocumentId);
         assertThat(citations.get(0).getExcerpt()).isEqualTo("발췌문");
+    }
+
+    @Test
+    @DisplayName("COMPLETED callback은 사내 문서함 참조 근거도 companyDocumentVersionId로 연결한다")
+    void completesReviewWithCompanyDocumentCitation() {
+        String attemptId = UUID.randomUUID().toString();
+        Long reviewId = seedProcessingReview(attemptId);
+        seedDocument(reviewId, 31L, null, "제안요청서.pdf");
+        seedCompanyDocument(reviewId, 9001L, "재무제표.xlsx");
+
+        BidReviewWorkerPort.CallbackUpdate update = workerAdapter.complete(
+                reviewId,
+                attemptId,
+                "재정 상태가 양호합니다.",
+                List.of(new BidReviewWorkerPort.DocumentOutcome(
+                        31L, "READY", "tmp/reviews/71/31.pdf", 204800L, "application/pdf"
+                )),
+                List.of(new BidReviewWorkerPort.CitationInput(
+                        1, "COMPANY_DOCUMENT_REFERENCE", null, null, 9001L, "재무제표.xlsx", null, "시트1", "발췌문"
+                )),
+                NOW
+        );
+
+        assertThat(update.accepted()).isTrue();
+
+        List<BidReviewCitationJpaEntity> citations = citationRepository.findAll();
+        assertThat(citations).hasSize(1);
+        Long companyDocumentId = documentRepository
+                .findByReviewIdAndDocumentRoleAndCompanyDocumentVersionId(
+                        reviewId, BidReviewDocumentRole.COMPANY_DOCUMENT_REFERENCE, 9001L)
+                .orElseThrow()
+                .getReviewDocumentId();
+        assertThat(citations.get(0).getReviewDocumentId()).isEqualTo(companyDocumentId);
     }
 
     @Test
@@ -235,6 +270,12 @@ class JpaBidReviewWorkerAdapterTest {
         BidReviewDocument document = attachmentId != null
                 ? BidReviewDocument.createBidAttachment(attachmentId, fileName, NOW)
                 : BidReviewDocument.createInternalReference(referenceFileId, fileName, NOW);
+        documentRepository.saveAndFlush(BidReviewDocumentJpaEntity.from(reviewId, document));
+    }
+
+    private void seedCompanyDocument(Long reviewId, Long companyDocumentVersionId, String fileName) {
+        BidReviewDocument document =
+                BidReviewDocument.createCompanyDocumentReference(companyDocumentVersionId, fileName, NOW);
         documentRepository.saveAndFlush(BidReviewDocumentJpaEntity.from(reviewId, document));
     }
 

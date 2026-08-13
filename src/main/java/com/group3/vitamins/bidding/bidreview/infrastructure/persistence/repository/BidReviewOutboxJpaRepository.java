@@ -48,4 +48,25 @@ public interface BidReviewOutboxJpaRepository
             @Param("now") LocalDateTime now,
             @Param("batchSize") int batchSize
     );
+
+    // BID_REVIEW_CLEANUP_REQUESTED만 대상 — 이제 소비자(정리 실행기)가 생겨서 REQUESTED와 별도로 둔다.
+    @Query(value = """
+        SELECT bid_review_outbox_id
+        FROM bid_review_outbox
+        WHERE event_type = 'BID_REVIEW_CLEANUP_REQUESTED'
+          AND publish_status = 'PENDING'
+          AND publish_attempt_count < 5
+          AND available_at <= :now
+          AND (
+                lock_expires_at IS NULL
+                OR lock_expires_at < :now
+          )
+        ORDER BY bid_review_outbox_id
+        LIMIT :batchSize
+        FOR UPDATE SKIP LOCKED
+        """, nativeQuery = true)
+    List<Long> findCleanupPublishableIdsForUpdate(
+            @Param("now") LocalDateTime now,
+            @Param("batchSize") int batchSize
+    );
 }
