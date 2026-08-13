@@ -74,31 +74,36 @@ public enum ApprovalErrorCode implements ErrorCode {
     /** MGT-005 — 차례 안 온 결재자(WAITING)이거나 관련 없는 사용자의 조회 시 403 */
     APPROVAL_LINE_NOT_VIEWABLE("APPROVAL_LINE_NOT_VIEWABLE", "조회 권한이 없습니다."),
 
-    // --- 블록 직접 삭제 잠금 (요구사항: DEL-016) ---
+    // --- 블록 직접 삭제 확인 요구 (요구사항: DEL-016) ---
 
     // ⛔ APPROVAL_IN_PROGRESS 제거(2026-08-10) — BLK-008 삭제 잠금 폐기로 사용처가 0이 됐다.
-    //    아래 코드로 되살리지 않는다: DEL-016은 IN_PROGRESS·REJECTED·COMPLETED 세 상태를 함께
-    //    덮으므로 "진행 중"이라는 이름이 맞지 않는다. 예고대로 요구사항 이름으로 새로 만들었다.
+    //    되살리지 않는다: DEL-016은 IN_PROGRESS·REJECTED·COMPLETED 세 상태를 함께 덮고,
+    //    "금지"가 아니라 "확인 요구"라 의미도 다르다. 요구사항 이름으로 새로 만들었다.
 
     /**
-     * DEL-016 — 한 번 상신된 결재의 블록을 직접 삭제하려 하면 409.
+     * DEL-016 — 상신 이후 결재의 블록을 직접 삭제하려 하면 <b>확인을 요구하는</b> 409.
      * {@code IN_PROGRESS}·{@code REJECTED}·{@code COMPLETED} 가 대상이고 {@code DRAFT}·{@code CANCELED} 는 통과한다.
      *
-     * <p>⛔ 메시지에 <b>"스텝을 삭제하면 함께 삭제된다"를 넣지 마라</b> (2026-08-12 결정). 스텝 삭제는
-     * 그 안의 블록·이슈 전부를 되돌릴 수 없이 날리는 훨씬 큰 행동이라, 블록 하나를 못 지운 사람에게
-     * 권할 안내가 아니다. 게다가 블록 삭제는 스텝 EDITOR, 스텝 삭제는 <b>프로젝트</b> EDITOR 라
-     * 오버라이드로 스텝 EDITOR 만 가진 사용자에게는 할 수 없는 일을 시키는 막다른 안내가 된다.
+     * <p>⚠️ <b>이것은 「금지」가 아니라 「되묻기」다.</b> 사용자가 확인해 {@code confirmApprovalCancel=true}
+     * 로 다시 요청하면 그대로 삭제된다. 프론트는 이 코드를 실패로 끝내지 말고 확인 다이얼로그를 띄워야 한다.
      *
-     * <p>⚠️ <b>실제로 나가는 문구는 상태별로 다르다</b> — "진행 중인/반려된/완료된 결재는 삭제할 수
-     * 없습니다." 사용자는 지금 화면의 상태를 기준으로 읽기 때문이다. 문구는
-     * {@code ApprovalHandlerService.LOCKED_MESSAGES} 가 갖고, 아래 메시지는 폴백이다.
+     * <p>⚠️ <b>실제로 나가는 문구는 상태별로 다르고, 각자 그 상태에서 잃는 것을 말한다</b> —
+     * 진행 중이면 "결재가 취소됩니다", 반려면 "재상신할 수 없습니다", 완료면 "승인 이력을 다시 볼 수
+     * 없습니다". 문구는 {@code ApprovalHandlerService.CONFIRM_MESSAGES} 가 갖고 아래는 폴백이다.
      * <b>코드는 하나로 유지한다</b> — 처리가 셋 다 같아 쪼개면 프론트가 같은 분기를 세 번 짠다.
+     *
+     * <p>⛔ 문구에 <b>"스텝을 삭제하면 함께 삭제된다"를 넣지 마라</b> (2026-08-12 결정). 스텝 삭제는
+     * 그 안의 블록·이슈 전부를 되돌릴 수 없이 날리는 훨씬 큰 행동이고, 블록 삭제는 스텝 EDITOR·스텝
+     * 삭제는 <b>프로젝트</b> EDITOR 라 권한이 안 맞는 사용자에게는 막다른 안내가 된다.
+     *
+     * <p>⛔ 문구에 <b>결재자 이름을 넣지 마라</b> — 결재선의 사람 정보는 {@code ApprovalViewPolicy} 가
+     * 제한하는데 삭제 권한자는 스텝 EDITOR 다. 자세한 근거는 {@code CONFIRM_MESSAGES} 주석 참고.
      *
      * <p>⚠️ <b>스텝 삭제 cascade 에서는 나오지 않는다</b> (DEL-017). 이 코드가 스텝 삭제 응답에 보이면
      * 판정을 공유 삭제 본체에 잘못 넣은 것이다 — {@code BlockCommandService} 참고.
      */
-    APPROVAL_ALREADY_SUBMITTED("APPROVAL_ALREADY_SUBMITTED",
-            "이미 상신된 결재는 삭제할 수 없습니다."),
+    APPROVAL_DELETE_CONFIRM_REQUIRED("APPROVAL_DELETE_CONFIRM_REQUIRED",
+            "상신된 결재입니다. 삭제하려면 확인이 필요합니다."),
 
     // --- 9. 결재관리 목록조회 (API 명세 요구사항: MGT-001~004) ---
 

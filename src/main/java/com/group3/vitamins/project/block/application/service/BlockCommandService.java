@@ -281,10 +281,10 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
      *
      * <p>⛔ 복구(휴지통)도 없다. 되돌리고 싶으면 삭제 전에 옮긴다 (BLK-014) — `PRJ-V1.md` §3-1.
      *
-     * <p>📌 <b>예외 1건 — 상신된 결재 (2026-08-12 · DEL-016).</b> 폐기된 잠금과 달리 <b>이 경로에만</b>
-     * 걸린다. 스텝 삭제 cascade({@link #deleteBlocks})는 판정을 부르지 않아 결재 때문에 롤백되지 않는다 —
-     * 폐기 사유가 "진행 중을 막는 게 나쁘다"가 아니라 "막힌 사용자에게 탈출구가 없었다"였기 때문이다.
-     * 판정 기준은 결재 도메인이 갖는다 ({@code APR-DELETE-DRAFT.md} §11).
+     * <p>📌 <b>상신된 결재는 「확인 요구」다 — 잠금이 아니다 (2026-08-12 · DEL-016).</b> 첫 요청을 409 로
+     * 되묻고 {@code confirmApprovalCancel=true} 재요청이면 삭제한다. 즉 <b>영구히 막지 않는다.</b>
+     * 스텝 삭제 cascade({@link #deleteBlocks})는 판정을 부르지 않아 결재 때문에 롤백되지도 않는다.
+     * 판정 기준·문구는 결재 도메인이 갖는다 ({@code APR-DELETE-DRAFT.md} §11).
      */
     @Override
     public void deleteBlock(DeleteBlockCommand command) {
@@ -295,7 +295,7 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         // ⚠️ 판정은 이 경로에만 있다. 아래 deleteBlock(block, ...) 본체는 cascade 와 공유하므로
         //    거기로 옮기면 스텝 삭제도 함께 막혀 409 롤백된다 (DEL-017 · BLK-008 폐기 사유).
-        assertDetailDeletable(block);
+        assertDetailDeletable(block, command.confirmApprovalCancel());
 
         deleteBlock(block, command.requesterUserId());
 
@@ -388,24 +388,28 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     }
 
     /**
-     * 상세 행도 같은 트랜잭션에서 논리 삭제한다. ⛔ 이벤트로 넘기지 않는다 — 상세는 block_id NOT NULL 이라
-     * 독립 생명주기가 없고, 유실되면 회수할 주체가 없다 (결과적 일관성이 아니라 그냥 유실이다).
-     * 어댑터가 없거나 상세 PK 가 없는 타입은 지울 것도 없다.
-     */
-    /**
-     * 상세 타입이 지금 삭제를 허용하는지 묻는다 (DEL-016). 막아야 하면 어댑터가 예외를 던진다.
+     * 상세 타입이 지금 삭제를 허용하는지 묻는다 (DEL-016). 확인이 필요하면 어댑터가 409 를 던진다.
      *
-     * <p>상태 개념이 없는 타입은 포트 기본 구현이 no-op 이라 그대로 통과한다. 현재 막는 타입은
+     * <p>상태 개념이 없는 타입은 포트 기본 구현이 no-op 이라 그대로 통과한다. 현재 되묻는 타입은
      * APPROVAL 하나이며, 블록 도메인은 그 판정 기준을 알지 않는다 (DEL-018).
+     *
+     * <p>⚠️ 확인 플래그가 <b>모든 타입에 함께</b> 전달된다. 지금은 되묻는 타입이 하나라 문제가 없지만,
+     * 두 번째 타입(예: 재무 연결 해제 — {@code BLOCK.md} §8)이 생기면 플래그를 타입별로 나눠야 한다.
+     * 그때 이 파라미터를 값 객체로 바꾼다 — 하나의 확인이 다른 타입의 확인을 대신하면 안 된다.
      */
-    private void assertDetailDeletable(Block block) {
+    private void assertDetailDeletable(Block block, boolean confirmed) {
         if (block.getTypeId() == null) {
             return;
         }
         blockDetailRegistry.find(block.getType())
-                .ifPresent(port -> port.assertDeletable(block.getTypeId()));
+                .ifPresent(port -> port.assertDeletable(block.getTypeId(), block.getTitle(), confirmed));
     }
 
+    /**
+     * 상세 행도 같은 트랜잭션에서 논리 삭제한다. ⛔ 이벤트로 넘기지 않는다 — 상세는 block_id NOT NULL 이라
+     * 독립 생명주기가 없고, 유실되면 회수할 주체가 없다 (결과적 일관성이 아니라 그냥 유실이다).
+     * 어댑터가 없거나 상세 PK 가 없는 타입은 지울 것도 없다.
+     */
     private void unlinkDetail(Block block, String requesterUserId, LocalDateTime now) {
         if (block.getTypeId() == null) {
             return;

@@ -29,22 +29,22 @@ class ApprovalDeleteConflictResponseTest {
     /** 상태별 문구가 <b>같은 코드</b>로 나가는지 본다 — 프론트는 코드로 분기하고 문구는 그대로 띄운다. */
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {
-            "진행 중인 결재는 삭제할 수 없습니다.",
-            "반려된 결재는 삭제할 수 없습니다.",
-            "완료된 결재는 삭제할 수 없습니다."
+            "기술 제안서 결재가 진행 중입니다. 삭제하면 결재가 취소됩니다.",
+            "기술 제안서 결재는 반려된 상태입니다. 삭제하면 재상신할 수 없습니다.",
+            "기술 제안서 결재는 완료된 상태입니다. 삭제하면 승인 이력을 다시 볼 수 없습니다."
     })
-    @DisplayName("상신된 결재의 블록 삭제는 409 + 명세 형식 본문으로 나간다")
-    void serializesAlreadySubmittedAsSpecifiedBody(String message) throws Exception {
+    @DisplayName("확인이 필요한 블록 삭제는 409 + 명세 형식 본문으로 나간다")
+    void serializesConfirmRequiredAsSpecifiedBody(String message) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/api/v1/blocks/10");
 
         ResponseEntity<ApiErrorResponse> response = handler.handleDomainException(
-                new ConflictException(ApprovalErrorCode.APPROVAL_ALREADY_SUBMITTED, message), request);
+                new ConflictException(ApprovalErrorCode.APPROVAL_DELETE_CONFIRM_REQUIRED, message), request);
 
         assertThat(response.getStatusCode().value()).isEqualTo(409);
         assertThat(objectMapper.writeValueAsString(response.getBody())).isEqualTo(
                 "{\"httpStatus\":409,"
                         + "\"message\":\"" + message + "\","
-                        + "\"code\":\"APPROVAL_ALREADY_SUBMITTED\"}");
+                        + "\"code\":\"APPROVAL_DELETE_CONFIRM_REQUIRED\"}");
     }
 
     /**
@@ -56,16 +56,22 @@ class ApprovalDeleteConflictResponseTest {
     @Test
     @DisplayName("enum 폴백 문구도 파괴적 우회로(스텝 삭제)를 권하지 않는다")
     void doesNotAdvertiseStepDeletionWorkaround() {
-        assertThat(ApprovalErrorCode.APPROVAL_ALREADY_SUBMITTED.getMessage())
-                .isEqualTo("이미 상신된 결재는 삭제할 수 없습니다.")
-                .doesNotContain("스텝");
+        assertThat(ApprovalErrorCode.APPROVAL_DELETE_CONFIRM_REQUIRED.getMessage())
+                .doesNotContain("스텝")
+                .doesNotContain("결재자");
     }
 
+    /**
+     * 코드명이 「금지」가 아니라 「확인 요구」를 뜻하는지 고정한다. 폐기된 {@code APPROVAL_IN_PROGRESS} 나
+     * 차단 시절의 {@code APPROVAL_ALREADY_SUBMITTED} 로 되돌아가면 프론트가 재요청 가능한 상황을
+     * 실패로 끝낸다.
+     */
     @Test
-    @DisplayName("폐기된 APPROVAL_IN_PROGRESS 로 되돌아가지 않았는지 코드 문자열로 확인한다")
-    void doesNotReviveDeprecatedCode() {
-        assertThat(ApprovalErrorCode.APPROVAL_ALREADY_SUBMITTED.getCode())
-                .isEqualTo("APPROVAL_ALREADY_SUBMITTED")
-                .isNotEqualTo("APPROVAL_IN_PROGRESS");
+    @DisplayName("코드 문자열이 확인 요구 의미를 유지한다")
+    void keepsConfirmRequiredCodeString() {
+        assertThat(ApprovalErrorCode.APPROVAL_DELETE_CONFIRM_REQUIRED.getCode())
+                .isEqualTo("APPROVAL_DELETE_CONFIRM_REQUIRED")
+                .isNotEqualTo("APPROVAL_IN_PROGRESS")
+                .isNotEqualTo("APPROVAL_ALREADY_SUBMITTED");
     }
 }
