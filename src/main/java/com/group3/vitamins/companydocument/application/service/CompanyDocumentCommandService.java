@@ -14,7 +14,6 @@ import com.group3.vitamins.companydocument.domain.model.CompanyDocument;
 import com.group3.vitamins.companydocument.domain.model.DocumentCategory;
 import com.group3.vitamins.companydocument.domain.repository.CompanyDocumentRepository;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
-import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
@@ -82,7 +81,8 @@ public class CompanyDocumentCommandService implements CompanyDocumentCommandUseC
 
         CompanyDocument document = findOwnedDocumentAllowDeleted(command.companyDocumentId(), companyId);
         if (document.isDeleted()) {
-            throw new ConflictException(CompanyDocumentErrorCode.CDOC_ALREADY_DELETED);
+            // 400 — 명세·file(FILE_ALREADY_DELETED) 과 동일. Conflict(409)로 내면 계약 이탈이다.
+            throw new ValidationException(CompanyDocumentErrorCode.CDOC_ALREADY_DELETED);
         }
 
         document.delete(LocalDateTime.now());

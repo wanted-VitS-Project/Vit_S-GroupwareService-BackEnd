@@ -7,6 +7,7 @@ import com.group3.vitamins.companydocument.presentation.api.response.CompanyDocu
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -35,10 +36,10 @@ public class CompanyDocumentController {
     })
     @GetMapping
     public ApiResponse<CompanyDocumentPageResponse> getDocuments(
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "카테고리 필터 enum(생략 시 전체)") @RequestParam(required = false) String category,
+            @Parameter(description = "표시명·원본명 검색어") @RequestParam(required = false) String keyword,
+            @Parameter(description = "0-base 페이지(음수는 0으로 정규화)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기 (기본 20, 최대 100 — 초과 시 100으로 제한)") @RequestParam(defaultValue = "20") int size,
             Authentication authentication
     ) {
         CompanyDocumentPageResponse data = CompanyDocumentPageResponse.from(
