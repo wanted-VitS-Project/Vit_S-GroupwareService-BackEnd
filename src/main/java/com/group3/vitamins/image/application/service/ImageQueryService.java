@@ -292,7 +292,8 @@ public class ImageQueryService implements ImageQueryUseCase {
 
         List<ProjectImageView> images = imageGalleryMapper.findActiveByProjectId(query.projectId()).stream()
                 .map(row -> new ProjectImageView(
-                        row.imgBlockId(), row.imgId(), row.originalName(),
+                        row.imgBlockId(), row.blockTitle(), row.stepId(), row.stepName(),
+                        row.imgId(), row.originalName(),
                         imageStoragePort.presignViewUrl(row.imageUrl()),
                         row.caption(), row.createdAt()))
                 .toList();

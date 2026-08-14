@@ -42,7 +42,7 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
     @Transactional
     public Settlement updateItem(Long settleId, SettlementType type, Integer roundNo, Long totalAmount,
                                   Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
-                                  String traderName, String bankName, String encryptedAccountNumber,
+                                  LocalDate taxInvoiceDueDate, String traderName, String bankName, String encryptedAccountNumber,
                                   String accountHolder, int expectedVersion) {
         // deleted_at IS NULL·status = PENDING·version = expectedVersion 조건을 UPDATE 문 자체에 걸어서
         // "확인 후 쓰기" 사이의 틈을 없앤다. 호출자(SettlementCommandService)가 이 메서드를 부르기 직전에
@@ -55,7 +55,7 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
         int updated = springDataSettlementRepository.updateItemIfActive(
                 settleId, type, roundNo,
                 toDecimal(totalAmount), toDecimal(plannedAmount), toDecimal(plannedTaxAmount),
-                plannedDate, traderName, bankName, encryptedAccountNumber, accountHolder,
+                plannedDate, taxInvoiceDueDate, traderName, bankName, encryptedAccountNumber, accountHolder,
                 SettlementStatus.PENDING, expectedVersion);
         if (updated == 0) {
             throw new ConflictException(SettlementErrorCode.SETTLEMENT_VERSION_CONFLICT);
@@ -85,6 +85,7 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
                 toLong(entity.getPlannedAmount()),
                 toLong(entity.getPlannedTaxAmount()),
                 entity.getPlannedDate(),
+                entity.getTaxInvoiceDueDate(),
                 toLong(entity.getActualAmount()),
                 entity.getActualDate(),
                 entity.getTraderName(),

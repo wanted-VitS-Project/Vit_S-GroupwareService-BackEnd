@@ -27,6 +27,15 @@
         sb.planned_amount AS plannedAmount,
         sb.planned_tax_amount AS plannedTaxAmount,
         sb.planned_date AS plannedDate,
+        sb.tax_invoice_due_date AS taxInvoiceDueDate,
+        <!--
+            세금계산서 연결 여부 — status로는 판정할 수 없다(PARTIAL/COMPLETED는 "입출금이 붙었다"만
+            말해준다). tax_invoice를 직접 봐야 정확하다(2026-08-14 프론트 요청으로 추가).
+        -->
+        EXISTS (
+        SELECT 1 FROM tax_invoice ti
+        WHERE ti.settle_block_id = sb.settle_id AND ti.deleted_at IS NULL
+        ) AS taxInvoiceLinked,
         sb.trader_name AS traderName,
         sb.bank_name AS bankName,
         sb.account_number AS accountNumber,

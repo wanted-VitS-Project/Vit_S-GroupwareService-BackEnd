@@ -137,7 +137,9 @@
 | `data.projects[].completedRoundCount` | Int | 완료된 회차 수 (INCOME+OUTCOME 합산) |
 | `data.projects[].totalRoundCount` | Int | 전체 회차 수 (INCOME+OUTCOME 합산) |
 | `data.projects[].nextPlannedDate` | LocalDate | 다음 정산 예정일. 미완료 회차가 없으면 null |
-| `data.projects[].settlementStatusSummary` | String | 대표 상태 문구 — 지금은 `"정산완료"` 또는 `"미연결 N건"` 둘 중 하나. **미연결은 입출금 기준**(세금계산서만 연결된 회차도 포함) |
+| `data.projects[].paymentUnlinkedCount` | Int | **입출금이 아직 연결되지 않은 회차 수** (2026-08-14 — 문자열 `settlementStatusSummary`를 대체). 세금계산서만 연결된 회차(`WAITING`)도 포함 |
+| `data.projects[].paymentOverdueDays` | Int | **입출금 지연일** (2026-08-14 신설) — 입출금 기한이 지났는데 아직 연결되지 않은 회차 중 가장 오래 밀린 일수. 지연이 없으면 `0` |
+| `data.projects[].taxInvoiceOverdueDays` | Int | **세금계산서 지연일** (2026-08-14 신설) — 세금계산서 기한이 지났는데 아직 연결되지 않은 회차 중 가장 오래 밀린 일수. 기한이 없는 회차(면세 등)는 제외. 지연이 없으면 `0` |
 | `data.projects[].taxInvoiceUnlinkedCount` | Int | **세금계산서가 연결되지 않은 회차 수** (2026-08-13 신규). 입출금 연결 여부와 무관 — 입금이 끝난 회차도 세금계산서가 없으면 포함 |
 | `data.projects[].projectStatus` | String | 프로젝트 상태 (`project.status`) |
 | `data.projects[].endedOn` | LocalDate | 프로젝트 종료일. 종료되지 않았으면 null |
@@ -161,15 +163,37 @@
   그 프로젝트의 활성 정산 블록 전체를 합산해서 센다. `completedRoundCount`는 `status = 'COMPLETED'`인 것.
   `SettlementStatusMapper.findProjectSettlements`(마이바티스, 파생 테이블 1개로 프로젝트당 한 번에 집계)로
   계산한다.
-- **`settlementStatusSummary` 규칙 (2026-08-09 확정, 의도적으로 단순화)** — 회차별 예정일까지 따지는
-  세분화("입금 대기 N일" 등)는 아직 규칙이 없어 보류했다. 지금은 **딱 두 가지만** 구분한다:
-  전체 회차가 다 `COMPLETED`면 `"정산완료"`, 아니면 미연결 회차 개수를 `"미연결 N건"`으로
-  보여준다(회차가 하나도 없는 프로젝트도 `"미연결 0건"`으로 떨어진다). ⚠️ **이 문구 규칙은 나중에 늘어날
-  수 있다** — 담당자가 세분화 규칙을 확정하면 `SettlementQueryService.settlementStatusSummary`를 손보면 된다.
+- **`settlementStatusSummary`(문자열) 폐지 → `paymentUnlinkedCount`(숫자) (2026-08-14, 사용자 확정)** —
+  원장별 미연결·지연을 전부 숫자로 내려주게 되면서 이 문구가 담던 정보가 모두 계산 가능해졌다:
+  `"정산완료"`는 `completedRoundCount == totalRoundCount`(둘 다 기존 필드), `"미연결 N건"`은
+  `paymentUnlinkedCount`. ⚠️ 문자열을 남기면 같은 정보가 두 형태로 나가고 **표현(문구·색·정렬)을 서버가
+  결정하는 구조**가 그대로 남는다. 애초에 문자열로 둔 이유(2026-08-09 "세분화 규칙이 없어서 단순화")도
+  원장별 구분이 생기면서 사라졌다. ⚠️ **프론트 계약 변경** — 이 필드를 쓰는 화면은 숫자 조립으로 바꿔야 한다.
 - **미연결 기준이 `PENDING` → `PENDING`+`WAITING`으로 바뀌었다 (2026-08-13)** — 재무 도메인에 세금계산서
   매칭이 붙으면서 `WAITING`(세금계산서만 연결되고 입금은 아직)이 실제로 쓰이기 시작했다. 예전 기준으로는
   그 회차가 "미연결"에도 "정산완료"에도 안 잡혀 **조용히 사라졌다.** 이제 이 문구의 "미연결"은
   **입출금 기준**으로 읽는다. 재무 요약(`GET /finance/summary`)의 `settlement.unlinkedCount`도 같은 기준이다.
+- **세금계산서 기한(`taxInvoiceDueDate`) 신설 (2026-08-14, 사용자 요청)** — `planned_date`(입출금 기한)와
+  의미가 달라 별도 컬럼(`settlement_block.tax_invoice_due_date`)으로 받는다. **NULL 허용** — 면세 등
+  세금계산서를 받지 않는 회차가 있어서다(사용자 확정).
+  ⚠️ **`plannedDate`는 이름을 바꾸지 않았다** — "입출금 기한"이 더 정확한 명칭이지만 프론트가 이미 이 필드를
+  쓰고 있어 rename 하면 연동이 깨진다. 명칭 변경은 **화면 라벨에서만** 반영한다.
+  나가는 곳: 정산 항목 작성/수정 응답, 블록 목록 조회(`detail.taxInvoiceDueDate`).
+  ⚠️ **정산 현황 블록 조회·세금계산서 매칭 추천 후보에는 안 내려준다** — 전자는 이미 세금계산서 연결
+  상태(`taxLinkedBy*`)가 나가고, 후자는 `matchTags`로 일자 일치/유사가 이미 표현되므로 기한 원본값이
+  필요 없다(2026-08-14, 처음엔 넣었다가 요청 범위를 넘는다는 지적으로 제거).
+- **블록 목록 조회에 `detail.taxInvoiceLinked` 신설 (2026-08-14, 사용자 요청)** — 그 정산 블록 ID로 매칭된
+  세금계산서가 있는지 여부(Boolean). `status`는 그대로 두고 연결 여부만 따로 준다 —
+  `PARTIAL`/`COMPLETED`는 "입출금이 붙었다"만 말해줘서 세금계산서 유무를 알 수 없기 때문에
+  `tax_invoice`를 직접 확인한다.
+- **지연일 2종 신설 (2026-08-14, 사용자 확정)** — 정의는 **"기한이 지났는데 아직 연결되지 않은"** 회차의
+  **최대 경과일**이다. ⚠️ 이미 받았지만 기한보다 늦게 받은 과거 이력은 지연으로 세지 않는다 — 이 화면은
+  "지금 문제인 것"을 보여주는 재무 현황이라는 판단. 기한 당일은 지연이 아니다.
+  ⚠️ 판정 조건이 원장별로 다르다 — 입출금은 `status IN ('PENDING','WAITING')`(WAITING은 입출금이 없는
+  상태라 지연 대상), 세금계산서는 `status`로 판정이 불가해 `tax_invoice` EXISTS를 직접 본다
+  (WAITING은 세금계산서가 이미 붙은 상태라 자동 제외된다).
+  ⚠️ **문자열 태그가 아니라 숫자로 내려준다** — 서버가 표현(색·아이콘·문구)을 결정하지 않게 하려는 것이고,
+  `taxInvoiceUnlinkedCount`와 같은 기조다. 프론트가 "입출금 지연 5일" 같은 태그를 조립한다.
 - **`taxInvoiceUnlinkedCount` 신규 (2026-08-13, 사용자 확정)** — 세금계산서 미연결은 위 문구와 **다른 개념**이라
   섞지 않고 숫자 필드로 따로 내린다(문자열 계약을 안 건드려야 프론트가 안 깨지고, 프론트가 배지를 직접
   조립할 수 있다). ⚠️ **판정을 `status`로 할 수 없다** — `PARTIAL`/`COMPLETED`는 "입출금이 붙었다"만
@@ -236,7 +260,7 @@
 | `data.blocks[].settleId` | Long | 정산 블록 아이디 |
 | `data.blocks[].roundNo` | Int | 회차 번호 (nullable — 아직 작성 전인 빈 블록) |
 | `data.blocks[].roundName` | String | 회차명(정산 블록명, `block.title`) |
-| `data.blocks[].plannedDate` | LocalDate | 예정일 |
+| `data.blocks[].plannedDate` | LocalDate | 입출금 기한 (화면 라벨 기준. 필드명은 기존 계약 유지) |
 | `data.blocks[].plannedAmount` | Long | 예정금액 |
 | `data.blocks[].plannedTaxAmount` | Long | 예정 세금 금액 |
 | `data.blocks[].taxInvoiceDate` | LocalDate | 세금계산서 발행일. 연결된 세금계산서 없으면 null |
@@ -429,7 +453,8 @@
 | `totalAmount` | Long | Y | 프로젝트 정산 예정 총 금액 |
 | `plannedAmount` | Long | Y | 회차별 정산 예정 금액 |
 | `plannedTaxAmount` | Long | Y | 회차별 정산 예정 세금 금액 |
-| `plannedDate` | LocalDate | Y | 회차별 정산 예정일 |
+| `plannedDate` | LocalDate | Y | 회차별 **입출금 기한**(화면 라벨 기준. 필드명은 기존 계약 유지 — 2026-08-14 메모 참고) |
+| `taxInvoiceDueDate` | LocalDate | N | **세금계산서 기한** (2026-08-14 신설). 면세 등 세금계산서를 받지 않는 회차면 `null`. 세금계산서 매칭 추천의 일자 판정이 이 값을 기준으로 한다 |
 | `traderName` | String | Y | 거래처명(입금자명) |
 | `bankName` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 은행명 |
 | `accountNumber` | String | N | `OUTCOME` 타입인 경우만 필수. 외주 업체 계좌번호(하이픈·띄어쓰기 없이) |
@@ -446,6 +471,7 @@
   "plannedAmount": 1500000,
   "plannedTaxAmount": 200000,
   "plannedDate": "2026-09-01",
+  "taxInvoiceDueDate": "2026-09-10",
   "traderName": "(주)대한항공",
   "version": 1
 }
@@ -458,6 +484,7 @@
   "plannedAmount": 1500000,
   "plannedTaxAmount": 200000,
   "plannedDate": "2026-09-01",
+  "taxInvoiceDueDate": null,
   "traderName": "(주)대한항공",
   "bankName": "신한은행",
   "accountNumber": "100555074444",
@@ -477,7 +504,8 @@
 | `data.totalAmount` | Long | 프로젝트 정산 예정 총 금액 |
 | `data.plannedAmount` | Long | 회차별 정산 예정 금액 |
 | `data.plannedTaxAmount` | Long | 회차별 정산 예정 세금 금액 |
-| `data.plannedDate` | LocalDate | 회차별 정산 예정일 |
+| `data.plannedDate` | LocalDate | 회차별 정산 예정일(입출금 기한) |
+| `data.taxInvoiceDueDate` | LocalDate | **세금계산서 기한** (2026-08-14 신설). 면세 등 세금계산서를 받지 않는 회차면 `null` |
 | `data.traderName` | String | 거래처명(입금자명) |
 | `data.bankName` | String | `OUTCOME` 타입인 경우만 값 있음. 외주 업체 은행명 (nullable) |
 | `data.accountNumber` | String | `OUTCOME` 타입인 경우만 값 있음. 앞·뒤 3자리만 남기고 마스킹 (nullable) |
@@ -502,6 +530,7 @@
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
+    "taxInvoiceDueDate": "2026-09-10",
     "traderName": "(주)대한항공",
     "bankName": null,
     "accountNumber": null,
@@ -527,6 +556,7 @@
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
+    "taxInvoiceDueDate": null,
     "traderName": "(주)대한항공",
     "bankName": "신한은행",
     "accountNumber": "100******444",
@@ -651,6 +681,13 @@ REPEATABLE READ 스냅샷 때문에 부정확할 수 있어서 순서를 바꿨�
 - **편집 권한(403) 검사** — `SettlementEligibilityPolicy.assertEditPermission`이 `BlockCatalogPort.hasEditPermission
   ("SETTLEMENT", settleId, userId, role)`을 호출한다(text/checklist와 동일한 공유 포트 재사용). `BlockType.SETTLEMENT`가
   2026-08-09에 추가돼 이제 정상 동작한다.
+- **`INCOME`에 실려 온 계좌정보는 서버가 버린다 (2026-08-14, 사용자 확정)** — 화면에서는 `INCOME`일 때
+  계좌정보 입력이 막혀 있지만, 스웨거·API 직접 호출로는 `bankName`/`accountNumber`/`accountHolder`가
+  그대로 저장됐다. 그러면 위 "계좌정보는 `OUTCOME`만 값 있음" 약속이 깨지고 INCOME 행에 쓸 데 없는
+  계좌번호 암호문이 남는다. **400으로 거부하지 않는다** — 새 에러코드가 필요해 프론트 계약이 바뀌는데,
+  정상 클라이언트는 애초에 보내지 않아 볼 사람이 없다. 대신 `type != OUTCOME`이면 세 필드를 `null`로
+  치환해 저장한다. ⚠️ 활동 로그와 응답 조립도 같은 치환값을 쓴다 — 그 둘은 DB 저장값이 아니라 요청값을
+  직접 들고 가므로, 저장만 막으면 "저장은 안 됐는데 응답·로그에는 마스킹된 계좌번호가 보이는" 불일치가 남는다.
 - **응답 필드 null 표기** — `INCOME` 타입 응답에도 `bankName`/`accountNumber`/`accountHolder` 키 자체는 내려간다
   (값이 `null`). 팀 공통 `ApiResponse` 관례(다른 도메인도 미사용 필드를 `null`로 명시)를 따랐다.
 - **`paidAmountRatio` 계산 규칙 (2026-08-09 재설계)** — 처음엔 "이 블록의 `actualAmount / plannedAmount`"로 잘못 구현했었다.

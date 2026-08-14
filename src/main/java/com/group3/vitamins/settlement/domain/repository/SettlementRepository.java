@@ -30,7 +30,7 @@ public interface SettlementRepository {
      */
     Settlement updateItem(Long settleId, SettlementType type, Integer roundNo, Long totalAmount,
                            Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
-                           String traderName, String bankName, String encryptedAccountNumber,
+                           LocalDate taxInvoiceDueDate, String traderName, String bankName, String encryptedAccountNumber,
                            String accountHolder, int expectedVersion);
 
     /**

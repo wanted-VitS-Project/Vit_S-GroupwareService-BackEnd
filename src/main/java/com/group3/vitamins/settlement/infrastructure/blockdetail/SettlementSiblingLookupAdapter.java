@@ -35,7 +35,7 @@ public class SettlementSiblingLookupAdapter implements SettlementSiblingLookupPo
         return new SettlementCurrentState(
                 row.version(), row.status(), row.deletedAt(),
                 row.type(), row.roundNo(), row.totalAmount(), row.plannedAmount(), row.plannedTaxAmount(),
-                row.plannedDate(), row.traderName(), row.bankName(), row.accountNumber(), row.accountHolder()
+                row.plannedDate(), row.taxInvoiceDueDate(), row.traderName(), row.bankName(), row.accountNumber(), row.accountHolder()
         );
     }
 

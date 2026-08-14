@@ -71,6 +71,9 @@ public interface ImageQueryUseCase {
 
     record ProjectImageView(
             Long imgBlockId,
+            String blockTitle,
+            Long stepId,
+            String stepName,
             Long imgId,
             String originalName,
             String imageUrl,

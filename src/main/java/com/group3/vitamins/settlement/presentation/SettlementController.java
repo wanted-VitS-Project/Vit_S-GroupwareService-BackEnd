@@ -119,6 +119,7 @@ public class SettlementController {
                 request.plannedAmount(),
                 request.plannedTaxAmount(),
                 request.plannedDate(),
+                request.taxInvoiceDueDate(),
                 request.traderName(),
                 request.bankName(),
                 request.accountNumber(),
