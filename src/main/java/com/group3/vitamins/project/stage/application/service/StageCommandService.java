@@ -13,6 +13,7 @@ import com.group3.vitamins.project.stage.application.result.StageDeleteResult;
 import com.group3.vitamins.project.stage.application.result.StageOrderResult;
 import com.group3.vitamins.project.stage.application.result.StageResult;
 import com.group3.vitamins.project.stage.application.usecase.StageCascadeUseCase;
+import com.group3.vitamins.project.stage.application.usecase.StageCloneUseCase;
 import com.group3.vitamins.project.stage.application.usecase.StageCommandUseCase;
 import com.group3.vitamins.project.stage.domain.exception.StageErrorCode;
 import com.group3.vitamins.project.stage.domain.model.Stage;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +34,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class StageCommandService implements StageCommandUseCase, StageCascadeUseCase {
+public class StageCommandService
+        implements StageCommandUseCase, StageCascadeUseCase, StageCloneUseCase {
 
     private static final int FIRST_SORT_ORDER = 1;
     private static final long UNASSIGNED = 0L;
@@ -42,6 +45,7 @@ public class StageCommandService implements StageCommandUseCase, StageCascadeUse
     private final StepRelocationPort stepRelocationPort;
     private final ProjectAccessUseCase projectAccessUseCase;
 
+    //stage 생성
     @Override
     public StageResult createStage(CreateStageCommand command) {
         projectAccessUseCase.requireEditable(
@@ -58,18 +62,14 @@ public class StageCommandService implements StageCommandUseCase, StageCascadeUse
                 saved.getName(), saved.getSortOrder(), saved.getVersion());
     }
 
-    /**
-     * 이름만 바꾼다 (STG-001). 순서는 순서 변경 API 소관이다.
-     * <b>내가 조회한 버전이 아직 최신일 때만</b> 저장된다 (`.ai/docs/global/CONCURRENCY.md`).
-     *
-     * <p>⚠️ {@code save()} 로 되돌리지 마라. 검사와 저장이 한 문장이 아니면 그 틈에 남의 저장이
-     * 끼어들어 <b>예외도 로그도 없이</b> 갱신이 유실된다 (§6-4).
-     */
+    //stage 수정
     @Override
     public StageResult updateStage(UpdateStageCommand command) {
+        //수정권한 확인
         Stage stage = requireEditableStage(
                 command.stageId(), command.requesterUserId(), command.role());
 
+        //버전 overwrite 시, 그냥 진입 시, 나누어 져서 진행
         int expected = command.overwrite() ? stage.getVersion() : command.version();
 
         int updated = stageRepository.renameIfVersionMatches(
@@ -153,6 +153,28 @@ public class StageCommandService implements StageCommandUseCase, StageCascadeUse
     public int deleteByProjectId(Long projectId) {
         stagePermissionDefaultRepository.deleteByProjectId(projectId);
         return stageRepository.deleteByProjectId(projectId, LocalDateTime.now());
+    }
+
+    /**
+     * 프로젝트 복제가 부르는 스테이지 복사 (PRJ-018). 권한은 호출자가 원본 참여자로 이미 판정했다.
+     *
+     * <p>이름과 {@code sortOrder} 만 옮긴다. {@code stage_permission_default}(새 스텝 권한 기본값)는
+     * 복사하지 않는다 — 참여자를 복제하지 않으므로 복제본에서는 <b>아무도 가리키지 않는 죽은 행</b>이 된다.
+     *
+     * <p>⚠️ {@code sortOrder} 는 원본 값 그대로다. 다시 매기면 스테이지 순서가 원본과 달라진다.
+     */
+    @Override
+    public Map<Long, Long> cloneToProject(Long sourceProjectId, Long targetProjectId) {
+        LocalDateTime now = LocalDateTime.now();
+
+        Map<Long, Long> stageIdMap = new LinkedHashMap<>();
+        for (Stage source : stageRepository.findAllByProjectId(sourceProjectId)) {
+            Stage clone = stageRepository.save(Stage.create(
+                    targetProjectId, source.getName(), source.getSortOrder(), now));
+
+            stageIdMap.put(source.getStageId(), clone.getStageId());
+        }
+        return stageIdMap;
     }
 
     /** 스테이지를 찾고 요청자가 그 프로젝트 EDITOR 인지 확인한다. */
