@@ -23,6 +23,9 @@ public class ProjectBusinessCategoryJpaEntity {
     @Column(name = "project_business_category_id")
     private Long projectBusinessCategoryId;
 
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     @Column(name = "project_id", nullable = false)
     private Long projectId;
 
