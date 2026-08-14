@@ -28,6 +28,8 @@ import com.group3.vitamins.project.step.application.result.StepResult;
 import com.group3.vitamins.project.step.application.result.StepStatusResult;
 import com.group3.vitamins.project.step.application.result.StepUpdateResult;
 import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
+import com.group3.vitamins.project.step.application.usecase.StepCascadeUseCase;
+import com.group3.vitamins.project.step.application.usecase.StepCloneUseCase;
 import com.group3.vitamins.project.step.application.usecase.StepCommandUseCase;
 import com.group3.vitamins.project.step.domain.exception.StepErrorCode;
 import com.group3.vitamins.project.step.domain.model.OpenIssueAction;
@@ -43,6 +45,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,7 +55,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class StepCommandService implements StepCommandUseCase {
+public class StepCommandService
+        implements StepCommandUseCase, StepCascadeUseCase, StepCloneUseCase {
 
     private static final int FIRST_SORT_ORDER = 1;
 
@@ -284,15 +288,78 @@ public class StepCommandService implements StepCommandUseCase {
             stepBlockCascadePort.moveBlocks(moveBlockIds, command.moveToStepId());
         }
         stepBlockCascadePort.deleteBlocks(deleteBlockIds, command.requesterUserId());
+        int issueCount = deleteStepTail(step, LocalDateTime.now());
 
+        return new StepDeleteResult(step.getStepId(),
+                moveBlockIds.size(), deleteBlockIds.size(), issueCount);
+    }
+
+    /**
+     * 프로젝트 삭제가 부르는 스텝 정리 (PRJ-014). 권한은 호출자가 이미 판정했다.
+     *
+     * <p>블록을 옮기지 않고 전부 지운다 — 프로젝트째 사라지므로 옮길 곳이 없다.
+     *
+     * <p>⚠️ <b>결재 확인 요구({@code APPROVAL_DELETE_CONFIRM_REQUIRED})는 여기서 나오면 안 된다</b>
+     * (DEL-017). {@code stepBlockCascadePort} 는 cascade 전용 경로라 상세의 {@code assertDeletable}
+     * 을 타지 않는다 — 직접 삭제용 {@code BlockCommandUseCase} 로 바꾸면 결재 하나 때문에
+     * 프로젝트 삭제 전체가 409 로 롤백된다.
+     */
+    @Override
+    public int deleteByProjectId(Long projectId, String requesterUserId) {
+        List<Step> steps = stepRepository.search(projectId, null, null);
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Step step : steps) {
+            stepBlockCascadePort.deleteBlocks(
+                    stepBlockCascadePort.findBlockIds(step.getStepId()), requesterUserId);
+            deleteStepTail(step, now);
+        }
+        return steps.size();
+    }
+
+    /**
+     * 프로젝트 복제가 부르는 스텝 복사 (PRJ-018). 권한은 호출자가 원본 참여자로 이미 판정했다.
+     *
+     * <p>이름과 {@code sortOrder} 만 옮긴다 — 기간·책임자는 복사하지 않는다. 새 프로젝트의 일정과
+     * 담당자는 아직 정해지지 않았고, 참여자를 복제하지 않으므로 책임자만 남기면 미참여자가 책임자가 된다.
+     * 상태는 {@link Step#create} 가 {@code NOT_STARTED} 로 시작시키므로 완료 정보도 따라오지 않는다.
+     *
+     * <p>⚠️ {@code sortOrder} 는 <b>원본 값 그대로</b> 쓴다. {@code nextSortOrder} 로 다시 매기면
+     * 프로젝트 전체 기준 통번호(#66)가 재배열되어 원본의 스텝 순서가 바뀐다.
+     *
+     * <p>미소속 스텝은 {@code stageIdMap} 에 키가 없어 {@code null} 이 되고, 그대로 미소속으로 복사된다.
+     */
+    @Override
+    public Map<Long, Long> cloneToProject(Long sourceProjectId, Long targetProjectId,
+                                          Map<Long, Long> stageIdMap) {
+        List<Step> sources = stepRepository.search(sourceProjectId, null, null);
+        LocalDateTime now = LocalDateTime.now();
+
+        Map<Long, Long> stepIdMap = new LinkedHashMap<>();
+        for (Step source : sources) {
+            Step clone = stepRepository.save(Step.create(
+                    targetProjectId,
+                    source.getStageId() == null ? null : stageIdMap.get(source.getStageId()),
+                    source.getName(), source.getSortOrder(),
+                    null, null, null, now));
+
+            stepIdMap.put(source.getStepId(), clone.getStepId());
+        }
+        return stepIdMap;
+    }
+
+    /**
+     * 스텝 본체와 하위 이슈·권한 오버라이드를 정리하고 지운 이슈 수를 돌려준다.
+     * 블록은 옮길 수도 있어 호출부가 먼저 처리한다.
+     */
+    private int deleteStepTail(Step step, LocalDateTime now) {
         List<Long> issueIds = issueStatLookupPort.findAllIssueIds(step.getStepId());
         issueDeleteCommandPort.delete(issueIds);
 
         stepPermissionRepository.deleteByStepId(step.getStepId());
-        stepRepository.save(step.delete(LocalDateTime.now()));
+        stepRepository.save(step.delete(now));
 
-        return new StepDeleteResult(step.getStepId(),
-                moveBlockIds.size(), deleteBlockIds.size(), issueIds.size());
+        return issueIds.size();
     }
 
     /**

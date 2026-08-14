@@ -48,6 +48,23 @@ public class BlockRepositoryAdapter implements BlockRepository {
     }
 
     @Override
+    public List<Block> findByStepIds(Collection<Long> stepIds) {
+        if (stepIds.isEmpty()) {
+            return List.of();
+        }
+        return springDataRepository
+                .findByStepIdInAndDeletedAtIsNullOrderByStepIdAscRowIndexAscSortOrderAsc(stepIds)
+                .stream()
+                .map(BlockMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public int countByProjectId(Long projectId) {
+        return springDataRepository.countByProjectId(projectId);
+    }
+
+    @Override
     public List<Block> findAllByIds(Collection<Long> blockIds) {
         return springDataRepository.findByBlockIdInAndDeletedAtIsNull(blockIds)
                 .stream()

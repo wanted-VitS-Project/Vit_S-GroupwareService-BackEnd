@@ -1,5 +1,9 @@
 package com.group3.vitamins.project.block.application.service;
 
+import com.group3.vitamins.activitylog.contract.ActivityFieldChange;
+import com.group3.vitamins.activitylog.contract.ActivityOccurredEvent;
+import com.group3.vitamins.activitylog.domain.ActivityLogAction;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
@@ -17,6 +21,8 @@ import com.group3.vitamins.project.block.application.result.BlockOwner;
 import com.group3.vitamins.project.block.application.result.BlockResult;
 import com.group3.vitamins.project.block.application.result.BlockUpdateResult;
 import com.group3.vitamins.project.block.application.usecase.BlockCascadeUseCase;
+import com.group3.vitamins.project.block.application.usecase.BlockCloneUseCase;
+import com.group3.vitamins.project.block.application.usecase.BlockCloneUseCase.BlockCloneCount;
 import com.group3.vitamins.project.block.application.usecase.BlockCommandUseCase;
 import com.group3.vitamins.project.block.domain.exception.BlockErrorCode;
 import com.group3.vitamins.project.block.domain.model.Block;
@@ -34,6 +40,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -41,7 +48,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUseCase {
+public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUseCase, BlockCloneUseCase {
 
     private static final int TITLE_MAX_LENGTH = 200;
     private static final int MIN_COL_SPAN = 1;
@@ -49,11 +56,18 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     private static final int DEFAULT_COL_SPAN = 1;
     private static final int FIRST_INDEX = 0;
 
+    /** 생성·삭제는 변경 필드가 특정되지 않아 null change 1개를 보낸다 (`activity-log.md` §3). */
+    private static final List<ActivityFieldChange> NULL_CHANGE =
+            List.of(new ActivityFieldChange(null, null, null));
+
+    private static final String FIELD_TITLE = "title";
+
     private final BlockRepository blockRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
     private final IssueBlockUnlinkPort issueBlockUnlinkPort;
     private final StepAccessUseCase stepAccessUseCase;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     public BlockResult createBlock(CreateBlockCommand command) {
@@ -87,6 +101,9 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
         //2. 1)상세 테이블 조회, 2)행 추가, 3)TYPE ID 조회, 4) TYPE ID 삽입
         linkDetail(block, type, now);
 
+        publishBlockActivity(ActivityLogAction.CREATE, block.getBlockId(),
+                command.requesterUserId(), NULL_CHANGE);
+
         return new BlockResult(
                 block.getBlockId(), block.getStepId(), step.projectId(), type.name(),
                 block.getTitle(), owner, block.getRowIndex(), block.getSortOrder(),
@@ -115,6 +132,7 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         int expected = command.overwrite() ? block.getVersion() : command.version();
         LocalDateTime now = LocalDateTime.now();
+        String beforeTitle = block.getTitle();
 
         if (command.titleProvided()) {
             validateTitle(command.title());
@@ -135,6 +153,12 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         if (updated == 0) {
             throw new ConflictException(BlockErrorCode.BLOCK_VERSION_CONFLICT);
+        }
+
+        if (!Objects.equals(beforeTitle, block.getTitle())) {
+            publishBlockActivity(ActivityLogAction.MODIFY, block.getBlockId(),
+                    command.requesterUserId(),
+                    List.of(new ActivityFieldChange(FIELD_TITLE, beforeTitle, block.getTitle())));
         }
 
         //담당자를 안 건드렸으면 기존 담당자를 그대로 내려야 한다 — 이름은 관대하게 조회한다
@@ -299,8 +323,20 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         deleteBlock(block, command.requesterUserId());
 
-        // 블록 삭제 활동 로그(§5.1)는 여기서 발행해야 하지만 활동기록 공통 컴포넌트(#43)가
-        // 아직 없다. 타입별 도메인에서 발행하면 어댑터 없는 타입(FILE·APPROVAL)이 영구 누락된다.
+        // ⚠️ cascade 와 공유하는 deleteBlock(block, ...) 본체가 아니라 이 경로에서만 발행한다.
+        //    본체로 옮기면 스텝 삭제 한 번에 블록 수만큼 DELETE 로그가 쌓인다.
+        publishBlockActivity(ActivityLogAction.DELETE, block.getBlockId(),
+                command.requesterUserId(), NULL_CHANGE);
+    }
+
+    /**
+     * 부모 Block 활동 로그를 발행한다 (`activity-log.md` §5.1).
+     * Block 자체 활동이라 resourceId·resourceName 은 항상 없다.
+     */
+    private void publishBlockActivity(ActivityLogAction action, Long blockId, String actorId,
+                                      List<ActivityFieldChange> changes) {
+        domainEventPublisher.publish(ActivityOccurredEvent.of(
+                action, blockId, null, actorId, changes));
     }
 
     /** 삭제 본체. 권한 판정이 끝난 뒤의 처리라 cascade 경로와 공유한다. */
@@ -339,6 +375,53 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     @Override
     public void deleteBlocks(Collection<Long> blockIds, String requesterUserId) {
         findBlocks(blockIds).forEach(block -> deleteBlock(block, requesterUserId));
+    }
+
+    @Override
+    public int countByProjectId(Long projectId) {
+        return blockRepository.countByProjectId(projectId);
+    }
+
+    /**
+     * 프로젝트 복제가 부르는 블록 복사 (PRJ-018). 권한은 호출자가 원본 참여자로 이미 판정했다.
+     *
+     * <p>배치 3종을 <b>원본 값 그대로</b> 옮긴다 — 새 스텝은 비어 있으므로 좌표가 겹칠 수 없고,
+     * {@code resolveRowIndex} 로 다시 계산하면 원본의 그리드 모양이 무너진다.
+     *
+     * <p>⚠️ 상세는 <b>내용을 복사하지 않고</b> {@link #linkDetail} 로 빈 행을 새로 만든다. 이 경로를
+     * 공유하는 것이 핵심이다 — 생성 3단계(`BLOCK.md` §1 규약 5)를 여기서 다시 구현하면 규약이 두 벌로 갈라진다.
+     *
+     * <p>⛔ 활동 로그를 발행하지 않는다. 블록마다 발행하면 복제 한 번에 활동기록이 {@code CREATE} 로 도배된다.
+     */
+    @Override
+    public BlockCloneCount cloneToSteps(Map<Long, Long> stepIdMap, String requesterUserId) {
+        if (stepIdMap.isEmpty()) {
+            return new BlockCloneCount(0, 0);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int copied = 0;
+        int skipped = 0;
+
+        for (Block source : blockRepository.findByStepIds(stepIdMap.keySet())) {
+            // BID_NOTICE 는 공고 전환 API 만 만든다 — 복제본은 원본과 다른 공고(또는 공고 없음)라
+            // 그대로 옮기면 원본 공고를 가리키는 블록이 된다
+            if (!source.getType().userCreatable()) {
+                skipped++;
+                continue;
+            }
+
+            // owner 는 비운다 — 참여자를 복제하지 않으므로 담당자만 남기면 미참여자가 담당자가 된다
+            Block clone = blockRepository.save(Block.create(
+                    stepIdMap.get(source.getStepId()), source.getType(), source.getTitle(),
+                    null, source.getRowIndex(), source.getSortOrder(), source.getColSpan(),
+                    requesterUserId, now));
+
+            linkDetail(clone, clone.getType(), now);
+            copied++;
+        }
+
+        return new BlockCloneCount(copied, skipped);
     }
 
     /**
