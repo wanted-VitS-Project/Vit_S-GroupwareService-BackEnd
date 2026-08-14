@@ -90,6 +90,15 @@ public class FileUploadService implements FileUploadUseCase {
             File file = fileRepository.findById(command.fileId())
                     .filter(f -> !f.isDeleted())
                     .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+            // command.fileId() 는 클라이언트가 지정한다 — 권한을 검증한 블록(command.blockId())이 실제로 이
+            // 파일의 소유 블록인지 확인하지 않으면 타 블록·타 프로젝트·타 회사 문서에 버전을 붙일 수 있다(IDOR).
+            // completeUpload 와 같은 방식으로 파일의 소유 블록을 재조회해 일치를 강제한다. 불일치는 존재를
+            // 숨겨 FILE_NOT_FOUND 로 통일한다(타 회사 문서 존재 열거 차단).
+            Long ownerBlockId = fileQueryPort.findBlockIdByFileId(file.getFileId())
+                    .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
+            if (!ownerBlockId.equals(command.blockId())) {
+                throw new NotFoundException(FileErrorCode.FILE_NOT_FOUND);
+            }
             fileId = file.getFileId();
             versionNo = fileVersionRepository.findMaxVersionNo(fileId) + 1;
         }
