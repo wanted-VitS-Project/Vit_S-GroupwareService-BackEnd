@@ -155,7 +155,8 @@
     -->
     <update id="updateExcludedBatch">
         UPDATE cash_flow SET is_excluded = #{isExcluded}
-        WHERE company_id = #{companyId}
+        <!-- deleted_at 조건은 세금계산서 쪽과 동일한 이유(다른 UPDATE들과 기준 통일, 2026-08-13). -->
+        WHERE company_id = #{companyId} AND deleted_at IS NULL
         <if test="isExcluded">AND settle_block_id IS NULL</if>
         AND cash_flow_id IN
         <foreach collection="cashFlowIds" item="id" open="(" separator="," close=")">
