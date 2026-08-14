@@ -144,6 +144,16 @@ public enum BiddingErrorCode implements ErrorCode {
     BIDDING_SUMMARY_ALREADY_CONFIRMED(
             "BIDDING_SUMMARY_ALREADY_CONFIRMED",
             "이미 확정된 입찰 공고 AI 요약입니다."
+    ),
+
+    BIDDING_SUMMARY_NOT_CONFIRMED(
+            "BIDDING_SUMMARY_NOT_CONFIRMED",
+            "확정되지 않은 입찰 공고 AI 요약은 프로젝트 전환에 사용할 수 없습니다."
+    ),
+
+    BIDDING_SUMMARY_ALREADY_LINKED(
+            "BIDDING_SUMMARY_ALREADY_LINKED",
+            "이미 다른 프로젝트에 연결된 입찰 공고 AI 요약입니다."
     );
 
     private final String code;
