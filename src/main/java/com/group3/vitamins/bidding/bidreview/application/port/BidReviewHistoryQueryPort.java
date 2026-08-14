@@ -5,7 +5,9 @@ import java.util.List;
 
 public interface BidReviewHistoryQueryPort {
 
-    List<HistoryRow> findHistory(Long companyId, Long noticeId, String userId);
+    List<HistoryRow> findHistory(Long companyId, Long noticeId, String userId, int offset, int size);
+
+    long countHistory(Long companyId, Long noticeId, String userId);
 
     record HistoryRow(
             Long reviewId,

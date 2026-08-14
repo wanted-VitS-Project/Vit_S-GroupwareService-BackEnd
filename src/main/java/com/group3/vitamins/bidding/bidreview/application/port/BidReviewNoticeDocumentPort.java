@@ -28,7 +28,8 @@ public interface BidReviewNoticeDocumentPort {
             Long attachmentId,
             Long noticeId,
             String fileName,
-            String sourceUrl
+            String sourceUrl,
+            String storageKey
     ) {
     }
 }

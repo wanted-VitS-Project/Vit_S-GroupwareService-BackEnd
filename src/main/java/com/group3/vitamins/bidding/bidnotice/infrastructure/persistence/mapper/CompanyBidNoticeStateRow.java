@@ -7,6 +7,7 @@ public record CompanyBidNoticeStateRow(
         Long bidNoticeId,
         String noticeStatus,
         String dismissReason,
+        boolean isFavorite,
         LocalDateTime updatedAt
 ) {
 }

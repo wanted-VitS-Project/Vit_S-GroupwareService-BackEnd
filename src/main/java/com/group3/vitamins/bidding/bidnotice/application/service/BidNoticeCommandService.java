@@ -1,12 +1,19 @@
 package com.group3.vitamins.bidding.bidnotice.application.service;
 
+import com.group3.vitamins.bidding.bidnotice.application.command.CompleteBidNoticeAttachmentUploadCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.CreateManualBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.DismissBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.FavoriteBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.RestoreBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.StartBidNoticeAttachmentUploadCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.UnfavoriteBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.UpdateManualBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort;
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort.PendingAttachmentUpload;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeStatusHistoryPort;
 import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
+import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeAttachmentUploadCompleteResult;
+import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeAttachmentUploadStartResult;
 import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeStatusResult;
 import com.group3.vitamins.bidding.bidnotice.application.result.ManualBidNoticeResult;
 import com.group3.vitamins.bidding.bidnotice.application.support.ManualBidNoticeDedupKeyGenerator;
@@ -20,6 +27,7 @@ import com.group3.vitamins.bidding.bidnotice.domain.model.CompanyBidNoticeState;
 import com.group3.vitamins.bidding.bidnotice.domain.event.BidNoticeListChangedEvent;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
+import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
@@ -54,6 +62,12 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
     private static final int MAX_ATTACHMENT_COUNT = 10;
     private static final int MAX_ATTACHMENT_NAME_LENGTH = 255;
 
+    // 업로드 첨부 제한 - 사내 문서함 업로드(CDOC-003)와 동일 기준을 재사용한다.
+    private static final long MAX_UPLOAD_SIZE_BYTES = 50L * 1024 * 1024;
+    private static final Set<String> BLOCKED_UPLOAD_EXTENSIONS = Set.of(
+            "exe", "bat", "sh", "jar", "cmd", "com", "msi", "scr", "dll", "bin", "app"
+    );
+
     private final BidNoticeCommandPort commandPort;
     private final CompanyBidNoticeStatePort companyStatePort;
     private final BidNoticeStatusHistoryPort statusHistoryPort;
@@ -61,6 +75,7 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
     private final BiddingAccessPolicy biddingAccessPolicy;
     private final ManualBidNoticeDedupKeyGenerator dedupKeyGenerator;
     private final DomainEventPublisher eventPublisher;
+    private final FileStoragePort fileStoragePort;
 
     // 입력값을 검증하고 현재 회사 소유의 직접 등록 공고를 생성합니다.
     @Override
@@ -155,6 +170,142 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
         return toStatusResult(changed);
     }
 
+    // 실제 공개 URL이 없는 첨부를 위해, 직접 등록 공고(MANUAL)에만 파일 업로드 슬롯을 만든다.
+    @Override
+    public BidNoticeAttachmentUploadStartResult startAttachmentUpload(StartBidNoticeAttachmentUploadCommand command) {
+        validateStartUploadCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        ManualBidNotice notice = findEditableNotice(companyId, command.noticeId());
+
+        if (commandPort.countActiveAttachments(notice.getNoticeId()) >= MAX_ATTACHMENT_COUNT) {
+            throw new ConflictException(BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_LIMIT_EXCEEDED);
+        }
+
+        String storageKey = "companies/" + companyId
+                + "/bidding/notices/" + notice.getNoticeId()
+                + "/attachments/" + UUID.randomUUID();
+
+        PendingAttachmentUpload pending = commandPort.createPendingUpload(
+                notice.getNoticeId(), command.fileName().trim(), storageKey,
+                command.sizeBytes(), command.mimeType(), LocalDateTime.now()
+        );
+
+        FileStoragePort.PresignedUrl presigned =
+                fileStoragePort.presignUpload(storageKey, command.mimeType(), command.sizeBytes());
+
+        return new BidNoticeAttachmentUploadStartResult(
+                pending.attachmentId(), presigned.url(), presigned.expiresAt()
+        );
+    }
+
+    // 업로드 완료를 저장소 HEAD로 검증한다. 실패하면 별도 트랜잭션으로 FAILED를 확정한 뒤 409를 던진다.
+    @Override
+    public BidNoticeAttachmentUploadCompleteResult completeAttachmentUpload(
+            CompleteBidNoticeAttachmentUploadCommand command
+    ) {
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        ManualBidNotice notice = findEditableNotice(companyId, command.noticeId());
+
+        PendingAttachmentUpload pending = commandPort
+                .findPendingUpload(notice.getNoticeId(), command.attachmentId())
+                .orElseThrow(() -> new NotFoundException(
+                        BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_NOT_FOUND
+                ));
+
+        if (!pending.uploading()) {
+            throw new ConflictException(BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED);
+        }
+
+        FileStoragePort.StoredObject stored = fileStoragePort.head(pending.storageKey()).orElse(null);
+        if (stored == null) {
+            commandPort.failUploadInNewTransaction(pending.attachmentId(), LocalDateTime.now());
+            throw new ConflictException(BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND);
+        }
+        if (stored.sizeBytes() != pending.sizeBytes()) {
+            commandPort.failUploadInNewTransaction(pending.attachmentId(), LocalDateTime.now());
+            throw new ConflictException(BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH);
+        }
+
+        commandPort.completeUpload(pending.attachmentId(), stored.sizeBytes(), LocalDateTime.now());
+        return new BidNoticeAttachmentUploadCompleteResult(
+                pending.attachmentId(), pending.fileName(), stored.sizeBytes()
+        );
+    }
+
+    private void validateStartUploadCommand(StartBidNoticeAttachmentUploadCommand command) {
+        if (command == null || command.noticeId() == null || command.noticeId() <= 0
+                || isBlank(command.userId())
+                || isInvalidRequired(command.fileName(), MAX_ATTACHMENT_NAME_LENGTH)
+                || command.sizeBytes() <= 0) {
+            throw invalidManualNotice();
+        }
+        if (command.sizeBytes() > MAX_UPLOAD_SIZE_BYTES
+                || BLOCKED_UPLOAD_EXTENSIONS.contains(extractExtension(command.fileName()))) {
+            throw invalidManualNotice();
+        }
+    }
+
+    private String extractExtension(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0 || dot == fileName.length() - 1) {
+            return "";
+        }
+        return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    // 회사 공용 관심 등록 - notice_status와 무관하게(제외된 공고도) 걸 수 있다.
+    @Override
+    public BidNoticeStatusResult favorite(FavoriteBidNoticeCommand command) {
+        validateFavoriteCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CompanyBidNoticeState current = findCompanyState(companyId, command.noticeId());
+        if (current.isFavorite()) {
+            throw new ConflictException(BiddingErrorCode.BIDDING_NOTICE_ALREADY_FAVORITED);
+        }
+
+        CompanyBidNoticeState changed = current.markFavorite(LocalDateTime.now());
+        companyStatePort.update(changed);
+        publishListChanged(companyId);
+        return toStatusResult(changed);
+    }
+
+    @Override
+    public BidNoticeStatusResult unfavorite(UnfavoriteBidNoticeCommand command) {
+        validateUnfavoriteCommand(command);
+        biddingAccessPolicy.assertAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CompanyBidNoticeState current = findCompanyState(companyId, command.noticeId());
+        if (!current.isFavorite()) {
+            throw new ConflictException(BiddingErrorCode.BIDDING_NOTICE_NOT_FAVORITED);
+        }
+
+        CompanyBidNoticeState changed = current.unmarkFavorite(LocalDateTime.now());
+        companyStatePort.update(changed);
+        publishListChanged(companyId);
+        return toStatusResult(changed);
+    }
+
+    private void validateFavoriteCommand(FavoriteBidNoticeCommand command) {
+        if (command == null || command.noticeId() == null || command.noticeId() <= 0
+                || isBlank(command.userId())) {
+            throw new ValidationException(BiddingErrorCode.BIDDING_INVALID_NOTICE_QUERY);
+        }
+    }
+
+    private void validateUnfavoriteCommand(UnfavoriteBidNoticeCommand command) {
+        if (command == null || command.noticeId() == null || command.noticeId() <= 0
+                || isBlank(command.userId())) {
+            throw new ValidationException(BiddingErrorCode.BIDDING_INVALID_NOTICE_QUERY);
+        }
+    }
+
     private void publishListChanged(Long companyId) {
         eventPublisher.publish(new BidNoticeListChangedEvent(companyId));
     }
@@ -182,7 +333,7 @@ public class BidNoticeCommandService implements BidNoticeCommandUseCase {
     private BidNoticeStatusResult toStatusResult(CompanyBidNoticeState state) {
         return new BidNoticeStatusResult(
                 state.noticeId(), state.status().name(),
-                state.dismissReason(), state.updatedAt()
+                state.dismissReason(), state.isFavorite(), state.updatedAt()
         );
     }
 

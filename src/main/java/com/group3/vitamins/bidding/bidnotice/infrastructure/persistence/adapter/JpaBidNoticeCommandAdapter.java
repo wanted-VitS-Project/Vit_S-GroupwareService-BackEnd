@@ -1,6 +1,7 @@
 package com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.adapter;
 
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort;
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort.PendingAttachmentUpload;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNotice;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeAttachment;
 import com.group3.vitamins.bidding.bidnotice.domain.model.ManualBidNoticeData;
@@ -17,6 +18,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ConflictExceptio
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -135,7 +137,9 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
             LocalDateTime now
     ) {
         List<BidNoticeAttachmentJpaEntity> existing = attachmentRepository
-                .findAllByBidNoticeIdOrderByAttachmentOrder(noticeId);
+                .findAllByBidNoticeIdAndAttachmentKindOrderByAttachmentOrder(
+                        noticeId, BidNoticeAttachmentJpaEntity.LINK_ATTACHMENT_KIND
+                );
         Map<Integer, BidNoticeAttachmentJpaEntity> byOrder = new HashMap<>();
         existing.forEach(entity -> byOrder.put(
                 entity.getAttachmentOrder().intValue(),
@@ -164,7 +168,9 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
     // 조회한 Entity와 활성 첨부 링크를 직접 등록 도메인으로 복원합니다.
     private ManualBidNotice toDomain(BidNoticeJpaEntity entity) {
         List<ManualBidNoticeAttachment> attachments = attachmentRepository
-                .findAllByBidNoticeIdOrderByAttachmentOrder(entity.getBidNoticeId())
+                .findAllByBidNoticeIdAndAttachmentKindOrderByAttachmentOrder(
+                        entity.getBidNoticeId(), BidNoticeAttachmentJpaEntity.LINK_ATTACHMENT_KIND
+                )
                 .stream()
                 .filter(attachment -> attachment.getDeletedAt() == null)
                 .map(attachment -> new ManualBidNoticeAttachment(
@@ -218,6 +224,68 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    @Override
+    public long countActiveAttachments(Long noticeId) {
+        return attachmentRepository.countByBidNoticeIdAndDeletedAtIsNull(noticeId);
+    }
+
+    @Override
+    @Transactional
+    public PendingAttachmentUpload createPendingUpload(
+            Long noticeId,
+            String fileName,
+            String storageKey,
+            long sizeBytes,
+            String mimeType,
+            LocalDateTime now
+    ) {
+        int nextOrder = attachmentRepository
+                .findFirstByBidNoticeIdAndAttachmentKindOrderByAttachmentOrderDesc(
+                        noticeId, BidNoticeAttachmentJpaEntity.UPLOAD_ATTACHMENT_KIND
+                )
+                .map(entity -> entity.getAttachmentOrder().intValue() + 1)
+                .orElse(1);
+
+        BidNoticeAttachmentJpaEntity saved = attachmentRepository.saveAndFlush(
+                BidNoticeAttachmentJpaEntity.createPendingUpload(
+                        noticeId, nextOrder, fileName, storageKey, sizeBytes, mimeType, now
+                )
+        );
+
+        return new PendingAttachmentUpload(
+                saved.getBidNoticeAttachmentId(), saved.getFileName(),
+                saved.getStorageKey(), saved.getSizeBytes(), saved.isUploading()
+        );
+    }
+
+    @Override
+    public Optional<PendingAttachmentUpload> findPendingUpload(Long noticeId, Long attachmentId) {
+        return attachmentRepository.findByBidNoticeAttachmentIdAndBidNoticeIdAndAttachmentKind(
+                        attachmentId, noticeId, BidNoticeAttachmentJpaEntity.UPLOAD_ATTACHMENT_KIND
+                )
+                .map(entity -> new PendingAttachmentUpload(
+                        entity.getBidNoticeAttachmentId(), entity.getFileName(),
+                        entity.getStorageKey(), entity.getSizeBytes(), entity.isUploading()
+                ));
+    }
+
+    @Override
+    @Transactional
+    public void completeUpload(Long attachmentId, long verifiedSizeBytes, LocalDateTime now) {
+        BidNoticeAttachmentJpaEntity entity = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new IllegalStateException("업로드 대상 첨부를 찾을 수 없습니다."));
+        entity.completeUpload(verifiedSizeBytes, now);
+    }
+
+    // ⚠️ REQUIRES_NEW - 호출부(BidNoticeCommandService)가 이 실패를 던진 뒤 자기 트랜잭션을 예외로
+    // 굴리더라도(ConflictException), 이 실패 기록은 별도로 커밋돼 UPLOADING으로 영영 남지 않게 한다.
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void failUploadInNewTransaction(Long attachmentId, LocalDateTime now) {
+        attachmentRepository.findById(attachmentId)
+                .ifPresent(entity -> entity.failUpload(now));
     }
 
     private LocalDateTime resolveChangedAt(ManualBidNotice notice) {

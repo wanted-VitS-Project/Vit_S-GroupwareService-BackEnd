@@ -6,6 +6,7 @@ public record BidNoticeStatusResult(
         Long noticeId,
         String noticeStatus,
         String dismissReason,
+        boolean isFavorite,
         LocalDateTime updatedAt
 ) {
 }

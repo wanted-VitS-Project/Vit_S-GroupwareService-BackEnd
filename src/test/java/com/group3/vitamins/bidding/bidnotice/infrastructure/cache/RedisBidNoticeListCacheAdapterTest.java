@@ -5,6 +5,7 @@ import com.group3.vitamins.bidding.bidnotice.application.query.SearchBidNoticesQ
 import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeListResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -95,6 +96,25 @@ class RedisBidNoticeListCacheAdapterTest {
     }
 
     @Test
+    void usesDifferentCacheKeysForFavoriteAndNonFavoriteQueries() {
+        // favorite 필터가 캐시 키에 반영되지 않으면, 관심 목록만 보는 조회가 전체 목록 캐시를
+        // 그대로 돌려주는(또는 반대) 오염이 생긴다 - 이 테스트는 그 회귀를 잡기 위한 것이다.
+        BidNoticeListResult result = new BidNoticeListResult(List.of(), 0, 0, 0, 20);
+        SearchBidNoticesQuery favoriteQuery = new SearchBidNoticesQuery(
+                null, null, null, null, null, null,
+                "smart-city", "COLLECTED", true, "ANNOUNCED_DESC",
+                0, 20, "EMP001", "ADMIN"
+        );
+
+        adapter.put(10L, query(), "4", result);
+        adapter.put(10L, favoriteQuery, "4", result);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(valueOperations, times(2)).set(keyCaptor.capture(), anyString(), eq(Duration.ofHours(24)));
+        assertThat(keyCaptor.getAllValues().get(0)).isNotEqualTo(keyCaptor.getAllValues().get(1));
+    }
+
+    @Test
     void incrementsOnlyTargetCompanyVersion() {
         assertThat(adapter.invalidate(10L)).isTrue();
 
@@ -124,7 +144,7 @@ class RedisBidNoticeListCacheAdapterTest {
     private SearchBidNoticesQuery query() {
         return new SearchBidNoticesQuery(
                 null, null, null, null, null, null,
-                "smart-city", "COLLECTED", "ANNOUNCED_DESC",
+                "smart-city", "COLLECTED", null, "ANNOUNCED_DESC",
                 0, 20, "EMP001", "ADMIN"
         );
     }

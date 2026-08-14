@@ -22,7 +22,7 @@ public record BidNoticeListResponse(
             String sourceUrl, String noticeAgency, Long businessCategoryId,
             String businessCategoryName, BigDecimal baseAmount, BigDecimal estimatedAmount,
             LocalDateTime announcedAt, LocalDateTime bidDeadlineAt, Integer dDay,
-            boolean isNew, String noticeStatus, Long projectId
+            boolean isNew, String noticeStatus, boolean isFavorite, Long projectId
     ) {
         static Item from(BidNoticeListItemResult result) {
             return new Item(
@@ -30,7 +30,7 @@ public record BidNoticeListResponse(
                     result.sourceUrl(), result.noticeAgency(), result.businessCategoryId(),
                     result.businessCategoryName(), result.baseAmount(), result.estimatedAmount(),
                     result.announcedAt(), result.bidDeadlineAt(), result.dDay(), result.isNew(),
-                    result.noticeStatus(), result.projectId()
+                    result.noticeStatus(), result.isFavorite(), result.projectId()
             );
         }
     }

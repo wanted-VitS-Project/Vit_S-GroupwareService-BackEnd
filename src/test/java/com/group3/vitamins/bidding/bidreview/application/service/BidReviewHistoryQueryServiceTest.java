@@ -11,6 +11,7 @@ import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingE
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,17 +57,44 @@ class BidReviewHistoryQueryServiceTest {
     @Test
     @DisplayName("본인이 요청한 이력을 최신순으로 반환한다")
     void returnsHistory() {
-        when(historyQueryPort.findHistory(COMPANY_ID, NOTICE_ID, USER_ID))
+        when(historyQueryPort.countHistory(COMPANY_ID, NOTICE_ID, USER_ID)).thenReturn(1L);
+        when(historyQueryPort.findHistory(COMPANY_ID, NOTICE_ID, USER_ID, 0, 20))
                 .thenReturn(List.of(new HistoryRow(
                         71L, "COMPLETED", "검토 지시", NOW, NOW, null, null
                 )));
 
         BidReviewHistoryResult result = service.get(
-                new GetBidReviewHistoryQuery(NOTICE_ID, USER_ID, ROLE)
+                new GetBidReviewHistoryQuery(NOTICE_ID, 0, 20, USER_ID, ROLE)
         );
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).reviewId()).isEqualTo(71L);
+        assertThat(result.totalElements()).isEqualTo(1L);
+        assertThat(result.totalPages()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("요청한 페이지가 전체 페이지 수를 넘으면 조회 없이 빈 목록을 반환한다")
+    void returnsEmptyWhenPageExceedsTotalPages() {
+        when(historyQueryPort.countHistory(COMPANY_ID, NOTICE_ID, USER_ID)).thenReturn(1L);
+
+        BidReviewHistoryResult result = service.get(
+                new GetBidReviewHistoryQuery(NOTICE_ID, 5, 20, USER_ID, ROLE)
+        );
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isEqualTo(1L);
+        verify(historyQueryPort, never()).findHistory(any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("페이지 크기가 50을 넘으면 400을 던진다")
+    void rejectsPageSizeOverMax() {
+        assertThatThrownBy(() -> service.get(
+                new GetBidReviewHistoryQuery(NOTICE_ID, 0, 51, USER_ID, ROLE)
+        )).isInstanceOf(ValidationException.class);
+
+        verifyNoInteractions(biddingAccessPolicy, noticeDocumentPort, historyQueryPort);
     }
 
     @Test
@@ -76,7 +104,7 @@ class BidReviewHistoryQueryServiceTest {
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(
-                new GetBidReviewHistoryQuery(NOTICE_ID, USER_ID, ROLE)
+                new GetBidReviewHistoryQuery(NOTICE_ID, 0, 20, USER_ID, ROLE)
         ))
                 .isInstanceOf(NotFoundException.class)
                 .satisfies(exception -> assertThat(((NotFoundException) exception).getErrorCode())
@@ -92,7 +120,7 @@ class BidReviewHistoryQueryServiceTest {
                 .when(biddingAccessPolicy).assertAccess(USER_ID, ROLE);
 
         assertThatThrownBy(() -> service.get(
-                new GetBidReviewHistoryQuery(NOTICE_ID, USER_ID, ROLE)
+                new GetBidReviewHistoryQuery(NOTICE_ID, 0, 20, USER_ID, ROLE)
         )).isInstanceOf(ForbiddenException.class);
 
         verifyNoInteractions(noticeDocumentPort, historyQueryPort);

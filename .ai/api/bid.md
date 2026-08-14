@@ -1,9 +1,9 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
+**최종 동기화**: 2026-08-14 (공고 관심 등록/해제 신설 + 목록 조회 favorite 필터 — FE 공유 필요)
+**최종 동기화**: 2026-08-14 (직접 등록 공고 첨부 업로드 신설 + 검토 이력 조회 페이지네이션 전환 — FE 공유 필요)
 **최종 동기화**: 2026-08-14 (공고 프로젝트 전환 서버 처리 13번 — 기본 스테이지·스텝 자동 생성 안 함으로 확정)
-**최종 동기화**: 2026-08-13 (입찰 기준자료 파일함 CRUD 4개 API 폐기 — FE 미사용 확인, companydocument 참조로 대체)
-**최종 동기화**: 2026-08-13 (검토 임시파일 보관 정책 변경 — 완료 후 고정 3시간 → 공고 입찰마감일시까지, 마감일 없으면 3시간 fallback)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -24,6 +24,10 @@
 | ✅ 확정 | 입찰 공고 상세 조회 | GET | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
 | ✅ 확정 | 입찰 공고 직접 등록 | POST | `/api/v1/bidding/notices` | `BIDDING` |
 | ✅ 확정 | 직접 등록 공고 수정 | PATCH | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
+| ✅ 확정 (2026-08-14 신설) | 직접 등록 공고 첨부 업로드 시작 | POST | `/api/v1/bidding/notices/{noticeId}/attachments/uploads` | `BIDDING` |
+| ✅ 확정 (2026-08-14 신설) | 직접 등록 공고 첨부 업로드 완료 통보 | POST | `/api/v1/bidding/notices/{noticeId}/attachments/uploads/{attachmentId}/complete` | `BIDDING` |
+| ✅ 확정 (2026-08-14 신설) | 공고 관심 등록 | PATCH | `/api/v1/bidding/notices/{noticeId}/favorite` | `BIDDING` |
+| ✅ 확정 (2026-08-14 신설) | 공고 관심 해제 | PATCH | `/api/v1/bidding/notices/{noticeId}/unfavorite` | `BIDDING` |
 | ✅ 확정 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
 | ✅ 확정 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
 | ✔️ 완료 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
@@ -643,6 +647,7 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `deadlineSoon` | 마감 임박 여부 |
 | `keyword` | 검색어 |
 | `noticeStatus` | 회사별 공고 상태. `COLLECTED`, `DISMISSED`. 생략하면 `COLLECTED`로 조회하여 제외 공고를 일반 목록에서 숨긴다 |
+| `favorite` | (2026-08-14 신설) `true`면 현재 회사가 관심 등록한 공고만 조회. 생략하거나 `false`면 필터 없음 |
 | `sort` | `ANNOUNCED_DESC`(기본), `DEADLINE_ASC`, `AMOUNT_DESC` |
 | `page` | 0부터 시작하는 페이지. 기본 `0` |
 | `size` | 페이지 크기. 기본 `20`, 최대 `100` |
@@ -666,6 +671,7 @@ Outbox는 최소한 아래 정보를 관리한다.
 | `dDay` | D-day |
 | `isNew` | 신규 배지 표시 여부 |
 | `noticeStatus` | 공고 상태 |
+| `isFavorite` | (2026-08-14 신설) 현재 회사의 관심 등록 여부(회사 공용 - `favorite` 필터 여부와 무관하게 항목마다 항상 반환) |
 | `projectId` | 전환된 프로젝트 ID |
 
 목록 응답은 `content`, `totalElements`, `totalPages`, `page`, `size`를 반환한다.
@@ -754,8 +760,15 @@ Outbox는 최소한 아래 정보를 관리한다.
 | 삭제 | 영구 삭제 API를 제공하지 않는다. 추후 공고 제외·복구 API로 회사별 노출 상태만 변경한다 |
 | 프로젝트 보호 | 프로젝트 전환 여부와 관계없이 공고 원본과 첨부 링크는 물리 삭제하지 않는다 |
 
-첨부는 파일 도메인의 업로드 파일이 아니라 공개된 원문 링크다. 파일 도메인의 파일은 프로젝트 소속이므로,
-프로젝트 전환 전 공고에 연결하지 않는다. 인증키·토큰·서명이 포함된 임시 URL은 저장하지 않는다.
+첨부는 기본적으로 파일 도메인의 업로드 파일이 아니라 공개된 원문 링크다. 파일 도메인의 파일은 프로젝트
+소속이므로, 프로젝트 전환 전 공고에 연결하지 않는다. 인증키·토큰·서명이 포함된 임시 URL은 저장하지 않는다.
+
+**(2026-08-14 추가) 공개 URL이 없는 첨부는 실제 업로드로 등록할 수 있다.** 직접 등록(MANUAL) 공고에
+한해 "첨부 업로드 시작/완료" API로 파일을 올릴 수 있으며, 완료 확인된 업로드는 링크형 첨부와 동일하게
+`bid_notice_attachment_id`로 검토(bidreview)에서 선택 가능하다. 링크형(`sourceUrl`)과 업로드형은 같은
+`bid_notice_attachment` 행을 공유하되 정확히 하나만 채워지며, 회사가 등록한 공고 전체 첨부 개수(링크+업로드
+합산)는 최대 10개로 동일하게 제한된다. 아래 "직접 등록" 첨부 명세는 링크형에 대한 것이고, 업로드형은
+별도 절("직접 등록 공고 첨부 업로드") 참고.
 
 ### 직접 등록 `POST /api/v1/bidding/notices`
 
@@ -887,6 +900,87 @@ Outbox는 최소한 아래 정보를 관리한다.
 
 ---
 
+## 직접 등록 공고 첨부 업로드 (2026-08-14 신설)
+
+**상태**: ✅ 확정
+
+공개 URL이 없는 첨부파일을 위한 실제 업로드 경로다. 링크형 첨부(`sourceUrl`)와 달리 파일을 S3에
+직접 올리며, presigned PUT URL 발급(시작) → 클라이언트 업로드 → 완료 통보(서버가 HEAD로 검증)
+2단계로 이뤄진다. 사내 문서함 업로드(CDOC-003)와 동일하게 최대 50MB, 실행 파일 확장자(`exe`,
+`bat`, `sh`, `jar`, `cmd`, `com`, `msi`, `scr`, `dll`, `bin`, `app`)는 거부한다.
+
+### 첨부 업로드 시작 `POST /api/v1/bidding/notices/{noticeId}/attachments/uploads`
+
+**Request Body**
+
+| 필드 | 타입 | 필수 | 규칙 |
+|------|------|------|------|
+| `fileName` | String | Y | 1~255자, 원본 파일명 |
+| `mimeType` | String | Y | 1~100자 |
+| `sizeBytes` | Long | Y | 1 이상, 최대 50MB |
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 201,
+  "message": "업로드 슬롯이 생성됐습니다.",
+  "data": {
+    "attachmentId": 501,
+    "uploadUrl": "https://s3.../presigned-put-url",
+    "expiresAt": "2026-08-14T12:10:00Z"
+  }
+}
+```
+
+`attachmentId`는 완료 통보 API에 그대로 사용한다.
+
+### 첨부 업로드 완료 통보 `POST /api/v1/bidding/notices/{noticeId}/attachments/uploads/{attachmentId}/complete`
+
+Request Body는 없다. 서버가 저장소 HEAD로 객체 존재·크기를 검증한 뒤에만 첨부를 `READY`로 반영한다.
+
+**Success Response**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "첨부 업로드 완료가 확인됐습니다.",
+  "data": {
+    "attachmentId": 501,
+    "fileName": "제안요청서.pdf",
+    "sizeBytes": 1048576
+  }
+}
+```
+
+### 처리 규칙
+
+1. 대상 공고가 현재 회사 소유의 직접 등록(MANUAL) 공고인지 확인한다(수정 API와 동일 판정).
+2. 링크형+업로드형을 합친 현재 활성 첨부가 10개 미만인지 확인한다(시작 시점).
+3. 완료 통보 시 `UPLOADING` 상태가 아니면 거부한다(중복 통보 방지).
+4. 저장소에 객체가 없거나 크기가 요청과 다르면 `FAILED`로 종료하고 409를 반환한다. 실패한 업로드는
+   재시도 대상이 아니며 클라이언트가 새 업로드를 다시 시작해야 한다.
+5. 완료(`READY`) 처리된 첨부만 검토(bidreview) 자료 조회·검토 요청에서 선택 가능하다.
+
+### Status Code
+
+| HTTP | code | 적용 API | 설명 |
+|------|------|----------|------|
+| 201 | - | 시작 | 업로드 슬롯 생성 성공 |
+| 200 | - | 완료 통보 | 업로드 완료 확인 성공 |
+| 400 | `BIDDING_INVALID_MANUAL_NOTICE` | 시작 | 파일명·크기·확장자가 올바르지 않음 |
+| 401 | `AUTH_UNAUTHENTICATED` | 전체 | 세션 없음 또는 만료 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 전체 | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 전체 | 현재 회사에서 접근할 수 있는 공고가 없음 |
+| 404 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_NOT_FOUND` | 완료 통보 | 업로드 대상 첨부를 찾을 수 없음 |
+| 409 | `BIDDING_NOTICE_EDIT_NOT_ALLOWED` | 전체 | 외부 수집 공고처럼 직접 등록 대상이 아님 |
+| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_LIMIT_EXCEEDED` | 시작 | 첨부 개수가 이미 10개(링크+업로드 합산) |
+| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED` | 완료 통보 | 이미 완료 또는 실패 처리된 업로드 |
+| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND` | 완료 통보 | 저장소에서 객체를 찾을 수 없음(FAILED로 종료됨) |
+| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH` | 완료 통보 | 저장된 객체 크기가 요청과 다름(FAILED로 종료됨) |
+
+---
+
 ## 공고 제외 및 복구
 
 **상태**: ✅ 확정
@@ -969,6 +1063,54 @@ Request Body는 없다.
 | 404 | `BIDDING_NOTICE_NOT_FOUND` | 제외·복구 | 현재 회사에서 조회할 수 없는 공고 |
 | 409 | `BIDDING_NOTICE_ALREADY_DISMISSED` | 제외 | 이미 제외된 공고 |
 | 409 | `BIDDING_NOTICE_NOT_DISMISSED` | 복구 | 제외 상태가 아닌 공고 |
+
+---
+
+## 공고 관심 등록 및 해제 (2026-08-14 신설)
+
+**상태**: ✅ 확정
+
+**회사 공용 관심 목록이다 — 개인별이 아니다.** 어느 직원이 등록·해제해도 같은 회사 전원에게 동일하게
+보인다. `notice_status`(COLLECTED/DISMISSED)와는 독립적인 별도 플래그라, 제외(DISMISSED)된 공고도
+관심 등록 상태를 유지할 수 있다.
+
+| API | 설명 |
+|-----|------|
+| `PATCH /api/v1/bidding/notices/{noticeId}/favorite` | 현재 회사 공용 관심 목록에 공고 등록 |
+| `PATCH /api/v1/bidding/notices/{noticeId}/unfavorite` | 현재 회사 공용 관심 목록에서 공고 해제 |
+
+두 API 모두 Request Body는 없다.
+
+**Success Response** (둘 다 같은 구조 — "공고 제외 및 복구"의 `BidNoticeStatusResponse`와 동일 스키마에
+`isFavorite` 필드만 추가됐다)
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입찰 공고 관심 등록 성공",
+  "data": {
+    "noticeId": 1,
+    "noticeStatus": "COLLECTED",
+    "dismissReason": null,
+    "isFavorite": true,
+    "updatedAt": "2026-08-14T16:00:00"
+  }
+}
+```
+
+관심 목록만 따로 보고 싶으면 `GET /api/v1/bidding/notices?favorite=true`를 호출한다(위 "입찰 공고 목록
+조회" 참고 — 새 항목이 아니라 기존 목록 API에 필터 하나 추가한 것).
+
+### Status Code
+
+| HTTP | code | 적용 API | 설명 |
+|------|------|----------|------|
+| 200 | - | 등록·해제 | 처리 성공 |
+| 401 | `AUTH_UNAUTHENTICATED` | 등록·해제 | 인증되지 않음 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 등록·해제 | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_NOTICE_NOT_FOUND` | 등록·해제 | 현재 회사에서 조회할 수 없는 공고 |
+| 409 | `BIDDING_NOTICE_ALREADY_FAVORITED` | 등록 | 이미 관심 등록된 공고 |
+| 409 | `BIDDING_NOTICE_NOT_FAVORITED` | 해제 | 관심 등록되지 않은 공고 |
 
 ---
 
@@ -1605,17 +1747,39 @@ FE는 원래부터 이 필드를 쓴 적이 없다고 확인됨. FE에 신규 �
 
 ## 공고별 입찰 문서 검토 이력 조회 `GET /api/v1/bidding/notices/{noticeId}/reviews`
 
-**상태**: ✅ 확정
+**상태**: ✅ 확정 (2026-08-14 변경 — 최대 20건 고정 배열에서 AI 요약 이력 조회와 동일한 page/size 페이지네이션으로 전환)
 
-현재 회사에서 본인이 요청한 검토 이력을 최신순으로 조회한다. 최대 20건을 반환하며 임시파일의 원본 URL과 저장 키는 포함하지 않는다.
+현재 회사에서 본인이 요청한 검토 이력을 최신순으로 페이지 단위 조회한다. 임시파일의 원본 URL과 저장 키는 포함하지 않는다.
 
-각 항목은 `reviewId`, `reviewStatus`, `prompt`, `requestedAt`, `completedAt`, `expiresAt`, `projectId`를 반환한다.
+### Query Parameter
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|----------|------|------|--------|------|
+| `page` | Integer | N | `0` | 0부터 시작하는 페이지 번호 |
+| `size` | Integer | N | `20` | 페이지 크기. 최대 50 |
+
+### Response Data
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `content[].reviewId` | Long | 검토 ID |
+| `content[].reviewStatus` | String | 검토 상태 |
+| `content[].prompt` | String | 요청 당시 사용자 프롬프트 |
+| `content[].requestedAt` | String | 요청 시각 |
+| `content[].completedAt` | String | 완료 또는 실패 시각. 없으면 `null` |
+| `content[].expiresAt` | String | 임시파일 정리 예정 시각. 없으면 `null` |
+| `content[].projectId` | Long | 정식 프로젝트로 귀속됐으면 프로젝트 ID. 없으면 `null` |
+| `totalElements` | Long | 조회 가능한 전체 이력 수 |
+| `totalPages` | Integer | 전체 페이지 수 |
+| `page` | Integer | 현재 페이지 |
+| `size` | Integer | 페이지 크기 |
 
 ### Status Code
 
 | HTTP | code | 설명 |
 |------|------|------|
 | 200 | - | 조회 성공. 이력이 없으면 빈 배열 |
+| 400 | `BIDDING_INVALID_REVIEW_REQUEST` | 공고 ID 또는 페이징 값 오류 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
 | 404 | `BIDDING_NOTICE_NOT_FOUND` | 현재 회사에서 조회할 수 있는 공고가 없음 |

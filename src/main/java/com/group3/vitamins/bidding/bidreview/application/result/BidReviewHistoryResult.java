@@ -4,7 +4,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record BidReviewHistoryResult(
-        List<HistoryItemResult> content
+        List<HistoryItemResult> content,
+        long totalElements,
+        int totalPages,
+        int page,
+        int size
 ) {
 
     public record HistoryItemResult(

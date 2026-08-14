@@ -1,11 +1,18 @@
 package com.group3.vitamins.bidding.bidnotice.application.service;
 
+import com.group3.vitamins.bidding.bidnotice.application.command.CompleteBidNoticeAttachmentUploadCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.CreateManualBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.DismissBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.FavoriteBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.PatchField;
 import com.group3.vitamins.bidding.bidnotice.application.command.RestoreBidNoticeCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.StartBidNoticeAttachmentUploadCommand;
+import com.group3.vitamins.bidding.bidnotice.application.command.UnfavoriteBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.command.UpdateManualBidNoticeCommand;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort;
+import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeCommandPort.PendingAttachmentUpload;
+import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeAttachmentUploadCompleteResult;
+import com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeAttachmentUploadStartResult;
 import com.group3.vitamins.bidding.bidnotice.application.port.BidNoticeStatusHistoryPort;
 import com.group3.vitamins.bidding.bidnotice.application.port.CompanyBidNoticeStatePort;
 import com.group3.vitamins.bidding.bidnotice.application.support.ManualBidNoticeDedupKeyGenerator;
@@ -20,6 +27,7 @@ import com.group3.vitamins.bidding.collectioncondition.application.policy.Biddin
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.InternationalBidType;
+import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.DomainException;
@@ -29,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -55,6 +64,7 @@ class BidNoticeCommandServiceTest {
     private CurrentCompanyIdProvider companyIdProvider;
     private BiddingAccessPolicy biddingAccessPolicy;
     private DomainEventPublisher eventPublisher;
+    private FileStoragePort fileStoragePort;
     private BidNoticeCommandService service;
 
     @BeforeEach
@@ -65,6 +75,7 @@ class BidNoticeCommandServiceTest {
         companyIdProvider = mock(CurrentCompanyIdProvider.class);
         biddingAccessPolicy = mock(BiddingAccessPolicy.class);
         eventPublisher = mock(DomainEventPublisher.class);
+        fileStoragePort = mock(FileStoragePort.class);
 
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
         when(commandPort.findManualSourceId()).thenReturn(Optional.of(3L));
@@ -78,7 +89,8 @@ class BidNoticeCommandServiceTest {
                 companyIdProvider,
                 biddingAccessPolicy,
                 new ManualBidNoticeDedupKeyGenerator(),
-                eventPublisher
+                eventPublisher,
+                fileStoragePort
         );
     }
 
@@ -313,6 +325,217 @@ class BidNoticeCommandServiceTest {
         verifyNoInteractions(statusHistoryPort);
     }
 
+    @Test
+    @DisplayName("현재 회사 공용 관심 목록에 공고를 등록한다")
+    void favoritesCompanyNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(collectedState()));
+
+        var result = service.favorite(new FavoriteBidNoticeCommand(NOTICE_ID, USER_ID, "ADMIN"));
+
+        ArgumentCaptor<CompanyBidNoticeState> stateCaptor =
+                ArgumentCaptor.forClass(CompanyBidNoticeState.class);
+        verify(companyStatePort).update(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().isFavorite()).isTrue();
+        assertThat(result.isFavorite()).isTrue();
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
+    }
+
+    @Test
+    @DisplayName("이미 관심 등록된 공고를 다시 등록하면 409를 던진다")
+    void rejectsFavoritingAlreadyFavoritedNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(collectedState().markFavorite(ANNOUNCED_AT)));
+
+        assertError(
+                () -> service.favorite(new FavoriteBidNoticeCommand(NOTICE_ID, USER_ID, "ADMIN")),
+                BiddingErrorCode.BIDDING_NOTICE_ALREADY_FAVORITED
+        );
+
+        verify(companyStatePort, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("관심 등록된 공고를 해제한다")
+    void unfavoritesCompanyNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(collectedState().markFavorite(ANNOUNCED_AT)));
+
+        var result = service.unfavorite(new UnfavoriteBidNoticeCommand(NOTICE_ID, USER_ID, "ADMIN"));
+
+        ArgumentCaptor<CompanyBidNoticeState> stateCaptor =
+                ArgumentCaptor.forClass(CompanyBidNoticeState.class);
+        verify(companyStatePort).update(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().isFavorite()).isFalse();
+        assertThat(result.isFavorite()).isFalse();
+        verify(eventPublisher).publish(new BidNoticeListChangedEvent(COMPANY_ID));
+    }
+
+    @Test
+    @DisplayName("관심 등록되지 않은 공고를 해제하면 409를 던진다")
+    void rejectsUnfavoritingNotFavoritedNotice() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(collectedState()));
+
+        assertError(
+                () -> service.unfavorite(new UnfavoriteBidNoticeCommand(NOTICE_ID, USER_ID, "ADMIN")),
+                BiddingErrorCode.BIDDING_NOTICE_NOT_FAVORITED
+        );
+
+        verify(companyStatePort, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("제외(DISMISSED)된 공고도 관심 등록할 수 있다 - notice_status와 독립적이다")
+    void favoritesDismissedNoticeToo() {
+        when(companyStatePort.findForUpdate(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(dismissedState()));
+
+        var result = service.favorite(new FavoriteBidNoticeCommand(NOTICE_ID, USER_ID, "ADMIN"));
+
+        assertThat(result.isFavorite()).isTrue();
+        assertThat(result.noticeStatus()).isEqualTo("DISMISSED");
+    }
+
+    @Test
+    @DisplayName("직접 등록 공고에 업로드 슬롯을 만들고 presigned URL을 발급한다")
+    void startsAttachmentUpload() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.countActiveAttachments(NOTICE_ID)).thenReturn(0L);
+        when(commandPort.createPendingUpload(
+                eq(NOTICE_ID), eq("제안요청서.pdf"), anyString(), eq(1024L), eq("application/pdf"), any()
+        )).thenReturn(new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true));
+        Instant expiresAt = Instant.parse("2026-08-14T12:10:00Z");
+        when(fileStoragePort.presignUpload(anyString(), eq("application/pdf"), eq(1024L)))
+                .thenReturn(new FileStoragePort.PresignedUrl("https://s3.example/upload", expiresAt));
+
+        BidNoticeAttachmentUploadStartResult result = service.startAttachmentUpload(
+                new StartBidNoticeAttachmentUploadCommand(
+                        NOTICE_ID, "제안요청서.pdf", "application/pdf", 1024L, USER_ID, "ADMIN"
+                )
+        );
+
+        assertThat(result.attachmentId()).isEqualTo(501L);
+        assertThat(result.uploadUrl()).isEqualTo("https://s3.example/upload");
+        assertThat(result.expiresAt()).isEqualTo(expiresAt);
+    }
+
+    @Test
+    @DisplayName("첨부가 이미 10개면 업로드 슬롯을 만들지 않는다")
+    void rejectsStartingUploadWhenAttachmentLimitReached() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.countActiveAttachments(NOTICE_ID)).thenReturn(10L);
+
+        assertError(
+                () -> service.startAttachmentUpload(new StartBidNoticeAttachmentUploadCommand(
+                        NOTICE_ID, "제안요청서.pdf", "application/pdf", 1024L, USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_LIMIT_EXCEEDED
+        );
+
+        verify(commandPort, never()).createPendingUpload(any(), any(), any(), anyLong(), any(), any());
+        verifyNoInteractions(fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("실행 파일 확장자는 업로드 요청 자체를 거부한다")
+    void rejectsBlockedExtensionOnUploadStart() {
+        assertError(
+                () -> service.startAttachmentUpload(new StartBidNoticeAttachmentUploadCommand(
+                        NOTICE_ID, "설치파일.exe", "application/x-msdownload", 1024L, USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_INVALID_MANUAL_NOTICE
+        );
+
+        verifyNoInteractions(commandPort, fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("저장소 HEAD 검증에 성공하면 업로드를 완료 처리한다")
+    void completesAttachmentUpload() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true)
+        ));
+        when(fileStoragePort.head("companies/10/bidding/notices/100/attachments/x"))
+                .thenReturn(Optional.of(new FileStoragePort.StoredObject(1024L)));
+
+        BidNoticeAttachmentUploadCompleteResult result = service.completeAttachmentUpload(
+                new CompleteBidNoticeAttachmentUploadCommand(NOTICE_ID, 501L, USER_ID, "ADMIN")
+        );
+
+        assertThat(result.attachmentId()).isEqualTo(501L);
+        assertThat(result.fileName()).isEqualTo("제안요청서.pdf");
+        assertThat(result.sizeBytes()).isEqualTo(1024L);
+        verify(commandPort).completeUpload(eq(501L), eq(1024L), any());
+        verify(commandPort, never()).failUploadInNewTransaction(any(), any());
+    }
+
+    @Test
+    @DisplayName("저장소에 객체가 없으면 실패로 종료하고 409를 던진다")
+    void failsUploadWhenObjectMissing() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true)
+        ));
+        when(fileStoragePort.head("companies/10/bidding/notices/100/attachments/x"))
+                .thenReturn(Optional.empty());
+
+        assertError(
+                () -> service.completeAttachmentUpload(
+                        new CompleteBidNoticeAttachmentUploadCommand(NOTICE_ID, 501L, USER_ID, "ADMIN")
+                ),
+                BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND
+        );
+
+        verify(commandPort).failUploadInNewTransaction(eq(501L), any());
+        verify(commandPort, never()).completeUpload(any(), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("저장된 객체 크기가 요청과 다르면 실패로 종료하고 409를 던진다")
+    void failsUploadWhenSizeMismatches() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true)
+        ));
+        when(fileStoragePort.head("companies/10/bidding/notices/100/attachments/x"))
+                .thenReturn(Optional.of(new FileStoragePort.StoredObject(999L)));
+
+        assertError(
+                () -> service.completeAttachmentUpload(
+                        new CompleteBidNoticeAttachmentUploadCommand(NOTICE_ID, 501L, USER_ID, "ADMIN")
+                ),
+                BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH
+        );
+
+        verify(commandPort).failUploadInNewTransaction(eq(501L), any());
+    }
+
+    @Test
+    @DisplayName("이미 완료 처리된 업로드를 다시 완료 통보하면 409를 던진다")
+    void rejectsCompletingAlreadyCompletedUpload() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, false)
+        ));
+
+        assertError(
+                () -> service.completeAttachmentUpload(
+                        new CompleteBidNoticeAttachmentUploadCommand(NOTICE_ID, 501L, USER_ID, "ADMIN")
+                ),
+                BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED
+        );
+
+        verifyNoInteractions(fileStoragePort);
+    }
+
     // 명세의 필수값과 대표 선택값을 포함한 유효한 등록 명령을 만듭니다.
     private CreateManualBidNoticeCommand validCreateCommand(String sourceUrl) {
         return new CreateManualBidNoticeCommand(
@@ -460,6 +683,7 @@ class BidNoticeCommandServiceTest {
                 NOTICE_ID,
                 BidNoticeCompanyStatus.COLLECTED,
                 null,
+                false,
                 ANNOUNCED_AT
         );
     }
@@ -470,6 +694,7 @@ class BidNoticeCommandServiceTest {
                 NOTICE_ID,
                 BidNoticeCompanyStatus.DISMISSED,
                 "기존 제외 사유",
+                false,
                 ANNOUNCED_AT
         );
     }
