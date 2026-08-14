@@ -15,17 +15,17 @@ public class StepAccessPolicy {
     private static final Set<String> GLOBAL_ADMIN_ROLES = Set.of("MASTER", "ADMIN");
 
     /**
-     * 스텝 권한을 판정한다. 프로젝트 권한이 없으면 오버라이드를 보지 않고,
-     * 있으면 오버라이드가 우선하며 없을 때 프로젝트 권한을 상속한다.
-     * MASTER·ADMIN 은 오버라이드까지 무시하고 EDITOR 로 본다 — 프로젝트 권한 판정과 같은 기준이다.
+     * 스텝 권한을 판정한다. 프로젝트 권한이 없으면(미참여·타 회사) 오버라이드도 role 승격도 보지 않고 NONE 이다.
+     * 있으면 MASTER·ADMIN 은 오버라이드까지 무시하고 EDITOR, 그 외에는 오버라이드 우선·없으면 프로젝트 권한 상속.
+     * projectPermission 은 회사 경계를 이미 반영한다 — 타 회사면 ProjectAccessService 가 NONE 을 준다.
      */
     public MemberPermission resolve(String role, MemberPermission projectPermission,
                                     MemberPermission override) {
-        if (GLOBAL_ADMIN_ROLES.contains(role)) {
-            return MemberPermission.EDITOR;
-        }
         if (projectPermission == null || projectPermission == MemberPermission.NONE) {
             return MemberPermission.NONE;
+        }
+        if (GLOBAL_ADMIN_ROLES.contains(role)) {
+            return MemberPermission.EDITOR;
         }
         return override != null ? override : projectPermission;
     }
