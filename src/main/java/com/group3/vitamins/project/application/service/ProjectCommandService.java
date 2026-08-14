@@ -98,7 +98,7 @@ public class ProjectCommandService implements ProjectCommandUseCase {
                 ProjectMember.createEditor(saved.getProjectId(), command.requesterUserId(), now));
 
         if (!categoryIds.isEmpty()) {
-            projectBusinessCategoryRepository.linkAll(saved.getProjectId(), categoryIds);
+            projectBusinessCategoryRepository.linkAll(companyId, saved.getProjectId(), categoryIds);
         }
 
         String createdByName = employeeLookupPort.findNameByUserId(command.requesterUserId());
@@ -319,7 +319,8 @@ public class ProjectCommandService implements ProjectCommandUseCase {
             throw new ConflictException(ProjectErrorCode.BUSINESS_CATEGORY_DUPLICATED);
         }
 
-        projectBusinessCategoryRepository.linkAll(command.projectId(), categoryIds);
+        projectBusinessCategoryRepository.linkAll(
+                currentCompanyIdProvider.currentCompanyId(), command.projectId(), categoryIds);
 
         // ⚠️ 응답은 describeLinked 다. resolveCategories(검증용)로 돌리면 예전에 연결해 둔 카테고리가
         //    그 사이 삭제됐을 때 개수가 안 맞아 404 가 나고, 방금 성공한 연결까지 롤백된다.
