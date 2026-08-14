@@ -135,6 +135,14 @@
         sb.planned_tax_amount AS plannedTaxAmount,
         sb.planned_date AS plannedDate,
         sb.trader_name AS traderName,
+        <!--
+            ⚠️ 아래 ORDER BY 가 이 별칭을 쓴다 — 파생 테이블이 내보내지 않으면 바깥 쿼리에서
+            Unknown column 'taxInvoiceDueDate' in 'order clause' 로 이 API 전체가 실패한다.
+            ⭐ 그런데 바깥 SELECT 목록에는 넣지 않는다 — 응답에는 기한 원본값을 내보내지 않기로 했다
+            (2026-08-14 사용자 확정: 판정 결과가 dateMatchType 태그로 이미 나가므로 원본값은 불필요).
+            정렬에만 쓰고 응답에서는 빠지는 컬럼이다.
+        -->
+        sb.tax_invoice_due_date AS taxInvoiceDueDate,
         CASE
         WHEN sb.planned_amount = #{totalAmount} THEN 'EXACT'
         WHEN sb.planned_amount BETWEEN #{totalAmount} * 0.95 AND #{totalAmount} * 1.05 THEN 'SIMILAR'
@@ -190,6 +198,13 @@
         + CASE WHEN taxAmountMatchType IS NOT NULL THEN 1 ELSE 0 END
         + CASE WHEN traderMatchType IS NOT NULL THEN 1 ELSE 0 END
         + CASE WHEN dateMatchType IS NOT NULL THEN 1 ELSE 0 END) DESC,
+        <!--
+            ⚠️ 기한이 NULL(면세 등)인 후보는 ABS(DATEDIFF(...)) 도 NULL 이고, MySQL 은 ASC 정렬에서
+            NULL 을 맨 앞에 놓는다. 그대로 두면 같은 매칭 개수에서 "기한이 아예 없는 회차"가
+            "기한이 정확히 일치하는 회차"보다 위로 올라간다. 일자 근접도를 계산할 수 없는 후보이므로
+            같은 매칭 개수 안에서는 뒤로 보낸다.
+        -->
+        taxInvoiceDueDate IS NULL ASC,
         ABS(DATEDIFF(taxInvoiceDueDate, #{issuedNo})) ASC
         LIMIT 5
     </select>

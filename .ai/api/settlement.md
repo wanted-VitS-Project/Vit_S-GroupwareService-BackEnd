@@ -471,6 +471,7 @@
   "plannedAmount": 1500000,
   "plannedTaxAmount": 200000,
   "plannedDate": "2026-09-01",
+  "taxInvoiceDueDate": "2026-09-10",
   "traderName": "(주)대한항공",
   "version": 1
 }
@@ -483,6 +484,7 @@
   "plannedAmount": 1500000,
   "plannedTaxAmount": 200000,
   "plannedDate": "2026-09-01",
+  "taxInvoiceDueDate": null,
   "traderName": "(주)대한항공",
   "bankName": "신한은행",
   "accountNumber": "100555074444",
@@ -528,6 +530,7 @@
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
+    "taxInvoiceDueDate": "2026-09-10",
     "traderName": "(주)대한항공",
     "bankName": null,
     "accountNumber": null,
@@ -553,6 +556,7 @@
     "plannedAmount": 1500000,
     "plannedTaxAmount": 200000,
     "plannedDate": "2026-09-01",
+    "taxInvoiceDueDate": null,
     "traderName": "(주)대한항공",
     "bankName": "신한은행",
     "accountNumber": "100******444",
