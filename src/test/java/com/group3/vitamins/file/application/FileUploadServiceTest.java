@@ -157,6 +157,8 @@ class FileUploadServiceTest {
             stubBlockAndEditable();
             stubUploader();
             when(fileRepository.findById(31L)).thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1)));
+            // 이 파일의 소유 블록이 요청 블록과 같아야 새 버전을 붙일 수 있다(IDOR 방어).
+            when(fileQueryPort.findBlockIdByFileId(31L)).thenReturn(Optional.of(BLOCK_ID));
             when(fileVersionRepository.findMaxVersionNo(31L)).thenReturn(1);
             when(fileVersionRepository.save(any())).thenReturn(uploadingVersion(75L, 31L, 2, "pdf"));
             when(fileStoragePort.presignUpload(anyString(), anyString(), anyLong()))
@@ -168,6 +170,33 @@ class FileUploadServiceTest {
             assertThat(result.versionNo()).isEqualTo(2);
             verify(fileRepository, never()).save(any());
             verify(blockFileRepository, never()).link(anyLong(), anyLong(), anyString());
+        }
+
+        @Test
+        @DisplayName("새 버전 — fileId 가 다른 블록 소유면 FILE_NOT_FOUND (크로스테넌트 IDOR 차단)")
+        void newVersionForFileOwnedByAnotherBlockRejected() {
+            stubBlockAndEditable();
+            when(fileRepository.findById(31L))
+                    .thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1)));
+            // 파일의 실제 소유 블록이 요청 블록(BLOCK_ID)이 아니다 — 타 블록·타 프로젝트·타 회사 문서에 버전 부착 시도.
+            when(fileQueryPort.findBlockIdByFileId(31L)).thenReturn(Optional.of(999L));
+
+            assertThatThrownBy(() -> service.startUpload(startCmd("제안서_v2.pdf", 5000L, null, 31L, false)))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
+            verify(fileVersionRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("새 버전 — 소유 블록 매핑이 없으면 FILE_NOT_FOUND")
+        void newVersionWithoutOwnerBlockRejected() {
+            stubBlockAndEditable();
+            when(fileRepository.findById(31L))
+                    .thenReturn(Optional.of(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1)));
+            when(fileQueryPort.findBlockIdByFileId(31L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.startUpload(startCmd("제안서_v2.pdf", 5000L, null, 31L, false)))
+                    .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
+            verify(fileVersionRepository, never()).save(any());
         }
 
         @Test
