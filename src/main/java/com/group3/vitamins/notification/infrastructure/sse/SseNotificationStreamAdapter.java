@@ -13,6 +13,7 @@ import org.springframework.session.Session;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -213,8 +214,9 @@ public class SseNotificationStreamAdapter implements NotificationStreamPort, Not
 
                 if (!alive) {
                     // RT-007 — 로그아웃·세션 만료·계정 잠금. 재연결하면 401 이라 여기서 끊는 게 맞다.
+                    // cause 가 null = 전송 실패가 아니라 **서버가 멀쩡한 연결을 끊는** 경우다 → complete() 필요.
                     log.debug("알림 SSE 세션 종료로 연결 정리 - userId={}", userId);
-                    discard(userId, subscription);
+                    discard(userId, subscription, null);
                     return;
                 }
                 dispatch(() -> ping(userId, subscription));
@@ -247,7 +249,7 @@ public class SseNotificationStreamAdapter implements NotificationStreamPort, Not
         } catch (Exception e) {
             // 끊긴 연결을 여기서 처음 발견하는 경우가 많다. 콜백이 안 불린 채 죽은 것을 회수한다.
             log.debug("알림 SSE 하트비트 실패로 연결 정리 - userId={} 사유={}", userId, e.toString());
-            discard(userId, subscription);
+            discard(userId, subscription, e);
         }
     }
 
@@ -266,7 +268,7 @@ public class SseNotificationStreamAdapter implements NotificationStreamPort, Not
             // IOException(브라우저가 닫음)뿐 아니라 IllegalStateException(이미 완료된 emitter)도 잡는다.
             // RT-004 — 실패를 위로 던지지 않는다. 알림 row 는 이미 커밋돼 목록 조회로 보인다.
             log.debug("알림 SSE 전송 실패로 연결 정리 - userId={} 사유={}", userId, e.toString());
-            discard(userId, subscription);
+            discard(userId, subscription, e);
         }
     }
 
@@ -284,9 +286,24 @@ public class SseNotificationStreamAdapter implements NotificationStreamPort, Not
         }
     }
 
-    /** 연결을 맵에서 빼고 닫는다. 닫는 것까지 실패해도 무시한다(이미 죽은 연결이다). */
-    private void discard(String userId, Subscription subscription) {
+    /**
+     * 연결을 맵에서 뺀다. 커넥션이 아직 살아 있는 경우에만 닫는다.
+     *
+     * @param cause 전송이 실패해서 정리하는 경우 그 예외, 서버가 스스로 끊는 경우(RT-007) {@code null}
+     */
+    private void discard(String userId, Subscription subscription, Exception cause) {
         remove(userId, subscription);
+
+        // ⚠️ I/O 로 실패한 연결에 complete() 를 부르면 안 된다. complete() 는 내부에서 flush 를 시도하고,
+        //    그 IOException 을 **우리에게 던지지 않고** deferredResult.setErrorResult() 로 넘긴다.
+        //    그러면 ASYNC ERROR 디스패치가 돌아 GlobalExceptionHandler 가 이 요청을
+        //    `[500] GET /api/v1/notifications/stream` 으로 기록한다 — 정상 종료인데 ERROR 로그가 남는다.
+        //    아래 catch 로는 절대 안 잡히므로 부르지 않는 것이 유일한 차단 방법이다(2026-08-14).
+        //    끊긴 커넥션의 뒷정리는 컨테이너의 onError → emitter.onError 콜백이 이미 처리한다.
+        if (cause instanceof IOException) {
+            return;
+        }
+
         try {
             subscription.emitter().complete();
         } catch (Exception ignored) {
