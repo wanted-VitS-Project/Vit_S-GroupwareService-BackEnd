@@ -100,10 +100,11 @@ class JpaCollectionRunOutboxStoreAdapterTest {
     }
 
     @Test
-    @DisplayName("보관 기간이 지난 PUBLISHED 행만 지우고 PENDING·FAILED·최근 PUBLISHED 행은 남긴다")
+    @DisplayName("보관 기간이 지난 PUBLISHED 행만 지우고 PENDING·FAILED·최근·경계값 PUBLISHED 행은 남긴다")
     void deletesOnlyStalePublishedRows() {
         insertOutboxRow("stale-published", "PUBLISHED", NOW.minusDays(10));
         insertOutboxRow("fresh-published", "PUBLISHED", NOW.minusDays(1));
+        insertOutboxRow("boundary-published", "PUBLISHED", CUTOFF);
         insertOutboxRow("stale-failed", "FAILED", null);
         insertOutboxRow("fresh-pending", "PENDING", null);
 
@@ -112,6 +113,8 @@ class JpaCollectionRunOutboxStoreAdapterTest {
         assertThat(deletedCount).isEqualTo(1);
         assertThat(countByEventId("stale-published")).isZero();
         assertThat(countByEventId("fresh-published")).isEqualTo(1);
+        // 쿼리 계약은 published_at < cutoff이므로 cutoff와 같은 시각은 지우면 안 된다.
+        assertThat(countByEventId("boundary-published")).isEqualTo(1);
         assertThat(countByEventId("stale-failed")).isEqualTo(1);
         assertThat(countByEventId("fresh-pending")).isEqualTo(1);
     }

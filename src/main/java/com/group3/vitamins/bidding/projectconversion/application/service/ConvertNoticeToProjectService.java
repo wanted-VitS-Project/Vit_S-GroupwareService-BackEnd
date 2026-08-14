@@ -26,6 +26,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -34,8 +36,8 @@ import java.util.List;
 /**
  * 공고 프로젝트 전환 오케스트레이션 (bid.md "공고 프로젝트 전환" §서버 처리).
  *
- * <p>1~12번까지 구현됨(6번은 별도 사전 체크 없이 11~12번의 {@code addMember} 내부 검증 +
- * 트랜잭션 롤백으로 충족 - 아래 8번 주석 참고). 기본 스테이지·스텝(13번)은 아직 TODO다.
+ * <p>1~13번까지 구현됨(6번은 별도 사전 체크 없이 11~12번의 {@code addMember} 내부 검증 +
+ * 트랜잭션 롤백으로 충족 - 아래 8번 주석 참고. 13번은 별도 구현 없이 확정 종료 - 아래 13번 주석 참고).
  */
 @Service
 @RequiredArgsConstructor
@@ -166,14 +168,20 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
             }
         }
 
-        // ⚠️ deleteObjects는 실패해도 예외를 던지지 않는다(FileStoragePort 계약) - 정식 파일로는
-        // 이미 귀속됐으니 임시 객체가 잠깐 남아도 데이터 정합성 문제는 아니다.
+        // ⚠️ 커밋 전에 지우면 안 된다 - 이 아래(review 연결·11~12번 addMember)에서 실패해 트랜잭션이
+        // 롤백되면 문서는 READY로 되돌아가는데 실제 객체는 이미 삭제돼 재시도 시 귀속할 원본이 없어진다.
+        // afterCommit 훅으로 미뤄서, 커밋에 실제로 성공했을 때만 지운다. deleteObjects 자체는 실패해도
+        // 예외를 던지지 않으므로(FileStoragePort 계약) 여기서 지우지 못해도 데이터 정합성 문제는 아니다.
         if (!promotableDocuments.isEmpty()) {
-            fileStoragePort.deleteObjects(
-                    promotableDocuments.stream()
-                            .map(BidReviewProjectLinkPort.PromotableDocument::temporaryStorageKey)
-                            .toList()
-            );
+            List<String> temporaryStorageKeys = promotableDocuments.stream()
+                    .map(BidReviewProjectLinkPort.PromotableDocument::temporaryStorageKey)
+                    .toList();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    fileStoragePort.deleteObjects(temporaryStorageKeys);
+                }
+            });
         }
 
         boolean reviewLinked = reviewLinkPort.linkProject(command.reviewId(), project.projectId(), promotionNow);
@@ -192,7 +200,9 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
             ));
         }
 
-        // TODO 13: 필요 시 입찰 프로젝트 기본 스테이지·스텝 자동 생성 (보류 - 세트 정의 필요)
+        // 13: 기본 스테이지·스텝은 자동 생성하지 않기로 확정(2026-08-14) - project 도메인 자체가
+        //     스테이지·스텝 없이 생성되는 것을 정상 상태로 취급해, 입찰 전환도 동일하게 따른다.
+        //     "필요 시"라는 스펙 조건이 성립하지 않는 것으로 판단 - bid.md §13 참고. 별도 구현 없음.
 
         return new ConvertNoticeToProjectResult(project.projectId());
     }

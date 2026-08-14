@@ -79,6 +79,7 @@ public class BidReviewProjectLinkAdapter implements BidReviewProjectLinkPort {
                 WHERE bid_review_document_id = :reviewDocumentId
                   AND document_role = 'BID_ATTACHMENT'
                   AND processing_status = 'READY'
+                  AND deleted_at IS NULL
                 """;
 
         MapSqlParameterSource parameters = new MapSqlParameterSource()

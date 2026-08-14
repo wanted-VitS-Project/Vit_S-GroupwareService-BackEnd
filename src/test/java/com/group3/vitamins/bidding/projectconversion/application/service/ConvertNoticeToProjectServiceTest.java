@@ -20,6 +20,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -319,8 +321,8 @@ class ConvertNoticeToProjectServiceTest {
     }
 
     @Test
-    @DisplayName("10번: 실제 다운로드에 성공한 공고 첨부만 정식 파일로 귀속하고 임시 객체를 삭제한다")
-    void promotesReadyBidAttachmentsAndDeletesTemporaryObjects() {
+    @DisplayName("10번: 실제 다운로드에 성공한 공고 첨부만 정식 파일로 귀속하고, 트랜잭션 커밋 후에 임시 객체를 삭제한다")
+    void promotesReadyBidAttachmentsAndDeletesTemporaryObjectsAfterCommit() {
         BidReviewProjectLinkPort.PromotableDocument promotable = new BidReviewProjectLinkPort.PromotableDocument(
                 77L, "reviews/77/staged.pdf", "공고문.pdf", 1024L
         );
@@ -329,7 +331,21 @@ class ConvertNoticeToProjectServiceTest {
                 .thenReturn(new BidReviewFilePromotionPort.PromotedFile(900L, 901L));
         when(reviewLinkPort.markDocumentPromoted(eq(77L), eq(900L), eq(901L), any())).thenReturn(true);
 
-        service.convert(command());
+        // TransactionSynchronizationManager는 실제 @Transactional 프록시 없이는 등록을 거부하므로
+        // (IllegalStateException), 테스트에서 직접 동기화를 열고 커밋 시점을 재현한다.
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.convert(command());
+
+            // ⚠️ 커밋 전에는 절대 지우면 안 된다(CodeRabbit 지적 사항) - 이후 단계가 실패해 롤백되면
+            // 문서는 READY로 되돌아가는데 실제 객체가 이미 삭제돼 재시도할 원본이 없어지기 때문이다.
+            verify(fileStoragePort, never()).deleteObjects(any());
+
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
 
         verify(filePromotionPort).promote(new BidReviewFilePromotionPort.PromotionRequest(
                 COMPANY_ID, PROJECT_ID, REQUESTER_USER_ID, 77L, "reviews/77/staged.pdf", "공고문.pdf", 1024L

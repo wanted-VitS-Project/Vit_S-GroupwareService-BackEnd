@@ -1828,7 +1828,7 @@ Spring은 현재 `attemptId`와 상태 전이가 일치할 때만 저장하며 �
 
 | 항목 | 규칙 |
 |------|------|
-| 원자성 | 프로젝트 생성부터 `project.bid_notice_id`, `bid_review.project_id`, (있으면) `bid_notice_summary.project_id`, 참여자 등록과 기본 단계 생성까지 하나의 DB 트랜잭션 |
+| 원자성 | 프로젝트 생성부터 `project.bid_notice_id`, `bid_review.project_id`, (있으면) `bid_notice_summary.project_id`, 참여자 등록까지 하나의 DB 트랜잭션(기본 스테이지·스텝은 13번 결정에 따라 생성하지 않음) |
 | 중간 실패 | 전체 롤백. 불완전한 프로젝트를 남기지 않음 |
 | 이미 전환된 공고 | 새 트랜잭션을 시작하지 않고 409 반환 |
 | 재시도 | 이전 요청이 롤백됐다면 재시도 가능. 이미 커밋됐다면 409 |
