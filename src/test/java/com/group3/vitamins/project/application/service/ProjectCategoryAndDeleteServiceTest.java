@@ -10,10 +10,12 @@ import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCom
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.port.StageCascadePort;
+import com.group3.vitamins.project.application.port.StepCascadePort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.domain.model.Project;
 import com.group3.vitamins.project.domain.model.ProjectStatus;
 import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -51,6 +54,7 @@ class ProjectCategoryAndDeleteServiceTest {
     @Mock private BusinessCategoryLookupPort businessCategoryLookupPort;
     @Mock private EmployeeLookupPort employeeLookupPort;
     @Mock private StepStatLookupPort stepStatLookupPort;
+    @Mock private StepCascadePort stepCascadePort;
     @Mock private StageCascadePort stageCascadePort;
     @Mock private ProjectAccessUseCase projectAccessUseCase;
     @Mock private CurrentCompanyIdProvider currentCompanyIdProvider;
@@ -83,7 +87,7 @@ class ProjectCategoryAndDeleteServiceTest {
                 new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(4L), REQUESTER, "USER"));
 
         assertThat(result.businessCategories()).hasSize(2);
-        Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
+        Mockito.verify(projectBusinessCategoryRepository).linkAll(COMPANY_ID, PROJECT_ID, List.of(4L));
     }
 
     @Test
@@ -104,7 +108,7 @@ class ProjectCategoryAndDeleteServiceTest {
         assertThat(result.businessCategories())
                 .extracting(BusinessCategorySummary::categoryId, BusinessCategorySummary::deleted)
                 .containsExactly(tuple(1L, true), tuple(4L, false));
-        Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
+        Mockito.verify(projectBusinessCategoryRepository).linkAll(COMPANY_ID, PROJECT_ID, List.of(4L));
     }
 
     @Test
@@ -130,7 +134,7 @@ class ProjectCategoryAndDeleteServiceTest {
                 .isInstanceOf(ConflictException.class);
 
         Mockito.verify(projectBusinessCategoryRepository, Mockito.never())
-                .linkAll(any(), anyList());
+                .linkAll(any(), any(), anyList());
     }
 
     @Test
@@ -158,14 +162,12 @@ class ProjectCategoryAndDeleteServiceTest {
     // ────────────────────────────── 프로젝트 삭제 ──────────────────────────────
 
     @Test
-    @DisplayName("진행 전 + 스텝 0개면 논리 삭제하고 공고 연결을 비운다")
+    @DisplayName("진행 전 + 스텝 0개면 확인 없이 삭제하고 공고 연결을 비운다")
     void 삭제() {
         givenProject(ProjectStatus.NOT_STARTED, 7L);
-        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
-                .willReturn(new StepStatLookupPort.StepStatView(0, 0));
+        givenStepCount(0);
 
-        projectCommandService.deleteProject(
-                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER"));
+        projectCommandService.deleteProject(deleteCommand(false));
 
         Project saved = captureSaved();
         assertThat(saved.getDeletedAt()).isNotNull();
@@ -173,51 +175,69 @@ class ProjectCategoryAndDeleteServiceTest {
         assertThat(saved.getBidNoticeId()).isNull();
 
         // 스텝이 0개여도 이것들은 남는다 — 프로젝트는 복구가 없으니 전부 죽은 행이다 (DELETE.md §2-2).
-        Mockito.verify(stageCascadePort).deleteByProjectId(PROJECT_ID);
-        Mockito.verify(projectMemberRepository).deleteByProjectId(PROJECT_ID);
-        Mockito.verify(projectBusinessCategoryRepository).deleteByProjectId(PROJECT_ID);
+        // ⚠️ 순서까지 못 박는다. save() 를 앞으로 옮기면 하위 정리의 벌크 UPDATE
+        //    (@Modifying(clearAutomatically = true)) 가 flush 없이 컨텍스트를 비워
+        //    프로젝트는 안 지워지고 하위만 지워진다. 순서를 안 보면 그 리팩터링이 통과한다.
+        InOrder 순서 = Mockito.inOrder(
+                stepCascadePort, stageCascadePort, projectMemberRepository,
+                projectBusinessCategoryRepository, projectRepository);
+        순서.verify(stepCascadePort).deleteByProjectId(PROJECT_ID, REQUESTER);
+        순서.verify(stageCascadePort).deleteByProjectId(PROJECT_ID);
+        순서.verify(projectMemberRepository).deleteByProjectId(PROJECT_ID);
+        순서.verify(projectBusinessCategoryRepository).deleteByProjectId(PROJECT_ID);
+        순서.verify(projectRepository).save(any());
     }
 
     @Test
-    @DisplayName("삭제가 409 로 막히면 연결 행을 하나도 건드리지 않는다")
-    void 삭제_거부시_정리_없음() {
+    @DisplayName("스텝이 남아 있으면 확인을 요구하고 아무것도 건드리지 않는다")
+    void 삭제_확인_요구() {
         givenProject(ProjectStatus.NOT_STARTED, null);
-        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
-                .willReturn(new StepStatLookupPort.StepStatView(3, 1));
+        givenStepCount(3);
 
-        assertThatThrownBy(() -> projectCommandService.deleteProject(
-                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
-                .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> projectCommandService.deleteProject(deleteCommand(false)))
+                .isInstanceOf(ConflictException.class)
+                // 몇 개가 날아가는지 모르면 사용자가 확인 버튼을 누를 근거가 없다.
+                .hasMessageContaining("스텝 3개")
+                // ⚠️ 코드까지 검증한다 — 메시지는 개수를 담느라 바뀌지만 코드는 프론트 분기의 계약이다.
+                .extracting(e -> ((ConflictException) e).getErrorCode())
+                .isEqualTo(ProjectErrorCode.PROJECT_DELETE_CONFIRM_REQUIRED);
 
-        Mockito.verifyNoInteractions(stageCascadePort);
+        Mockito.verifyNoInteractions(stepCascadePort, stageCascadePort);
         Mockito.verify(projectMemberRepository, Mockito.never()).deleteByProjectId(any());
         Mockito.verify(projectBusinessCategoryRepository, Mockito.never()).deleteByProjectId(any());
-    }
-
-    @Test
-    @DisplayName("스텝이 남아 있으면 409 다 — 종결로 처리해야 한다")
-    void 삭제_스텝_있음() {
-        givenProject(ProjectStatus.NOT_STARTED, null);
-        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
-                .willReturn(new StepStatLookupPort.StepStatView(3, 1));
-
-        assertThatThrownBy(() -> projectCommandService.deleteProject(
-                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
-                .isInstanceOf(ConflictException.class);
-
         Mockito.verify(projectRepository, Mockito.never()).save(any(Project.class));
     }
 
     @Test
-    @DisplayName("진행 전이 아니면 409 다 — 스텝을 세지도 않는다")
-    void 삭제_진행중() {
+    @DisplayName("진행 중이면 스텝이 0개여도 확인을 요구한다")
+    void 삭제_진행중_확인_요구() {
         givenProject(ProjectStatus.IN_PROGRESS, null);
+        givenStepCount(0);
 
-        assertThatThrownBy(() -> projectCommandService.deleteProject(
-                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
-                .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> projectCommandService.deleteProject(deleteCommand(false)))
+                .isInstanceOf(ConflictException.class)
+                .extracting(e -> ((ConflictException) e).getErrorCode())
+                .isEqualTo(ProjectErrorCode.PROJECT_DELETE_CONFIRM_REQUIRED);
 
-        Mockito.verifyNoInteractions(stepStatLookupPort);
+        // 되묻는 단계에서는 하위 정리가 하나도 돌면 안 된다 — 예외를 던져도 롤백 전에 부수효과가 남으면
+        // 「확인만 하고 취소」 한 사용자의 참여자·카테고리가 이미 지워진 뒤다.
+        Mockito.verifyNoInteractions(stepCascadePort, stageCascadePort);
+        Mockito.verify(projectMemberRepository, Mockito.never()).deleteByProjectId(any());
+        Mockito.verify(projectBusinessCategoryRepository, Mockito.never()).deleteByProjectId(any());
+        Mockito.verify(projectRepository, Mockito.never()).save(any(Project.class));
+    }
+
+    @Test
+    @DisplayName("confirm=true 면 진행 중이고 스텝이 남아 있어도 하위까지 지운다")
+    void 삭제_확인_후_강제() {
+        givenProject(ProjectStatus.IN_PROGRESS, null);
+        givenStepCount(3);
+
+        projectCommandService.deleteProject(deleteCommand(true));
+
+        // ⚠️ 확인은 게이트가 아니라 되묻기다 — confirm 이 붙으면 상태·스텝 수와 무관하게 통과해야 한다.
+        Mockito.verify(stepCascadePort).deleteByProjectId(PROJECT_ID, REQUESTER);
+        assertThat(captureSaved().getDeletedAt()).isNotNull();
     }
 
     @Test
@@ -225,9 +245,17 @@ class ProjectCategoryAndDeleteServiceTest {
     void 삭제_프로젝트_없음() {
         given(projectRepository.findById(PROJECT_ID, COMPANY_ID)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> projectCommandService.deleteProject(
-                new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER")))
+        assertThatThrownBy(() -> projectCommandService.deleteProject(deleteCommand(false)))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    private DeleteProjectCommand deleteCommand(boolean confirm) {
+        return new DeleteProjectCommand(PROJECT_ID, REQUESTER, "USER", confirm);
+    }
+
+    private void givenStepCount(int totalCount) {
+        given(stepStatLookupPort.countByProjectId(PROJECT_ID))
+                .willReturn(new StepStatLookupPort.StepStatView(totalCount, 0));
     }
 
     private void givenProject(ProjectStatus status, Long bidNoticeId) {

@@ -104,7 +104,8 @@
             resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementCurrentStateRow">
         SELECT version, status, deleted_at AS deletedAt,
         type, round_no AS roundNo, total_amount AS totalAmount, planned_amount AS plannedAmount,
-        planned_tax_amount AS plannedTaxAmount, planned_date AS plannedDate, trader_name AS traderName,
+        planned_tax_amount AS plannedTaxAmount, planned_date AS plannedDate,
+        tax_invoice_due_date AS taxInvoiceDueDate, trader_name AS traderName,
         bank_name AS bankName, account_number AS accountNumber, account_holder AS accountHolder
         FROM settlement_block
         WHERE settle_id = #{settleId}

@@ -20,6 +20,8 @@ public record SettlementDetailRow(
         Long plannedAmount,
         Long plannedTaxAmount,
         LocalDate plannedDate,
+        LocalDate taxInvoiceDueDate,
+        Boolean taxInvoiceLinked,
         String traderName,
         String bankName,
         String accountNumber,

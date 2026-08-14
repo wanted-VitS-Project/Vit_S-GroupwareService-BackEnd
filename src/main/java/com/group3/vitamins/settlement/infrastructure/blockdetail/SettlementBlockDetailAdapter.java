@@ -59,6 +59,8 @@ public class SettlementBlockDetailAdapter implements BlockDetailPort {
                 row.plannedAmount(),
                 row.plannedTaxAmount(),
                 row.plannedDate(),
+                row.taxInvoiceDueDate(),
+                row.taxInvoiceLinked(),
                 row.traderName(),
                 row.bankName(),
                 accountNumberCipher.decryptAndMask(row.accountNumber()),

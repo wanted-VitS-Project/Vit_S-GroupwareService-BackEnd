@@ -25,6 +25,10 @@ public record SettlementItemResponse(
         @Schema(description = "회차별 정산 예정일", example = "2026-09-01")
         LocalDate plannedDate,
 
+        @Schema(description = "세금계산서 기한. 면세 등 세금계산서를 받지 않는 회차면 null",
+                example = "2026-09-10", nullable = true)
+        LocalDate taxInvoiceDueDate,
+
         @Schema(description = "거래처명(입금자명)", example = "(주)대한항공")
         String traderName,
 
@@ -67,6 +71,7 @@ public record SettlementItemResponse(
                 view.plannedAmount(),
                 view.plannedTaxAmount(),
                 view.plannedDate(),
+                view.taxInvoiceDueDate(),
                 view.traderName(),
                 view.bankName(),
                 view.maskedAccountNumber(),

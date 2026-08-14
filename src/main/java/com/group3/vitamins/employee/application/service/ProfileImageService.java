@@ -4,7 +4,9 @@ import com.group3.vitamins.employee.application.port.ProfileImageStoragePort;
 import com.group3.vitamins.employee.application.support.ProfileImageValidator;
 import com.group3.vitamins.employee.application.usecase.ProfileImageUseCase;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
+import com.group3.vitamins.employee.domain.model.Employee;
 import com.group3.vitamins.employee.domain.repository.EmployeeRepository;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ public class ProfileImageService implements ProfileImageUseCase {
     private final EmployeeRepository employeeRepository;
     private final ProfileImageStoragePort profileImageStoragePort;
     private final ProfileImageValidator profileImageValidator;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
 
     @Override
     @Transactional
@@ -75,7 +78,12 @@ public class ProfileImageService implements ProfileImageUseCase {
     @Override
     @Transactional(readOnly = true)
     public String resolveViewUrl(String userId) {
-        if (!employeeRepository.existsById(userId)) {
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        Employee employee = employeeRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND));
+        // 타사 사원은 없는 것으로 취급 — 사번(전역 유일)을 알아도 다른 회사 사원의 프로필을 조회할 수 없다.
+        // 존재 여부를 회사 경계 밖으로 노출하지 않도록 타사도 EMP_NOT_FOUND 로 통일한다.
+        if (!employee.getCompanyId().equals(companyId)) {
             throw new NotFoundException(EmployeeErrorCode.EMP_NOT_FOUND);
         }
         String key = employeeRepository.findProfileImageKey(userId).orElse(null);

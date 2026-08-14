@@ -18,6 +18,10 @@ public record SettlementDetail(
         Long plannedAmount,
         Long plannedTaxAmount,
         LocalDate plannedDate,
+        LocalDate taxInvoiceDueDate,
+        // 이 정산 블록에 세금계산서가 연결됐는지 — status로는 판정할 수 없어 tax_invoice를 직접 본다
+        // (PARTIAL/COMPLETED는 '입출금이 붙었다'만 말해준다, 2026-08-14 프론트 요청).
+        Boolean taxInvoiceLinked,
         String traderName,
         String bankName,
         String accountNumber,

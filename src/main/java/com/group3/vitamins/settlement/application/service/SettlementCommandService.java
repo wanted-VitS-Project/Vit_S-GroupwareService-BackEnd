@@ -89,9 +89,20 @@ public class SettlementCommandService implements SettlementCommandUseCase {
 
         assertTotalAmountConsistent(command.settleId(), type, command.totalAmount());
 
-        String encryptedAccountNumber = command.accountNumber() == null
+        // INCOME 블록에는 계좌정보가 존재할 수 없다(2026-08-14) — 화면은 입력을 막지만 API를 직접 호출하면
+        // 그대로 저장돼 "계좌정보는 OUTCOME만 값 있음"이라는 명세 약속이 깨졌다. 새 에러코드로 거부하는
+        // 대신 서버에서 버린다(정상 클라이언트는 애초에 보내지 않는다). 아래 활동 로그·응답 조립도 반드시
+        // 이 plainAccountNumber를 써야 한다 — 그 둘은 DB에 저장된 값이 아니라 요청값을 직접 들고 가므로,
+        // command.accountNumber()를 그대로 넘기면 저장은 안 됐는데 가짜 변경 로그가 남고 응답에만
+        // 마스킹된 계좌번호가 실려 나간다.
+        boolean outcome = type == SettlementType.OUTCOME;
+        String bankName = outcome ? command.bankName() : null;
+        String accountHolder = outcome ? command.accountHolder() : null;
+        String plainAccountNumber = outcome ? command.accountNumber() : null;
+
+        String encryptedAccountNumber = plainAccountNumber == null
                 ? null
-                : accountNumberCipher.encrypt(command.accountNumber());
+                : accountNumberCipher.encrypt(plainAccountNumber);
 
         // overwrite면 위에서 잠금 하에 다시 읽은 "지금" 버전을 기대값으로 써서 반드시 통과시킨다. 아니면
         // 클라이언트가 보낸 버전을 그대로 검사한다(WHERE version = ?, CONCURRENCY.md §1-5).
@@ -100,14 +111,14 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         Settlement saved = settlementRepository.updateItem(
                 command.settleId(), type, command.roundNo(), command.totalAmount(),
                 command.plannedAmount(), command.plannedTaxAmount(), command.plannedDate(),
-                command.traderName(), command.bankName(), encryptedAccountNumber, command.accountHolder(),
+                command.taxInvoiceDueDate(), command.traderName(), bankName, encryptedAccountNumber, accountHolder,
                 expectedVersion);
 
         log.info("정산 항목 작성/수정 완료 - settleId={}", saved.getSettleId());
 
         // 활동 로그(항목 작성/수정) — text 도메인과 동일하게 실제로 바뀐 필드가 있을 때만 발행한다.
         // 계좌번호는 원문을 절대 로그에 남기지 않는다 — 이전/이후 값 모두 마스킹해서 비교·기록한다.
-        List<ActivityFieldChange> changes = detectChanges(currentState, saved, command.accountNumber());
+        List<ActivityFieldChange> changes = detectChanges(currentState, saved, plainAccountNumber);
         if (!changes.isEmpty()) {
             domainEventPublisher.publish(ActivityOccurredEvent.of(
                     ActivityLogAction.MODIFY,
@@ -119,7 +130,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
             ));
         }
 
-        return toView(saved, command.accountNumber());
+        return toView(saved, plainAccountNumber);
     }
 
     private SettlementType parseType(String rawType) {
@@ -194,6 +205,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
         addIfChanged(changes, "plannedAmount", before.plannedAmount(), saved.getPlannedAmount());
         addIfChanged(changes, "plannedTaxAmount", before.plannedTaxAmount(), saved.getPlannedTaxAmount());
         addIfChanged(changes, "plannedDate", before.plannedDate(), saved.getPlannedDate());
+        addIfChanged(changes, "taxInvoiceDueDate", before.taxInvoiceDueDate(), saved.getTaxInvoiceDueDate());
         addIfChanged(changes, "traderName", before.traderName(), saved.getTraderName());
         addIfChanged(changes, "bankName", before.bankName(), saved.getBankName());
         addIfChanged(changes, "accountHolder", before.accountHolder(), saved.getAccountHolder());
@@ -238,6 +250,7 @@ public class SettlementCommandService implements SettlementCommandUseCase {
                 saved.getPlannedAmount(),
                 saved.getPlannedTaxAmount(),
                 saved.getPlannedDate(),
+                saved.getTaxInvoiceDueDate(),
                 saved.getTraderName(),
                 saved.getBankName(),
                 accountNumberCipher.mask(plainAccountNumber),

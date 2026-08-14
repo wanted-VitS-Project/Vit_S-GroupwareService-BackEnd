@@ -11,9 +11,14 @@ import com.group3.vitamins.bidding.projectconversion.application.result.ConvertN
 import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.project.application.port.BlockClonePort;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.application.port.StageCascadePort;
+import com.group3.vitamins.project.application.port.StageClonePort;
+import com.group3.vitamins.project.application.port.StepCascadePort;
+import com.group3.vitamins.project.application.port.StepClonePort;
 import com.group3.vitamins.project.application.port.StepPermissionCleanupPort;
 import com.group3.vitamins.project.application.port.StagePermissionDefaultCleanupPort;
 import com.group3.vitamins.project.application.port.StepStatLookupPort;
@@ -270,6 +275,33 @@ class ConvertNoticeToProjectIntegrationTest {
         @Bean
         StageCascadePort stageCascadePort() {
             return mock(StageCascadePort.class);
+        }
+
+        @Bean
+        StepCascadePort stepCascadePort() {
+            return mock(StepCascadePort.class);
+        }
+
+        // 복제(PRJ-018) 전용 포트 3종. 공고 전환은 createProject 만 타므로 호출되지 않는다.
+        @Bean
+        StageClonePort stageClonePort() {
+            return mock(StageClonePort.class);
+        }
+
+        @Bean
+        StepClonePort stepClonePort() {
+            return mock(StepClonePort.class);
+        }
+
+        @Bean
+        BlockClonePort blockClonePort() {
+            return mock(BlockClonePort.class);
+        }
+
+        // 참여자 추가 시 PROJECT_INVITED 알림을 발행한다. 이 테스트는 트랜잭션 전파만 보므로 목으로 둔다.
+        @Bean
+        DomainEventPublisher domainEventPublisher() {
+            return mock(DomainEventPublisher.class);
         }
 
         @Bean
