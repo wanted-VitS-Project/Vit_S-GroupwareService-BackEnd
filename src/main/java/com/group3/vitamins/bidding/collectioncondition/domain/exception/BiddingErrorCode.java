@@ -181,6 +181,11 @@ public enum BiddingErrorCode implements ErrorCode {
             "이미 완료 처리된 업로드입니다."
     ),
 
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED",
+            "이미 실패로 종료된 업로드입니다. 새 업로드를 다시 시작해 주세요."
+    ),
+
     BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND(
             "BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND",
             "업로드한 파일을 저장소에서 찾을 수 없습니다."

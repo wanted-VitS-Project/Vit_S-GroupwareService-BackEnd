@@ -172,24 +172,8 @@ public class BidNoticeAttachmentJpaEntity {
         return UPLOAD_STATUS_UPLOADING.equals(this.uploadStatus);
     }
 
-    // 저장소 HEAD 검증까지 끝난 업로드를 완료 상태로 반영합니다. UPLOADING이 아니면 거부합니다.
-    public void completeUpload(long verifiedSizeBytes, LocalDateTime now) {
-        if (!isUploading()) {
-            throw new IllegalStateException("UPLOADING 상태의 업로드만 완료 처리할 수 있습니다.");
-        }
-        this.uploadStatus = UPLOAD_STATUS_READY;
-        this.sizeBytes = verifiedSizeBytes;
-        this.updatedAt = now;
-    }
-
-    // 저장소에 객체가 없거나 크기가 다르면 실패로 종료합니다. 실패 전이는 재시도 대상이 아니다 -
-    // 클라이언트가 새 업로드를 다시 시작해야 한다(파일 도메인 업로드 실패 처리와 동일 정책).
-    public void failUpload(LocalDateTime now) {
-        if (!isUploading()) {
-            throw new IllegalStateException("UPLOADING 상태의 업로드만 실패 처리할 수 있습니다.");
-        }
-        this.uploadStatus = UPLOAD_STATUS_FAILED;
-        this.updatedAt = now;
+    public boolean isFailed() {
+        return UPLOAD_STATUS_FAILED.equals(this.uploadStatus);
     }
 
     // 최신 공고 응답에서 사라진 첨부파일을 논리 삭제합니다.

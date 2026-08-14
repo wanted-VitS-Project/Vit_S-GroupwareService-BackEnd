@@ -1,7 +1,11 @@
 package com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.repository;
 
 import com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.entity.BidNoticeJpaEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -31,6 +35,18 @@ public interface SpringDataBidNoticeRepository
             Long bidNoticeId,
             Long ownerCompanyId,
             Long crawlSourceId
+    );
+
+    // 첨부 업로드 예약을 직렬화하기 위해 공고 행에 PESSIMISTIC_WRITE 잠금을 걸고 조회합니다.
+    // 트랜잭션 커밋까지 잠금이 유지되므로 개수 확인→순번 계산→INSERT가 같은 공고에 대해 원자적으로 처리된다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT n FROM BidNoticeJpaEntity n WHERE n.bidNoticeId = :bidNoticeId "
+            + "AND n.ownerCompanyId = :ownerCompanyId AND n.crawlSourceId = :crawlSourceId "
+            + "AND n.deletedAt IS NULL")
+    Optional<BidNoticeJpaEntity> findByBidNoticeIdAndOwnerCompanyIdAndCrawlSourceIdAndDeletedAtIsNullForUpdate(
+            @Param("bidNoticeId") Long bidNoticeId,
+            @Param("ownerCompanyId") Long ownerCompanyId,
+            @Param("crawlSourceId") Long crawlSourceId
     );
 
     // 공용 외부 수집 공고인지 확인합니다.

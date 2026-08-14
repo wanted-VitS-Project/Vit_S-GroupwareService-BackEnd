@@ -61,6 +61,21 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
     }
 
     @Override
+    public Optional<ManualBidNotice> findOwnedManualNoticeForUpdate(
+            Long companyId,
+            Long noticeId
+    ) {
+        return findManualSourceId()
+                .flatMap(sourceId -> noticeRepository
+                        .findByBidNoticeIdAndOwnerCompanyIdAndCrawlSourceIdAndDeletedAtIsNullForUpdate(
+                                noticeId,
+                                companyId,
+                                sourceId
+                        ))
+                .map(this::toDomain);
+    }
+
+    @Override
     public boolean existsExternalNotice(Long noticeId) {
         return noticeRepository
                 .existsByBidNoticeIdAndOwnerCompanyIdIsNullAndDeletedAtIsNull(
@@ -256,7 +271,7 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
 
         return new PendingAttachmentUpload(
                 saved.getBidNoticeAttachmentId(), saved.getFileName(),
-                saved.getStorageKey(), saved.getSizeBytes(), saved.isUploading()
+                saved.getStorageKey(), saved.getSizeBytes(), saved.isUploading(), saved.isFailed()
         );
     }
 
@@ -267,25 +282,31 @@ public class JpaBidNoticeCommandAdapter implements BidNoticeCommandPort {
                 )
                 .map(entity -> new PendingAttachmentUpload(
                         entity.getBidNoticeAttachmentId(), entity.getFileName(),
-                        entity.getStorageKey(), entity.getSizeBytes(), entity.isUploading()
+                        entity.getStorageKey(), entity.getSizeBytes(),
+                        entity.isUploading(), entity.isFailed()
                 ));
     }
 
+    // UPLOADING 상태일 때만 원자적으로 완료 반영한다(WHERE 조건부 UPDATE). 영향 행이 0이면 동시에
+    // 다른 완료·실패 통보가 먼저 반영된 것이므로 ALREADY_COMPLETED로 변환한다.
     @Override
     @Transactional
     public void completeUpload(Long attachmentId, long verifiedSizeBytes, LocalDateTime now) {
-        BidNoticeAttachmentJpaEntity entity = attachmentRepository.findById(attachmentId)
-                .orElseThrow(() -> new IllegalStateException("업로드 대상 첨부를 찾을 수 없습니다."));
-        entity.completeUpload(verifiedSizeBytes, now);
+        int updated = attachmentRepository.completeUploadIfPending(attachmentId, verifiedSizeBytes, now);
+        if (updated == 0) {
+            throw new ConflictException(
+                    BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED
+            );
+        }
     }
 
     // ⚠️ REQUIRES_NEW - 호출부(BidNoticeCommandService)가 이 실패를 던진 뒤 자기 트랜잭션을 예외로
     // 굴리더라도(ConflictException), 이 실패 기록은 별도로 커밋돼 UPLOADING으로 영영 남지 않게 한다.
+    // UPLOADING 상태일 때만 원자적으로 실패 반영하며, 이미 종료된 상태면 조용히 넘어간다(최선노력 기록).
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void failUploadInNewTransaction(Long attachmentId, LocalDateTime now) {
-        attachmentRepository.findById(attachmentId)
-                .ifPresent(entity -> entity.failUpload(now));
+        attachmentRepository.failUploadIfPending(attachmentId, now);
     }
 
     private LocalDateTime resolveChangedAt(ManualBidNotice notice) {

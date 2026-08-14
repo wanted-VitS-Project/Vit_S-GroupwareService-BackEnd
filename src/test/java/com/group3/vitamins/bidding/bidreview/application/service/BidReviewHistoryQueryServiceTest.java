@@ -98,6 +98,36 @@ class BidReviewHistoryQueryServiceTest {
     }
 
     @Test
+    @DisplayName("페이지 번호가 음수면 400을 던진다")
+    void rejectsNegativePage() {
+        assertThatThrownBy(() -> service.get(
+                new GetBidReviewHistoryQuery(NOTICE_ID, -1, 20, USER_ID, ROLE)
+        )).isInstanceOf(ValidationException.class);
+
+        verifyNoInteractions(biddingAccessPolicy, noticeDocumentPort, historyQueryPort);
+    }
+
+    @Test
+    @DisplayName("페이지 크기가 0이면 400을 던진다")
+    void rejectsZeroPageSize() {
+        assertThatThrownBy(() -> service.get(
+                new GetBidReviewHistoryQuery(NOTICE_ID, 0, 0, USER_ID, ROLE)
+        )).isInstanceOf(ValidationException.class);
+
+        verifyNoInteractions(biddingAccessPolicy, noticeDocumentPort, historyQueryPort);
+    }
+
+    @Test
+    @DisplayName("페이지 크기가 음수면 400을 던진다")
+    void rejectsNegativePageSize() {
+        assertThatThrownBy(() -> service.get(
+                new GetBidReviewHistoryQuery(NOTICE_ID, 0, -1, USER_ID, ROLE)
+        )).isInstanceOf(ValidationException.class);
+
+        verifyNoInteractions(biddingAccessPolicy, noticeDocumentPort, historyQueryPort);
+    }
+
+    @Test
     @DisplayName("현재 회사에서 접근 불가한 공고면 404를 던진다")
     void rejectsWhenNoticeNotAccessible() {
         when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))

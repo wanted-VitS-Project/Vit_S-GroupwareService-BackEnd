@@ -22,7 +22,9 @@ public record BidNoticeListResponse(
             String sourceUrl, String noticeAgency, Long businessCategoryId,
             String businessCategoryName, BigDecimal baseAmount, BigDecimal estimatedAmount,
             LocalDateTime announcedAt, LocalDateTime bidDeadlineAt, Integer dDay,
-            boolean isNew, String noticeStatus, boolean isFavorite, Long projectId
+            boolean isNew, String noticeStatus,
+            @Schema(description = "현재 회사 공용 관심 등록 여부", example = "false") boolean isFavorite,
+            Long projectId
     ) {
         static Item from(BidNoticeListItemResult result) {
             return new Item(

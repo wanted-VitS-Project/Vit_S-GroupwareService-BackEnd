@@ -14,6 +14,10 @@ public interface BidNoticeCommandPort {
     // 현재 회사가 소유한 직접 등록 공고를 수정 목적으로 조회합니다.
     Optional<ManualBidNotice> findOwnedManualNotice(Long companyId, Long noticeId);
 
+    // 첨부 업로드 예약(개수 확인 → 순번 계산 → INSERT)을 원자적으로 만들기 위해 공고 행에
+    // PESSIMISTIC_WRITE 잠금을 걸고 조회합니다. 같은 공고에 대한 동시 업로드 시작 요청을 직렬화합니다.
+    Optional<ManualBidNotice> findOwnedManualNoticeForUpdate(Long companyId, Long noticeId);
+
     // 공용 외부 수집 공고인지 확인하여 직접 등록 공고와 다른 수정 오류를 반환할 수 있게 합니다.
     boolean existsExternalNotice(Long noticeId);
 
@@ -55,7 +59,10 @@ public interface BidNoticeCommandPort {
             String fileName,
             String storageKey,
             long sizeBytes,
-            boolean uploading
+            boolean uploading,
+            // UPLOADING/READY 둘 다 아닌 종료 상태 - 완료 통보 시 ALREADY_COMPLETED와
+            // 구분되는 에러를 반환하기 위해 별도로 노출한다.
+            boolean failed
     ) {
     }
 }

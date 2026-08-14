@@ -400,12 +400,12 @@ class BidNoticeCommandServiceTest {
     @Test
     @DisplayName("직접 등록 공고에 업로드 슬롯을 만들고 presigned URL을 발급한다")
     void startsAttachmentUpload() {
-        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+        when(commandPort.findOwnedManualNoticeForUpdate(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existingNotice()));
         when(commandPort.countActiveAttachments(NOTICE_ID)).thenReturn(0L);
         when(commandPort.createPendingUpload(
                 eq(NOTICE_ID), eq("제안요청서.pdf"), anyString(), eq(1024L), eq("application/pdf"), any()
-        )).thenReturn(new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true));
+        )).thenReturn(new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true, false));
         Instant expiresAt = Instant.parse("2026-08-14T12:10:00Z");
         when(fileStoragePort.presignUpload(anyString(), eq("application/pdf"), eq(1024L)))
                 .thenReturn(new FileStoragePort.PresignedUrl("https://s3.example/upload", expiresAt));
@@ -424,7 +424,7 @@ class BidNoticeCommandServiceTest {
     @Test
     @DisplayName("첨부가 이미 10개면 업로드 슬롯을 만들지 않는다")
     void rejectsStartingUploadWhenAttachmentLimitReached() {
-        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+        when(commandPort.findOwnedManualNoticeForUpdate(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existingNotice()));
         when(commandPort.countActiveAttachments(NOTICE_ID)).thenReturn(10L);
 
@@ -440,7 +440,7 @@ class BidNoticeCommandServiceTest {
     }
 
     @Test
-    @DisplayName("실행 파일 확장자는 업로드 요청 자체를 거부한다")
+    @DisplayName("화이트리스트에 없는 확장자는 업로드 요청 자체를 거부한다")
     void rejectsBlockedExtensionOnUploadStart() {
         assertError(
                 () -> service.startAttachmentUpload(new StartBidNoticeAttachmentUploadCommand(
@@ -453,12 +453,55 @@ class BidNoticeCommandServiceTest {
     }
 
     @Test
+    @DisplayName("mimeType이 비어 있으면 업로드 요청 자체를 거부한다")
+    void rejectsBlankMimeTypeOnUploadStart() {
+        assertError(
+                () -> service.startAttachmentUpload(new StartBidNoticeAttachmentUploadCommand(
+                        NOTICE_ID, "제안요청서.pdf", " ", 1024L, USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_INVALID_MANUAL_NOTICE
+        );
+
+        verifyNoInteractions(commandPort, fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("50MB를 넘는 업로드 요청은 거부한다")
+    void rejectsOversizedUploadStart() {
+        assertError(
+                () -> service.startAttachmentUpload(new StartBidNoticeAttachmentUploadCommand(
+                        NOTICE_ID, "제안요청서.pdf", "application/pdf", 50L * 1024 * 1024 + 1, USER_ID, "ADMIN"
+                )),
+                BiddingErrorCode.BIDDING_INVALID_MANUAL_NOTICE
+        );
+
+        verifyNoInteractions(commandPort, fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("업로드 시작도 권한이 없으면 거부하고 조회조차 하지 않는다")
+    void rejectsStartingUploadWhenAccessDenied() {
+        doThrow(new com.group3.vitamins.global.domain.common.error.exception.ForbiddenException(
+                BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED
+        )).when(biddingAccessPolicy).assertAccess(USER_ID, "USER");
+
+        assertError(
+                () -> service.startAttachmentUpload(new StartBidNoticeAttachmentUploadCommand(
+                        NOTICE_ID, "제안요청서.pdf", "application/pdf", 1024L, USER_ID, "USER"
+                )),
+                BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED
+        );
+
+        verifyNoInteractions(commandPort, fileStoragePort);
+    }
+
+    @Test
     @DisplayName("저장소 HEAD 검증에 성공하면 업로드를 완료 처리한다")
     void completesAttachmentUpload() {
         when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existingNotice()));
         when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
-                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true)
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true, false)
         ));
         when(fileStoragePort.head("companies/10/bidding/notices/100/attachments/x"))
                 .thenReturn(Optional.of(new FileStoragePort.StoredObject(1024L)));
@@ -480,7 +523,7 @@ class BidNoticeCommandServiceTest {
         when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existingNotice()));
         when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
-                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true)
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true, false)
         ));
         when(fileStoragePort.head("companies/10/bidding/notices/100/attachments/x"))
                 .thenReturn(Optional.empty());
@@ -502,7 +545,7 @@ class BidNoticeCommandServiceTest {
         when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existingNotice()));
         when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
-                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true)
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, true, false)
         ));
         when(fileStoragePort.head("companies/10/bidding/notices/100/attachments/x"))
                 .thenReturn(Optional.of(new FileStoragePort.StoredObject(999L)));
@@ -523,7 +566,7 @@ class BidNoticeCommandServiceTest {
         when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(existingNotice()));
         when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
-                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, false)
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, false, false)
         ));
 
         assertError(
@@ -534,6 +577,38 @@ class BidNoticeCommandServiceTest {
         );
 
         verifyNoInteractions(fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("이미 실패로 종료된 업로드를 완료 통보하면 실패 전용 에러를 던진다")
+    void rejectsCompletingFailedUpload() {
+        when(commandPort.findOwnedManualNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(existingNotice()));
+        when(commandPort.findPendingUpload(NOTICE_ID, 501L)).thenReturn(Optional.of(
+                new PendingAttachmentUpload(501L, "제안요청서.pdf", "companies/10/bidding/notices/100/attachments/x", 1024L, false, true)
+        ));
+
+        assertError(
+                () -> service.completeAttachmentUpload(
+                        new CompleteBidNoticeAttachmentUploadCommand(NOTICE_ID, 501L, USER_ID, "ADMIN")
+                ),
+                BiddingErrorCode.BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED
+        );
+
+        verifyNoInteractions(fileStoragePort);
+    }
+
+    @Test
+    @DisplayName("완료 통보 명령이 비어 있으면 검증 단계에서 거부한다")
+    void rejectsCompletingUploadWithInvalidCommand() {
+        assertError(
+                () -> service.completeAttachmentUpload(
+                        new CompleteBidNoticeAttachmentUploadCommand(NOTICE_ID, null, USER_ID, "ADMIN")
+                ),
+                BiddingErrorCode.BIDDING_INVALID_MANUAL_NOTICE
+        );
+
+        verifyNoInteractions(commandPort, fileStoragePort);
     }
 
     // 명세의 필수값과 대표 선택값을 포함한 유효한 등록 명령을 만듭니다.

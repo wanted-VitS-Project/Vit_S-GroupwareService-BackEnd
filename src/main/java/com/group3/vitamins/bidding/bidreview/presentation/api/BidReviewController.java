@@ -187,7 +187,7 @@ public class BidReviewController {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200", description = "조회 성공. 이력이 없으면 빈 배열"
+                    responseCode = "200", description = "조회 성공. 이력이 없으면 content가 빈 배열(페이지 메타데이터는 그대로 포함)"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "400", description = "BIDDING_INVALID_REVIEW_REQUEST"

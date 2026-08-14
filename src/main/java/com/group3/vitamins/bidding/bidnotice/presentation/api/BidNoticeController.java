@@ -239,6 +239,7 @@ public class BidNoticeController {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "관심 등록 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "BIDDING_INVALID_NOTICE_QUERY"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "BIDDING_ACCESS_PERMISSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "BIDDING_NOTICE_NOT_FOUND"),
@@ -266,6 +267,7 @@ public class BidNoticeController {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "관심 해제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "BIDDING_INVALID_NOTICE_QUERY"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "BIDDING_ACCESS_PERMISSION_REQUIRED"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "BIDDING_NOTICE_NOT_FOUND"),
@@ -340,6 +342,7 @@ public class BidNoticeController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "409",
                     description = "BIDDING_NOTICE_EDIT_NOT_ALLOWED · BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED · " +
+                            "BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED · " +
                             "BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND · BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH"
             )
     })

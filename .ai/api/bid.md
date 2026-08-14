@@ -1,9 +1,9 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
+**최종 동기화**: 2026-08-14 (CodeRabbit 피드백 반영 — 첨부 업로드 확장자 화이트리스트 전환, FAILED 에러코드 신설, 관심 등록/해제 400 응답 추가)
 **최종 동기화**: 2026-08-14 (공고 관심 등록/해제 신설 + 목록 조회 favorite 필터 — FE 공유 필요)
 **최종 동기화**: 2026-08-14 (직접 등록 공고 첨부 업로드 신설 + 검토 이력 조회 페이지네이션 전환 — FE 공유 필요)
-**최종 동기화**: 2026-08-14 (공고 프로젝트 전환 서버 처리 13번 — 기본 스테이지·스텝 자동 생성 안 함으로 확정)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -906,8 +906,10 @@ Outbox는 최소한 아래 정보를 관리한다.
 
 공개 URL이 없는 첨부파일을 위한 실제 업로드 경로다. 링크형 첨부(`sourceUrl`)와 달리 파일을 S3에
 직접 올리며, presigned PUT URL 발급(시작) → 클라이언트 업로드 → 완료 통보(서버가 HEAD로 검증)
-2단계로 이뤄진다. 사내 문서함 업로드(CDOC-003)와 동일하게 최대 50MB, 실행 파일 확장자(`exe`,
-`bat`, `sh`, `jar`, `cmd`, `com`, `msi`, `scr`, `dll`, `bin`, `app`)는 거부한다.
+2단계로 이뤄진다. 최대 50MB이며, 입찰 공고 첨부라는 용도에 맞춰 **허용 확장자 화이트리스트**만
+받는다: `pdf`, `hwp`, `hwpx`, `doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `txt`, `zip`
+(2026-08-14 CodeRabbit 지적 반영 — 원래 사내 문서함 업로드(CDOC-003)와 동일한 블랙리스트 방식이었으나,
+목록에 없는 `html`/`svg`/`hta`/`ps1` 등 스크립트성 확장자가 그대로 통과하는 문제가 있어 화이트리스트로 전환).
 
 ### 첨부 업로드 시작 `POST /api/v1/bidding/notices/{noticeId}/attachments/uploads`
 
@@ -955,11 +957,18 @@ Request Body는 없다. 서버가 저장소 HEAD로 객체 존재·크기를 검
 
 ### 처리 규칙
 
-1. 대상 공고가 현재 회사 소유의 직접 등록(MANUAL) 공고인지 확인한다(수정 API와 동일 판정).
+1. 대상 공고가 현재 회사 소유의 직접 등록(MANUAL) 공고인지 확인한다(수정 API와 동일 판정) — 이 조회는
+   공고 행에 잠금을 걸고 수행해, 같은 공고에 동시에 여러 업로드가 시작돼도 아래 2번의 개수 제한이
+   정확히 지켜진다(2026-08-14 CodeRabbit 지적 반영 — 잠금이 없으면 동시 요청이 같은 개수를 읽어 10개
+   제한을 넘겨 생성할 수 있었음).
 2. 링크형+업로드형을 합친 현재 활성 첨부가 10개 미만인지 확인한다(시작 시점).
-3. 완료 통보 시 `UPLOADING` 상태가 아니면 거부한다(중복 통보 방지).
-4. 저장소에 객체가 없거나 크기가 요청과 다르면 `FAILED`로 종료하고 409를 반환한다. 실패한 업로드는
-   재시도 대상이 아니며 클라이언트가 새 업로드를 다시 시작해야 한다.
+3. 완료 통보 시 `UPLOADING` 상태가 아니면 거부한다(중복 통보 방지) — 이 전이도 `UPLOADING`일 때만
+   반영되는 조건부 UPDATE로 처리해 동시에 들어온 완료·실패 통보끼리 경합해도 하나만 반영된다.
+4. 저장소에 객체가 없거나 크기가 요청과 다르면 `FAILED`로 종료하고 409(`..._OBJECT_NOT_FOUND` 또는
+   `..._SIZE_MISMATCH`)를 반환한다. 실패한 업로드는 재시도 대상이 아니며 클라이언트가 새 업로드를
+   다시 시작해야 한다. 이미 `FAILED`로 종료된 첨부에 완료 통보가 다시 오면 `..._ALREADY_COMPLETED`가
+   아니라 별도의 `BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED`를 반환한다(2026-08-14 CodeRabbit
+   지적 반영 — 실패한 업로드를 "이미 완료됨"으로 잘못 안내하던 문제).
 5. 완료(`READY`) 처리된 첨부만 검토(bidreview) 자료 조회·검토 요청에서 선택 가능하다.
 
 ### Status Code
@@ -975,7 +984,8 @@ Request Body는 없다. 서버가 저장소 HEAD로 객체 존재·크기를 검
 | 404 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_NOT_FOUND` | 완료 통보 | 업로드 대상 첨부를 찾을 수 없음 |
 | 409 | `BIDDING_NOTICE_EDIT_NOT_ALLOWED` | 전체 | 외부 수집 공고처럼 직접 등록 대상이 아님 |
 | 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_LIMIT_EXCEEDED` | 시작 | 첨부 개수가 이미 10개(링크+업로드 합산) |
-| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED` | 완료 통보 | 이미 완료 또는 실패 처리된 업로드 |
+| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED` | 완료 통보 | 이미 완료(`READY`) 처리된 업로드 |
+| 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED` | 완료 통보 | 이미 실패(`FAILED`)로 종료된 업로드 - 새 업로드를 다시 시작해야 함 |
 | 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND` | 완료 통보 | 저장소에서 객체를 찾을 수 없음(FAILED로 종료됨) |
 | 409 | `BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH` | 완료 통보 | 저장된 객체 크기가 요청과 다름(FAILED로 종료됨) |
 
@@ -1106,6 +1116,7 @@ Request Body는 없다.
 | HTTP | code | 적용 API | 설명 |
 |------|------|----------|------|
 | 200 | - | 등록·해제 | 처리 성공 |
+| 400 | `BIDDING_INVALID_NOTICE_QUERY` | 등록·해제 | noticeId가 유효하지 않음 |
 | 401 | `AUTH_UNAUTHENTICATED` | 등록·해제 | 인증되지 않음 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 등록·해제 | 입찰 관리 권한 없음 |
 | 404 | `BIDDING_NOTICE_NOT_FOUND` | 등록·해제 | 현재 회사에서 조회할 수 없는 공고 |
