@@ -133,9 +133,13 @@ class ProjectDuplicateServiceTest {
     void 상한_초과() {
         given(blockClonePort.countBlocks(SOURCE_ID)).willReturn(301);
 
+        // 코드까지 본다 — 메시지의 "301" 만 보면 다른 검증 오류가 같은 숫자를 담아도 통과한다.
+        // 프론트는 이 코드로 「원본을 줄여 달라」 안내를 분기한다.
         assertThatThrownBy(() -> projectCommandService.duplicateProject(command(null)))
                 .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("301");
+                .hasMessageContaining("301")
+                .extracting(e -> ((ValidationException) e).getErrorCode())
+                .isEqualTo(ProjectErrorCode.PROJECT_DUPLICATE_TOO_LARGE);
 
         // 프로젝트도 만들지 않는다 — 다 만든 뒤 거절하면 그만큼 헛일하고 롤백한다
         Mockito.verify(projectRepository, Mockito.never()).save(any(Project.class));

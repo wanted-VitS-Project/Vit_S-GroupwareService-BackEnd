@@ -25,6 +25,7 @@ public record ProjectDuplicateRequest(
         @Schema(description = "설명", example = "상수도 관리 시스템 고도화 용역")
         String description,
 
+        @Size(max = 200, message = "CLIENT_NAME_TOO_LONG|발주처는 200자를 넘을 수 없습니다.")
         @Schema(description = "발주처 (최대 200자)", example = "OO시청")
         String clientName,
 
