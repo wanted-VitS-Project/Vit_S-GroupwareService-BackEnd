@@ -87,7 +87,7 @@ class ProjectCategoryAndDeleteServiceTest {
                 new LinkBusinessCategoriesCommand(PROJECT_ID, List.of(4L), REQUESTER, "USER"));
 
         assertThat(result.businessCategories()).hasSize(2);
-        Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
+        Mockito.verify(projectBusinessCategoryRepository).linkAll(COMPANY_ID, PROJECT_ID, List.of(4L));
     }
 
     @Test
@@ -108,7 +108,7 @@ class ProjectCategoryAndDeleteServiceTest {
         assertThat(result.businessCategories())
                 .extracting(BusinessCategorySummary::categoryId, BusinessCategorySummary::deleted)
                 .containsExactly(tuple(1L, true), tuple(4L, false));
-        Mockito.verify(projectBusinessCategoryRepository).linkAll(PROJECT_ID, List.of(4L));
+        Mockito.verify(projectBusinessCategoryRepository).linkAll(COMPANY_ID, PROJECT_ID, List.of(4L));
     }
 
     @Test
@@ -134,7 +134,7 @@ class ProjectCategoryAndDeleteServiceTest {
                 .isInstanceOf(ConflictException.class);
 
         Mockito.verify(projectBusinessCategoryRepository, Mockito.never())
-                .linkAll(any(), anyList());
+                .linkAll(any(), any(), anyList());
     }
 
     @Test

@@ -13,9 +13,9 @@ public class ProjectBusinessCategoryRepositoryAdapter implements ProjectBusiness
     private final SpringDataProjectBusinessCategoryRepository springDataRepository;
 
     @Override
-    public void linkAll(Long projectId, List<Long> businessCategoryIds) {
+    public void linkAll(Long companyId, Long projectId, List<Long> businessCategoryIds) {
         List<ProjectBusinessCategoryJpaEntity> links = businessCategoryIds.stream()
-                .map(categoryId -> new ProjectBusinessCategoryJpaEntity(null, projectId, categoryId))
+                .map(categoryId -> new ProjectBusinessCategoryJpaEntity(null, companyId, projectId, categoryId))
                 .toList();
         springDataRepository.saveAll(links);
     }
