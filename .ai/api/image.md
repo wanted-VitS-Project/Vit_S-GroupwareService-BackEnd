@@ -261,6 +261,9 @@
 | `message` | String | 응답 메시지 |
 | `data.images` | List<Object> | 프로젝트 내 전체(활성) 이미지 목록 |
 | `data.images[].imgBlockId` | Long | 속한 블록 ID |
+| `data.images[].blockTitle` | String | 속한 블록 제목. 제목을 지정하지 않은 블록이면 `null` (2026-08-14 프론트 요청으로 추가) |
+| `data.images[].stepId` | Long | 속한 스텝 ID (2026-08-14 추가) |
+| `data.images[].stepName` | String | 속한 스텝 이름 (2026-08-14 추가) |
 | `data.images[].imgId` | Long | 이미지 ID |
 | `data.images[].originalName` | String | 원본 파일명 |
 | `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
