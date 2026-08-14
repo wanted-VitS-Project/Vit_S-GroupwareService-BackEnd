@@ -11,7 +11,11 @@
         cashFlow/taxInvoice unlinkedCount: is_excluded = FALSE(제외 대상 아님) AND settle_block_id IS NULL
         (정산 블록에 매칭된 적 없음)인 행만 센다. totalCount는 is_excluded 무관, 소프트 삭제만 제외한 전체 건수다.
 
-        settlementUnlinkedCount: settlement_block.status = 'PENDING' = "미연결"(컬럼 코멘트 그대로).
+        settlementUnlinkedCount: 입출금이 아직 연결되지 않은 활성 정산 블록 수 = status IN ('PENDING','WAITING').
+        ⚠️ WAITING을 포함한다 (2026-08-13) — WAITING은 "세금계산서만 붙고 입금은 아직 안 들어온" 상태다.
+        예전엔 PENDING만 셌는데, WAITING이 실제로 쓰이기 시작하면서 그 회차가 어느 카운트에도 안 잡혀
+        조용히 사라지는 문제가 있었다. 요약 지표에서는 둘 다 "정산이 아직 안 끝난 회차"로 묶는다
+        (사용자 확정: "입출금 미연결이 두 가지 경우가 있으니까 포함해야지").
         삭제 판정은 settlement_block.deleted_at·block.deleted_at 둘 다 확인한다(block.deleted_at 우선 규칙).
 
         settlementInProgressCount: 정산 블록 유무와 무관하게 project.status가 COMPLETED·CLOSED가 아닌
@@ -40,7 +44,8 @@
         JOIN block b ON b.block_id = sb.block_id
         JOIN step st ON st.step_id = b.step_id
         JOIN project p ON p.project_id = st.project_id
-        WHERE sb.deleted_at IS NULL AND b.deleted_at IS NULL AND sb.status = 'PENDING'
+        WHERE sb.deleted_at IS NULL AND b.deleted_at IS NULL
+        AND sb.status IN ('PENDING', 'WAITING')
         AND p.company_id = #{companyId}) AS settlementUnlinkedCount,
         (SELECT COUNT(*) FROM project
         WHERE deleted_at IS NULL AND status NOT IN ('COMPLETED', 'CLOSED')

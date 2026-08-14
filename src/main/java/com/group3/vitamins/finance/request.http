@@ -567,3 +567,504 @@ Content-Type: application/json
     "cashFlowIds": [199],
     "isExcluded": true
 }
+
+### ========================================================================
+### 10단계 — 세금계산서 조회 (2026-08-12 신규)
+### 등록 API가 아직 없어(cash_flow 3단계와 동일 사유) SQL로 직접 넣어야 한다. 아래 세 가지 조합을 넣고 비교할 것:
+###   A. 미연결·비제외                 → unlinked=true 목록에 나옴, linkStatus=UNLINKED
+###   B. is_excluded = TRUE            → unlinked=true 목록엔 안 나오지만 전체 조회엔 나옴
+###   C. settle_block_id 로 정산 블록에 연결됨 → linkStatus=LINKED
+### C는 0-4(정산 블록 settleId 확인)에서 만든 실제 settleId로 바꿔서 실행할 것(아래는 1로 가정).
+### ⚠️ tax_invoice.company_id는 DEFAULT가 없다 — INSERT에 반드시 명시할 것. 회사가 하나뿐이니 전부 1.
+### ⚠️ approval_no는 UNIQUE(uk_tax_invoice_approval_no) — 재실행 시 값을 바꿔야 한다.
+### ========================================================================
+
+### [DB 직접 조작] tax_invoice A — 미연결·비제외
+### INSERT INTO tax_invoice (company_id, type, approval_no, issued_no, supply_amount, tax_amount, total_amount, buyer_name, buyer_biz_no, source_type)
+### VALUES (1, 'INCOME', 'APV-TEST-A-001', '2026-08-01', 40909090, 4090910, 45000000, '환경부', '1234567890', 'HOMETAX_API');
+
+### [DB 직접 조작] tax_invoice B — is_excluded = TRUE
+### INSERT INTO tax_invoice (company_id, type, approval_no, issued_no, supply_amount, tax_amount, total_amount, buyer_name, buyer_biz_no, source_type, is_excluded)
+### VALUES (1, 'INCOME', 'APV-TEST-B-001', '2026-08-02', 20000000, 2000000, 22000000, '환경부', '1234567890', 'CSV', TRUE);
+
+### [DB 직접 조작] tax_invoice C — settle_block_id 연결됨 (아래 1을 실제 settleId로 교체)
+### INSERT INTO tax_invoice (company_id, settle_block_id, type, approval_no, issued_no, supply_amount, tax_amount, total_amount, buyer_name, buyer_biz_no, source_type, linked_by, linked_at)
+### VALUES (1, 1, 'INCOME', 'APV-TEST-C-001', '2026-08-03', 90000000, 9000000, 99000000, '환경부', '1234567890', 'HOMETAX_API', 'vitas-EMP006', NOW());
+
+### 기본 조회 — page/size 생략 시 기본값(0/20). A·B·C 전부 issuedNo 내림차순(C→B→A)으로 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices
+
+### unlinked=true — A·B 둘 다 나와야 한다(둘 다 settle_block_id가 NULL). is_excluded 여부는 이 필터와
+### 무관하다 — B는 is_excluded=TRUE지만 미연결이라 여기 포함된다(재무 관리 요약의 unlinkedCount와는 판정
+### 기준이 다르다 — 거긴 is_excluded=FALSE까지 같이 봄. cash_flow의 unlinked 필터와 동일 규칙)
+GET localhost:8080/api/v1/finance/tax-invoices?unlinked=true
+
+### projectId 필터 — C가 연결된 프로젝트의 projectId로 교체. C 하나만 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?projectId=1
+
+### keyword 필터 — approvalNo("APV-TEST-A-001")로 검색하면 A만 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?keyword=APV-TEST-A-001
+
+### startDate/endDate 필터 — A·B·C가 2026-08-01~03에 걸쳐 있으므로 그 범위로 지정하면 셋 다 나오고,
+### 범위를 벗어나면(예: 8월 10일부터) 전부 빠져야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?startDate=2026-08-01&endDate=2026-08-03
+###
+GET localhost:8080/api/v1/finance/tax-invoices?startDate=2026-08-10&endDate=2026-08-20
+
+### size=1 — 페이지 나뉘는지 확인. totalElements=3, totalPages=3, taxInvoices엔 1건만(가장 최신인 C)
+GET localhost:8080/api/v1/finance/tax-invoices?size=1
+
+### sort=ISSUED_NO_ASC — 가장 오래된 것부터(A→B→C) 나와야 한다
+GET localhost:8080/api/v1/finance/tax-invoices?sort=ISSUED_NO_ASC
+
+### sort=AMOUNT_DESC — 합계(totalAmount) 큰 순으로 나와야 한다(C→A→B)
+GET localhost:8080/api/v1/finance/tax-invoices?sort=AMOUNT_DESC
+
+### page 음수 → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?page=-1
+
+### size 101(최대 초과) → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?size=101
+
+### sort 허용값 아님 → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?sort=INVALID_SORT
+
+### startDate > endDate(날짜 역전) → 400 FINANCE_PAGE_QUERY_INVALID
+GET localhost:8080/api/v1/finance/tax-invoices?startDate=2026-08-10&endDate=2026-08-01
+
+### 접근 권한 없음 → 403 FINANCE_ACCESS_DENIED 확인용 — FINANCE 페이지 권한 없는 MEMBER 계정으로 로그인 후 호출
+GET localhost:8080/api/v1/finance/tax-invoices
+###
+GET localhost:8080/api/v1/finance/tax-invoices/filters
+
+### [DB 직접 조작] 연결됐던 정산 블록이 삭제된 경우 → linkStatus=LINK_BLOCK_DELETED 확인용
+### C가 연결된 settle_id(위에서 1로 가정)의 block을 소프트 삭제한 뒤 재조회하면 C의 linkStatus가
+### LINK_BLOCK_DELETED로 바뀌어야 한다(settleId/roundName 값 자체는 유지됨).
+### 예: UPDATE block SET deleted_at = NOW() WHERE block_id = (SELECT block_id FROM settlement_block WHERE settle_id = 1);
+GET localhost:8080/api/v1/finance/tax-invoices
+
+### 확인 후 되돌리려면: UPDATE block SET deleted_at = NULL WHERE block_id = (SELECT block_id FROM settlement_block WHERE settle_id = 1);
+
+### 세금계산서 필터 옵션 조회 — C가 연결된 프로젝트 하나가 나와야 한다(A·B는 미연결이라 안 잡힘)
+GET localhost:8080/api/v1/finance/tax-invoices/filters
+
+### ========================================================================
+### 11단계 — 세금계산서 CSV 업로드 (미리보기 → 업로드, 2026-08-12 신규)
+### 편집 권한(EDITOR) 필요 — 7단계(입출금 CSV)와 동일한 권한 규칙.
+### ⚠️ sample-tax-invoice.csv는 실제 홈택스 파일로 테스트하느라 지워짐(2026-08-13) — 아래 요청들은
+### 실제 세금계산서 CSV/엑셀 파일로 직접 대체해서 실행할 것(파일 파트만 그 파일로 바꾸면 됨).
+### recommendedType은 헤더 위 제목 줄(예: "2022년도 매출세금계산서")의 "매출"/"매입" 키워드로 추천된다.
+### 공급자/공급받는자 블록이 겹치는 헤더명("상호"/"대표자명"/"종사업장번호")은 두 번째부터 " (2)" 접미사가
+### 붙어 `columns`에 구분되어 나온다 — recommendedMapping의 buyerNameColumn/ceoNameColumn/subBizNoColumn은
+### recommendedType=OUTCOME(매입)이면 접미사 없는 쪽(공급자), INCOME(매출)이거나 판단 불가면 " (2)" 쪽
+### (공급받는자)을 가리켜야 한다(2026-08-13, `.ai/api/finance.md` 참고).
+### ========================================================================
+
+### 11-1. CSV 컬럼 추천 조회 — recommendedType과 recommendedMapping이 위 규칙대로 나오는지 확인.
+### 매출 파일이면 buyerNameColumn 등이 " (2)"(공급받는자) 쪽, 매입 파일이면 접미사 없는(공급자) 쪽인지 확인.
+POST localhost:8080/api/v1/finance/tax-invoices/csv/preview
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary--
+
+### 11-2. CSV 업로드 — totalRows=3. 1·3행이 승인번호(20260720-12345678)가 완전히 동일해서
+### 그중 하나가 duplicateRows로 빠져야 한다 → savedCount=2, duplicateCount=1.
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "INCOME",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "buyerNameColumn": "상호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액",
+    "itemNameColumn": "품목"
+}
+--WebAppBoundary--
+
+### 11-3. 같은 파일 재업로드 — 이번엔 3행 전부(1·3행 포함)가 이미 DB에 있으므로
+### savedCount=0, duplicateCount=3이어야 한다(DB 레벨 중복 판정 확인).
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "INCOME",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "buyerNameColumn": "상호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액",
+    "itemNameColumn": "품목"
+}
+--WebAppBoundary--
+
+### 11-4. 필수 컬럼 매핑 누락(buyerNameColumn 빠뜨림) → 400 FINANCE_CSV_MAPPING_REQUIRED 확인용
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "INCOME",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액"
+}
+--WebAppBoundary--
+
+### 11-5. type 값이 INCOME/OUTCOME이 아님 → 400 FINANCE_CSV_MAPPING_REQUIRED 확인용
+POST localhost:8080/api/v1/finance/tax-invoices/csv
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary
+Content-Disposition: form-data; name="request"
+Content-Type: application/json
+
+{
+    "type": "잘못된값",
+    "approvalNoColumn": "승인번호",
+    "issuedDateColumn": "작성일자",
+    "supplierBizNoColumn": "공급자사업자번호",
+    "buyerBizNoColumn": "공급받는자사업자번호",
+    "buyerNameColumn": "상호",
+    "supplyAmountColumn": "공급가액",
+    "taxAmountColumn": "세액",
+    "totalAmountColumn": "합계금액"
+}
+--WebAppBoundary--
+
+### 11-6. 편집 권한 없음(VIEWER거나 미부여) → 403 FINANCE_EDIT_ACCESS_DENIED 확인용
+### FINANCE에 VIEWER만 부여됐거나 아예 없는 MEMBER 계정으로 로그인 후 호출할 것
+POST localhost:8080/api/v1/finance/tax-invoices/csv/preview
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="sample-tax-invoice.csv"
+Content-Type: text/csv
+
+< ./sample-tax-invoice.csv
+--WebAppBoundary--
+
+### 11-7. 유효하지 않은 형식(파일 파트 자체를 빼고 호출) → 404 FINANCE_INVALID_CSV_FILE 확인용
+POST localhost:8080/api/v1/finance/tax-invoices/csv/preview
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+### ========================================================================
+### 12단계 — 세금계산서 매칭 추천 조회 / 블록 매칭 / 매칭 해제 (2026-08-13 신규)
+### 편집 권한(EDITOR) 필요.
+###
+### ⭐ 정산 블록 하나에는 입출금 1건 + 세금계산서 1장이 **각각** 붙는다. 두 원장은 서로를 막지 않는다.
+###    status는 그 조합의 결과값이다 — 둘 다 없으면 PENDING, 세금계산서만 있으면 WAITING(정산 대기),
+###    입출금이 붙으면 금액에 따라 PARTIAL(예정보다 적음)/COMPLETED(예정 이상). 순서는 무관하다.
+###    ⚠️ 세금계산서 매칭은 실적값(actual_amount/actual_date)을 건드리지 않는다 — 입출금 소관이다.
+###    상세는 `.ai/api/finance.md` "⭐ 정산 블록 status 규칙" 절 참고.
+###
+### ⚠️ 준비물: ① 11단계에서 업로드한(또는 3단계에서 SQL로 넣은) 미매칭 세금계산서의 taxId,
+### ② 같은 타입(INCOME/OUTCOME)이고 **세금계산서가 아직 안 붙은** 정산 블록의 settleId.
+### 8단계에서 입출금을 매칭해둔 블록을 그대로 재사용해도 된다(그게 12-5 시나리오다).
+### ⚠️ 추천 후보로 뜨려면 4기준(금액·세액·상호명·발행일) 중 최소 하나가 걸려야 한다. 아무것도 안 걸리면
+### 정상적으로 빈 배열이 나온다 — 블록의 planned_amount/planned_tax_amount/planned_date/trader_name을
+### 세금계산서 값과 맞춰두면 4개 다 "일치"로 뜬다. trader_name은 세금계산서 buyer_name을 그대로 복사할 것
+### ("㈜"와 "(주)"는 다른 문자열이라 한쪽만 달라도 상호명 기준이 탈락한다).
+### 아래 URL의 taxId(3)·settleId(4)는 전부 본인 환경 값으로 교체해서 실행할 것.
+### ========================================================================
+
+### 12-1. 매칭 추천 조회 — 같은 타입 + 세금계산서가 안 붙은 블록, 매칭 개수 많은 순 최대 5건.
+### matchTags에 "금액 일치/유사", "세액 일치/유사", "상호명 일치/유사", "일자 일치/유사"가 붙는다.
+### ⚠️ status는 조건이 아니다 — 입출금이 이미 매칭된 PARTIAL/COMPLETED 블록도 후보에 떠야 한다
+### (입금은 끝났고 세금계산서만 기다리는 정상 대상이다).
+### 네 기준 다 안 걸리는 블록은 아예 안 나와야 한다(빈 배열이면 candidates: []).
+GET localhost:8080/api/v1/finance/tax-invoices/3/match-candidates
+
+### 12-2. 존재하지 않는(또는 삭제된/타사) 세금계산서로 추천 조회 → 404 FINANCE_TAX_INVOICE_NOT_FOUND
+GET localhost:8080/api/v1/finance/tax-invoices/999999/match-candidates
+
+### 12-3. 블록 매칭 — 성공(200). 응답의 roundName/projectName/linkedBy/linkedByName/linkedAt 확인.
+### ⚠️ 매칭 직후 settlement_block의 status만 바뀐다 — PENDING이었으면 WAITING(정산 대기)으로,
+### 이미 PARTIAL/COMPLETED(입출금이 붙은 블록)면 그대로 유지된다.
+### ⚠️ actual_amount/actual_date는 그대로 둔다(NULL이면 NULL 유지) — 실적값은 입출금 소관이다.
+### 정산 현황 블록 조회(GET /api/v1/projects/{projectId}/settlements)로 둘 다 확인할 것.
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/match
+Content-Type: application/json
+
+{
+  "settleId": 4
+}
+
+### 12-4. 방금 매칭한 세금계산서를 다시 매칭 시도 → 400 FINANCE_TAX_INVOICE_ALREADY_MATCHED
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/match
+Content-Type: application/json
+
+{
+  "settleId": 4
+}
+
+### 12-5. 타입이 다른 정산 블록에 매칭 시도 → 400 FINANCE_TAX_TYPE_MISMATCH
+### (INCOME 세금계산서 + OUTCOME 정산 블록, 또는 아직 항목을 한 번도 안 채운 빈 블록(type=NULL))
+PATCH localhost:8080/api/v1/finance/tax-invoices/5/match
+Content-Type: application/json
+
+{
+  "settleId": 5
+}
+
+### 12-6. 세금계산서가 이미 1장 붙은 블록에 다른 세금계산서를 매칭 시도
+### → 400 FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED
+### ⚠️ 판정 기준은 status가 아니라 "그 블록에 세금계산서가 있나"다 — 입출금이 붙어 있는지와는 무관하다.
+PATCH localhost:8080/api/v1/finance/tax-invoices/6/match
+Content-Type: application/json
+
+{
+  "settleId": 4
+}
+
+### 12-6-1. 제외 처리된 세금계산서를 매칭 시도 → 400 FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH
+### 먼저 13-8로 제외 처리한 taxId로 실행할 것. 제외를 취소(13-10)하면 다시 매칭된다.
+### ⚠️ 입출금도 같은 규칙이다(7단계 "입출력 블록 매칭"을 제외 처리된 cashFlowId로 실행 → 400).
+PATCH localhost:8080/api/v1/finance/tax-invoices/4/match
+Content-Type: application/json
+
+{
+  "settleId": 4
+}
+
+### 12-7. 존재하지 않는 세금계산서 또는 정산 블록 → 404 FINANCE_TAX_MATCH_TARGET_NOT_FOUND
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/match
+Content-Type: application/json
+
+{
+  "settleId": 999999
+}
+
+### 12-8. 매칭 해제 — 성공(200, data=null). 본문 없음.
+### ⚠️ 해제 후 상태는 입출금 유무로 갈린다 — 입출금이 없으면 PENDING(미연결)으로 돌아가고,
+### 입출금이 아직 붙어 있으면 PARTIAL/COMPLETED가 그대로 유지된다(실적값도 그대로).
+### 정산 현황 블록 조회로 확인할 것.
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/unmatch
+
+### 12-9. 매칭 안 된 세금계산서 매칭 해제 시도 → 400 FINANCE_TAX_INVOICE_NOT_MATCHED
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/unmatch
+
+### 12-10. 존재하지 않는 세금계산서 매칭 해제 시도 → 404 FINANCE_TAX_INVOICE_NOT_FOUND
+PATCH localhost:8080/api/v1/finance/tax-invoices/999999/unmatch
+
+### 12-11. 편집 권한 없음(VIEWER거나 미부여) → 403 FINANCE_EDIT_ACCESS_DENIED
+### 세 API 전부 동일하게 확인할 것(아래는 추천 조회 예시)
+GET localhost:8080/api/v1/finance/tax-invoices/3/match-candidates
+
+### ========================================================================
+### 12-A. [핵심 시나리오] 매칭 순서를 거꾸로 — 입출금 먼저, 세금계산서 나중
+### 2026-08-13 규칙 재구현으로 가능해진 흐름이다(예전엔 status=PENDING만 허용해서 아예 막혔다).
+### 아래 순서대로 실행하면서 정산 현황 블록 조회로 status·actualAmount를 매 단계 확인할 것.
+###
+###   ① 8단계로 입출금 직접 등록 → 그 블록에 입출금 매칭
+###      → status = COMPLETED(입금 >= 예정금액) 또는 PARTIAL(미달), actualAmount 채워짐
+###   ② 아래 12-A-1 로 같은 블록에 세금계산서 매칭
+###      → 200 성공. status는 ①의 값 그대로 유지, actualAmount도 그대로(세금계산서는 실적값을 안 건드림)
+###   ③ 아래 12-A-2 로 세금계산서만 해제
+###      → status·actualAmount 둘 다 ①의 값 그대로 유지 (PENDING으로 떨어지지 않는 것이 핵심)
+###   ④ 입출금까지 해제(7단계 아래 "입출력 블록 매칭 해제")
+###      → 이제야 status = PENDING, actualAmount = NULL
+###
+### 반대 순서(세금계산서 먼저 → WAITING → 입출금 → PARTIAL/COMPLETED → 입출금 해제 → WAITING 복귀)도
+### 같은 방식으로 확인할 것. 어느 순서로 붙여도 최종 상태가 같아야 한다.
+### ========================================================================
+
+### 12-A-1. 입출금이 이미 매칭된 블록(PARTIAL/COMPLETED)에 세금계산서 매칭 → 200, status 유지
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/match
+Content-Type: application/json
+
+{
+  "settleId": 4
+}
+
+### 12-A-2. 그 상태에서 세금계산서만 해제 → 200, status·실적값 그대로 유지
+PATCH localhost:8080/api/v1/finance/tax-invoices/3/unmatch
+
+### ========================================================================
+### 13단계 — 세금계산서 메모 수정 / 삭제 / 연결 제외 처리 (2026-08-13 신규)
+### 편집 권한(EDITOR) 필요. 세금계산서는 수동 등록이 없어(전부 CSV/엑셀 업로드) **수정은 메모만** 된다 —
+### 승인번호·금액·사업자번호는 국세청 발급 원본 값이라 고칠 수 없고, 요청 바디에 memo 하나만 받는다.
+### 아래 taxId는 전부 본인 환경 값으로 교체할 것.
+### ========================================================================
+
+### 13-1. 메모 수정 — 200. 응답의 memo·updatedAt 확인.
+PATCH localhost:8080/api/v1/finance/tax-invoices/3
+Content-Type: application/json
+
+{
+  "memo": "재입고 관련 확인 필요"
+}
+
+### 13-2. 메모 비우기 — memo에 빈 문자열(또는 null)을 보내면 메모가 지워진다.
+PATCH localhost:8080/api/v1/finance/tax-invoices/3
+Content-Type: application/json
+
+{
+  "memo": ""
+}
+
+### 13-3. 매칭된 세금계산서의 메모 수정 — 200 성공해야 한다(매칭 여부와 무관하게 메모는 항상 수정 가능).
+### 12단계로 매칭해둔 taxId로 실행할 것.
+PATCH localhost:8080/api/v1/finance/tax-invoices/3
+Content-Type: application/json
+
+{
+  "memo": "매칭된 건도 메모는 수정 가능"
+}
+
+### 13-4. 존재하지 않는 세금계산서 메모 수정 → 404 FINANCE_TAX_INVOICE_NOT_FOUND
+PATCH localhost:8080/api/v1/finance/tax-invoices/999999
+Content-Type: application/json
+
+{
+  "memo": "없는 건"
+}
+
+### 13-5. 배치 삭제 — 매칭된 것(3) + 없는 ID(999999) + 미매칭 건(6)을 섞어서 보낸다.
+### → 400/404가 아니라 200. 미매칭 건만 지워지고(deletedCount=1) 나머지는 skippedItems에 사유와 함께 담긴다.
+### 매칭된 건: "매칭된 항목은 삭제할 수 없습니다. 먼저 매칭을 해제해주세요."
+### 없는 ID: "존재하지 않는 세금계산서입니다."
+DELETE localhost:8080/api/v1/finance/tax-invoices
+Content-Type: application/json
+
+{
+  "taxIds": [3, 6, 999999]
+}
+
+### 13-6. 매칭 해제 후 삭제 → deletedCount=1. 목록 조회(10단계)에서 사라지는지 확인할 것(소프트 삭제).
+### 먼저 12-8로 매칭을 해제하고 실행할 것.
+DELETE localhost:8080/api/v1/finance/tax-invoices
+Content-Type: application/json
+
+{
+  "taxIds": [3]
+}
+
+### 13-7. taxIds 비어있음 → 400 FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING ("삭제할 항목을 선택해주세요.")
+DELETE localhost:8080/api/v1/finance/tax-invoices
+Content-Type: application/json
+
+{
+  "taxIds": []
+}
+
+### 13-7-1. 같은 ID 중복 → deletedCount가 부풀려지지 않고 1이어야 한다(중복 제거).
+DELETE localhost:8080/api/v1/finance/tax-invoices
+Content-Type: application/json
+
+{
+  "taxIds": [7, 7, 7]
+}
+
+### 13-8. 연결 제외 처리 — 미매칭 건들을 제외한다. updatedCount 확인.
+### ⚠️ 재무 요약(1단계)의 taxInvoice.unlinkedCount가 제외한 건수만큼 줄어야 한다.
+PATCH localhost:8080/api/v1/finance/tax-invoices/exclude
+Content-Type: application/json
+
+{
+  "taxIds": [4, 5],
+  "isExcluded": true
+}
+
+### 13-9. 매칭된 것 + 없는 ID + 미매칭 건을 섞어서 제외 처리
+### → 400이 아니라 200. 처리 가능한 건만 처리하고 나머지는 skippedItems에 사유와 함께 담긴다.
+### 매칭된 건: "이미 매칭된 항목은 제외 처리할 수 없습니다." / 없는 ID: "존재하지 않는 세금계산서입니다."
+PATCH localhost:8080/api/v1/finance/tax-invoices/exclude
+Content-Type: application/json
+
+{
+  "taxIds": [3, 6, 999999],
+  "isExcluded": true
+}
+
+### 13-10. 제외 취소 — 매칭된 건을 섞어도 전부 처리돼야 한다(skippedItems는 없는 ID만).
+### 제외 취소는 매칭 여부와 무관하게 항상 허용된다. 요약의 unlinkedCount가 원래대로 돌아오는지 확인할 것.
+PATCH localhost:8080/api/v1/finance/tax-invoices/exclude
+Content-Type: application/json
+
+{
+  "taxIds": [3, 4, 5],
+  "isExcluded": false
+}
+
+### 13-11. 같은 ID를 중복으로 보냄 → updatedCount가 부풀려지지 않고 1이어야 한다(중복 제거).
+PATCH localhost:8080/api/v1/finance/tax-invoices/exclude
+Content-Type: application/json
+
+{
+  "taxIds": [4, 4, 4],
+  "isExcluded": true
+}
+
+### 13-12. taxIds 비어있음 → 400 FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING
+PATCH localhost:8080/api/v1/finance/tax-invoices/exclude
+Content-Type: application/json
+
+{
+  "taxIds": [],
+  "isExcluded": true
+}
+
+### 13-13. isExcluded 누락 → 400 FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING
+PATCH localhost:8080/api/v1/finance/tax-invoices/exclude
+Content-Type: application/json
+
+{
+  "taxIds": [4]
+}
+
+### 13-14. 편집 권한 없음(VIEWER거나 미부여) → 403 FINANCE_EDIT_ACCESS_DENIED
+### 세 API 전부 동일하게 확인할 것(아래는 삭제 예시)
+DELETE localhost:8080/api/v1/finance/tax-invoices
+Content-Type: application/json
+
+{
+  "taxIds": [4]
+}

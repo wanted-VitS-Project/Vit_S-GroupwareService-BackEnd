@@ -6,11 +6,20 @@ import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
+import com.group3.vitamins.finance.application.query.TaxInvoiceMatchCandidatesQuery;
 import com.group3.vitamins.finance.application.command.CashFlowCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
 import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceMemoCommand;
+import com.group3.vitamins.finance.application.command.DeleteTaxInvoicesCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceExclusionCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowCsvPreviewView;
@@ -19,11 +28,20 @@ import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.Cas
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowDetailView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowExclusionResultView;
 import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.CashFlowMatchView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvPreviewView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceCsvUploadView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceMatchView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceMemoView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceDeleteResultView;
+import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.TaxInvoiceExclusionResultView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowListView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.FinanceSummaryView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.MatchCandidatesView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceFilterView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceListView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceMatchCandidatesView;
 import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
 import com.group3.vitamins.finance.presentation.api.request.CashFlowCsvUploadRequest;
 import com.group3.vitamins.finance.presentation.api.response.CashFlowCsvPreviewResponse;
@@ -41,7 +59,21 @@ import com.group3.vitamins.finance.presentation.api.response.CashFlowMatchCandid
 import com.group3.vitamins.finance.presentation.api.response.CashFlowMatchResponse;
 import com.group3.vitamins.finance.presentation.api.response.CashFlowUpdateResponse;
 import com.group3.vitamins.finance.presentation.api.request.MatchCashFlowRequest;
+import com.group3.vitamins.finance.presentation.api.request.MatchTaxInvoiceRequest;
 import com.group3.vitamins.finance.presentation.api.response.FinanceSummaryResponse;
+import com.group3.vitamins.finance.presentation.api.request.TaxInvoiceCsvUploadRequest;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceCsvPreviewResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceCsvUploadResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceFilterResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceListResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMatchCandidatesResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMatchResponse;
+import com.group3.vitamins.finance.presentation.api.request.UpdateTaxInvoiceMemoRequest;
+import com.group3.vitamins.finance.presentation.api.request.UpdateTaxInvoiceExclusionRequest;
+import com.group3.vitamins.finance.presentation.api.request.DeleteTaxInvoicesRequest;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceMemoResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceDeleteResponse;
+import com.group3.vitamins.finance.presentation.api.response.TaxInvoiceExclusionResponse;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -150,6 +182,288 @@ public class FinanceController {
         return ResponseEntity.ok(ApiResponse.success("입출금 내역 필터 옵션 조회 성공", CashFlowFilterResponse.from(view)));
     }
 
+    @Operation(summary = "세금계산서 조회",
+            description = "재무 관리 페이지의 세금계산서 목록을 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "페이지 조회 조건이 올바르지 않습니다. (FINANCE_PAGE_QUERY_INVALID)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)")
+    })
+    @GetMapping("/tax-invoices")
+    public ResponseEntity<ApiResponse<TaxInvoiceListResponse>> getTaxInvoices(
+            @Parameter(description = "조회 시작일(issuedNo 날짜 기준)", example = "2026-07-01")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @Parameter(description = "조회 종료일(issuedNo 날짜 기준)", example = "2026-07-31")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "미연결 항목만 조회(true: 미매칭, 없으면 전체)", example = "true")
+            @RequestParam(required = false) Boolean unlinked,
+            @Parameter(description = "매칭 프로젝트 필터", example = "1")
+            @RequestParam(required = false) Long projectId,
+            @Parameter(description = "승인번호 또는 공급받는자 상호명 검색 키워드", example = "환경부")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "0-base 페이지 번호. 생략하면 0", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지당 개수(최대 100). 생략하면 20", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "정렬 기준. 생략하면 ISSUED_NO_DESC",
+                    example = "ISSUED_NO_DESC",
+                    schema = @io.swagger.v3.oas.annotations.media.Schema(
+                            allowableValues = {"ISSUED_NO_DESC", "ISSUED_NO_ASC", "AMOUNT_DESC"}))
+            @RequestParam(defaultValue = "ISSUED_NO_DESC") String sort,
+            Authentication authentication
+    ) {
+        TaxInvoiceListView view = financeQueryUseCase.getTaxInvoices(new TaxInvoiceListQuery(
+                startDate, endDate, unlinked, projectId, keyword, page, size, sort,
+                authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 조회 성공", TaxInvoiceListResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 필터 옵션 조회",
+            description = "세금계산서 조회 화면의 프로젝트 필터 옵션을 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 필터 옵션 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)")
+    })
+    @GetMapping("/tax-invoices/filters")
+    public ResponseEntity<ApiResponse<TaxInvoiceFilterResponse>> getTaxInvoiceFilters(Authentication authentication) {
+        TaxInvoiceFilterView view = financeQueryUseCase.getTaxInvoiceFilters(
+                new TaxInvoiceFilterQuery(authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 필터 옵션 조회 성공", TaxInvoiceFilterResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 CSV 컬럼 추천 조회",
+            description = "업로드한 CSV(또는 엑셀 .xlsx/.xls)의 컬럼 목록·미리보기·추천 컬럼 매핑 + 추천 구분(INCOME/OUTCOME)을 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 CSV 컬럼 추천 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
+                            + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "유효하지 않은 형식입니다. (FINANCE_INVALID_CSV_FILE)")
+    })
+    @PostMapping(value = "/tax-invoices/csv/preview", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<TaxInvoiceCsvPreviewResponse>> previewTaxInvoiceCsv(
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @Parameter(description = "파일이 비밀번호로 보호돼 있으면 그 비밀번호(엑셀만 해당). "
+                    + "원 명세엔 없던 필드 — cash_flow와 동일하게 추가함(2026-08-12)")
+            @RequestPart(value = "password", required = false) String password,
+            Authentication authentication
+    ) {
+        byte[] fileBytes = readBytes(file);
+        TaxInvoiceCsvPreviewView view = financeCommandUseCase.previewTaxInvoiceCsv(
+                new TaxInvoiceCsvPreviewCommand(fileBytes, file.getOriginalFilename(), password,
+                        authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 CSV 컬럼 추천 조회 성공", TaxInvoiceCsvPreviewResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서(CSV 기반) 업로드",
+            description = "미리보기에서 확정한 구분·컬럼 매핑으로 CSV(또는 엑셀 .xlsx/.xls)를 파싱해 세금계산서로 저장한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "세금계산서(CSV 기반) 업로드 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "필수 컬럼 매핑이 누락되었습니다. (FINANCE_CSV_MAPPING_REQUIRED) / "
+                            + "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
+                            + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "유효하지 않은 형식입니다. (FINANCE_INVALID_CSV_FILE) — 파일 파트 누락·빈 파일·읽기 실패")
+    })
+    @PostMapping(value = "/tax-invoices/csv", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<TaxInvoiceCsvUploadResponse>> uploadTaxInvoiceCsv(
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @Parameter(description = "구분 + 컬럼 매핑 정보 JSON 문자열. password는 파일이 비밀번호로 "
+                    + "보호된 경우에만 필요(엑셀만 해당, 선택 필드라 없으면 생략 가능)",
+                    example = "{\"type\": \"INCOME\", \"approvalNoColumn\": \"승인번호\", "
+                            + "\"issuedDateColumn\": \"작성일자\", \"supplierBizNoColumn\": \"공급자사업자번호\", "
+                            + "\"buyerBizNoColumn\": \"공급받는자사업자번호\", \"buyerNameColumn\": \"상호\", "
+                            + "\"supplyAmountColumn\": \"공급가액\", \"taxAmountColumn\": \"세액\", "
+                            + "\"totalAmountColumn\": \"합계금액\", \"itemNameColumn\": \"품목\", "
+                            + "\"ceoNameColumn\": null, \"subBizNoColumn\": null, \"memoColumn\": null, "
+                            + "\"password\": null}")
+            @RequestPart(value = "request", required = false) String requestJson,
+            Authentication authentication
+    ) {
+        TaxInvoiceCsvUploadRequest request = parseTaxInvoiceUploadRequest(requestJson);
+
+        byte[] fileBytes = readBytes(file);
+        TaxInvoiceCsvUploadView view = financeCommandUseCase.uploadTaxInvoiceCsv(
+                request.toCommand(fileBytes, file.getOriginalFilename(),
+                        authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created("세금계산서(CSV 기반) 업로드 성공", TaxInvoiceCsvUploadResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 매칭 추천 조회",
+            description = "세금계산서의 발행일·금액·세액·공급받는자 상호명을 기준으로 매칭할 만한 정산 블록 후보를 추천한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "매칭 추천 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @GetMapping("/tax-invoices/{taxId}/match-candidates")
+    public ResponseEntity<ApiResponse<TaxInvoiceMatchCandidatesResponse>> getTaxInvoiceMatchCandidates(
+            @Parameter(description = "매칭할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            Authentication authentication
+    ) {
+        TaxInvoiceMatchCandidatesView view = financeQueryUseCase.getTaxInvoiceMatchCandidates(
+                new TaxInvoiceMatchCandidatesQuery(taxId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("매칭 추천 조회 성공", TaxInvoiceMatchCandidatesResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 블록 매칭",
+            description = "세금계산서를 정산 블록에 연결한다. 제한은 원장별로 걸린다 — **세금계산서가 아직 연결되지 않은 "
+                    + "블록이면 입출금 연결 여부와 무관하게 매칭할 수 있다**(입금이 끝난 PARTIAL/COMPLETED 블록도 가능). "
+                    + "같은 블록에 세금계산서 2장은 안 된다. 매칭되면 블록 status가 PENDING일 때만 WAITING(정산 대기)으로 "
+                    + "올라가고, 실적값(actual_amount·actual_date)은 입출금 소관이라 건드리지 않는다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "이미 매칭된 항목입니다. (FINANCE_TAX_INVOICE_ALREADY_MATCHED) / "
+                            + "제외 처리된 항목은 매칭할 수 없습니다. (FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH) / "
+                            + "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다. (FINANCE_TAX_TYPE_MISMATCH) / "
+                            + "이미 매칭된 정산 블록입니다. (FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서 또는 정산 블록입니다. (FINANCE_TAX_MATCH_TARGET_NOT_FOUND)")
+    })
+    @PatchMapping("/tax-invoices/{taxId}/match")
+    public ResponseEntity<ApiResponse<TaxInvoiceMatchResponse>> matchTaxInvoice(
+            @Parameter(description = "매칭할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            @RequestBody MatchTaxInvoiceRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceMatchView view = financeCommandUseCase.matchTaxInvoice(new MatchTaxInvoiceCommand(
+                taxId, request.settleId(), authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 블록 매칭 성공", TaxInvoiceMatchResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 블록 매칭 해제",
+            description = "세금계산서와 정산 블록의 연결을 해제한다. 정산 블록 상태는 남은 연결에 따라 달라진다 — "
+                    + "입출금이 아직 연결돼 있으면 PARTIAL/COMPLETED와 실적값이 그대로 유지되고, "
+                    + "세금계산서만 연결돼 있던 블록(WAITING)이면 미연결(PENDING)로 되돌아간다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 블록 매칭 해제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "매칭되지 않은 항목입니다. (FINANCE_TAX_INVOICE_NOT_MATCHED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @PatchMapping("/tax-invoices/{taxId}/unmatch")
+    public ResponseEntity<ApiResponse<Void>> unmatchTaxInvoice(
+            @Parameter(description = "매칭 해제할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            Authentication authentication
+    ) {
+        financeCommandUseCase.unmatchTaxInvoice(
+                new UnmatchTaxInvoiceCommand(taxId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 블록 매칭 해제 성공", null));
+    }
+
+    @Operation(summary = "세금계산서 메모 수정",
+            description = "세금계산서의 비고/메모를 수정한다. 세금계산서는 수동 등록이 없어(전부 CSV/엑셀 업로드) "
+                    + "메모만 수정할 수 있다 — 승인번호·금액·사업자번호는 국세청 발급 원본 값이라 고칠 수 없다. "
+                    + "매칭된 항목의 메모도 수정할 수 있다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 메모 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @PatchMapping("/tax-invoices/{taxId}")
+    public ResponseEntity<ApiResponse<TaxInvoiceMemoResponse>> updateTaxInvoiceMemo(
+            @Parameter(description = "수정할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            @RequestBody UpdateTaxInvoiceMemoRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceMemoView view = financeCommandUseCase.updateTaxInvoiceMemo(new UpdateTaxInvoiceMemoCommand(
+                taxId, request.memo(), authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 메모 수정 성공", TaxInvoiceMemoResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 삭제",
+            description = "세금계산서 여러 건을 한 번에 삭제한다(소프트 삭제). 정산 블록에 매칭된 항목은 먼저 매칭을 "
+                    + "해제해야 삭제할 수 있다 — 매칭됐거나 존재하지 않는 항목은 전체를 실패시키지 않고 "
+                    + "skippedItems로 사유와 함께 돌려준다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "삭제할 항목을 선택해주세요. (FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+    })
+    @DeleteMapping("/tax-invoices")
+    public ResponseEntity<ApiResponse<TaxInvoiceDeleteResponse>> deleteTaxInvoices(
+            @RequestBody DeleteTaxInvoicesRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceDeleteResultView view = financeCommandUseCase.deleteTaxInvoices(new DeleteTaxInvoicesCommand(
+                request.taxIds(), authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 삭제 성공", TaxInvoiceDeleteResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 연결 제외/포함 처리",
+            description = "프로젝트와 무관한 세금계산서를 미연결 건수 집계에서 빼거나(제외), 다시 포함시킨다. "
+                    + "이미 매칭된 항목은 제외 처리할 수 없다(제외 취소는 매칭 여부와 무관하게 항상 가능). "
+                    + "처리하지 못한 항목은 전체를 실패시키지 않고 skippedItems로 사유와 함께 돌려준다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 연결 제외 처리 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "필수 항목이 누락되었습니다. (FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+    })
+    @PatchMapping("/tax-invoices/exclude")
+    public ResponseEntity<ApiResponse<TaxInvoiceExclusionResponse>> updateTaxInvoiceExclusion(
+            @RequestBody UpdateTaxInvoiceExclusionRequest request,
+            Authentication authentication
+    ) {
+        TaxInvoiceExclusionResultView view = financeCommandUseCase.updateTaxInvoiceExclusion(
+                new UpdateTaxInvoiceExclusionCommand(request.taxIds(), request.isExcluded(),
+                        authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(
+                ApiResponse.success("세금계산서 연결 제외 처리 성공", TaxInvoiceExclusionResponse.from(view)));
+    }
+
+    private TaxInvoiceCsvUploadRequest parseTaxInvoiceUploadRequest(String requestJson) {
+        if (requestJson == null || requestJson.isBlank()) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
+        }
+        try {
+            TaxInvoiceCsvUploadRequest parsed = objectMapper.readValue(requestJson, TaxInvoiceCsvUploadRequest.class);
+            // ⚠️ 파트 값이 문자열 "null"이면 isBlank()는 통과하고 readValue가 null을 돌려준다 —
+            // 그대로 반환하면 호출부의 toCommand(...)에서 NPE가 나 500이 된다(2026-08-13, CodeRabbit 지적).
+            if (parsed == null) {
+                throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
+            }
+            return parsed;
+        } catch (JsonProcessingException e) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, e);
+        }
+    }
+
     @Operation(summary = "입출금 내역 CSV 컬럼 추천 조회",
             description = "업로드한 CSV(또는 엑셀 .xlsx/.xls)의 컬럼 목록·미리보기·추천 컬럼 매핑을 조회한다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
@@ -190,7 +504,9 @@ public class FinanceController {
                             + "비밀번호가 필요한 파일입니다. (FINANCE_CSV_PASSWORD_REQUIRED) / "
                             + "비밀번호가 올바르지 않습니다. (FINANCE_CSV_PASSWORD_INVALID)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)")
+                    description = "편집 권한이 없습니다. (FINANCE_EDIT_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "유효하지 않은 형식입니다. (FINANCE_INVALID_CSV_FILE) — 파일 파트 누락·빈 파일·읽기 실패")
     })
     @PostMapping(value = "/cash-flows/csv", consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<CashFlowCsvUploadResponse>> uploadCashFlowCsv(
@@ -244,6 +560,7 @@ public class FinanceController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 블록 매칭 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "이미 매칭된 항목입니다. (FINANCE_CASH_FLOW_ALREADY_MATCHED) / "
+                            + "제외 처리된 항목은 매칭할 수 없습니다. (FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH) / "
                             + "입출금 구분과 정산 블록 타입이 일치하지 않습니다. (FINANCE_MATCH_TYPE_MISMATCH) / "
                             + "이미 매칭된 정산 블록입니다. (FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
@@ -264,7 +581,9 @@ public class FinanceController {
     }
 
     @Operation(summary = "입출금 내역 블록 매칭 해제",
-            description = "입출금 내역과 정산 블록의 연결을 해제하고, 그 정산 블록을 미연결(PENDING) 상태로 되돌린다.")
+            description = "입출금 내역과 정산 블록의 연결을 해제하고 실적값(actual_amount·actual_date)을 비운다. "
+                    + "정산 블록 상태는 남은 연결에 따라 달라진다 — 세금계산서가 아직 연결돼 있으면 WAITING(정산 대기), "
+                    + "둘 다 없으면 미연결(PENDING)이 된다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 블록 매칭 해제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -380,7 +699,12 @@ public class FinanceController {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
         }
         try {
-            return objectMapper.readValue(requestJson, CashFlowCsvUploadRequest.class);
+            CashFlowCsvUploadRequest parsed = objectMapper.readValue(requestJson, CashFlowCsvUploadRequest.class);
+            // 세금계산서 쪽 parseTaxInvoiceUploadRequest와 동일한 이유 — 문자열 "null"이 오면 NPE→500이 된다.
+            if (parsed == null) {
+                throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "request가 필요합니다.");
+            }
+            return parsed;
         } catch (JsonProcessingException e) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, e);
         }
