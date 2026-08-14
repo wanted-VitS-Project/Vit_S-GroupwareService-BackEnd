@@ -24,7 +24,8 @@ public interface SpringDataSettlementRepository extends JpaRepository<Settlement
     @Query("UPDATE SettlementJpaEntity s SET "
             + "s.type = :type, s.roundNo = :roundNo, s.totalAmount = :totalAmount, "
             + "s.plannedAmount = :plannedAmount, s.plannedTaxAmount = :plannedTaxAmount, "
-            + "s.plannedDate = :plannedDate, s.traderName = :traderName, s.bankName = :bankName, "
+            + "s.plannedDate = :plannedDate, s.taxInvoiceDueDate = :taxInvoiceDueDate, "
+            + "s.traderName = :traderName, s.bankName = :bankName, "
             + "s.accountNumber = :accountNumber, s.accountHolder = :accountHolder, "
             + "s.updatedAt = CURRENT_TIMESTAMP, s.version = s.version + 1 "
             + "WHERE s.settleId = :settleId AND s.deletedAt IS NULL AND s.status = :expectedStatus "
@@ -36,6 +37,7 @@ public interface SpringDataSettlementRepository extends JpaRepository<Settlement
                             @Param("plannedAmount") BigDecimal plannedAmount,
                             @Param("plannedTaxAmount") BigDecimal plannedTaxAmount,
                             @Param("plannedDate") LocalDate plannedDate,
+                            @Param("taxInvoiceDueDate") LocalDate taxInvoiceDueDate,
                             @Param("traderName") String traderName,
                             @Param("bankName") String bankName,
                             @Param("accountNumber") String accountNumber,

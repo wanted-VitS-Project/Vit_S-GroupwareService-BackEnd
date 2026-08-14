@@ -63,6 +63,11 @@ public class SettlementJpaEntity {
     @Column(name = "planned_date")
     private LocalDate plannedDate;
 
+    // 세금계산서 기한 — 면세 등 세금계산서를 받지 않는 회차는 null(2026-08-14 신설).
+    // planned_date(입출금 기한)와 의미가 다르다 — 세금계산서 매칭 추천의 일자 비교가 이 값을 본다.
+    @Column(name = "tax_invoice_due_date")
+    private LocalDate taxInvoiceDueDate;
+
     @Column(name = "actual_amount", precision = 18, scale = 2)
     private BigDecimal actualAmount;
 

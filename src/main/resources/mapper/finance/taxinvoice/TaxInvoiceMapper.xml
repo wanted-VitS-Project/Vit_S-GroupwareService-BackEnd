@@ -113,12 +113,12 @@
         거래일시(traded_at)처럼 "돈이 실제로 움직인 날"이 아니라 "세금계산서가 발행된 날"이라 신뢰도가
         낮지만, 결제 예정일 근처에 발행되는 경우가 많아 완전히 버리진 않는다).
 
-        같은 타입(INCOME/OUTCOME)의 PENDING(미연결) 정산 블록만 대상으로, 금액/세액/상호명/일자 네
+        같은 타입(INCOME/OUTCOME)이면서 세금계산서가 아직 안 붙은 정산 블록을 대상으로, 금액/세액/상호명/일자 네
         기준을 각각 EXACT(정확히 일치)/SIMILAR(유사)/NULL(불일치)로 판정한다 —
         금액: total_amount 기준 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
         세액: tax_amount 기준 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
         상호명: buyer_name(거래상대방) 기준 완전 동일이면 EXACT, 한쪽이 다른 쪽을 포함하면 SIMILAR.
-        일자: issued_no 기준 같은 날짜면 EXACT, ±7일 이내면 SIMILAR.
+        일자: 세금계산서 기한(tax_invoice_due_date) 기준 — 같은 날이면 EXACT, 기한 7일 후 ~ 21일 전이면 SIMILAR.
         네 기준 다 NULL(전부 불일치)인 행은 바깥 WHERE에서 제외한다. 정렬은 매칭 개수 많은 순 →
         발행일 가까운 순, 최대 5건(cash_flow와 동일 — 페이지네이션 없음, 필요해지면 추가).
     -->
@@ -151,9 +151,19 @@
         OR #{buyerName} LIKE CONCAT('%', sb.trader_name, '%') THEN 'SIMILAR'
         ELSE NULL
         END AS traderMatchType,
+        <!--
+            ⚠️ 비교 대상이 planned_date(입출금 기한)가 아니라 tax_invoice_due_date(세금계산서 기한)다
+            (2026-08-14 변경) — 세금계산서는 "언제까지 받아야 하는가"가 별도 기한으로 관리된다.
+            기한이 NULL(면세 등 세금계산서를 안 받는 회차)이면 비교가 NULL이 되어 일자 기준만 탈락하고,
+            나머지 3기준(금액·세액·상호명)으로는 그대로 후보에 오른다.
+
+            ⭐ 창이 비대칭이다: DATEDIFF(기한, 발행일)이 양수면 기한보다 이르게 발행된 것(정상),
+            음수면 기한을 넘긴 것(지연). 조기 발행은 실무상 흔해서 넉넉히(+21일), 지연은 좁게(-7일)
+            잡는다(2026-08-14 사용자 확정). 입출금 쪽은 입금이 앞뒤로 모두 어긋나 대칭(±7)을 유지한다.
+        -->
         CASE
-        WHEN sb.planned_date = #{issuedNo} THEN 'EXACT'
-        WHEN ABS(DATEDIFF(sb.planned_date, #{issuedNo})) &lt;= 7 THEN 'SIMILAR'
+        WHEN sb.tax_invoice_due_date = #{issuedNo} THEN 'EXACT'
+        WHEN DATEDIFF(sb.tax_invoice_due_date, #{issuedNo}) BETWEEN -7 AND 21 THEN 'SIMILAR'
         ELSE NULL
         END AS dateMatchType
         FROM settlement_block sb
@@ -180,7 +190,7 @@
         + CASE WHEN taxAmountMatchType IS NOT NULL THEN 1 ELSE 0 END
         + CASE WHEN traderMatchType IS NOT NULL THEN 1 ELSE 0 END
         + CASE WHEN dateMatchType IS NOT NULL THEN 1 ELSE 0 END) DESC,
-        ABS(DATEDIFF(plannedDate, #{issuedNo})) ASC
+        ABS(DATEDIFF(taxInvoiceDueDate, #{issuedNo})) ASC
         LIMIT 5
     </select>
 

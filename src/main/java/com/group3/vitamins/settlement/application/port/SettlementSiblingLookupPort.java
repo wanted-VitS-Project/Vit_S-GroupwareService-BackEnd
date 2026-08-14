@@ -46,7 +46,7 @@ public interface SettlementSiblingLookupPort {
     record SettlementCurrentState(
             Integer version, String status, LocalDateTime deletedAt,
             String type, Integer roundNo, Long totalAmount, Long plannedAmount, Long plannedTaxAmount,
-            LocalDate plannedDate, String traderName, String bankName, String accountNumber, String accountHolder
+            LocalDate plannedDate, LocalDate taxInvoiceDueDate, String traderName, String bankName, String accountNumber, String accountHolder
     ) {
     }
 

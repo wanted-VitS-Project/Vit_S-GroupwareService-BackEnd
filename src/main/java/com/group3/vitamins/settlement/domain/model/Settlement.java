@@ -23,6 +23,8 @@ public class Settlement {
     private final Long plannedAmount;
     private final Long plannedTaxAmount;
     private final LocalDate plannedDate;
+    // 세금계산서 기한 — 면세 등 세금계산서를 받지 않는 회차는 null 이다(2026-08-14 신설).
+    private final LocalDate taxInvoiceDueDate;
     private final Long actualAmount;
     private final LocalDateTime actualDate;
     private final String traderName;
@@ -38,7 +40,7 @@ public class Settlement {
 
     private Settlement(Long settleId, Long blockId, Integer roundNo, SettlementType type, SettlementStatus status,
                         Long totalAmount, Long plannedAmount, Long plannedTaxAmount, LocalDate plannedDate,
-                        Long actualAmount, LocalDateTime actualDate, String traderName, String bankName,
+                        LocalDate taxInvoiceDueDate, Long actualAmount, LocalDateTime actualDate, String traderName, String bankName,
                         String accountNumber, String accountHolder,
                         LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt, int version) {
         this.settleId = settleId;
@@ -50,6 +52,7 @@ public class Settlement {
         this.plannedAmount = plannedAmount;
         this.plannedTaxAmount = plannedTaxAmount;
         this.plannedDate = plannedDate;
+        this.taxInvoiceDueDate = taxInvoiceDueDate;
         this.actualAmount = actualAmount;
         this.actualDate = actualDate;
         this.traderName = traderName;
@@ -64,13 +67,13 @@ public class Settlement {
 
     public static Settlement reconstruct(Long settleId, Long blockId, Integer roundNo, SettlementType type,
                                           SettlementStatus status, Long totalAmount, Long plannedAmount,
-                                          Long plannedTaxAmount, LocalDate plannedDate, Long actualAmount,
-                                          LocalDateTime actualDate, String traderName, String bankName,
+                                          Long plannedTaxAmount, LocalDate plannedDate, LocalDate taxInvoiceDueDate,
+                                          Long actualAmount, LocalDateTime actualDate, String traderName, String bankName,
                                           String accountNumber, String accountHolder,
                                           LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt,
                                           int version) {
         return new Settlement(settleId, blockId, roundNo, type, status, totalAmount, plannedAmount,
-                plannedTaxAmount, plannedDate, actualAmount, actualDate, traderName, bankName,
+                plannedTaxAmount, plannedDate, taxInvoiceDueDate, actualAmount, actualDate, traderName, bankName,
                 accountNumber, accountHolder, createdAt, updatedAt, deletedAt, version);
     }
 
@@ -108,6 +111,10 @@ public class Settlement {
 
     public LocalDate getPlannedDate() {
         return plannedDate;
+    }
+
+    public LocalDate getTaxInvoiceDueDate() {
+        return taxInvoiceDueDate;
     }
 
     public Long getActualAmount() {

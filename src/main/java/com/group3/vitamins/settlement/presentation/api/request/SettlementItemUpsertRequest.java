@@ -18,8 +18,14 @@ public record SettlementItemUpsertRequest(
         @Schema(description = "회차별 정산 예정 세금 금액", example = "200000", requiredMode = Schema.RequiredMode.REQUIRED)
         Long plannedTaxAmount,
 
-        @Schema(description = "회차별 정산 예정일", example = "2026-09-01", requiredMode = Schema.RequiredMode.REQUIRED)
+        @Schema(description = "회차별 입출금 기한(화면 라벨은 \"입출금 기한\", 필드명은 기존 계약 유지)",
+                example = "2026-09-01", requiredMode = Schema.RequiredMode.REQUIRED)
         LocalDate plannedDate,
+
+        @Schema(description = "세금계산서 기한. 면세 등 세금계산서를 받지 않는 회차면 null로 보낸다. "
+                + "세금계산서 매칭 추천의 일자 비교가 이 값을 기준으로 한다",
+                example = "2026-09-10", nullable = true)
+        LocalDate taxInvoiceDueDate,
 
         @Schema(description = "거래처명(입금자명)", example = "(주)대한항공", requiredMode = Schema.RequiredMode.REQUIRED)
         String traderName,
