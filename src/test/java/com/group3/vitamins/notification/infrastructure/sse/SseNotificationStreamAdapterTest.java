@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -156,6 +157,21 @@ class SseNotificationStreamAdapterTest {
 
             // connected(1) + 첫 push(1) = 2회. 회수가 안 되면 3회가 된다.
             verify(broken, times(2)).send(any(SseEmitter.SseEventBuilder.class));
+        }
+
+        @Test
+        @DisplayName("I/O 로 끊긴 연결에는 complete() 를 부르지 않는다 — 부르면 ERROR 500 로그가 남는다")
+        void 끊긴_연결은_complete_하지_않는다() throws IOException {
+            SseEmitter broken = handOut();
+            adapter.subscribe(USER_A, SESSION_A);
+            doThrow(new IOException("broken pipe"))
+                    .when(broken).send(any(SseEmitter.SseEventBuilder.class));
+
+            adapter.push(USER_A, notification());
+
+            // complete() 는 내부 flush 실패를 deferredResult 로 넘겨 ASYNC ERROR 디스패치를 만든다.
+            // 그 결과가 `[500] GET /api/v1/notifications/stream` 이다 — 정상 종료인데 ERROR 로 잡힌다.
+            verify(broken, never()).complete();
         }
     }
 
