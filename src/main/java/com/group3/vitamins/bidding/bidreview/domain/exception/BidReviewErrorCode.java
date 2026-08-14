@@ -55,6 +55,10 @@ public enum BidReviewErrorCode implements ErrorCode {
     BIDDING_REVIEW_NOT_COMPLETED(
             "BIDDING_REVIEW_NOT_COMPLETED",
             "완료되지 않은 입찰 문서 검토는 프로젝트로 전환할 수 없습니다."
+    ),
+    BIDDING_REVIEW_ALREADY_LINKED_TO_PROJECT(
+            "BIDDING_REVIEW_ALREADY_LINKED_TO_PROJECT",
+            "이미 다른 프로젝트에 연결된 검토입니다."
     );
 
     private final String code;

@@ -46,4 +46,13 @@ public interface CollectionRunOutboxJpaRepository
             @Param("now") LocalDateTime now,
             @Param("batchSize") int batchSize
     );
+
+    // 발행 완료 후 보관 기간이 지난 Outbox 행을 정리합니다. FAILED는 장애 이력이라 대상이 아닙니다.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM crawl_run_outbox
+            WHERE publish_status = 'PUBLISHED'
+              AND published_at < :cutoff
+            """, nativeQuery = true)
+    int deletePublishedBefore(@Param("cutoff") LocalDateTime cutoff);
 }

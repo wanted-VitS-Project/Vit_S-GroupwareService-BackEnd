@@ -41,4 +41,8 @@ public interface CollectionRunOutboxStorePort {
             String errorMessage,
             LocalDateTime nextAvailableAt
     );
+
+    // 발행 완료 후 cutoff 이전인 Outbox 행을 정리합니다. FAILED는 장애 이력이라 대상이 아닙니다.
+    // 삭제된 행 수를 반환합니다.
+    int deletePublishedBefore(LocalDateTime cutoff);
 }

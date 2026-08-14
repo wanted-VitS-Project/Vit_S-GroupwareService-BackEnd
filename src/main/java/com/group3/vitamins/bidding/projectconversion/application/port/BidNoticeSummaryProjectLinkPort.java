@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.projectconversion.application.port;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 // 공고 프로젝트 전환 3번("summaryId가 있으면 같은 공고·회사의 확정 요약이며 아직 프로젝트에
@@ -11,6 +12,11 @@ public interface BidNoticeSummaryProjectLinkPort {
     // 조회 자체를 companyId·noticeId로 스코프한다 - 다른 회사·다른 공고 소속이면 그냥 못 찾은 것으로
     // 취급한다(bidsummary 자체 조회 API들의 기존 관례와 동일 - 별도의 403을 안 만듦).
     Optional<SummarySnapshot> findSummary(Long companyId, Long noticeId, Long summaryId);
+
+    // 9번 - project_id를 조건부로 쓴다(WHERE project_id IS NULL). 3번 확인과 이 쓰기 사이의
+    // 경합(그 사이 다른 요청이 같은 요약을 먼저 연결)을 영향받은 행 수로 감지하기 위해, 성공하면
+    // true, 이미 다른 프로젝트에 연결돼 있어 갱신되지 않았으면 false를 반환한다.
+    boolean linkProject(Long companyId, Long noticeId, Long summaryId, Long projectId, LocalDateTime now);
 
     record SummarySnapshot(
             Long summaryId,

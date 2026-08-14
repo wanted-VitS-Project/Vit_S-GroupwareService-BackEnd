@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.projectconversion.application.service;
 
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewFilePromotionPort;
 import com.group3.vitamins.bidding.bidreview.domain.exception.BidReviewErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
@@ -10,6 +11,7 @@ import com.group3.vitamins.bidding.projectconversion.application.port.BidNoticeS
 import com.group3.vitamins.bidding.projectconversion.application.port.BidReviewProjectLinkPort;
 import com.group3.vitamins.bidding.projectconversion.application.result.ConvertNoticeToProjectResult;
 import com.group3.vitamins.bidding.projectconversion.application.usecase.ConvertNoticeToProjectUseCase;
+import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
@@ -25,14 +27,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
  * 공고 프로젝트 전환 오케스트레이션 (bid.md "공고 프로젝트 전환" §서버 처리).
  *
- * <p>1~6번까지 구현됨(6번은 별도 사전 체크 없이 11~12번의 {@code addMember} 내부 검증 +
- * 트랜잭션 롤백으로 충족 - 아래 8번 주석 참고). summary/review 연결(9~10번), 기본 스테이지·스텝(13번)은
- * 아직 TODO다.
+ * <p>1~12번까지 구현됨(6번은 별도 사전 체크 없이 11~12번의 {@code addMember} 내부 검증 +
+ * 트랜잭션 롤백으로 충족 - 아래 8번 주석 참고). 기본 스테이지·스텝(13번)은 아직 TODO다.
  */
 @Service
 @RequiredArgsConstructor
@@ -51,6 +54,9 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final ProjectCommandUseCase projectCommandUseCase;
     private final ProjectMemberCommandUseCase projectMemberCommandUseCase;
+    private final Clock clock;
+    private final BidReviewFilePromotionPort filePromotionPort;
+    private final FileStoragePort fileStoragePort;
 
     @Override
     @Transactional
@@ -119,10 +125,61 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
             throw integrityViolation;
         }
 
-        // TODO 9: summaryId가 있으면 bid_notice_summary.project_id에 연결 (다음 단계 - 쓰기 메서드 신설 필요)
+        // 9: summaryId가 있으면 bid_notice_summary.project_id에 연결한다. 3번 확인과 이 쓰기
+        //    사이에도 8번과 같은 경합 창이 있다 - linkProject가 조건부 UPDATE(WHERE project_id IS
+        //    NULL)라 영향받은 행이 0이면 그 사이 다른 요청이 먼저 연결한 것이므로 409로 변환한다.
+        if (command.summaryId() != null) {
+            boolean linked = summaryLinkPort.linkProject(
+                    companyId, command.noticeId(), command.summaryId(),
+                    project.projectId(), LocalDateTime.now(clock)
+            );
+            if (!linked) {
+                throw new ConflictException(BiddingErrorCode.BIDDING_SUMMARY_ALREADY_LINKED);
+            }
+        }
 
-        // TODO 10: reviewId의 실제 다운로드 성공 첨부를 BidReviewFilePromotionPort로 귀속하고
-        //          bid_review.project_id 저장 (다음 단계 - 쓰기 메서드 신설 필요)
+        // 10: reviewId에서 실제 다운로드에 성공한 공고 첨부(BID_ATTACHMENT + READY)만 정식 파일로
+        //     귀속한다. 사내 기준자료·사내 문서함 참조는 Worker 다운로드를 거치지 않아 대상이 아니다.
+        //     bidReviewDocumentId를 파일 도메인 멱등키로 넘기므로(BidReviewFilePromotionAdapter)
+        //     재시도해도 파일이 중복 생성되지 않는다.
+        List<BidReviewProjectLinkPort.PromotableDocument> promotableDocuments =
+                reviewLinkPort.findPromotableDocuments(command.reviewId());
+        LocalDateTime promotionNow = LocalDateTime.now(clock);
+        for (BidReviewProjectLinkPort.PromotableDocument document : promotableDocuments) {
+            BidReviewFilePromotionPort.PromotedFile promoted = filePromotionPort.promote(
+                    new BidReviewFilePromotionPort.PromotionRequest(
+                            companyId,
+                            project.projectId(),
+                            command.requesterUserId(),
+                            document.reviewDocumentId(),
+                            document.temporaryStorageKey(),
+                            document.fileName(),
+                            document.fileSize()
+                    )
+            );
+
+            boolean promotionRecorded = reviewLinkPort.markDocumentPromoted(
+                    document.reviewDocumentId(), promoted.fileId(), promoted.fileVersionId(), promotionNow
+            );
+            if (!promotionRecorded) {
+                throw new IllegalStateException("귀속하려는 검토 문서 상태가 예상과 다릅니다.");
+            }
+        }
+
+        // ⚠️ deleteObjects는 실패해도 예외를 던지지 않는다(FileStoragePort 계약) - 정식 파일로는
+        // 이미 귀속됐으니 임시 객체가 잠깐 남아도 데이터 정합성 문제는 아니다.
+        if (!promotableDocuments.isEmpty()) {
+            fileStoragePort.deleteObjects(
+                    promotableDocuments.stream()
+                            .map(BidReviewProjectLinkPort.PromotableDocument::temporaryStorageKey)
+                            .toList()
+            );
+        }
+
+        boolean reviewLinked = reviewLinkPort.linkProject(command.reviewId(), project.projectId(), promotionNow);
+        if (!reviewLinked) {
+            throw new ConflictException(BidReviewErrorCode.BIDDING_REVIEW_ALREADY_LINKED_TO_PROJECT);
+        }
 
         // 11~12: 추가 참여자 등록. 요청자는 8번에서 이미 등록됐으므로 겹치면 제외한다("중복 참여자" 규칙).
         for (String memberId : distinctAdditionalMembers(command)) {
