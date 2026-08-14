@@ -64,7 +64,8 @@ public class ProjectController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
                     description = "생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID"),
+                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
+                            + "/ CLIENT_NAME_TOO_LONG / CONTRACT_AMOUNT_INVALID"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
@@ -97,7 +98,8 @@ public class ProjectController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
                     description = "복제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID / "
+                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
+                            + "/ CLIENT_NAME_TOO_LONG / CONTRACT_AMOUNT_INVALID / "
                             + "PROJECT_DUPLICATE_TOO_LARGE — 원본의 살아있는 블록이 300개를 초과함"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),

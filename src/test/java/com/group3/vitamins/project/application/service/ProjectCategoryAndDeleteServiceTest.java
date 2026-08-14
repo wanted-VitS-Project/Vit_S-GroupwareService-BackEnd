@@ -15,6 +15,7 @@ import com.group3.vitamins.project.application.port.StepStatLookupPort;
 import com.group3.vitamins.project.application.result.BusinessCategorySummary;
 import com.group3.vitamins.project.application.result.ProjectCategoryResult;
 import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
+import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.domain.model.Project;
 import com.group3.vitamins.project.domain.model.ProjectStatus;
 import com.group3.vitamins.project.domain.repository.ProjectBusinessCategoryRepository;
@@ -196,7 +197,10 @@ class ProjectCategoryAndDeleteServiceTest {
         assertThatThrownBy(() -> projectCommandService.deleteProject(deleteCommand(false)))
                 .isInstanceOf(ConflictException.class)
                 // 몇 개가 날아가는지 모르면 사용자가 확인 버튼을 누를 근거가 없다.
-                .hasMessageContaining("스텝 3개");
+                .hasMessageContaining("스텝 3개")
+                // ⚠️ 코드까지 검증한다 — 메시지는 개수를 담느라 바뀌지만 코드는 프론트 분기의 계약이다.
+                .extracting(e -> ((ConflictException) e).getErrorCode())
+                .isEqualTo(ProjectErrorCode.PROJECT_DELETE_CONFIRM_REQUIRED);
 
         Mockito.verifyNoInteractions(stepCascadePort, stageCascadePort);
         Mockito.verify(projectMemberRepository, Mockito.never()).deleteByProjectId(any());
@@ -211,8 +215,15 @@ class ProjectCategoryAndDeleteServiceTest {
         givenStepCount(0);
 
         assertThatThrownBy(() -> projectCommandService.deleteProject(deleteCommand(false)))
-                .isInstanceOf(ConflictException.class);
+                .isInstanceOf(ConflictException.class)
+                .extracting(e -> ((ConflictException) e).getErrorCode())
+                .isEqualTo(ProjectErrorCode.PROJECT_DELETE_CONFIRM_REQUIRED);
 
+        // 되묻는 단계에서는 하위 정리가 하나도 돌면 안 된다 — 예외를 던져도 롤백 전에 부수효과가 남으면
+        // 「확인만 하고 취소」 한 사용자의 참여자·카테고리가 이미 지워진 뒤다.
+        Mockito.verifyNoInteractions(stepCascadePort, stageCascadePort);
+        Mockito.verify(projectMemberRepository, Mockito.never()).deleteByProjectId(any());
+        Mockito.verify(projectBusinessCategoryRepository, Mockito.never()).deleteByProjectId(any());
         Mockito.verify(projectRepository, Mockito.never()).save(any(Project.class));
     }
 
