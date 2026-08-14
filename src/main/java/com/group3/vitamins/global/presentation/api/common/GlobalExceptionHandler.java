@@ -1,6 +1,7 @@
 package com.group3.vitamins.global.presentation.api.common;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -19,7 +20,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.util.DisconnectedClientHelper;
 
+import java.io.IOException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -212,6 +215,49 @@ public class GlobalExceptionHandler {
                 .allow(supported == null ? new HttpMethod[0] : supported.toArray(new HttpMethod[0]))
                 .body(ApiErrorResponse.of(
                         405, COMMON_METHOD_NOT_ALLOWED, COMMON_METHOD_NOT_ALLOWED_MESSAGE));
+    }
+
+    /**
+     * 클라이언트가 끊어 버린 응답에 쓰다 난 I/O 오류 — <b>장애가 아니다</b>.
+     *
+     * <p>🚨 <b>이 핸들러가 없으면 아래 {@code Exception} 폴백이 삼켜 ERROR 500 이 쌓인다.</b>
+     * 브라우저가 알림 SSE 스트림을 끊을 때마다(페이지 이동·새로고침·탭 닫기) 컨테이너가 그 오류를
+     * 비동기 디스패치로 되돌려 보내기 때문이다. 정상 종료 한 건이 ERROR 한 줄이 되면 진짜 장애가 묻힌다.
+     *
+     * <p>⚠️ <b>{@code DisconnectedClientHelper} 에만 의존하면 안 된다.</b> Spring 의 "끊긴 클라이언트"
+     * 판별은 예외 메시지가 {@code "broken pipe"} · {@code "connection reset by peer"} 인지를 보는데,
+     * <b>OS 로케일이 영어가 아니면 그 문자열이 아니다</b>(한글 윈도우: "현재 연결은 사용자의 호스트
+     * 시스템의 소프트웨어에 의해 중단되었습니다"). 그러면 Spring 이 감싸주지 않아 원본
+     * {@code IOException} 이 그대로 올라온다 — 로컬(윈도우)에서만 500 이 뜨고 배포 서버(리눅스)에선
+     * 안 뜨는, 재현이 갈리는 증상이 된다. 그래서 <b>디스패치 타입</b>을 1차 기준으로 삼는다(2026-08-14).
+     *
+     * <p>⚠️ 끊긴 연결에는 <b>아무것도 쓰지 않는다</b>({@code null} 반환). 응답 헤더가 이미
+     * {@code text/event-stream} 으로 굳어 있어 {@link ApiErrorResponse} 를 쓰려 하면
+     * {@code HttpMessageNotWritableException} 이 한 번 더 난다. {@code null} 은 Spring 이
+     * "처리 완료, 쓸 것 없음" 으로 받는다({@code HttpEntityMethodProcessor} 확인).
+     */
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiErrorResponse> handleClientDisconnect(
+            IOException e,
+            HttpServletRequest request
+    ) {
+        if (!isClientGone(e, request)) {
+            // 클라이언트 종료가 아닌 진짜 I/O 오류는 기존대로 500 JSON 을 내려준다
+            return handleException(e, request);
+        }
+
+        log.debug("[스트림 종료] {} {} - {}",
+                request.getMethod(), request.getRequestURI(), e.getMessage());
+        return null;
+    }
+
+    /**
+     * 비동기 디스패치(= SSE 스트림) 중의 I/O 오류는 <b>정의상</b> 클라이언트 쪽이 끊긴 것이다 —
+     * 그 시점에 서버가 하는 일은 열린 응답에 쓰는 것뿐이다. 로케일과 무관하게 판별된다.
+     */
+    private boolean isClientGone(IOException e, HttpServletRequest request) {
+        return request.getDispatcherType() == DispatcherType.ASYNC
+                || DisconnectedClientHelper.isClientDisconnectedException(e);
     }
 
     @ExceptionHandler(Exception.class)
