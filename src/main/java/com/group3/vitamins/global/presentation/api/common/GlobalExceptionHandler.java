@@ -3,10 +3,12 @@ package com.group3.vitamins.global.presentation.api.common;
 import com.group3.vitamins.global.domain.common.error.DomainException;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -239,10 +241,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IOException.class)
     public ResponseEntity<ApiErrorResponse> handleClientDisconnect(
             IOException e,
-            HttpServletRequest request
+            HttpServletRequest request,
+            HttpServletResponse response
     ) {
-        if (!isClientGone(e, request)) {
-            // 클라이언트 종료가 아닌 진짜 I/O 오류는 기존대로 500 JSON 을 내려준다
+        if (!cannotReportError(e, request, response)) {
+            // 에러 응답을 정상적으로 내려보낼 수 있는 상황이면 진짜 장애다 — 기존대로 500 JSON
             return handleException(e, request);
         }
 
@@ -252,12 +255,39 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 비동기 디스패치(= SSE 스트림) 중의 I/O 오류는 <b>정의상</b> 클라이언트 쪽이 끊긴 것이다 —
-     * 그 시점에 서버가 하는 일은 열린 응답에 쓰는 것뿐이다. 로케일과 무관하게 판별된다.
+     * 이 오류를 <b>에러 응답으로 알려줄 수 없는 상황</b>인지 판단한다. 그런 상황에서만 조용히 끝낸다.
+     *
+     * <p>기준이 "클라이언트가 끊겼나" 가 아니라 "에러를 내려보낼 수 있나" 인 이유: 알려줄 수 없는데
+     * 500 을 만들어 봐야 <b>로그만 남고 클라이언트는 아무것도 못 받는다</b>. 반대로 알려줄 수 있는
+     * 상황이면 그것은 삼키면 안 되는 장애다.
+     *
+     * <p>⚠️ <b>{@code DispatcherType.ASYNC} 하나만으로 판단하면 안 된다.</b> 이 핸들러는 전역이라,
+     * 앞으로 추가될 다른 비동기 엔드포인트가 파일·네트워크 I/O 로 실패했을 때까지 조용히 삼켜
+     * <b>클라이언트가 빈 200 을 받는다</b>(CodeRabbit 지적, 2026-08-14). 지금은 비동기 엔드포인트가
+     * 알림 SSE 하나뿐이라 드러나지 않을 뿐이다. 그래서 <b>아직 응답을 쓰지 않은 비동기 요청은
+     * 500 으로 보낸다</b> — 그때는 에러를 정상적으로 알려줄 수 있다.
      */
-    private boolean isClientGone(IOException e, HttpServletRequest request) {
-        return request.getDispatcherType() == DispatcherType.ASYNC
-                || DisconnectedClientHelper.isClientDisconnectedException(e);
+    private boolean cannotReportError(
+            IOException e, HttpServletRequest request, HttpServletResponse response) {
+
+        // 클라이언트가 끊긴 것이 확실한 경우(영문 로케일 등) — 디스패치 타입과 무관하게 알릴 방법이 없다
+        if (DisconnectedClientHelper.isClientDisconnectedException(e)) {
+            return true;
+        }
+
+        if (request.getDispatcherType() != DispatcherType.ASYNC) {
+            return false;
+        }
+
+        // 이미 커밋됐으면 상태코드·바디를 못 바꾸고, SSE 응답이면 ApiErrorResponse 컨버터가 없다.
+        // 두 경우 모두 "쓸 수 있는 방법이 없는" 상태다.
+        return response.isCommitted() || isEventStream(response);
+    }
+
+    private boolean isEventStream(HttpServletResponse response) {
+        String contentType = response.getContentType();
+        return contentType != null
+                && contentType.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 
     @ExceptionHandler(Exception.class)
