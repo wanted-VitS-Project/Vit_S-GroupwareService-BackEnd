@@ -35,7 +35,6 @@ public class ProjectAccessPolicy {
             return;
         }
         if (memberPermission != MemberPermission.EDITOR) {
-            log.warn("프로젝트 편집 권한 없음 - role={}, permission={}", role, memberPermission);
             throw new ForbiddenException(ProjectErrorCode.PROJECT_EDIT_DENIED);
         }
     }

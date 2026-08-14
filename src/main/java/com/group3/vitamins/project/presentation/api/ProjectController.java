@@ -4,6 +4,9 @@ import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import com.group3.vitamins.global.presentation.api.common.RequesterRole;
 import com.group3.vitamins.project.application.command.DeleteProjectCommand;
 import com.group3.vitamins.project.application.command.UnlinkBusinessCategoryCommand;
+import com.group3.vitamins.project.application.result.ProjectDuplicateResult;
+import com.group3.vitamins.project.presentation.api.request.ProjectDuplicateRequest;
+import com.group3.vitamins.project.presentation.api.response.ProjectDuplicateResponse;
 import com.group3.vitamins.project.application.query.ProjectDetailQuery;
 import com.group3.vitamins.project.application.query.ProjectListQuery;
 import com.group3.vitamins.project.application.query.ProjectProgressQuery;
@@ -61,7 +64,8 @@ public class ProjectController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
                     description = "생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID"),
+                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
+                            + "/ CLIENT_NAME_TOO_LONG / CONTRACT_AMOUNT_INVALID"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
@@ -80,6 +84,47 @@ public class ProjectController {
         return ResponseEntity.status(201).body(
                 ApiResponse.created(ProjectResponseMessage.SUCCESS,
                         ProjectCreateResponse.from(result)));
+    }
+
+    @Operation(summary = "프로젝트 복제",
+            description = "원본의 스테이지·스텝·블록 골격만 복제해 새 프로젝트를 만든다 (PRJ-018). "
+                    + "⛔ 참여자·기간·담당자·블록 내용·실적은 복제되지 않는다 — 담기는 것의 전체 목록은 "
+                    + "PRJ-V1-API.md §4-J 를 정본으로 본다. "
+                    + "요청 바디는 생성 API 와 같고, 원본의 필드값은 하나도 승계하지 않는다. "
+                    + "복제본 상태는 NOT_STARTED 로 고정되고 요청자가 자동으로 EDITOR 참여자가 된다. "
+                    + "원본은 한 글자도 바뀌지 않으므로 VIEWER 참여자도 복제할 수 있다. "
+                    + "BID_NOTICE 블록은 공고 전환 API 만 만들 수 있어 건너뛰고, 그 수를 skipped 에 담는다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
+                    description = "복제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "PROJECT_NAME_REQUIRED / _NAME_TOO_LONG / _DATE_RANGE_INVALID "
+                            + "/ CLIENT_NAME_TOO_LONG / CONTRACT_AMOUNT_INVALID / "
+                            + "PROJECT_DUPLICATE_TOO_LARGE — 원본의 살아있는 블록이 300개를 초과함"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "PROJECT_ACCESS_DENIED — 원본 프로젝트의 참여자가 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "PROJECT_NOT_FOUND — 원본이 없거나 삭제됨 / "
+                            + "BUSINESS_CATEGORY_NOT_FOUND — 사업 카테고리가 존재하지 않음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "PROJECT_BID_NOTICE_ALREADY_LINKED — 요청한 공고에 이미 다른 프로젝트가 연결됨")
+    })
+    @PostMapping("/{projectId}/duplicate")
+    public ResponseEntity<ApiResponse<ProjectDuplicateResponse>> duplicateProject(
+            @Parameter(description = "복제할 원본 프로젝트 ID")
+            @PathVariable Long projectId,
+            @Valid @RequestBody ProjectDuplicateRequest request,
+            Authentication authentication
+    ) {
+        ProjectDuplicateResult result = projectCommandUseCase.duplicateProject(
+                request.toCommand(projectId, authentication.getName(),
+                        RequesterRole.from(authentication)));
+
+        return ResponseEntity.status(201).body(
+                ApiResponse.created(ProjectResponseMessage.SUCCESS,
+                        ProjectDuplicateResponse.from(result)));
     }
 
     @Operation(summary = "프로젝트 상세 조회",
@@ -363,9 +408,11 @@ public class ProjectController {
     }
 
     @Operation(summary = "프로젝트 삭제",
-            description = "진행 전이고 스텝이 0개일 때만 논리 삭제한다 (PRJ-014). "
-                    + "이미 굴러간 프로젝트는 삭제가 아니라 종결(POST /close)로 남긴다. "
-                    + "블록 수는 따로 보지 않는다 — 블록은 스텝에만 붙으므로 스텝이 0개면 블록도 0개다. "
+            description = "프로젝트를 논리 삭제한다 (PRJ-014). 하위 스테이지·스텝·블록·이슈까지 함께 지워지며 "
+                    + "되돌릴 수 없다. "
+                    + "📌 진행 전이 아니거나 스텝이 남아 있으면 첫 요청을 409 로 되묻는다 — "
+                    + "confirm=true 로 재요청하면 삭제된다. "
+                    + "기록으로 남기려면 삭제가 아니라 종결(POST /close)을 쓴다. "
                     + "삭제 시 연결된 공고를 비운다 — 안 그러면 그 공고로 프로젝트를 다시 못 만든다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
@@ -377,16 +424,20 @@ public class ProjectController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "PROJECT_NOT_FOUND — 프로젝트가 없거나 삭제됨"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "PROJECT_DELETE_NOT_ALLOWED — 진행 전이 아니거나 스텝이 남아 있음")
+                    description = "PROJECT_DELETE_CONFIRM_REQUIRED — 지울 범위 확인이 필요하다. "
+                            + "⚠️ 금지가 아니다 — confirm=true 로 재요청하면 삭제된다. "
+                            + "message 에 삭제될 스텝 수가 담긴다")
     })
     @DeleteMapping("/{projectId}")
     public ResponseEntity<ApiResponse<Void>> deleteProject(
             @Parameter(description = "삭제할 프로젝트 ID")
             @PathVariable Long projectId,
+            @Parameter(description = "지울 범위를 사용자가 확인했다는 표시. 409 를 받은 뒤 true 로 재요청한다")
+            @RequestParam(defaultValue = "false") boolean confirm,
             Authentication authentication
     ) {
         projectCommandUseCase.deleteProject(new DeleteProjectCommand(
-                projectId, authentication.getName(), RequesterRole.from(authentication)));
+                projectId, authentication.getName(), RequesterRole.from(authentication), confirm));
 
         return ResponseEntity.ok(ApiResponse.success(ProjectResponseMessage.SUCCESS));
     }

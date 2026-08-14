@@ -1,5 +1,6 @@
 package com.group3.vitamins.project.block.application.service;
 
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
 import com.group3.vitamins.global.domain.common.error.ErrorCode;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
@@ -42,6 +43,7 @@ class BlockApprovalDeletionPropagationTest {
     @Mock private BlockDetailPort approvalDetailPort;
     @Mock private IssueBlockUnlinkPort issueBlockUnlinkPort;
     @Mock private StepAccessUseCase stepAccessUseCase;
+    @Mock private DomainEventPublisher domainEventPublisher;
 
     private BlockCommandService service;
 
@@ -53,7 +55,8 @@ class BlockApprovalDeletionPropagationTest {
                 employeeLookupPort,
                 new BlockDetailRegistry(List.of(approvalDetailPort)),
                 issueBlockUnlinkPort,
-                stepAccessUseCase);
+                stepAccessUseCase,
+                domainEventPublisher);
     }
 
     @Test
