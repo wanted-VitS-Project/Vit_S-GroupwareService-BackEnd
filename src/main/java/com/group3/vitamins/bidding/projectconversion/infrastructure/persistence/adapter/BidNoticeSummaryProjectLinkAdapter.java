@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
@@ -39,5 +40,28 @@ public class BidNoticeSummaryProjectLinkAdapter implements BidNoticeSummaryProje
                         resultSet.getObject("project_id") == null ? null : resultSet.getLong("project_id")
                 )
         ).stream().findFirst();
+    }
+
+    @Override
+    public boolean linkProject(Long companyId, Long noticeId, Long summaryId, Long projectId, LocalDateTime now) {
+        String sql = """
+                UPDATE bid_notice_summary
+                SET project_id = :projectId,
+                    updated_at = :now
+                WHERE bid_notice_summary_id = :summaryId
+                  AND company_id = :companyId
+                  AND bid_notice_id = :noticeId
+                  AND deleted_at IS NULL
+                  AND project_id IS NULL
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("projectId", projectId)
+                .addValue("now", now)
+                .addValue("summaryId", summaryId)
+                .addValue("companyId", companyId)
+                .addValue("noticeId", noticeId);
+
+        return jdbcTemplate.update(sql, parameters) > 0;
     }
 }
