@@ -1,5 +1,6 @@
 package com.group3.vitamins.bidding.projectconversion.application.service;
 
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewFilePromotionPort;
 import com.group3.vitamins.bidding.projectconversion.application.command.ConvertNoticeToProjectCommand;
 import com.group3.vitamins.bidding.collectioncondition.application.policy.BiddingAccessPolicy;
 import com.group3.vitamins.bidding.projectconversion.application.port.BidNoticeProjectAccessPort;
@@ -7,6 +8,7 @@ import com.group3.vitamins.bidding.projectconversion.application.port.BidNoticeP
 import com.group3.vitamins.bidding.projectconversion.application.port.BidNoticeSummaryProjectLinkPort;
 import com.group3.vitamins.bidding.projectconversion.application.port.BidReviewProjectLinkPort;
 import com.group3.vitamins.bidding.projectconversion.application.result.ConvertNoticeToProjectResult;
+import com.group3.vitamins.file.application.port.FileStoragePort;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.project.application.policy.ProjectAccessPolicy;
 import com.group3.vitamins.project.application.port.BusinessCategoryLookupPort;
@@ -35,12 +37,14 @@ import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -191,7 +195,22 @@ class ConvertNoticeToProjectIntegrationTest {
                             REQUESTER_USER_ID, "COMPLETED", null
                     )
             ));
+            // 두 테스트 모두 10번(검토 첨부 귀속)이 관심사가 아니므로 귀속 대상 없음 + 저장 성공으로 고정한다.
+            when(port.findPromotableDocuments(REVIEW_ID)).thenReturn(List.of());
+            when(port.findPromotableDocuments(REVIEW_ID_FOR_ROLLBACK_TEST)).thenReturn(List.of());
+            when(port.linkProject(any(), any(), any())).thenReturn(true);
             return port;
+        }
+
+        // 10번 검토 첨부 귀속 - 이 통합 테스트의 관심사가 아니므로(귀속 대상 문서 자체가 없음) 빈만 채운다.
+        @Bean
+        BidReviewFilePromotionPort bidReviewFilePromotionPort() {
+            return mock(BidReviewFilePromotionPort.class);
+        }
+
+        @Bean
+        FileStoragePort fileStoragePort() {
+            return mock(FileStoragePort.class);
         }
 
         // 이 통합 테스트는 summaryId=null로 호출해서 3단계 검증 자체를 안 타므로 스텁 없이 빈만 채운다.
@@ -251,6 +270,11 @@ class ConvertNoticeToProjectIntegrationTest {
         @Bean
         StageCascadePort stageCascadePort() {
             return mock(StageCascadePort.class);
+        }
+
+        @Bean
+        Clock clock() {
+            return Clock.systemDefaultZone();
         }
     }
 }

@@ -21,8 +21,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// ⚠️ 뼈대 단계 - summary/review 연결(9~10번)·기본 스테이지(13번)는 아직 서비스에서 TODO로 남아 있다.
-// 9~10번이 구현되면 description·ApiResponses(요약 연결·파일 귀속 관련 코드)를 함께 갱신해야 한다.
 @Tag(
         name = "Bidding - 공고 프로젝트 전환",
         description = "담당자가 확정한 입찰 문서 검토(및 선택적으로 AI 요약)를 근거로 공고를 프로젝트로 전환합니다."
@@ -38,7 +36,8 @@ public class BidNoticeProjectController {
             summary = "공고 프로젝트 전환",
             description = "COMPLETED 문서 검토(및 선택적으로 확정 AI 요약)를 근거로 프로젝트를 생성합니다. "
                     + "전환 요청자는 편집 권한으로 자동 등록되고, 추가 memberIds도 함께 등록됩니다. "
-                    + "검토에서 사용한 공고 첨부의 정식 파일 귀속과 확정 요약 연결은 다음 단계에서 반영될 예정입니다."
+                    + "검토에서 실제 다운로드에 성공한 공고 첨부는 정식 파일로 귀속되고, summaryId를 지정하면 "
+                    + "해당 확정 요약에도 생성된 프로젝트가 연결됩니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -63,6 +62,7 @@ public class BidNoticeProjectController {
                     responseCode = "409",
                     description = "PROJECT_BID_NOTICE_ALREADY_LINKED(이미 전환된 공고) · "
                             + "BIDDING_REVIEW_NOT_COMPLETED(검토 미완료) · "
+                            + "BIDDING_REVIEW_ALREADY_LINKED_TO_PROJECT(검토가 이미 다른 프로젝트에 연결됨) · "
                             + "BIDDING_SUMMARY_NOT_CONFIRMED(요약 미확정) · "
                             + "BIDDING_SUMMARY_ALREADY_LINKED(요약이 이미 다른 프로젝트에 연결됨)"
             )
