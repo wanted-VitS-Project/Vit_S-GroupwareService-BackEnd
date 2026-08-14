@@ -124,14 +124,31 @@ public class TaxInvoiceCsvParser {
         return count;
     }
 
+    /**
+     * ⚠️ BOM이 없어도 UTF-8일 수 있다 — 입출금 쪽 {@code CashFlowCsvParser.resolveCharset}과 동일한 이유·
+     * 동일한 판정이다(2026-08-13). BOM 없으면 무조건 EUC-KR로 읽던 것을, UTF-8 엄격 디코딩을 먼저
+     * 시도하고 실패할 때만 EUC-KR로 가도록 바꿨다.
+     */
     private java.nio.charset.Charset resolveCharset(byte[] fileBytes) {
-        if (hasUtf8Bom(fileBytes)) {
+        if (hasUtf8Bom(fileBytes) || isValidUtf8(fileBytes)) {
             return StandardCharsets.UTF_8;
         }
         try {
             return java.nio.charset.Charset.forName("EUC-KR");
         } catch (Exception e) {
             return StandardCharsets.UTF_8;
+        }
+    }
+
+    private boolean isValidUtf8(byte[] fileBytes) {
+        java.nio.charset.CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+        try {
+            decoder.decode(java.nio.ByteBuffer.wrap(fileBytes));
+            return true;
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return false;
         }
     }
 

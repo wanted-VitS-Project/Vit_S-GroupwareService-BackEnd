@@ -31,7 +31,8 @@ public interface TaxInvoiceCommandMapper {
             @Param("taxId") Long taxId,
             @Param("settleId") Long settleId,
             @Param("linkedBy") String linkedBy,
-            @Param("linkedAt") LocalDateTime linkedAt);
+            @Param("linkedAt") LocalDateTime linkedAt,
+            @Param("companyId") Long companyId);
 
     /**
      * 정산 블록을 WAITING(정산 대기)으로 올린다 — PENDING 이었을 때만.
@@ -40,7 +41,7 @@ public interface TaxInvoiceCommandMapper {
     int markSettlementBlockWaiting(@Param("settleId") Long settleId);
 
     /** tax_invoice 쪽 연결 정보 해제. */
-    int clearTaxInvoiceMatch(@Param("taxId") Long taxId);
+    int clearTaxInvoiceMatch(@Param("taxId") Long taxId, @Param("companyId") Long companyId);
 
     /**
      * 정산 블록을 PENDING 으로 되돌린다 — WAITING(세금계산서만 붙어 있던 상태)이었을 때만.
@@ -49,7 +50,8 @@ public interface TaxInvoiceCommandMapper {
     int resetSettlementBlockFromWaiting(@Param("settleId") Long settleId);
 
     /** 메모만 수정한다 — 세금계산서 원본 값(승인번호·금액·사업자번호 등)은 고칠 수 없다. */
-    int updateTaxInvoiceMemo(@Param("taxId") Long taxId, @Param("memo") String memo);
+    int updateTaxInvoiceMemo(
+            @Param("taxId") Long taxId, @Param("memo") String memo, @Param("companyId") Long companyId);
 
     /** 소프트 삭제(배치) — 매칭된 항목은 지우지 않는다(조건을 UPDATE 문에 걸어 확인~삭제 사이의 틈을 없앤다). */
     int softDeleteBatch(@Param("taxIds") List<Long> taxIds, @Param("companyId") Long companyId);

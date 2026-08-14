@@ -46,7 +46,8 @@
     <update id="updateTaxInvoiceMatch">
         UPDATE tax_invoice
         SET settle_block_id = #{settleId}, linked_by = #{linkedBy}, linked_at = #{linkedAt}
-        WHERE tax_id = #{taxId} AND settle_block_id IS NULL AND deleted_at IS NULL
+        WHERE tax_id = #{taxId} AND company_id = #{companyId}
+        AND settle_block_id IS NULL AND deleted_at IS NULL
         AND is_excluded = FALSE
     </update>
 
@@ -72,7 +73,8 @@
     <update id="clearTaxInvoiceMatch">
         UPDATE tax_invoice
         SET settle_block_id = NULL, linked_by = NULL, linked_at = NULL
-        WHERE tax_id = #{taxId} AND settle_block_id IS NOT NULL AND deleted_at IS NULL
+        WHERE tax_id = #{taxId} AND company_id = #{companyId}
+        AND settle_block_id IS NOT NULL AND deleted_at IS NULL
     </update>
 
     <!--
@@ -95,7 +97,7 @@
 
     <update id="updateTaxInvoiceMemo">
         UPDATE tax_invoice SET memo = #{memo}, updated_at = NOW()
-        WHERE tax_id = #{taxId} AND deleted_at IS NULL
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
     </update>
 
     <!--

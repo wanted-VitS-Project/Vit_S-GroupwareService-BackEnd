@@ -111,14 +111,35 @@ public class CashFlowCsvParser {
      * 국내 은행 CSV 내보내기는 EUC-KR(엑셀 기본 저장 인코딩)인 경우가 흔하다. BOM이 있으면 UTF-8,
      * 없으면 EUC-KR로 가정한다 — 완벽한 감지는 아니라 실제 은행 CSV 샘플로 나중에 검증이 필요하다.
      */
+    /**
+     * ⚠️ BOM이 없어도 UTF-8일 수 있다 (2026-08-13, CodeRabbit 지적) — 예전엔 BOM이 없으면 무조건 EUC-KR로
+     * 읽었는데, UTF-8 CSV는 BOM 없이 저장되는 게 오히려 흔하다. 그러면 한글 헤더·값이 통째로 깨지고,
+     * 에러가 아니라 "깨진 글자로 정상 응답"이 나가서 사용자가 원인을 알 수 없다.
+     *
+     * <p>그래서 UTF-8로 <b>엄격하게</b> 디코딩을 시도하고, 실패할 때만 EUC-KR로 간다. EUC-KR 한글 바이트는
+     * 대부분 유효한 UTF-8 시퀀스가 아니라서 이 판별이 실제로 잘 갈린다(순수 ASCII 파일은 어느 쪽으로 읽어도
+     * 결과가 같다).
+     */
     private java.nio.charset.Charset resolveCharset(byte[] fileBytes) {
-        if (hasUtf8Bom(fileBytes)) {
+        if (hasUtf8Bom(fileBytes) || isValidUtf8(fileBytes)) {
             return StandardCharsets.UTF_8;
         }
         try {
             return java.nio.charset.Charset.forName("EUC-KR");
         } catch (Exception e) {
             return StandardCharsets.UTF_8;
+        }
+    }
+
+    private boolean isValidUtf8(byte[] fileBytes) {
+        java.nio.charset.CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+        try {
+            decoder.decode(java.nio.ByteBuffer.wrap(fileBytes));
+            return true;
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return false;
         }
     }
 

@@ -443,7 +443,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
 
         LocalDateTime linkedAt = LocalDateTime.now();
         int taxInvoiceUpdated = taxInvoiceCommandMapper.updateTaxInvoiceMatch(
-                command.taxId(), command.settleId(), command.userId(), linkedAt);
+                command.taxId(), command.settleId(), command.userId(), linkedAt, companyId);
         if (taxInvoiceUpdated == 0) {
             throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_ALREADY_MATCHED);
         }
@@ -468,8 +468,8 @@ public class FinanceCommandService implements FinanceCommandUseCase {
 
         assertEditAccess(command.userId(), command.role());
 
-        TaxInvoiceMatchLookupRow taxInvoice =
-                taxInvoiceMapper.findMatchLookup(command.taxId(), currentCompanyIdProvider.currentCompanyId());
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        TaxInvoiceMatchLookupRow taxInvoice = taxInvoiceMapper.findMatchLookup(command.taxId(), companyId);
         if (taxInvoice == null) {
             throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
         }
@@ -479,7 +479,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
 
         // ⚠️ 영향 행 수를 확인해야 조건부 UPDATE(settle_block_id IS NOT NULL)의 동시성 보장이 응답까지
         // 이어진다 — 버리면 동시 해제 요청 두 건이 모두 200을 받는다(2026-08-13, CodeRabbit 지적).
-        if (taxInvoiceCommandMapper.clearTaxInvoiceMatch(command.taxId()) == 0) {
+        if (taxInvoiceCommandMapper.clearTaxInvoiceMatch(command.taxId(), companyId) == 0) {
             throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_MATCHED);
         }
         taxInvoiceCommandMapper.resetSettlementBlockFromWaiting(taxInvoice.settleBlockId());
@@ -505,7 +505,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
         }
 
-        taxInvoiceCommandMapper.updateTaxInvoiceMemo(command.taxId(), command.memo());
+        taxInvoiceCommandMapper.updateTaxInvoiceMemo(command.taxId(), command.memo(), companyId);
 
         TaxInvoiceMemoRow result = taxInvoiceMapper.findMemoById(command.taxId(), companyId);
         return new TaxInvoiceMemoView(result.taxId(), result.memo(), result.updatedAt());
