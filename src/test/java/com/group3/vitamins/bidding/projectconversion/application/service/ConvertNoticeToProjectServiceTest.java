@@ -224,11 +224,31 @@ class ConvertNoticeToProjectServiceTest {
     @Test
     @DisplayName("4번 선확인 통과 후 동시요청 경합으로 DB UNIQUE 제약을 위반하면 409로 변환한다")
     void convertsRaceConditionViolationTo409() {
+        // 첫 호출(4번 선확인)은 false, catch 안에서 다시 확인할 때는 true - 그 사이에 경합자가
+        // 실제로 커밋했다는 뜻이라 이때만 409로 변환해야 한다.
+        when(noticeProjectExistencePort.existsForNotice(COMPANY_ID, NOTICE_ID)).thenReturn(false, true);
         when(projectCommandUseCase.createProject(any(CreateProjectCommand.class)))
                 .thenThrow(new DataIntegrityViolationException("uk_project_bid_notice_company violated"));
 
         assertThatThrownBy(() -> service.convert(command()))
                 .isInstanceOf(ConflictException.class);
+
+        verify(projectMemberCommandUseCase, never()).addMember(any());
+    }
+
+    @Test
+    @DisplayName("공고 중복 전환이 원인이 아닌 다른 무결성 위반이면 변환하지 않고 원인 그대로 던진다")
+    void rethrowsIntegrityViolationWhenNotCausedByDuplicateNoticeConversion() {
+        DataIntegrityViolationException unrelatedViolation =
+                new DataIntegrityViolationException("fk_project_created_by violated");
+        // 재확인해도 여전히 false - 이 공고로 만든 프로젝트가 진짜로 없다는 뜻이라, 경합이 아니라
+        // 다른 무결성 위반(FK 등)이라고 판단하고 그대로 다시 던져야 한다.
+        when(noticeProjectExistencePort.existsForNotice(COMPANY_ID, NOTICE_ID)).thenReturn(false, false);
+        when(projectCommandUseCase.createProject(any(CreateProjectCommand.class)))
+                .thenThrow(unrelatedViolation);
+
+        assertThatThrownBy(() -> service.convert(command()))
+                .isSameAs(unrelatedViolation);
 
         verify(projectMemberCommandUseCase, never()).addMember(any());
     }

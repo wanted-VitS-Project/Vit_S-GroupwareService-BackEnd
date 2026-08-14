@@ -95,7 +95,10 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
         // ⚠️ 4번의 선확인과 이 save() 사이엔 짧은 경합 창이 있다 - 두 요청이 동시에 4번을 통과하면
         // DB의 UNIQUE(bid_notice_id, company_id) 제약이 최종적으로 막아주지만, 그 위반은 도메인
         // 에러코드 없는 DataIntegrityViolationException(Spring 예외)으로 그대로 올라온다.
-        // 여기서 잡아 4번과 동일한 PROJECT_BID_NOTICE_ALREADY_LINKED(409)로 변환해 일관된 응답을 준다.
+        // createProject는 project·project_member·project_business_category를 함께 저장하므로
+        // DataIntegrityViolationException이 전부 "이미 전환된 공고" 때문이라고 단정하면 안 된다 -
+        // 잡은 뒤 noticeProjectExistencePort로 다시 확인해서, 진짜 그 경합이 맞을 때만 409로 변환하고
+        // 아니면(다른 무결성 위반) 원인 그대로 다시 던진다.
         ProjectResult project;
         try {
             project = projectCommandUseCase.createProject(new CreateProjectCommand(
@@ -109,8 +112,11 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
                     List.of(command.businessCategoryId()),
                     command.requesterUserId()
             ));
-        } catch (DataIntegrityViolationException raceCondition) {
-            throw new ConflictException(ProjectErrorCode.PROJECT_BID_NOTICE_ALREADY_LINKED);
+        } catch (DataIntegrityViolationException integrityViolation) {
+            if (noticeProjectExistencePort.existsForNotice(companyId, command.noticeId())) {
+                throw new ConflictException(ProjectErrorCode.PROJECT_BID_NOTICE_ALREADY_LINKED, integrityViolation);
+            }
+            throw integrityViolation;
         }
 
         // TODO 9: summaryId가 있으면 bid_notice_summary.project_id에 연결 (다음 단계 - 쓰기 메서드 신설 필요)

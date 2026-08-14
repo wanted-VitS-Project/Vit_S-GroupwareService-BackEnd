@@ -17,7 +17,9 @@ public record ConvertNoticeToProjectRequest(
         Long reviewId,
 
         @Positive(message = "COMMON_INVALID_REQUEST|요약 ID가 올바르지 않습니다.")
-        @Schema(description = "확정된 AI 요약 ID. 지정하면 bid_notice_summary.project_id에 연결",
+        @Schema(description = "확정된 AI 요약 ID. 지정하면 같은 공고·회사의 확정(COMPLETED) 요약이며 "
+                + "아직 다른 프로젝트에 연결되지 않았는지만 검증한다 - bid_notice_summary.project_id 연결은 "
+                + "다음 단계에서 반영 예정(아직 저장 안 됨)",
                 example = "12", nullable = true)
         Long summaryId,
 
