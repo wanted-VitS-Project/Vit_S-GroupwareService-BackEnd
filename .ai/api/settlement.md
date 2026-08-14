@@ -137,7 +137,8 @@
 | `data.projects[].completedRoundCount` | Int | 완료된 회차 수 (INCOME+OUTCOME 합산) |
 | `data.projects[].totalRoundCount` | Int | 전체 회차 수 (INCOME+OUTCOME 합산) |
 | `data.projects[].nextPlannedDate` | LocalDate | 다음 정산 예정일. 미완료 회차가 없으면 null |
-| `data.projects[].settlementStatusSummary` | String | 대표 상태 문구 — 지금은 `"정산완료"` 또는 `"미연결 N건"` 둘 중 하나 |
+| `data.projects[].settlementStatusSummary` | String | 대표 상태 문구 — 지금은 `"정산완료"` 또는 `"미연결 N건"` 둘 중 하나. **미연결은 입출금 기준**(세금계산서만 연결된 회차도 포함) |
+| `data.projects[].taxInvoiceUnlinkedCount` | Int | **세금계산서가 연결되지 않은 회차 수** (2026-08-13 신규). 입출금 연결 여부와 무관 — 입금이 끝난 회차도 세금계산서가 없으면 포함 |
 | `data.projects[].projectStatus` | String | 프로젝트 상태 (`project.status`) |
 | `data.projects[].endedOn` | LocalDate | 프로젝트 종료일. 종료되지 않았으면 null |
 
@@ -161,10 +162,20 @@
   `SettlementStatusMapper.findProjectSettlements`(마이바티스, 파생 테이블 1개로 프로젝트당 한 번에 집계)로
   계산한다.
 - **`settlementStatusSummary` 규칙 (2026-08-09 확정, 의도적으로 단순화)** — 회차별 예정일까지 따지는
-  세분화(계산서 미발행·"입금 대기 N일" 등)는 아직 규칙이 없어 보류했다. 지금은 **딱 두 가지만** 구분한다:
-  전체 회차가 다 `COMPLETED`면 `"정산완료"`, 아니면 미연결(`PENDING`) 회차 개수를 `"미연결 N건"`으로
+  세분화("입금 대기 N일" 등)는 아직 규칙이 없어 보류했다. 지금은 **딱 두 가지만** 구분한다:
+  전체 회차가 다 `COMPLETED`면 `"정산완료"`, 아니면 미연결 회차 개수를 `"미연결 N건"`으로
   보여준다(회차가 하나도 없는 프로젝트도 `"미연결 0건"`으로 떨어진다). ⚠️ **이 문구 규칙은 나중에 늘어날
   수 있다** — 담당자가 세분화 규칙을 확정하면 `SettlementQueryService.settlementStatusSummary`를 손보면 된다.
+- **미연결 기준이 `PENDING` → `PENDING`+`WAITING`으로 바뀌었다 (2026-08-13)** — 재무 도메인에 세금계산서
+  매칭이 붙으면서 `WAITING`(세금계산서만 연결되고 입금은 아직)이 실제로 쓰이기 시작했다. 예전 기준으로는
+  그 회차가 "미연결"에도 "정산완료"에도 안 잡혀 **조용히 사라졌다.** 이제 이 문구의 "미연결"은
+  **입출금 기준**으로 읽는다. 재무 요약(`GET /finance/summary`)의 `settlement.unlinkedCount`도 같은 기준이다.
+- **`taxInvoiceUnlinkedCount` 신규 (2026-08-13, 사용자 확정)** — 세금계산서 미연결은 위 문구와 **다른 개념**이라
+  섞지 않고 숫자 필드로 따로 내린다(문자열 계약을 안 건드려야 프론트가 안 깨지고, 프론트가 배지를 직접
+  조립할 수 있다). ⚠️ **판정을 `status`로 할 수 없다** — `PARTIAL`/`COMPLETED`는 "입출금이 붙었다"만
+  말해주고 세금계산서 유무는 알려주지 않으므로, `tax_invoice.settle_block_id`를 직접 확인한다.
+  ⚠️ **`WAITING`은 여기서 빠진다** — 세금계산서가 이미 붙은 상태이기 때문이다(붙지 않은 건 입출금 쪽).
+  집계 대상은 활성 정산 블록 전체이며, 빈 블록(내용 미작성)도 세금계산서가 없으므로 포함된다.
 - **`startDate`/`endDate` 필터 기준 (2026-08-09 확정)** — 정산 회차 하나하나의 `plannedDate`가 아니라,
   프로젝트 단위로 계산한 **`nextPlannedDate`**로 거른다. `nextPlannedDate` 자체는 "미완료(`status != COMPLETED`)
   회차 중 회차 번호(`round_no`)가 가장 낮은 것의 `planned_date`"다 — 1차가 미완료면 1차 예정일, 1차가

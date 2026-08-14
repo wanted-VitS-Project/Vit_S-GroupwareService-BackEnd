@@ -68,8 +68,14 @@ public record SettlementProjectListResponse(
             LocalDate nextPlannedDate,
 
             @Schema(description = "대표 상태 문구. 지금은 \"정산완료\"(모든 회차 완료) 또는 \"미연결 N건\" "
-                    + "(미연결 회차 수) 둘 중 하나만 나간다 — 추후 세분화될 수 있다", example = "미연결 2건")
+                    + "(입출금이 아직 연결되지 않은 회차 수 — 세금계산서만 연결된 회차도 포함) 둘 중 "
+                    + "하나만 나간다 — 추후 세분화될 수 있다", example = "미연결 2건")
             String settlementStatusSummary,
+
+            @Schema(description = "세금계산서가 연결되지 않은 회차 수. 입출금 연결 여부와 무관하게 "
+                    + "세금계산서만 기준으로 센다(입금이 끝난 회차도 세금계산서가 없으면 포함된다)",
+                    example = "3")
+            Integer taxInvoiceUnlinkedCount,
 
             @Schema(description = "프로젝트 상태", example = "IN_PROGRESS")
             String projectStatus,
@@ -92,6 +98,7 @@ public record SettlementProjectListResponse(
                     view.totalRoundCount(),
                     view.nextPlannedDate(),
                     view.settlementStatusSummary(),
+                    view.taxInvoiceUnlinkedCount(),
                     view.projectStatus(),
                     view.endedOn()
             );

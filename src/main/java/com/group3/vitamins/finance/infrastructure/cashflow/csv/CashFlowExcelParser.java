@@ -60,6 +60,13 @@ public class CashFlowExcelParser {
 
             int headerRowIndex = findHeaderRowIndex(sheet, lastRowNum);
             Row headerRow = sheet.getRow(headerRowIndex);
+            // ⚠️ null 체크 필요 (2026-08-13, CodeRabbit 지적) — findHeaderRowIndex는 값이 채워진 행을 하나도
+            // 못 찾으면 초기값 0을 돌려주는데, 0번 행 객체 자체가 없는 시트(서식만 남은 빈 시트, 아래쪽
+            // 행에만 셀이 있는 시트)면 getRow(0)이 null이다. 그대로 readHeaders에 넘기면 NPE가 나고,
+            // 아래 포괄 catch가 404로 바꿔버려서 로그에 NPE 스택만 남아 원인 추적이 어렵다.
+            if (headerRow == null) {
+                throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
+            }
             HeaderColumns headerColumns = readHeaders(headerRow);
             if (headerColumns.headers().isEmpty()) {
                 throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);

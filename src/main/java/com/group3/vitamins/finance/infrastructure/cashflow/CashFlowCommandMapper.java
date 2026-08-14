@@ -72,8 +72,11 @@ public interface CashFlowCommandMapper {
     int updateCashFlowMemo(@Param("cashFlowId") Long cashFlowId, @Param("memo") String memo);
 
     /** 소프트 삭제(배치) — 매칭 안 된 것만 호출부에서 걸러서 넘긴다. */
-    int softDeleteBatch(@Param("cashFlowIds") List<Long> cashFlowIds);
+    int softDeleteBatch(@Param("cashFlowIds") List<Long> cashFlowIds, @Param("companyId") Long companyId);
 
     /** 연결 제외 처리(배치) — 매칭돼서 제외 못 하는 것만 호출부에서 걸러서 넘긴다. */
-    int updateExcludedBatch(@Param("cashFlowIds") List<Long> cashFlowIds, @Param("isExcluded") boolean isExcluded);
+    int updateExcludedBatch(
+            @Param("cashFlowIds") List<Long> cashFlowIds,
+            @Param("isExcluded") boolean isExcluded,
+            @Param("companyId") Long companyId);
 }

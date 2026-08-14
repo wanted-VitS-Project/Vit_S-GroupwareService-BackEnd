@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMapper">
+
+    <!--
+        세금계산서 조회 — cash_flow의 findCashFlows와 동일한 사고방식.
+        settlement_block/block 조인엔 deleted_at 필터를 걸지 않는다 — "연결됐던 블록이 삭제된 것"과
+        "애초에 미연결"을 구분해서 보여줘야 하므로(cash_flow와 동일 요청사항), linkStatus로 셋을 구분한다:
+        settle_block_id가 없으면 UNLINKED, 있는데 연결된 블록/정산 블록이 삭제됐으면 LINK_BLOCK_DELETED,
+        그 외엔 LINKED. project 조인만 deleted_at IS NULL을 유지한다(프로젝트 자체가 삭제되면 프로젝트명은
+        안 보이는 게 맞음).
+    -->
+    <sql id="taxInvoiceJoinsAndFilters">
+        FROM tax_invoice ti
+        LEFT JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        LEFT JOIN block b ON b.block_id = sb.block_id
+        LEFT JOIN step st ON st.step_id = b.step_id
+        LEFT JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        LEFT JOIN employee e ON e.user_id = ti.linked_by
+        WHERE ti.deleted_at IS NULL
+        AND ti.company_id = #{companyId}
+        <if test="startDate != null">AND ti.issued_no &gt;= #{startDate}</if>
+        <if test="endDate != null">AND ti.issued_no &lt;= #{endDate}</if>
+        <if test="unlinked != null and unlinked == true">AND ti.settle_block_id IS NULL</if>
+        <if test="projectId != null">AND p.project_id = #{projectId}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (ti.approval_no LIKE CONCAT('%', #{keyword}, '%') OR ti.buyer_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <select id="findTaxInvoices" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceRow">
+        SELECT
+        ti.tax_id AS taxId,
+        ti.issued_no AS issuedNo,
+        ti.approval_no AS approvalNo,
+        ti.type AS type,
+        ti.buyer_name AS buyerName,
+        ti.buyer_biz_no AS buyerBizNo,
+        ti.supplier_biz_no AS supplierBizNo,
+        ti.sub_biz_no AS subBizNo,
+        ti.ceo_name AS ceoName,
+        ti.item_name AS itemName,
+        ti.supply_amount AS supplyAmount,
+        ti.tax_amount AS taxAmount,
+        ti.total_amount AS totalAmount,
+        ti.memo AS memo,
+        ti.source_type AS sourceType,
+        p.project_id AS projectId,
+        p.name AS projectName,
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        ti.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        ti.linked_at AS linkedAt,
+        ti.is_excluded AS isExcluded,
+        CASE
+        WHEN ti.settle_block_id IS NULL THEN 'UNLINKED'
+        WHEN sb.deleted_at IS NOT NULL OR b.deleted_at IS NOT NULL THEN 'LINK_BLOCK_DELETED'
+        ELSE 'LINKED'
+        END AS linkStatus
+        <include refid="taxInvoiceJoinsAndFilters"/>
+        <choose>
+            <when test="sort == 'ISSUED_NO_ASC'">ORDER BY ti.issued_no ASC, ti.tax_id ASC</when>
+            <when test="sort == 'AMOUNT_DESC'">ORDER BY ti.total_amount DESC, ti.tax_id DESC</when>
+            <otherwise>ORDER BY ti.issued_no DESC, ti.tax_id DESC</otherwise>
+        </choose>
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countTaxInvoices" resultType="long">
+        SELECT COUNT(*)
+        <include refid="taxInvoiceJoinsAndFilters"/>
+    </select>
+
+    <!--
+        필터 옵션 — tax_invoice가 하나라도 연결된 정산 블록을 가진 프로젝트만(cash_flow의 findFilterProjects와
+        동일한 사고방식). company_id는 project·tax_invoice 양쪽 다 방어적으로 건다.
+    -->
+    <select id="findFilterProjects"
+            resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceFilterProjectRow">
+        SELECT DISTINCT p.project_id AS projectId, p.name AS projectName
+        FROM project p
+        WHERE p.deleted_at IS NULL
+        AND p.company_id = #{companyId}
+        AND EXISTS (
+        SELECT 1 FROM tax_invoice ti
+        JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE st.project_id = p.project_id
+        AND ti.deleted_at IS NULL
+        AND sb.deleted_at IS NULL
+        AND b.deleted_at IS NULL
+        AND ti.company_id = #{companyId}
+        )
+        ORDER BY p.name ASC
+    </select>
+
+    <!-- 매칭 추천 조회의 기준값(type/totalAmount/taxAmount/issuedNo/buyerName)만 뽑는다. -->
+    <select id="findBasicById" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceBasicRow">
+        SELECT type AS type, total_amount AS totalAmount, tax_amount AS taxAmount,
+        issued_no AS issuedNo, buyer_name AS buyerName
+        FROM tax_invoice
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <!--
+        매칭 추천 후보 — cash_flow의 findMatchCandidates와 동일한 사고방식이나, 세금계산서는 세액 기준을
+        추가하고 일자는 약한 신호로만 둔다(2026-08-13, 사용자 확인 — 발행일(issued_no)은 cash_flow의
+        거래일시(traded_at)처럼 "돈이 실제로 움직인 날"이 아니라 "세금계산서가 발행된 날"이라 신뢰도가
+        낮지만, 결제 예정일 근처에 발행되는 경우가 많아 완전히 버리진 않는다).
+
+        같은 타입(INCOME/OUTCOME)의 PENDING(미연결) 정산 블록만 대상으로, 금액/세액/상호명/일자 네
+        기준을 각각 EXACT(정확히 일치)/SIMILAR(유사)/NULL(불일치)로 판정한다 —
+        금액: total_amount 기준 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
+        세액: tax_amount 기준 완전 동일이면 EXACT, ±5% 이내면 SIMILAR.
+        상호명: buyer_name(거래상대방) 기준 완전 동일이면 EXACT, 한쪽이 다른 쪽을 포함하면 SIMILAR.
+        일자: issued_no 기준 같은 날짜면 EXACT, ±7일 이내면 SIMILAR.
+        네 기준 다 NULL(전부 불일치)인 행은 바깥 WHERE에서 제외한다. 정렬은 매칭 개수 많은 순 →
+        발행일 가까운 순, 최대 5건(cash_flow와 동일 — 페이지네이션 없음, 필요해지면 추가).
+    -->
+    <select id="findMatchCandidates"
+            resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchCandidateRow">
+        SELECT settleId, roundName, projectName, plannedAmount, plannedTaxAmount, plannedDate, traderName,
+        amountMatchType, taxAmountMatchType, traderMatchType, dateMatchType
+        FROM (
+        SELECT
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        p.name AS projectName,
+        sb.planned_amount AS plannedAmount,
+        sb.planned_tax_amount AS plannedTaxAmount,
+        sb.planned_date AS plannedDate,
+        sb.trader_name AS traderName,
+        CASE
+        WHEN sb.planned_amount = #{totalAmount} THEN 'EXACT'
+        WHEN sb.planned_amount BETWEEN #{totalAmount} * 0.95 AND #{totalAmount} * 1.05 THEN 'SIMILAR'
+        ELSE NULL
+        END AS amountMatchType,
+        CASE
+        WHEN sb.planned_tax_amount = #{taxAmount} THEN 'EXACT'
+        WHEN sb.planned_tax_amount BETWEEN #{taxAmount} * 0.95 AND #{taxAmount} * 1.05 THEN 'SIMILAR'
+        ELSE NULL
+        END AS taxAmountMatchType,
+        CASE
+        WHEN sb.trader_name = #{buyerName} THEN 'EXACT'
+        WHEN sb.trader_name LIKE CONCAT('%', #{buyerName}, '%')
+        OR #{buyerName} LIKE CONCAT('%', sb.trader_name, '%') THEN 'SIMILAR'
+        ELSE NULL
+        END AS traderMatchType,
+        CASE
+        WHEN sb.planned_date = #{issuedNo} THEN 'EXACT'
+        WHEN ABS(DATEDIFF(sb.planned_date, #{issuedNo})) &lt;= 7 THEN 'SIMILAR'
+        ELSE NULL
+        END AS dateMatchType
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        WHERE sb.deleted_at IS NULL
+        <!--
+            ⚠️ status가 아니라 "이 블록에 세금계산서가 이미 붙었나"로 거른다 (2026-08-13 규칙 확정).
+            status = 'PENDING' 으로 걸면 입출금이 먼저 매칭된 블록(PARTIAL/COMPLETED)이 후보에서
+            통째로 빠지는데, 입금은 끝났고 세금계산서만 기다리는 그 블록들이야말로 정상 대상이다.
+        -->
+        AND NOT EXISTS (
+        SELECT 1 FROM tax_invoice ti2
+        WHERE ti2.settle_block_id = sb.settle_id AND ti2.deleted_at IS NULL
+        )
+        AND sb.type = #{type}
+        AND p.company_id = #{companyId}
+        ) candidates
+        WHERE amountMatchType IS NOT NULL OR taxAmountMatchType IS NOT NULL
+        OR traderMatchType IS NOT NULL OR dateMatchType IS NOT NULL
+        ORDER BY
+        (CASE WHEN amountMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN taxAmountMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN traderMatchType IS NOT NULL THEN 1 ELSE 0 END
+        + CASE WHEN dateMatchType IS NOT NULL THEN 1 ELSE 0 END) DESC,
+        ABS(DATEDIFF(plannedDate, #{issuedNo})) ASC
+        LIMIT 5
+    </select>
+
+    <!-- 매칭/매칭 해제 검증용 — settleBlockId(현재 연결된 정산 블록)로 "이미 매칭됨" 여부를 판정한다. -->
+    <select id="findMatchLookup" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchLookupRow">
+        SELECT type AS type, total_amount AS totalAmount, issued_no AS issuedNo,
+        settle_block_id AS settleBlockId, is_excluded AS isExcluded
+        FROM tax_invoice
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <!--
+        매칭 대상 정산 블록 검증용 — cash_flow의 findSettlementBlockForMatch와 완전히 동일(같은
+        settlement_block 테이블, 도메인 무관 검증). 회사 스코프는 block→step→project로 타고 올라가
+        project.company_id를 확인한다.
+    -->
+    <select id="findSettlementBlockForMatch" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.SettlementBlockMatchRow">
+        SELECT sb.type AS type, sb.status AS status, sb.planned_amount AS plannedAmount
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id AND b.deleted_at IS NULL
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        WHERE sb.settle_id = #{settleId} AND sb.deleted_at IS NULL
+        AND p.company_id = #{companyId}
+    </select>
+
+    <!--
+        매칭 직전 정산 블록 행만 잠근다 — 조인 없이 settlement_block 단일 테이블로 거는 게 중요하다
+        (조인 쿼리에 FOR UPDATE 를 붙이면 block·step·project 행까지 같이 잠겨서, 매칭과 무관한
+        스텝 수정·블록 생성이 대기한다). 정산 도메인의 findCurrentStateForUpdate 와 동일한 방식.
+
+        ⭐ 세금계산서 매칭에 이 잠금이 필요한 이유 (입출금 매칭에는 없는 사정):
+        입출금은 매칭될 때 status 가 반드시 PENDING/WAITING → PARTIAL/COMPLETED 로 바뀌어서, 상태
+        조건부 UPDATE 자체가 경합 지점이 된다(먼저 온 쪽만 1행 성공). 반면 세금계산서는 이미
+        PARTIAL/COMPLETED 인 블록에 붙을 때 status 를 안 바꾸므로 경합할 행 변경이 없다 — 서로 다른
+        세금계산서 2건이 같은 블록으로 동시에 들어오면 둘 다 통과해 "블록당 1장" 규칙이 깨진다.
+    -->
+    <!--
+        ⚠️ deleted_at 조건 필수 (2026-08-13, CodeRabbit 지적) — findSettlementBlockForMatch(조인 조회)와 이
+        잠금 사이에 블록이 소프트 삭제될 수 있다. 조건 없이 잠그면 삭제된 블록에 세금계산서가 연결된다.
+        결과가 null이면 호출부가 404로 중단한다.
+    -->
+    <select id="lockSettlementBlockForUpdate" resultType="java.lang.Long">
+        SELECT settle_id FROM settlement_block
+        WHERE settle_id = #{settleId} AND deleted_at IS NULL
+        FOR UPDATE
+    </select>
+
+    <!--
+        ⚠️ FOR UPDATE 필수 — 일반 SELECT 면 MySQL 기본 격리 수준(REPEATABLE READ)에서 트랜잭션이 처음
+        조회한 시점의 스냅샷을 보기 때문에, 위 잠금으로 줄을 서서 기다린 뒤에도 "기다리기 전의 옛 값"을
+        볼 수 있다. 잠금 읽기는 항상 최신 커밋 값을 본다. 정산 도메인이 SETL-008 에서 실제로 겪은 문제다.
+    -->
+    <select id="findLinkedTaxInvoiceId" resultType="java.lang.Long">
+        SELECT tax_id FROM tax_invoice
+        WHERE settle_block_id = #{settleId} AND deleted_at IS NULL
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <!-- 매칭 UPDATE 직후 같은 트랜잭션 안에서 응답 조립용으로 다시 조회한다(커밋 전에도 같은 커넥션이라 보임). -->
+    <select id="findMatchResultById" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchResultRow">
+        SELECT
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        p.name AS projectName,
+        ti.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        ti.linked_at AS linkedAt
+        FROM tax_invoice ti
+        JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        JOIN project p ON p.project_id = st.project_id
+        JOIN employee e ON e.user_id = ti.linked_by
+        WHERE ti.tax_id = #{taxId}
+        AND ti.company_id = #{companyId}
+    </select>
+
+    <select id="findMemoById" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMemoRow">
+        SELECT tax_id AS taxId, memo AS memo, updated_at AS updatedAt
+        FROM tax_invoice
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </select>
+
+    <select id="findDeleteCandidates"
+            resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceDeleteCandidateRow">
+        SELECT tax_id AS taxId, settle_block_id AS settleBlockId
+        FROM tax_invoice
+        WHERE company_id = #{companyId} AND deleted_at IS NULL
+        AND tax_id IN
+        <foreach collection="taxIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>
