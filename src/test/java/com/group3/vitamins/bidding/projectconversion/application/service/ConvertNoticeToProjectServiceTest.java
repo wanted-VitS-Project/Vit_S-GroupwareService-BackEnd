@@ -10,11 +10,13 @@ import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.project.application.command.CreateProjectCommand;
 import com.group3.vitamins.project.application.usecase.ProjectCommandUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectMemberCommandUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -216,6 +218,18 @@ class ConvertNoticeToProjectServiceTest {
                 .isInstanceOf(ForbiddenException.class);
 
         verify(projectCommandUseCase, never()).createProject(any());
+        verify(projectMemberCommandUseCase, never()).addMember(any());
+    }
+
+    @Test
+    @DisplayName("4번 선확인 통과 후 동시요청 경합으로 DB UNIQUE 제약을 위반하면 409로 변환한다")
+    void convertsRaceConditionViolationTo409() {
+        when(projectCommandUseCase.createProject(any(CreateProjectCommand.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_project_bid_notice_company violated"));
+
+        assertThatThrownBy(() -> service.convert(command()))
+                .isInstanceOf(ConflictException.class);
+
         verify(projectMemberCommandUseCase, never()).addMember(any());
     }
 

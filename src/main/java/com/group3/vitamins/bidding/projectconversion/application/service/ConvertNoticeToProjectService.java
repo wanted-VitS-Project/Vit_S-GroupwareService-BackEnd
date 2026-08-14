@@ -21,6 +21,7 @@ import com.group3.vitamins.project.application.usecase.ProjectCommandUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectMemberCommandUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -91,17 +92,26 @@ public class ConvertNoticeToProjectService implements ConvertNoticeToProjectUseC
         //    "불완전한 프로젝트를 남기지 않는다"는 트랜잭션 정책과 정확히 일치한다.
 
         // 8: 프로젝트 생성 + project.bid_notice_id 저장 + 요청자 자동 등록(EDITOR)까지 한 번에 처리됨.
-        ProjectResult project = projectCommandUseCase.createProject(new CreateProjectCommand(
-                command.noticeId(),
-                command.name(),
-                command.description(),
-                null,
-                command.startedOn(),
-                command.endedOn(),
-                null,
-                List.of(command.businessCategoryId()),
-                command.requesterUserId()
-        ));
+        // ⚠️ 4번의 선확인과 이 save() 사이엔 짧은 경합 창이 있다 - 두 요청이 동시에 4번을 통과하면
+        // DB의 UNIQUE(bid_notice_id, company_id) 제약이 최종적으로 막아주지만, 그 위반은 도메인
+        // 에러코드 없는 DataIntegrityViolationException(Spring 예외)으로 그대로 올라온다.
+        // 여기서 잡아 4번과 동일한 PROJECT_BID_NOTICE_ALREADY_LINKED(409)로 변환해 일관된 응답을 준다.
+        ProjectResult project;
+        try {
+            project = projectCommandUseCase.createProject(new CreateProjectCommand(
+                    command.noticeId(),
+                    command.name(),
+                    command.description(),
+                    null,
+                    command.startedOn(),
+                    command.endedOn(),
+                    null,
+                    List.of(command.businessCategoryId()),
+                    command.requesterUserId()
+            ));
+        } catch (DataIntegrityViolationException raceCondition) {
+            throw new ConflictException(ProjectErrorCode.PROJECT_BID_NOTICE_ALREADY_LINKED);
+        }
 
         // TODO 9: summaryId가 있으면 bid_notice_summary.project_id에 연결 (다음 단계 - 쓰기 메서드 신설 필요)
 
