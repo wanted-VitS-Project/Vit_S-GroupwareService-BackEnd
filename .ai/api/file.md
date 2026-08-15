@@ -1,5 +1,6 @@
 # 📎 File · FileVersion API
 
+**최종 업데이트**: 2026-08-16 (§1 — `APPROVAL` 블록 동명 검사 면제. 결재 문서 제거 후 같은 파일 재첨부가 영구 409 로 막히던 문제)
 **최종 업데이트**: 2026-08-07 (§12 프로젝트 전체 파일 모아보기 · §13 휴지통 모아보기 신설 · §7 파생데이터 정리 포트 선호출 명시) · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
@@ -152,6 +153,7 @@
 ⛔ **새 문서와 새 버전이 같은 API 다.** `fileId` 를 주면 그 문서의 새 버전, 주지 않으면 새 문서(버전 1)다. 검증·presigned 발급·완료 통보 흐름이 완전히 같다.
 ⛔ **파일 자체는 이 API 로 올리지 않는다.** 응답의 `uploadUrl` 로 클라이언트가 저장소에 직접 PUT 한 뒤 완료 통보를 호출한다.
 ⛔ **동명 문서가 있으면 `409` 로 거부한다.** 사용자가 확인하면 `allowDuplicateName: true` 로 다시 호출한다 (`FILE-009`).
+⭐ **단 `APPROVAL` 블록은 동명 검사를 면제한다** (2026-08-16 확정). 결재 문서 제거(`approval.md` §4)는 `approval_document` 링크만 끊고 파일은 블록에 남는데, 그 파일은 §3 목록에서 제외돼 **사용자가 발견·삭제할 경로가 없다.** 그 상태로 같은 파일을 다시 첨부하면 영구히 `409` 라 "제거 후 재첨부"가 막힌다. 이름 유일성은 어차피 불변식이 아니고(문서명 수정 §4 에 중복 검사가 없다), `allowDuplicateName: true` 가 도달하는 결과와 동일하므로 결재 블록에서는 되묻기를 생략한다. **`FILE` 블록은 종전대로 `409`.**
 ⭐ **`uploadUrl` 만료 = 10분** (2026-08-06 확정).
 ⭐ **업로드 대상 블록 = `FILE` 또는 `APPROVAL`** (2026-08-06 확정). 결재 블록의 드롭존에 올린 파일도 이 API 로 받는다 — 결재 도메인은 자체 업로드 API 를 두지 않고 공용 파일 API 를 재사용한다. 결재 블록에 올리면 파일이 `block_file` 로 그 블록에 매달리고(FILE 블록과 동일), 이후 프론트가 결재 첨부 API(`POST /approvals/{id}/revisions/{revId}/documents`)로 `fileVersionId` 를 넘겨 `approval_document` 링크를 추가한다 → **`block_file` + `approval_document` 이중 링크**(팀 합의). 권한·삭제잠금(§5)·버전 조회는 FILE 블록과 완전히 같은 `블록→스텝` 경로를 탄다. 그 외 타입 블록은 `FILE_BLOCK_NOT_FOUND`.
 
@@ -180,7 +182,7 @@
 | 403 | `FILE_EDIT_PERMISSION_REQUIRED` | 스텝 편집 권한 없음 |
 | 404 | `FILE_BLOCK_NOT_FOUND` | 블록이 없거나 **soft delete** 됨 (`block.deleted_at IS NOT NULL`) 또는 **`FILE`·`APPROVAL` 이 아닌 타입** |
 | 404 | `FILE_NOT_FOUND` | `fileId` 로 지정한 문서 없음 |
-| 409 | `FILE_NAME_DUPLICATED` | 동명 문서 존재. `allowDuplicateName: true` 로 재요청 |
+| 409 | `FILE_NAME_DUPLICATED` | 동명 문서 존재. `allowDuplicateName: true` 로 재요청. **`FILE` 블록에서만 발생** — `APPROVAL` 블록은 검사 면제(2026-08-16) |
 
 ---
 

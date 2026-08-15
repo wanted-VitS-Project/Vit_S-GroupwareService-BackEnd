@@ -248,6 +248,36 @@ class FileUploadServiceTest {
                     .satisfies(hasCode(FileErrorCode.FILE_NAME_DUPLICATED));
             verify(fileRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("결재 블록이면 동명 검사를 건너뛴다 — 조회조차 하지 않는다 (§1, 2026-08-16)")
+        void approvalBlockSkipsNameCheck() {
+            stubBlockAndEditable();
+            stubUploader();
+            when(blockCatalogPort.isApprovalBlock(BLOCK_ID)).thenReturn(true);
+            when(fileRepository.save(any())).thenReturn(File.restore(31L, PROJECT_ID, "제안서", USER, null, 1));
+            when(fileVersionRepository.save(any())).thenReturn(uploadingVersion(74L, 31L, 1, "pdf"));
+            when(fileStoragePort.presignUpload(anyString(), anyString(), anyLong()))
+                    .thenReturn(new FileStoragePort.PresignedUrl("https://s3/put", Instant.now()));
+
+            FileUploadStartResult result = service.startUpload(
+                    startCmd("제안서_v1.pdf", 5000L, "제안서", null, false));
+
+            assertThat(result.fileId()).isEqualTo(31L);
+            // 면제는 "동명이어도 통과"가 아니라 "검사 자체를 안 한다" 여야 한다 — 쿼리가 나가면 회귀다.
+            verify(fileQueryPort, never()).existsActiveNameInBlock(any(), any());
+        }
+
+        @Test
+        @DisplayName("FILE 블록은 종전대로 동명 검사를 한다 — 면제가 새어나가지 않는다")
+        void fileBlockStillChecksName() {
+            stubBlockAndEditable();
+            when(blockCatalogPort.isApprovalBlock(BLOCK_ID)).thenReturn(false);
+            when(fileQueryPort.existsActiveNameInBlock(BLOCK_ID, "제안서")).thenReturn(true);
+
+            assertThatThrownBy(() -> service.startUpload(startCmd("제안서_v1.pdf", 5000L, "제안서", null, false)))
+                    .satisfies(hasCode(FileErrorCode.FILE_NAME_DUPLICATED));
+        }
     }
 
     @Nested
