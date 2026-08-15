@@ -55,6 +55,13 @@ public class JpaBidNoticeSummaryManagementAdapter
         return entity.toDetails();
     }
 
+    @Override
+    public BidNoticeSummaryDetails abandon(Long summaryId, LocalDateTime now) {
+        BidNoticeSummaryJpaEntity entity = managed(summaryId);
+        entity.abandon(now);
+        return entity.toDetails();
+    }
+
     private BidNoticeSummaryJpaEntity managed(Long summaryId) {
         return repository.findById(summaryId)
                 .orElseThrow(() -> new IllegalStateException(

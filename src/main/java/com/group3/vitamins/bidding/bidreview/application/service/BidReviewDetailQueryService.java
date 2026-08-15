@@ -84,6 +84,7 @@ public class BidReviewDetailQueryService implements GetBidReviewDetailUseCase {
                 review.completedAt(),
                 review.expiresAt(),
                 review.projectId(),
+                review.retryCount(),
                 documents,
                 citations
         );

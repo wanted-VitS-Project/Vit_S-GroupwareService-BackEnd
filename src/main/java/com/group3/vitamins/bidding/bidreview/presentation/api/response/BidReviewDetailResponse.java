@@ -38,6 +38,9 @@ public record BidReviewDetailResponse(
         @Schema(description = "정식 프로젝트로 귀속됐으면 프로젝트 ID", nullable = true)
         Long projectId,
 
+        @Schema(description = "일시 장애로 재시도한 횟수. 화면에서 \"재시도 중 (n/2)\"로 안내할 때 사용", example = "0")
+        int retryCount,
+
         @Schema(description = "요청 당시 선택한 문서 목록과 처리 상태")
         List<DocumentResponse> documents,
 
@@ -57,6 +60,7 @@ public record BidReviewDetailResponse(
                 result.completedAt(),
                 result.expiresAt(),
                 result.projectId(),
+                result.retryCount(),
                 result.documents().stream().map(DocumentResponse::from).toList(),
                 result.citations().stream().map(CitationResponse::from).toList()
         );

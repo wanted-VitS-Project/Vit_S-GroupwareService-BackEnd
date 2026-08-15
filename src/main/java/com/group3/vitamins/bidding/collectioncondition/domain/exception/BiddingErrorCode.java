@@ -146,6 +146,11 @@ public enum BiddingErrorCode implements ErrorCode {
             "수정할 수 없는 입찰 공고 AI 요약입니다."
     ),
 
+    BIDDING_SUMMARY_NOT_ABANDONABLE(
+            "BIDDING_SUMMARY_NOT_ABANDONABLE",
+            "진행 중이 아닌 입찰 공고 AI 요약은 중단할 수 없습니다."
+    ),
+
     BIDDING_SUMMARY_NOT_COMPLETED(
             "BIDDING_SUMMARY_NOT_COMPLETED",
             "완료되지 않은 입찰 공고 AI 요약은 확정할 수 없습니다."

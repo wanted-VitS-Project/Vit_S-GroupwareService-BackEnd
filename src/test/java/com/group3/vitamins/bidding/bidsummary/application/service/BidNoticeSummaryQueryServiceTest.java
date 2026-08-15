@@ -58,6 +58,7 @@ class BidNoticeSummaryQueryServiceTest {
 
         assertThat(result.summaryId()).isEqualTo(SUMMARY_ID);
         assertThat(result.summaryStatus()).isEqualTo("COMPLETED");
+        assertThat(result.retryCount()).isEqualTo(2);
     }
 
     @Test
@@ -119,7 +120,7 @@ class BidNoticeSummaryQueryServiceTest {
                 BidNoticeSummaryStatus.COMPLETED,
                 "개요", "금액", "일정", "자격", "과업", "위험",
                 confirmed, confirmed ? USER_ID : null,
-                confirmed ? now : null, null, null, now, now, now
+                confirmed ? now : null, null, null, 2, now, now, now
         );
     }
 }

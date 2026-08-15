@@ -1,9 +1,9 @@
 # 입찰 관리 API 명세
 
 **노션 원본**: 사용자 제공 노션 정리본 (링크 미제공)
+**최종 동기화**: 2026-08-15 (요약 중단 API 신설, 요약·검토 응답에 retryCount 추가, summaryStatus에 ABANDONED 추가 — FE 공유 필요)
 **최종 동기화**: 2026-08-14 (CodeRabbit 피드백 반영 — 첨부 업로드 확장자 화이트리스트 전환, FAILED 에러코드 신설, 관심 등록/해제 400 응답 추가)
 **최종 동기화**: 2026-08-14 (공고 관심 등록/해제 신설 + 목록 조회 favorite 필터 — FE 공유 필요)
-**최종 동기화**: 2026-08-14 (직접 등록 공고 첨부 업로드 신설 + 검토 이력 조회 페이지네이션 전환 — FE 공유 필요)
 **도메인 담당**: 정현
 
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
@@ -35,6 +35,7 @@
 | ✅ 확정 | 입찰 AI 요약 조회 | GET | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
 | ✅ 확정 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
 | ✅ 확정 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
+| ✅ 확정 (2026-08-15 신설) | 입찰 AI 요약 중단 | PATCH | `/api/v1/bidding/summaries/{summaryId}/abandon` | `BIDDING` |
 | ✔️ 완료 | Python 입찰 요약 작업 조회 | GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | 내부 서버 |
 | ✅ 확정 | Python 입찰 요약 결과 callback | POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | 내부 서버 |
 | ✅ 확정 | 입찰 문서 검토 요청 | POST | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
@@ -1295,7 +1296,7 @@ Request Body는 없다.
 | `parentSummaryId` | Long | Y | 개선 기준 요약 ID. 최초 요청이면 `null` |
 | `revisionNo` | Integer | N | 개선 계보의 개정 번호. 최초 요청은 `1` |
 | `prompt` | String | N | 요청 당시 사용자가 입력한 프롬프트 원문 |
-| `summaryStatus` | String | N | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
+| `summaryStatus` | String | N | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `ABANDONED`(2026-08-15 신설 - 사용자가 직접 중단) |
 | `overviewSummary` | String | Y | 공고 개요. 완료 전 또는 근거 부족 시 `null` |
 | `amountSummary` | String | Y | 금액 요약 |
 | `scheduleSummary` | String | Y | 일정 요약 |
@@ -1307,6 +1308,7 @@ Request Body는 없다.
 | `confirmedAt` | String | Y | 확정 시각. 미확정이면 `null` |
 | `projectId` | Long | Y | 이 확정 요약으로 생성한 프로젝트 ID. 미전환이면 `null` |
 | `errorMessage` | String | Y | 실패 사유. `FAILED`가 아니면 `null` |
+| `retryCount` | Integer | N | 일시 장애로 재시도한 횟수(최대 2). "재시도 중 (n/2)" 안내용(2026-08-15 신설) |
 | `requestedAt` | String | N | 요청 생성 시각 |
 | `completedAt` | String | Y | 분석 완료 또는 실패 시각 |
 | `updatedAt` | String | Y | 사용자가 요약 결과를 마지막으로 수정한 시각 |
@@ -1331,6 +1333,7 @@ Request Body는 없다.
     "confirmedAt": null,
     "projectId": null,
     "errorMessage": null,
+    "retryCount": 0,
     "requestedAt": "2026-08-11T17:30:00",
     "completedAt": "2026-08-11T17:30:12",
     "updatedAt": null
@@ -1423,6 +1426,39 @@ AI가 생성한 구조화 결과를 요청자가 검토하여 부분 수정한�
 | 404 | `BIDDING_SUMMARY_NOT_FOUND` | 현재 회사의 요약이 존재하지 않음 |
 | 409 | `BIDDING_SUMMARY_NOT_COMPLETED` | 완료되지 않은 요약을 확정하려고 함 |
 | 409 | `BIDDING_SUMMARY_ALREADY_CONFIRMED` | 이미 확정된 요약 |
+
+---
+
+## 입찰 AI 요약 중단 `PATCH /api/v1/bidding/summaries/{summaryId}/abandon` (2026-08-15 신설)
+
+**상태**: ✅ 확정
+
+요청자가 진행 중(`PENDING`/`PROCESSING`)인 AI 요약을 스스로 끝낸다. 검토(bidreview)의 abandon과 동일한
+형태다. Request Body는 없다. 중단 이후 Worker가 뒤늦게 결과를 보내와도 조용히 무시된다(현재
+attemptId와 상태가 더 이상 일치하지 않기 때문).
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입찰 공고 AI 요약 중단 성공",
+  "data": {
+    "summaryId": 31,
+    "summaryStatus": "ABANDONED",
+    "abandonedAt": "2026-08-15T14:00:00"
+  }
+}
+```
+
+### Status Code
+
+| HTTP | code | 설명 |
+|------|------|------|
+| 200 | - | 요약 중단 성공 |
+| 400 | `BIDDING_INVALID_SUMMARY_REQUEST` | 유효하지 않은 요약 ID |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
+| 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
+| 404 | `BIDDING_SUMMARY_NOT_FOUND` | 현재 회사·요청자 소유의 요약이 존재하지 않음 |
+| 409 | `BIDDING_SUMMARY_NOT_ABANDONABLE` | 진행 중(PENDING/PROCESSING)이 아닌 요약을 중단하려고 함 |
 
 ---
 
@@ -1815,6 +1851,7 @@ FE는 원래부터 이 필드를 쓴 적이 없다고 확인됨. FE에 신규 �
 | `completedAt` | LocalDateTime | 완료 또는 실패 시각 |
 | `expiresAt` | LocalDateTime | 임시파일 정리 예정 시각. 처리 중이거나 귀속 완료면 `null` |
 | `projectId` | Long | 정식 프로젝트로 귀속됐으면 프로젝트 ID |
+| `retryCount` | Integer | 일시 장애로 재시도한 횟수(최대 3). "재시도 중 (n/3)" 안내용(2026-08-15 신설) |
 | `documents` | List | 요청 당시 선택한 문서 목록과 처리 상태 |
 | `citations` | List | 검토 결과의 근거 목록 |
 

@@ -292,6 +292,63 @@ class JpaBidReviewWorkerAdapterTest {
         assertThat(update.accepted()).isFalse();
     }
 
+    @Test
+    @DisplayName("살아있는 outbox 없이 오래 멈춘 검토를 재큐잉한다")
+    void requeuesOrphanedReview() {
+        String attemptId = UUID.randomUUID().toString();
+        Long reviewId = seedProcessingReview(attemptId);
+
+        int recovered = workerAdapter.recoverOrphaned(NOW.plusMinutes(1), 100, NOW.plusMinutes(11));
+
+        assertThat(recovered).isEqualTo(1);
+        BidReviewJpaEntity persisted = reviewRepository.findById(reviewId).orElseThrow();
+        assertThat(persisted.getReviewStatus()).isEqualTo(BidReviewStatus.PENDING);
+        assertThat(persisted.getRetryCount()).isEqualTo(1);
+        assertThat(persisted.getProcessingAttemptId()).isNotEqualTo(attemptId);
+        assertThat(outboxRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("재시도를 이미 소진한 고아 검토는 재큐잉 대신 최종 FAILED로 종료한다")
+    void failsOrphanedReviewAfterRetryLimit() {
+        String attemptId = UUID.randomUUID().toString();
+        Long reviewId = seedProcessingReview(attemptId);
+        BidReviewJpaEntity entity = reviewRepository.findById(reviewId).orElseThrow();
+        BidReview domain = entity.toDomain();
+        for (int i = 0; i < 3; i++) {
+            domain = domain.retryProcessing(UUID.randomUUID().toString(), "TEMP", "일시 장애", NOW);
+        }
+        entity.apply(domain);
+        reviewRepository.saveAndFlush(entity);
+
+        int recovered = workerAdapter.recoverOrphaned(NOW.plusMinutes(1), 100, NOW.plusMinutes(11));
+
+        assertThat(recovered).isEqualTo(1);
+        BidReviewJpaEntity persisted = reviewRepository.findById(reviewId).orElseThrow();
+        assertThat(persisted.getReviewStatus()).isEqualTo(BidReviewStatus.FAILED);
+        assertThat(outboxRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이미 살아있는 outbox가 있으면 손대지 않는다")
+    void skipsReviewThatAlreadyHasPendingOutbox() {
+        String attemptId = UUID.randomUUID().toString();
+        Long reviewId = seedProcessingReview(attemptId);
+        var payload = new ObjectMapper().createObjectNode()
+                .put("reviewId", reviewId).put("companyId", COMPANY_ID)
+                .put("attemptId", attemptId).put("retryCount", 0);
+        outboxRepository.saveAndFlush(BidReviewOutboxJpaEntity.pending(
+                UUID.randomUUID().toString(), reviewId, attemptId,
+                "BID_REVIEW_REQUESTED", payload, NOW, NOW
+        ));
+
+        int recovered = workerAdapter.recoverOrphaned(NOW.plusMinutes(1), 100, NOW.plusMinutes(11));
+
+        assertThat(recovered).isZero();
+        BidReviewJpaEntity persisted = reviewRepository.findById(reviewId).orElseThrow();
+        assertThat(persisted.getReviewStatus()).isEqualTo(BidReviewStatus.PROCESSING);
+    }
+
     private Long seedReview(String attemptId) {
         BidReview review = BidReview.createPending(
                 COMPANY_ID, NOTICE_ID, USER_ID, PROMPT, attemptId, NOW

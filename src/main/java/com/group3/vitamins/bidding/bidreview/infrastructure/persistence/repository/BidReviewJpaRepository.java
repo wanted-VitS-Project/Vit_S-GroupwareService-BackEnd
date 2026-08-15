@@ -53,4 +53,25 @@ public interface BidReviewJpaRepository
             @Param("now") LocalDateTime now,
             @Param("batchSize") int batchSize
     );
+
+    // 정상 흐름에서는 검토와 outbox가 같은 트랜잭션에 저장돼 나오지 않아야 하는 상태다 - 그래도
+    // 살아있는(PENDING) outbox가 하나도 없이 오래 멈춘 검토를 방어적으로 찾아 재발행 스케줄러가 훑는다
+    // (bidsummary의 findOrphanedCandidateIds와 동일 패턴).
+    @Query(value = """
+            SELECT r.bid_review_id
+            FROM bid_review r
+            WHERE r.review_status IN ('PENDING', 'PROCESSING')
+              AND r.updated_at < :staleBefore
+              AND NOT EXISTS (
+                  SELECT 1 FROM bid_review_outbox o
+                  WHERE o.bid_review_id = r.bid_review_id
+                    AND o.publish_status = 'PENDING'
+              )
+            ORDER BY r.bid_review_id
+            LIMIT :batchLimit
+            """, nativeQuery = true)
+    List<Long> findOrphanedCandidateIds(
+            @Param("staleBefore") LocalDateTime staleBefore,
+            @Param("batchLimit") int batchLimit
+    );
 }
