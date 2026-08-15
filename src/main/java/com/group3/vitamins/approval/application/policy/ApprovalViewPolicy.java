@@ -6,8 +6,6 @@ import com.group3.vitamins.approval.application.port.BlockCatalogPort;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
 import com.group3.vitamins.approval.domain.model.Approval;
 import com.group3.vitamins.approval.domain.model.ApprovalLine;
-import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
-import com.group3.vitamins.approval.domain.model.ApprovalStatus;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import lombok.RequiredArgsConstructor;
@@ -17,25 +15,29 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Set;
 
-/** 결재 회차 상세조회(MGT-005)가 쓰는 조회 권한 검증 */
+/**
+ * 결재 조회 3종(MGT-005~007)이 쓰는 조회 권한 검증.
+ *
+ * <p>2026-08-15 계약 변경 — 열람 범위를 <b>블록이 속한 스텝의 열람 권한자(VIEWER 이상) 전원</b>으로
+ * 넓혔다. 블록 카드가 이미 같은 사람들에게 노출되는 마당에 상세만 막는 것은 기밀 보호가 아니라 불편이었고,
+ * 자기 차례를 기다리는 결재자가 정작 그 문서를 못 읽는 문제가 있었다.
+ *
+ * <p>회차 상태는 조회 권한에 영향을 주지 않는다. 블록 목록에서 결재 블록을 볼 수 있는 사람이라면
+ * {@code DRAFT}를 포함한 결재 내용도 함께 볼 수 있어야 한다.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class ApprovalViewPolicy {
 
-    /** MASTER 는 차례와 무관하게 전부 조회 가능(MGT-005). ADMIN은 결재 권한이 없다. */
+    /** MASTER 는 스텝 참여와 무관하게 전부 조회 가능(MGT-005). ADMIN은 결재 권한이 없다. */
     private static final Set<String> FULL_ACCESS_ROLES = Set.of("MASTER");
-
-    /** "ACTIVE 이상(과거 이력 포함)" — DRAFT(상신 전) · WAITING(차례 안 옴)은 제외 */
-    private static final Set<ApprovalLineStatus> VIEWABLE_LINE_STATUSES =
-            Set.of(ApprovalLineStatus.ACTIVE, ApprovalLineStatus.APPROVED,
-                    ApprovalLineStatus.REJECTED, ApprovalLineStatus.CANCELED);
 
     private final EmployeeCatalogPort employeeCatalogPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final BlockCatalogPort blockCatalogPort;
 
-    /** 기안자·대행 기안자·ACTIVE 이상 결재자(과거 이력 포함)·MASTER만 조회 가능. 아니면 403 */
+    /** 기안자·대행 기안자·스텝 열람 권한자·결재선 참여자·MASTER만 상태와 무관하게 조회 가능. 아니면 403 */
     public void assertViewable(Approval approval, List<ApprovalLine> lines, String requesterId) {
         assertSameCompany(approval, requesterId);
 
@@ -46,26 +48,20 @@ public class ApprovalViewPolicy {
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
         }
 
-        if (approval.getDrafterId().equals(requesterId)
-                || requesterId.equals(approval.getActingDrafterId())) {
+        if (isDrafterSide(approval, requesterId, role)) {
             return;
         }
 
-        if (FULL_ACCESS_ROLES.contains(role)) {
+        if (blockCatalogPort.canViewBlock(approval.getBlockId(), requesterId, role)) {
             return;
         }
 
-        // 기안자 또는 대행자가 참여 불가일 때만 스텝 EDITOR에게 상세 열람을 연다.
-        // 알림을 클릭한 EDITOR가 대행 선점·결재선 교체 화면에 진입할 수 있어야 한다.
-        if (requiresDrafterAction(approval)
-                && blockCatalogPort.isStepEditor(approval.getBlockId(), requesterId, role)) {
-            return;
-        }
-
-        boolean isViewableParticipant = lines.stream()
-                .anyMatch(line -> line.getApproverId().equals(requesterId)
-                        && VIEWABLE_LINE_STATUSES.contains(line.getStatus()));
-        if (isViewableParticipant) {
+        // 결재선에 이름이 오른 사람은 상태 무관 열람 가능(WAITING 제외 규칙 폐지, 2026-08-15).
+        // 프로젝트 멤버십 검사가 면제되는 대표 직책 결재자는 위 스텝 권한으로 안 열려서 이 분기가 필요하다
+        // (ApprovalLineEligibilityPolicy 의 MEMBERSHIP_CHECK_EXEMPT_ROLES·대표 직책 참고).
+        boolean isParticipant = lines.stream()
+                .anyMatch(line -> line.getApproverId().equals(requesterId));
+        if (isParticipant) {
             return;
         }
 
@@ -73,17 +69,10 @@ public class ApprovalViewPolicy {
         throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
     }
 
-    private boolean requiresDrafterAction(Approval approval) {
-        if (approval.getStatus() != ApprovalStatus.IN_PROGRESS
-                && approval.getStatus() != ApprovalStatus.REJECTED) {
-            return false;
-        }
-        String currentDrafterId = approval.getActingDrafterId() == null
-                ? approval.getDrafterId() : approval.getActingDrafterId();
-        return employeeCatalogPort.findEmployee(currentDrafterId)
-                .map(employee -> employee.participationUnavailable()
-                        || "ADMIN".equals(employee.role()))
-                .orElse(true);
+    private boolean isDrafterSide(Approval approval, String requesterId, String role) {
+        return approval.getDrafterId().equals(requesterId)
+                || requesterId.equals(approval.getActingDrafterId())
+                || FULL_ACCESS_ROLES.contains(role);
     }
 
     /**

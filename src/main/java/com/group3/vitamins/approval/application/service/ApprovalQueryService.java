@@ -163,11 +163,13 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         log.info("결재 상세조회 요청 - approvalId={}, requesterId={}", query.approvalId(), query.requesterId());
 
         Approval approval = revisionEligibilityPolicy.getApprovalOrThrow(query.approvalId());
+
+        // 전 회차 결재선을 통틀어 열람 자격을 판정한다 — 과거 회차 참여자도 결재 이력을 볼 수 있다.
+        List<ApprovalLine> allLines = approvalRepository.findLinesByApprovalId(query.approvalId());
+        viewPolicy.assertViewable(approval, allLines, query.requesterId());
+
         ApprovalRevision revision = approvalRepository.findLatestRevisionReadOnly(query.approvalId())
                 .orElseThrow(() -> new NotFoundException(ApprovalErrorCode.APPROVAL_REVISION_NOT_FOUND));
-        List<ApprovalLine> lines = approvalRepository.findLinesByRevisionId(revision.getRevisionId());
-
-        viewPolicy.assertViewable(approval, lines, query.requesterId());
 
         EmployeeSummary drafter = employeeCatalogPort.findEmployee(approval.getDrafterId())
                 .orElse(unavailableEmployee(approval.getDrafterId()));
