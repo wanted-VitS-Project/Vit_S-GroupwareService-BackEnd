@@ -79,7 +79,11 @@ public class FileUploadService implements FileUploadUseCase {
 
         if (newDocument) {
             String docName = resolveDocumentName(command.name(), command.originalFileName());
+            // 결재 블록은 동명 검사를 면제한다(§1, 2026-08-16). 결재 문서 제거는 링크만 끊고 파일은
+            // 블록에 남는데 그 파일은 §3 목록에서 빠져 사용자가 지울 수 없다 — 검사를 두면 "제거 후
+            // 같은 파일 재첨부"가 영구히 409 다. FILE 블록은 종전대로 되묻는다.
             if (!command.allowDuplicateName()
+                    && !blockCatalogPort.isApprovalBlock(command.blockId())
                     && fileQueryPort.existsActiveNameInBlock(command.blockId(), docName)) {
                 throw new ConflictException(FileErrorCode.FILE_NAME_DUPLICATED);
             }
