@@ -4,6 +4,7 @@ import com.group3.vitamins.bidding.collectioncondition.application.support.Colle
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionConditionFilter;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionScheduleType;
 import com.group3.vitamins.bidding.collectionrun.application.port.ScheduledCollectionConditionPort;
 import com.group3.vitamins.bidding.collectionrun.application.support.CollectionRunCreator;
@@ -123,6 +124,7 @@ class ScheduledCollectionRunServiceTest {
                         true,
                         null
                 ),
+                CollectionLookbackPeriod.ONE_WEEK,
                 true,
                 true,
                 CollectionScheduleType.DAILY,

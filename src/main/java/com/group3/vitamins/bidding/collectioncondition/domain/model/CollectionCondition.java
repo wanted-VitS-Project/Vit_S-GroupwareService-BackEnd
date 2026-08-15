@@ -12,6 +12,7 @@ public class CollectionCondition {
     private String conditionName;
     private List<BidNoticeType> noticeTypes;
     private CollectionConditionFilter filters;
+    private CollectionLookbackPeriod lookbackPeriod;
     private boolean active;
     private boolean autoCollectionEnabled;
     private CollectionScheduleType scheduleType;
@@ -33,6 +34,7 @@ public class CollectionCondition {
             String conditionName,
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
+            CollectionLookbackPeriod lookbackPeriod,
             boolean active,
             boolean autoCollectionEnabled,
             CollectionScheduleType scheduleType,
@@ -53,6 +55,7 @@ public class CollectionCondition {
         this.conditionName = conditionName;
         this.noticeTypes = List.copyOf(noticeTypes);
         this.filters = filters;
+        this.lookbackPeriod = lookbackPeriod;
         this.active = active;
         this.autoCollectionEnabled = autoCollectionEnabled;
         this.scheduleType = scheduleType;
@@ -75,6 +78,7 @@ public class CollectionCondition {
             String conditionName,
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
+            CollectionLookbackPeriod lookbackPeriod,
             boolean active,
             boolean autoCollectionEnabled,
             CollectionScheduleType scheduleType,
@@ -91,6 +95,7 @@ public class CollectionCondition {
                 conditionName,
                 noticeTypes,
                 filters,
+                lookbackPeriod,
                 active,
                 autoCollectionEnabled,
                 scheduleType,
@@ -113,7 +118,8 @@ public class CollectionCondition {
             boolean active, String createdBy, LocalDateTime now
     ) {
         return create(companyId, sourceCode, conditionName, noticeTypes, filters,
-                active, false, null, null, null, null, createdBy, now);
+                CollectionLookbackPeriod.ONE_WEEK, active, false, null, null, null, null,
+                createdBy, now);
     }
 
     // DB에서 조회한 회사별 수집 조건을 도메인 객체로 복원합니다.
@@ -124,6 +130,7 @@ public class CollectionCondition {
             String conditionName,
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
+            CollectionLookbackPeriod lookbackPeriod,
             boolean active,
             boolean autoCollectionEnabled,
             CollectionScheduleType scheduleType,
@@ -145,6 +152,7 @@ public class CollectionCondition {
                 conditionName,
                 noticeTypes,
                 filters,
+                lookbackPeriod,
                 active,
                 autoCollectionEnabled,
                 scheduleType,
@@ -170,7 +178,7 @@ public class CollectionCondition {
             LocalDateTime updatedAt, LocalDateTime deletedAt
     ) {
         return restore(conditionId, companyId, sourceCode, conditionName,
-                noticeTypes, filters, active, false, null, null, null,
+                noticeTypes, filters, CollectionLookbackPeriod.ONE_WEEK, active, false, null, null, null,
                 null, null, lastSuccessAt, lastCollectedCount, createdBy,
                 createdAt, updatedAt, deletedAt);
     }
@@ -180,6 +188,7 @@ public class CollectionCondition {
             String conditionName,
             List<BidNoticeType> noticeTypes,
             CollectionConditionFilter filters,
+            CollectionLookbackPeriod lookbackPeriod,
             boolean active,
             boolean autoCollectionEnabled,
             CollectionScheduleType scheduleType,
@@ -191,6 +200,7 @@ public class CollectionCondition {
         this.conditionName = conditionName;
         this.noticeTypes = List.copyOf(noticeTypes);
         this.filters = filters;
+        this.lookbackPeriod = lookbackPeriod;
         this.active = active;
         this.autoCollectionEnabled = autoCollectionEnabled;
         this.scheduleType = scheduleType;
@@ -205,7 +215,7 @@ public class CollectionCondition {
             CollectionConditionFilter filters, boolean active,
             LocalDateTime updatedAt
     ) {
-        update(conditionName, noticeTypes, filters, active,
+        update(conditionName, noticeTypes, filters, CollectionLookbackPeriod.ONE_WEEK, active,
                 false, null, null, null, null, updatedAt);
     }
 
@@ -274,6 +284,10 @@ public class CollectionCondition {
 
     public CollectionConditionFilter getFilters() {
         return filters;
+    }
+
+    public CollectionLookbackPeriod getLookbackPeriod() {
+        return lookbackPeriod;
     }
 
     public boolean isActive() {

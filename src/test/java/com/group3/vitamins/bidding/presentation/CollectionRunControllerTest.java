@@ -64,7 +64,7 @@ class CollectionRunControllerTest {
             )).thenReturn(result);
 
             ResponseEntity<ApiResponse<StartCollectionRunResponse>> response =
-                    controller.start(USER_ID, CONDITION_ID);
+                    controller.start(USER_ID, CONDITION_ID, null);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
             assertThat(response.getBody()).isNotNull();
@@ -96,7 +96,7 @@ class CollectionRunControllerTest {
                     new StartCollectionRunCommand(CONDITION_ID, USER_ID)
             )).thenThrow(expected);
 
-            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID))
+            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID, null))
                     .isSameAs(expected);
         }
 
@@ -110,7 +110,7 @@ class CollectionRunControllerTest {
                     new StartCollectionRunCommand(CONDITION_ID, USER_ID)
             )).thenThrow(expected);
 
-            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID))
+            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID, null))
                     .isSameAs(expected);
         }
 
@@ -124,7 +124,7 @@ class CollectionRunControllerTest {
                     new StartCollectionRunCommand(CONDITION_ID, USER_ID)
             )).thenThrow(expected);
 
-            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID))
+            assertThatThrownBy(() -> controller.start(USER_ID, CONDITION_ID, null))
                     .isSameAs(expected);
         }
     }
@@ -158,6 +158,9 @@ class CollectionRunControllerTest {
                     .isEqualTo(CollectionRunTriggerType.MANUAL);
             assertThat(data.runStatus())
                     .isEqualTo(CollectionRunStatus.COMPLETED);
+            assertThat(data.collectionStartedAt())
+                    .isEqualTo(STARTED_AT.minusDays(7));
+            assertThat(data.collectionEndedAt()).isEqualTo(STARTED_AT);
             assertThat(data.collectedCount()).isEqualTo(40);
             assertThat(data.insertedCount()).isEqualTo(12);
             assertThat(data.updatedCount()).isEqualTo(5);
@@ -192,6 +195,8 @@ class CollectionRunControllerTest {
                 CONDITION_ID,
                 CollectionRunTriggerType.MANUAL,
                 CollectionRunStatus.PENDING,
+                STARTED_AT.minusDays(7),
+                STARTED_AT,
                 0,
                 0,
                 0,
@@ -209,6 +214,8 @@ class CollectionRunControllerTest {
                 CONDITION_ID,
                 CollectionRunTriggerType.MANUAL,
                 CollectionRunStatus.COMPLETED,
+                STARTED_AT.minusDays(7),
+                STARTED_AT,
                 40,
                 12,
                 5,
