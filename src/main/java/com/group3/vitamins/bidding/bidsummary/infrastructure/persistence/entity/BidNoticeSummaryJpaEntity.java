@@ -218,8 +218,19 @@ public class BidNoticeSummaryJpaEntity {
                 summaryStatus, overviewSummary, amountSummary,
                 scheduleSummary, qualificationSummary, taskSummary,
                 riskSummary, confirmed, confirmedBy, confirmedAt,
-                projectId, errorMessage, createdAt, completedAt, updatedAt
+                projectId, errorMessage, retryCount, createdAt, completedAt, updatedAt
         );
+    }
+
+    // 진행 중(PENDING/PROCESSING)인 요약을 사용자가 중단합니다. Worker가 나중에 콜백을 보내도
+    // isCurrentProcessingAttempt()가 false를 반환해 조용히 무시된다.
+    public void abandon(LocalDateTime now) {
+        if (!summaryStatus.isInProgress()) {
+            throw new IllegalStateException("진행 중이 아닌 요약은 중단할 수 없습니다.");
+        }
+        this.summaryStatus = BidNoticeSummaryStatus.ABANDONED;
+        this.completedAt = now;
+        this.updatedAt = now;
     }
 
     // 사용자가 검토한 구조화 요약값으로 전체 결과 필드를 갱신합니다.

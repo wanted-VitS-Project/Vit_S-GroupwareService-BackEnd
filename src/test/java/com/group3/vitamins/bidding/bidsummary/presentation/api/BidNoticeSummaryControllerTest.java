@@ -1,15 +1,18 @@
 package com.group3.vitamins.bidding.bidsummary.presentation.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group3.vitamins.bidding.bidsummary.application.command.AbandonBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.command.ConfirmBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.command.UpdateBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryQuery;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryHistoryQuery;
+import com.group3.vitamins.bidding.bidsummary.application.result.AbandonBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryHistoryItemResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryHistoryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.ConfirmBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.CreateBidNoticeSummaryResult;
+import com.group3.vitamins.bidding.bidsummary.application.usecase.AbandonBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.ConfirmBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.CreateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSummaryUseCase;
@@ -46,6 +49,7 @@ class BidNoticeSummaryControllerTest {
     private GetBidNoticeSummaryHistoryUseCase historyUseCase;
     private UpdateBidNoticeSummaryUseCase updateUseCase;
     private ConfirmBidNoticeSummaryUseCase confirmUseCase;
+    private AbandonBidNoticeSummaryUseCase abandonUseCase;
     private BidNoticeSummaryController controller;
     private Authentication authentication;
 
@@ -56,10 +60,11 @@ class BidNoticeSummaryControllerTest {
         historyUseCase = mock(GetBidNoticeSummaryHistoryUseCase.class);
         updateUseCase = mock(UpdateBidNoticeSummaryUseCase.class);
         confirmUseCase = mock(ConfirmBidNoticeSummaryUseCase.class);
+        abandonUseCase = mock(AbandonBidNoticeSummaryUseCase.class);
         controller = new BidNoticeSummaryController(
                 createUseCase,
                 historyUseCase,
-                getUseCase, updateUseCase, confirmUseCase
+                getUseCase, updateUseCase, confirmUseCase, abandonUseCase
         );
         authentication = new UsernamePasswordAuthenticationToken(
                 USER_ID, null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
@@ -196,12 +201,28 @@ class BidNoticeSummaryControllerTest {
         assertThat(response.getBody().data().projectCreationAllowed()).isTrue();
     }
 
+    @Test
+    @DisplayName("요약 중단은 요청자와 역할을 command로 전달한다")
+    void abandonsSummary() {
+        when(abandonUseCase.abandon(any())).thenReturn(
+                new AbandonBidNoticeSummaryResult(SUMMARY_ID, "ABANDONED", NOW)
+        );
+
+        var response = controller.abandon(SUMMARY_ID, authentication);
+
+        verify(abandonUseCase).abandon(
+                new AbandonBidNoticeSummaryCommand(SUMMARY_ID, USER_ID, "ADMIN")
+        );
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().data().summaryStatus()).isEqualTo("ABANDONED");
+    }
+
     private BidNoticeSummaryResult summaryResult(boolean confirmed) {
         return new BidNoticeSummaryResult(
                 SUMMARY_ID, 317L, null, 1, "검토해줘", "COMPLETED",
                 "개요", "금액", "일정", "자격", "과업", "위험",
                 confirmed, confirmed ? USER_ID : null,
-                confirmed ? NOW : null, null, null, NOW, NOW, NOW
+                confirmed ? NOW : null, null, null, 0, NOW, NOW, NOW
         );
     }
 

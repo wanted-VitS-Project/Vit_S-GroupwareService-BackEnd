@@ -23,6 +23,8 @@ public record BidNoticeSummaryResponse(
         @Schema(description = "확정 시각", nullable = true) LocalDateTime confirmedAt,
         @Schema(description = "전환된 프로젝트 ID", nullable = true) Long projectId,
         @Schema(description = "실패 메시지", nullable = true) String errorMessage,
+        @Schema(description = "일시 장애로 재시도한 횟수. 화면에서 \"재시도 중 (n/2)\"로 안내할 때 사용", example = "0")
+        int retryCount,
         @Schema(description = "요약 요청 시각") LocalDateTime requestedAt,
         @Schema(description = "요약 완료 시각", nullable = true) LocalDateTime completedAt,
         @Schema(description = "마지막 수정 시각", nullable = true) LocalDateTime updatedAt
@@ -36,7 +38,7 @@ public record BidNoticeSummaryResponse(
                 result.qualificationSummary(), result.taskSummary(),
                 result.riskSummary(), result.confirmed(),
                 result.confirmedBy(), result.confirmedAt(), result.projectId(),
-                result.errorMessage(), result.requestedAt(),
+                result.errorMessage(), result.retryCount(), result.requestedAt(),
                 result.completedAt(), result.updatedAt()
         );
     }

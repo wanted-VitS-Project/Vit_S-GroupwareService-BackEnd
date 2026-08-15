@@ -23,6 +23,7 @@ public record BidNoticeSummaryDetails(
         LocalDateTime confirmedAt,
         Long projectId,
         String errorMessage,
+        int retryCount,
         LocalDateTime requestedAt,
         LocalDateTime completedAt,
         LocalDateTime updatedAt

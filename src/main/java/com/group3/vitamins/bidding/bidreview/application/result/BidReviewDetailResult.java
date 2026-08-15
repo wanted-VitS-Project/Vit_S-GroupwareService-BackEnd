@@ -14,6 +14,7 @@ public record BidReviewDetailResult(
         LocalDateTime completedAt,
         LocalDateTime expiresAt,
         Long projectId,
+        int retryCount,
         List<DocumentResult> documents,
         List<CitationResult> citations
 ) {

@@ -24,7 +24,8 @@ public interface BidReviewDetailQueryPort {
             LocalDateTime requestedAt,
             LocalDateTime completedAt,
             LocalDateTime expiresAt,
-            Long projectId
+            Long projectId,
+            int retryCount
     ) {
     }
 

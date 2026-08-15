@@ -221,6 +221,44 @@ public class JpaBidReviewWorkerAdapter implements BidReviewWorkerPort {
         };
     }
 
+    @Override
+    @Transactional
+    public int recoverOrphaned(LocalDateTime staleBefore, int batchLimit, LocalDateTime now) {
+        List<Long> candidateIds = reviewRepository.findOrphanedCandidateIds(staleBefore, batchLimit);
+        int recovered = 0;
+
+        for (Long reviewId : candidateIds) {
+            Optional<BidReviewJpaEntity> found = reviewRepository.findForWorkerUpdate(reviewId);
+            if (found.isEmpty()) {
+                continue;
+            }
+            BidReviewJpaEntity entity = found.get();
+            BidReview review = entity.toDomain();
+
+            // 후보 조회와 잠금 사이에 정상 흐름이 이미 처리했을 수 있으니 재확인한다.
+            if (!review.reviewStatus().isProcessing()
+                    || !entity.getUpdatedAt().isBefore(staleBefore)
+                    || outboxRepository.existsByReviewIdAndPublishStatus(reviewId, "PENDING")) {
+                continue;
+            }
+
+            if (review.retryCount() >= MAX_RETRY_COUNT) {
+                BidReview failed = review.fail(
+                        "ORPHANED_OUTBOX",
+                        "발행 경로가 유실돼 재시도를 소진했습니다.",
+                        now,
+                        findNoticeDeadlineAt(entity)
+                );
+                entity.apply(failed);
+            } else {
+                retry(entity, review, "ORPHANED_OUTBOX", "발행 경로가 유실돼 재큐잉합니다.", now);
+            }
+            recovered++;
+        }
+
+        return recovered;
+    }
+
     // documents[]의 각 항목을 해당 공고 첨부 문서에 반영한다. INTERNAL_REFERENCE·COMPANY_DOCUMENT_REFERENCE
     // 문서는 bidAttachmentId가 없어 조회에 걸리지 않으므로 자연히 건너뛴다.
     private void applyDocumentOutcomes(

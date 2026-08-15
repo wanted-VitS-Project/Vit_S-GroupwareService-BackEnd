@@ -27,6 +27,12 @@ public interface BidNoticeSummaryManagementPort {
             LocalDateTime now
     );
 
+    // 진행 중(PENDING/PROCESSING)인 요약을 중단합니다. 진행 중이 아니면 IllegalStateException.
+    BidNoticeSummaryDetails abandon(
+            Long summaryId,
+            LocalDateTime now
+    );
+
     record SummaryValues(
             String overviewSummary,
             String amountSummary,
