@@ -8,9 +8,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -66,5 +68,15 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode().value()).isEqualTo(405);
         assertThat(response.getHeaders().containsKey(HttpHeaders.ALLOW)).isTrue();
         assertThat(response.getHeaders().getAllow()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("비동기 요청 연결이 끊긴 경우 응답 바디를 다시 쓰려 하지 않고 조용히 끝난다")
+    void ignoresAsyncRequestNotUsable() {
+        AsyncRequestNotUsableException e =
+                new AsyncRequestNotUsableException("client disconnected");
+
+        assertThatCode(() -> handler.handleAsyncRequestNotUsable(e, request()))
+                .doesNotThrowAnyException();
     }
 }

@@ -31,7 +31,8 @@ public class BidReviewDetailQueryAdapter implements BidReviewDetailQueryPort {
                     review.created_at,
                     review.completed_at,
                     review.expires_at,
-                    review.project_id
+                    review.project_id,
+                    review.retry_count
                 FROM bid_review review
                 WHERE review.bid_review_id = :reviewId
                 """;
@@ -54,7 +55,8 @@ public class BidReviewDetailQueryAdapter implements BidReviewDetailQueryPort {
                         resultSet.getObject("created_at", LocalDateTime.class),
                         resultSet.getObject("completed_at", LocalDateTime.class),
                         resultSet.getObject("expires_at", LocalDateTime.class),
-                        resultSet.getObject("project_id", Long.class)
+                        resultSet.getObject("project_id", Long.class),
+                        resultSet.getInt("retry_count")
                 )
         ).stream().findFirst();
     }

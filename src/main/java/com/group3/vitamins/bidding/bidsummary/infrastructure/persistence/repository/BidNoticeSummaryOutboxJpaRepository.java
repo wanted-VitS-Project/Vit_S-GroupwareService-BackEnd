@@ -12,6 +12,17 @@ import java.util.List;
 public interface BidNoticeSummaryOutboxJpaRepository
         extends JpaRepository<BidNoticeSummaryOutboxJpaEntity, Long> {
 
+    // markExhaustedAsFailed가 벌크 네이티브 UPDATE라 어떤 행이 바뀌었는지 알 수 없다 - 같은 조건으로
+    // summaryId를 먼저 조회해 둬야 호출부가 bid_notice_summary.summary_status를 함께 전이시킬 수 있다.
+    @Query(value = """
+            SELECT bid_notice_summary_id
+            FROM bid_notice_summary_outbox
+            WHERE publish_status = 'PENDING'
+              AND publish_attempt_count >= 5
+              AND (lock_expires_at IS NULL OR lock_expires_at < :now)
+            """, nativeQuery = true)
+    List<Long> findExhaustedSummaryIds(@Param("now") LocalDateTime now);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
             UPDATE bid_notice_summary_outbox
@@ -45,4 +56,8 @@ public interface BidNoticeSummaryOutboxJpaRepository
             @Param("now") LocalDateTime now,
             @Param("batchSize") int batchSize
     );
+
+    // 고아 복구 스케줄러가 후보 재확인(TOCTOU 방지)에 쓴다 - 후보 조회와 잠금 사이 정상 흐름이
+    // 이미 새 outbox를 만들었을 수 있다.
+    boolean existsBySummaryIdAndPublishStatus(Long summaryId, String publishStatus);
 }

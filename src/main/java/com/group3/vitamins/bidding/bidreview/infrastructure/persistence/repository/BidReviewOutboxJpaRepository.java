@@ -69,4 +69,8 @@ public interface BidReviewOutboxJpaRepository
             @Param("now") LocalDateTime now,
             @Param("batchSize") int batchSize
     );
+
+    // 고아 복구 스케줄러가 후보 재확인(TOCTOU 방지)에 쓴다 - 후보 조회와 잠금 사이 정상 흐름이
+    // 이미 새 outbox를 만들었을 수 있다.
+    boolean existsByReviewIdAndPublishStatus(Long reviewId, String publishStatus);
 }

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -179,6 +180,37 @@ public class JpaBidNoticeSummaryWorkerAdapter
                         now
                 )
         );
+    }
+
+    @Override
+    @Transactional
+    public int recoverOrphaned(LocalDateTime staleBefore, int batchLimit, LocalDateTime now) {
+        List<Long> candidateIds = repository.findOrphanedCandidateIds(staleBefore, batchLimit);
+        int recovered = 0;
+
+        for (Long summaryId : candidateIds) {
+            Optional<BidNoticeSummaryJpaEntity> found = repository.findForWorkerUpdate(summaryId);
+            if (found.isEmpty()) {
+                continue;
+            }
+            BidNoticeSummaryJpaEntity entity = found.get();
+
+            // 후보 조회와 잠금 사이에 정상 흐름이 이미 처리했을 수 있으니 재확인한다.
+            if (!entity.getSummaryStatus().isInProgress()
+                    || !entity.getUpdatedAt().isBefore(staleBefore)
+                    || outboxRepository.existsBySummaryIdAndPublishStatus(summaryId, "PENDING")) {
+                continue;
+            }
+
+            if (entity.getRetryCount() >= MAX_RETRY_COUNT) {
+                entity.fail("발행 경로가 유실돼 재시도를 소진했습니다.", now);
+            } else {
+                prepareRetry(entity, "발행 경로가 유실돼 재큐잉합니다.", now);
+            }
+            recovered++;
+        }
+
+        return recovered;
     }
 
     // Redis에는 재시도 작업을 식별하는 최소 정보만 저장합니다.

@@ -181,7 +181,7 @@ class BidNoticeSummaryReviewServiceTest {
                 SUMMARY_ID, COMPANY_ID, 317L, null, 1, USER_ID, "검토해줘", status,
                 "개요", "금액", "일정", "자격", "과업", "위험",
                 confirmed, confirmed ? USER_ID : null,
-                confirmed ? NOW : null, null, null, NOW, NOW, NOW
+                confirmed ? NOW : null, null, null, 0, NOW, NOW, NOW
         );
     }
 
@@ -208,8 +208,8 @@ class BidNoticeSummaryReviewServiceTest {
                 values.scheduleSummary(), values.qualificationSummary(),
                 values.taskSummary(), values.riskSummary(), confirmed,
                 confirmed ? USER_ID : null, confirmed ? NOW : null,
-                current.projectId(), current.errorMessage(), current.requestedAt(),
-                current.completedAt(), NOW
+                current.projectId(), current.errorMessage(), current.retryCount(),
+                current.requestedAt(), current.completedAt(), NOW
         );
     }
 

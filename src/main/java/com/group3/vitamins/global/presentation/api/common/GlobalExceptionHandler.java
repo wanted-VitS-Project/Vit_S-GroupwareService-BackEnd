@@ -17,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -212,6 +213,26 @@ public class GlobalExceptionHandler {
                 .allow(supported == null ? new HttpMethod[0] : supported.toArray(new HttpMethod[0]))
                 .body(ApiErrorResponse.of(
                         405, COMMON_METHOD_NOT_ALLOWED, COMMON_METHOD_NOT_ALLOWED_MESSAGE));
+    }
+
+    /**
+     * SSE 등 비동기 응답이 클라이언트 연결 종료로 이미 못 쓰게 된 경우 - {@code SseNotificationStreamAdapter}
+     * 의 하트비트/전송 코드가 자체 try-catch로 대부분 방어하지만, Spring이 비동기 디스패치 완료 시점에
+     * 애플리케이션 스레드 밖에서 이 예외를 던지는 경로가 남아 있다(2026-08-14 프론트 리포트).
+     *
+     * <p>⚠️ 여기서 {@link #handleException}처럼 응답 바디를 쓰면 안 된다 - 응답 자체가 이미 못 쓰는
+     * 상태라 두 번째 쓰기 시도가 {@code HttpMessageNotWritableException}으로 또 실패해 로그만 두 배로
+     * 남는다. 조용히 로그만 남기고 끝낸다(Spring 권장 처리).
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleAsyncRequestNotUsable(
+            AsyncRequestNotUsableException e,
+            HttpServletRequest request
+    ) {
+        log.debug(
+                "[SSE] 비동기 요청 연결이 이미 끊겨 응답을 쓸 수 없습니다 - {} {}",
+                request.getMethod(), request.getRequestURI()
+        );
     }
 
     @ExceptionHandler(Exception.class)

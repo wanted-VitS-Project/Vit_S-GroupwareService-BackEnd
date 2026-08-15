@@ -216,6 +216,63 @@ class JpaBidNoticeSummaryWorkerAdapterTest {
     }
 
     @Test
+    @DisplayName("살아있는 outbox 없이 오래 멈춘 요약을 재큐잉한다")
+    void requeuesOrphanedSummary() {
+        entity.startProcessing(NOW.minusMinutes(20));
+        when(repository.findOrphanedCandidateIds(NOW.minusMinutes(10), 100))
+                .thenReturn(List.of(SUMMARY_ID));
+        when(repository.findForWorkerUpdate(SUMMARY_ID)).thenReturn(Optional.of(entity));
+        when(outboxRepository.existsBySummaryIdAndPublishStatus(SUMMARY_ID, "PENDING"))
+                .thenReturn(false);
+
+        int recovered = adapter.recoverOrphaned(NOW.minusMinutes(10), 100, NOW);
+
+        assertThat(recovered).isEqualTo(1);
+        assertThat(entity.getSummaryStatus()).isEqualTo(BidNoticeSummaryStatus.PENDING);
+        assertThat(entity.getRetryCount()).isEqualTo(1);
+        assertThat(entity.getProcessingAttemptId()).isNotEqualTo(ATTEMPT_ID);
+        verify(outboxRepository).save(any(BidNoticeSummaryOutboxJpaEntity.class));
+    }
+
+    @Test
+    @DisplayName("재시도를 이미 소진한 고아 요약은 재큐잉 대신 최종 FAILED로 종료한다")
+    void failsOrphanedSummaryAfterRetryLimit() {
+        entity.startProcessing(NOW.minusMinutes(30));
+        entity.prepareRetry("be54f33d-cfee-4a17-bf48-bce42dfcb388", "첫 실패", NOW.minusMinutes(25));
+        entity.startProcessing(NOW.minusMinutes(24));
+        entity.prepareRetry("cbf83e43-830e-4838-8ea0-1c55bc70aa37", "두 번째 실패", NOW.minusMinutes(23));
+        entity.startProcessing(NOW.minusMinutes(20));
+        when(repository.findOrphanedCandidateIds(NOW.minusMinutes(10), 100))
+                .thenReturn(List.of(SUMMARY_ID));
+        when(repository.findForWorkerUpdate(SUMMARY_ID)).thenReturn(Optional.of(entity));
+        when(outboxRepository.existsBySummaryIdAndPublishStatus(SUMMARY_ID, "PENDING"))
+                .thenReturn(false);
+
+        int recovered = adapter.recoverOrphaned(NOW.minusMinutes(10), 100, NOW);
+
+        assertThat(recovered).isEqualTo(1);
+        assertThat(entity.getSummaryStatus()).isEqualTo(BidNoticeSummaryStatus.FAILED);
+        verify(outboxRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("재확인 결과 이미 살아있는 outbox가 생겼으면 손대지 않는다")
+    void skipsCandidateThatAlreadyHasPendingOutbox() {
+        entity.startProcessing(NOW.minusMinutes(20));
+        when(repository.findOrphanedCandidateIds(NOW.minusMinutes(10), 100))
+                .thenReturn(List.of(SUMMARY_ID));
+        when(repository.findForWorkerUpdate(SUMMARY_ID)).thenReturn(Optional.of(entity));
+        when(outboxRepository.existsBySummaryIdAndPublishStatus(SUMMARY_ID, "PENDING"))
+                .thenReturn(true);
+
+        int recovered = adapter.recoverOrphaned(NOW.minusMinutes(10), 100, NOW);
+
+        assertThat(recovered).isZero();
+        assertThat(entity.getSummaryStatus()).isEqualTo(BidNoticeSummaryStatus.PROCESSING);
+        verify(outboxRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("존재하지 않는 요약은 exists=false를 반환한다")
     void returnsMissingResult() {
         when(repository.findForWorkerUpdate(SUMMARY_ID)).thenReturn(Optional.empty());
