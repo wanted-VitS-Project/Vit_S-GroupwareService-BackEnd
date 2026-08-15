@@ -1,11 +1,14 @@
 package com.group3.vitamins.global.presentation.api.common;
 
 import com.group3.vitamins.global.domain.common.error.DomainException;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -17,10 +20,11 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.util.DisconnectedClientHelper;
 
+import java.io.IOException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -216,23 +220,74 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * SSE 등 비동기 응답이 클라이언트 연결 종료로 이미 못 쓰게 된 경우 - {@code SseNotificationStreamAdapter}
-     * 의 하트비트/전송 코드가 자체 try-catch로 대부분 방어하지만, Spring이 비동기 디스패치 완료 시점에
-     * 애플리케이션 스레드 밖에서 이 예외를 던지는 경로가 남아 있다(2026-08-14 프론트 리포트).
+     * 클라이언트가 끊어 버린 응답에 쓰다 난 I/O 오류 — <b>장애가 아니다</b>.
      *
-     * <p>⚠️ 여기서 {@link #handleException}처럼 응답 바디를 쓰면 안 된다 - 응답 자체가 이미 못 쓰는
-     * 상태라 두 번째 쓰기 시도가 {@code HttpMessageNotWritableException}으로 또 실패해 로그만 두 배로
-     * 남는다. 조용히 로그만 남기고 끝낸다(Spring 권장 처리).
+     * <p>🚨 <b>이 핸들러가 없으면 아래 {@code Exception} 폴백이 삼켜 ERROR 500 이 쌓인다.</b>
+     * 브라우저가 알림 SSE 스트림을 끊을 때마다(페이지 이동·새로고침·탭 닫기) 컨테이너가 그 오류를
+     * 비동기 디스패치로 되돌려 보내기 때문이다. 정상 종료 한 건이 ERROR 한 줄이 되면 진짜 장애가 묻힌다.
+     *
+     * <p>⚠️ <b>{@code DisconnectedClientHelper} 에만 의존하면 안 된다.</b> Spring 의 "끊긴 클라이언트"
+     * 판별은 예외 메시지가 {@code "broken pipe"} · {@code "connection reset by peer"} 인지를 보는데,
+     * <b>OS 로케일이 영어가 아니면 그 문자열이 아니다</b>(한글 윈도우: "현재 연결은 사용자의 호스트
+     * 시스템의 소프트웨어에 의해 중단되었습니다"). 그러면 Spring 이 감싸주지 않아 원본
+     * {@code IOException} 이 그대로 올라온다 — 로컬(윈도우)에서만 500 이 뜨고 배포 서버(리눅스)에선
+     * 안 뜨는, 재현이 갈리는 증상이 된다. 그래서 <b>디스패치 타입</b>을 1차 기준으로 삼는다(2026-08-14).
+     *
+     * <p>⚠️ 끊긴 연결에는 <b>아무것도 쓰지 않는다</b>({@code null} 반환). 응답 헤더가 이미
+     * {@code text/event-stream} 으로 굳어 있어 {@link ApiErrorResponse} 를 쓰려 하면
+     * {@code HttpMessageNotWritableException} 이 한 번 더 난다. {@code null} 은 Spring 이
+     * "처리 완료, 쓸 것 없음" 으로 받는다({@code HttpEntityMethodProcessor} 확인).
      */
-    @ExceptionHandler(AsyncRequestNotUsableException.class)
-    public void handleAsyncRequestNotUsable(
-            AsyncRequestNotUsableException e,
-            HttpServletRequest request
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiErrorResponse> handleClientDisconnect(
+            IOException e,
+            HttpServletRequest request,
+            HttpServletResponse response
     ) {
-        log.debug(
-                "[SSE] 비동기 요청 연결이 이미 끊겨 응답을 쓸 수 없습니다 - {} {}",
-                request.getMethod(), request.getRequestURI()
-        );
+        if (!cannotReportError(e, request, response)) {
+            // 에러 응답을 정상적으로 내려보낼 수 있는 상황이면 진짜 장애다 — 기존대로 500 JSON
+            return handleException(e, request);
+        }
+
+        log.debug("[스트림 종료] {} {} - {}",
+                request.getMethod(), request.getRequestURI(), e.getMessage());
+        return null;
+    }
+
+    /**
+     * 이 오류를 <b>에러 응답으로 알려줄 수 없는 상황</b>인지 판단한다. 그런 상황에서만 조용히 끝낸다.
+     *
+     * <p>기준이 "클라이언트가 끊겼나" 가 아니라 "에러를 내려보낼 수 있나" 인 이유: 알려줄 수 없는데
+     * 500 을 만들어 봐야 <b>로그만 남고 클라이언트는 아무것도 못 받는다</b>. 반대로 알려줄 수 있는
+     * 상황이면 그것은 삼키면 안 되는 장애다.
+     *
+     * <p>⚠️ <b>{@code DispatcherType.ASYNC} 하나만으로 판단하면 안 된다.</b> 이 핸들러는 전역이라,
+     * 앞으로 추가될 다른 비동기 엔드포인트가 파일·네트워크 I/O 로 실패했을 때까지 조용히 삼켜
+     * <b>클라이언트가 빈 200 을 받는다</b>(CodeRabbit 지적, 2026-08-14). 지금은 비동기 엔드포인트가
+     * 알림 SSE 하나뿐이라 드러나지 않을 뿐이다. 그래서 <b>아직 응답을 쓰지 않은 비동기 요청은
+     * 500 으로 보낸다</b> — 그때는 에러를 정상적으로 알려줄 수 있다.
+     */
+    private boolean cannotReportError(
+            IOException e, HttpServletRequest request, HttpServletResponse response) {
+
+        // 클라이언트가 끊긴 것이 확실한 경우(영문 로케일 등) — 디스패치 타입과 무관하게 알릴 방법이 없다
+        if (DisconnectedClientHelper.isClientDisconnectedException(e)) {
+            return true;
+        }
+
+        if (request.getDispatcherType() != DispatcherType.ASYNC) {
+            return false;
+        }
+
+        // 이미 커밋됐으면 상태코드·바디를 못 바꾸고, SSE 응답이면 ApiErrorResponse 컨버터가 없다.
+        // 두 경우 모두 "쓸 수 있는 방법이 없는" 상태다.
+        return response.isCommitted() || isEventStream(response);
+    }
+
+    private boolean isEventStream(HttpServletResponse response) {
+        String contentType = response.getContentType();
+        return contentType != null
+                && contentType.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 
     @ExceptionHandler(Exception.class)
