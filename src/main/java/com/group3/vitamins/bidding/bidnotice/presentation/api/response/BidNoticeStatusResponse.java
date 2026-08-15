@@ -19,6 +19,9 @@ public record BidNoticeStatusResponse(
         )
         String dismissReason,
 
+        @Schema(description = "현재 회사의 관심 등록 여부(회사 공용)", example = "false")
+        boolean isFavorite,
+
         @Schema(description = "상태 변경 시각", example = "2026-08-11T16:00:00")
         LocalDateTime updatedAt
 ) {
@@ -28,6 +31,7 @@ public record BidNoticeStatusResponse(
                 result.noticeId(),
                 result.noticeStatus(),
                 result.dismissReason(),
+                result.isFavorite(),
                 result.updatedAt()
         );
     }

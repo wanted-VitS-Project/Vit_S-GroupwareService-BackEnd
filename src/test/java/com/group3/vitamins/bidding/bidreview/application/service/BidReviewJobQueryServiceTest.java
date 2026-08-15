@@ -87,7 +87,7 @@ class BidReviewJobQueryServiceTest {
                 )));
         when(noticeDocumentPort.findAttachments(COMPANY_ID, NOTICE_ID, List.of(31L)))
                 .thenReturn(List.of(new BidReviewNoticeDocumentPort.AttachmentSnapshot(
-                        31L, NOTICE_ID, "제안요청서.pdf", "https://nara.example/31.pdf"
+                        31L, NOTICE_ID, "제안요청서.pdf", "https://nara.example/31.pdf", null
                 )));
         when(referenceFilePort.findDownloadableFiles(COMPANY_ID, List.of(501L)))
                 .thenReturn(List.of(new BidReviewReferenceFilePort.DownloadableReferenceFile(
@@ -127,6 +127,44 @@ class BidReviewJobQueryServiceTest {
                 .contains("컴퓨터공학 12명")
                 .contains("학사 14명")
                 .contains("정보처리기사 8명");
+    }
+
+    @Test
+    @DisplayName("업로드형 첨부(source_url 없음)는 presigned GET URL을 다운로드 대상으로 넘긴다")
+    void resolvesDownloadUrlForUploadedAttachment() {
+        when(workerPort.claimJob(REVIEW_ID, ATTEMPT_ID, NOW))
+                .thenReturn(Optional.of(new BidReviewWorkerPort.ClaimedJob(
+                        REVIEW_ID, COMPANY_ID, NOTICE_ID, ATTEMPT_ID, "재정 상태를 검토해줘.",
+                        List.of(new BidReviewWorkerPort.JobDocument(
+                                "BID_ATTACHMENT", 32L, null, null, "제안요청서.pdf"
+                        ))
+                )));
+        when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(new BidReviewNoticeDocumentPort.NoticeSnapshot(
+                        NOTICE_ID, "스마트시티 통합관제 용역", null
+                )));
+        when(noticeDocumentPort.findAttachments(COMPANY_ID, NOTICE_ID, List.of(32L)))
+                .thenReturn(List.of(new BidReviewNoticeDocumentPort.AttachmentSnapshot(
+                        32L, NOTICE_ID, "제안요청서.pdf", null,
+                        "companies/10/bidding/notices/100/attachments/x"
+                )));
+        when(qualificationPort.summarizeMajors(COMPANY_ID)).thenReturn(List.of());
+        when(qualificationPort.summarizeDegrees(COMPANY_ID)).thenReturn(List.of());
+        when(qualificationPort.summarizeCertificates(COMPANY_ID)).thenReturn(List.of());
+        when(fileStoragePort.presignDownload("companies/10/bidding/notices/100/attachments/x", "제안요청서.pdf"))
+                .thenReturn(new FileStoragePort.PresignedUrl(
+                        "https://s3.example/download?sig=...", Instant.parse("2026-08-13T00:05:00Z")
+                ));
+        when(fileStoragePort.presignUpload(any(), eq("application/octet-stream"), eq(0L)))
+                .thenReturn(new FileStoragePort.PresignedUrl(
+                        "https://s3.example/upload?sig=...", Instant.parse("2026-08-13T00:10:00Z")
+                ));
+
+        BidReviewJobResult result = service.handle(new GetBidReviewJobQuery(REVIEW_ID, ATTEMPT_ID));
+
+        assertThat(result.attachments()).hasSize(1);
+        assertThat(result.attachments().get(0).sourceUrl()).isEqualTo("https://s3.example/download?sig=...");
+        verify(fileStoragePort).presignDownload("companies/10/bidding/notices/100/attachments/x", "제안요청서.pdf");
     }
 
     @Test

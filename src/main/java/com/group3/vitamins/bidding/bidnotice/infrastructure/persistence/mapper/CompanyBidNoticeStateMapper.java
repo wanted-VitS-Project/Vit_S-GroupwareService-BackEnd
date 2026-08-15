@@ -28,6 +28,7 @@ public interface CompanyBidNoticeStateMapper {
             @Param("bidNoticeId") Long bidNoticeId,
             @Param("noticeStatus") String noticeStatus,
             @Param("dismissReason") String dismissReason,
+            @Param("isFavorite") boolean isFavorite,
             @Param("updatedAt") LocalDateTime updatedAt
     );
 }

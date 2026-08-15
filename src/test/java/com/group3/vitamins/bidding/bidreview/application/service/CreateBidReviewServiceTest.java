@@ -85,7 +85,7 @@ class CreateBidReviewServiceTest {
                 )));
         when(noticeDocumentPort.findAttachments(COMPANY_ID, NOTICE_ID, List.of(ATTACHMENT_ID)))
                 .thenReturn(List.of(new BidReviewNoticeDocumentPort.AttachmentSnapshot(
-                        ATTACHMENT_ID, NOTICE_ID, "제안요청서.pdf", "https://example.org/rfp.pdf"
+                        ATTACHMENT_ID, NOTICE_ID, "제안요청서.pdf", "https://example.org/rfp.pdf", null
                 )));
         when(referenceFilePort.findAccessibleFiles(COMPANY_ID, List.of(REFERENCE_FILE_ID)))
                 .thenReturn(List.of(readyReference()));
