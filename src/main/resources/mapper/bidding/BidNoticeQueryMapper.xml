@@ -66,15 +66,8 @@
             notice.announced_at,
             notice.bid_deadline_at,
             NULL AS d_day,
-            CASE WHEN state.first_seen_run_id = (
-                SELECT MAX(latest_run.crawl_run_id)
-                FROM crawl_run latest_run
-                JOIN crawl_condition latest_condition
-                  ON latest_condition.crawl_condition_id = latest_run.crawl_condition_id
-                WHERE latest_condition.company_id = #{companyId}
-                  AND latest_run.run_status IN ('COMPLETED', 'PARTIAL_SUCCESS')
-                  AND latest_run.deleted_at IS NULL
-            ) THEN TRUE ELSE FALSE END AS is_new,
+            CASE WHEN state.first_seen_run_id = latest_run.crawl_run_id
+                THEN TRUE ELSE FALSE END AS is_new,
             state.notice_status,
             state.is_favorite,
             (
@@ -86,6 +79,20 @@
                   AND project_table.deleted_at IS NULL
             ) AS project_id
         <include refid="noticeJoins"/>
+        <!--
+            현재 회사의 "마지막 성공 수집 실행 ID"는 이 쿼리 전체에서 단 하나의 값이라(companyId에만
+            의존, notice별로 달라지지 않음), 예전처럼 SELECT 절 안 상관 서브쿼리로 행마다 재계산하지
+            않고 단일 행 파생 테이블로 한 번만 계산해 조인한다.
+        -->
+        JOIN (
+            SELECT MAX(latest_run.crawl_run_id) AS crawl_run_id
+            FROM crawl_run latest_run
+            JOIN crawl_condition latest_condition
+              ON latest_condition.crawl_condition_id = latest_run.crawl_condition_id
+            WHERE latest_condition.company_id = #{companyId}
+              AND latest_run.run_status IN ('COMPLETED', 'PARTIAL_SUCCESS')
+              AND latest_run.deleted_at IS NULL
+        ) latest_run ON 1 = 1
         <include refid="noticeFilters"/>
         <choose>
             <when test="query.sort == 'DEADLINE_ASC'">

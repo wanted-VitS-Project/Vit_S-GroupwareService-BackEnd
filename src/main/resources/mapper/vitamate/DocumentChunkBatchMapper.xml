@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.mapper.DocumentChunkBatchMapper">
+
+    <!--
+        DocumentChunkJpaRepository.upsertChunk(단건)을 한 파일의 청크 전체에 대해 한 번에 처리한다.
+        UNIQUE(file_version_id, chunk_index) 기준으로 신규/기존을 가리지 않고 upsert한다.
+    -->
+    <insert id="upsertChunks">
+        INSERT INTO document_chunk (
+            file_version_id, chunk_index, page_number, section_title,
+            start_offset, end_offset, token_count, chroma_id, excerpt,
+            embedding_model, embedding_status, created_at, updated_at, deleted_at
+        ) VALUES
+        <foreach item="c" collection="chunks" separator=",">
+        (
+            #{fileVersionId}, #{c.chunkIndex}, #{c.pageNumber}, #{c.sectionTitle},
+            #{c.startOffset}, #{c.endOffset}, #{c.tokenCount}, NULL, #{c.excerpt},
+            NULL, 'PENDING', #{now}, #{now}, NULL
+        )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            page_number = VALUES(page_number),
+            section_title = VALUES(section_title),
+            start_offset = VALUES(start_offset),
+            end_offset = VALUES(end_offset),
+            token_count = VALUES(token_count),
+            chroma_id = NULL,
+            excerpt = VALUES(excerpt),
+            embedding_model = NULL,
+            embedding_status = 'PENDING',
+            updated_at = #{now},
+            deleted_at = NULL
+    </insert>
+
+    <!--
+        청크마다 다른 chroma_id를 한 번의 UPDATE로 반영하기 위해 CASE ... WHEN id THEN chromaId를 쓴다.
+        같은 file_version_id·삭제되지 않은 행으로 범위를 좁혀 다른 파일의 청크를 건드리지 않는다.
+    -->
+    <update id="updateChunkEmbeddings">
+        UPDATE document_chunk
+        SET chroma_id = CASE document_chunk_id
+            <foreach item="c" collection="chunks">
+                WHEN #{c.documentChunkId} THEN #{c.chromaId}
+            </foreach>
+            ELSE chroma_id
+            END,
+            embedding_model = #{embeddingModel},
+            embedding_status = 'COMPLETED',
+            updated_at = #{now}
+        WHERE file_version_id = #{fileVersionId}
+          AND document_chunk_id IN
+        <foreach item="c" collection="chunks" open="(" separator="," close=")">
+            #{c.documentChunkId}
+        </foreach>
+          AND deleted_at IS NULL
+    </update>
+</mapper>

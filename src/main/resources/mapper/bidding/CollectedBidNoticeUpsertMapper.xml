@@ -4,8 +4,23 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.CollectedBidNoticeUpsertMapper">
 
-    <insert id="insertNoticeIfAbsent">
-        INSERT IGNORE INTO bid_notice (
+    <select id="findNoticeIds" resultType="com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.NoticeIdRow">
+        SELECT external_id, notice_ord, bid_notice_id
+        FROM bid_notice
+        WHERE crawl_source_id = #{sourceId}
+          AND (external_id, notice_ord) IN
+        <foreach item="n" collection="notices" open="(" separator="," close=")">
+            (#{n.externalId}, #{n.noticeOrder})
+        </foreach>
+    </select>
+
+    <!--
+        ⚠️ 배치 전체를 신규/기존 구분 없이 한 번에 upsert한다. VALUES(col) 함수로 각 행이 자신의
+        새 값을 UPDATE 절에서 참조한다 — MySQL 8.0.19 이전 문법이며, 8.0.20+에서는
+        신규 문법(별칭 테이블)으로 교체해야 경고 없이 동작한다. 로컬 MySQL 버전 확인 후 필요하면 조정.
+    -->
+    <insert id="upsertNotices">
+        INSERT INTO bid_notice (
             crawl_source_id, external_id, notice_ord, notice_type,
             notice_name, external_notice_status, international_bid_type,
             notice_agency, demand_agency, announced_at, bid_start_at,
@@ -13,75 +28,80 @@
             bid_method, contract_method, participation_qualification_text,
             joint_contract_allowed, joint_contract_text, source_url,
             has_attachment, notice_status, crawled_at, created_at
-        ) VALUES (
-            #{sourceId}, #{notice.externalId}, #{notice.noticeOrder},
-            #{notice.noticeType}, #{notice.noticeName},
-            #{notice.externalNoticeStatus}, #{notice.internationalBidType},
-            #{notice.noticeAgency}, #{notice.demandAgency},
-            #{notice.announcedAt}, #{notice.bidStartAt},
-            #{notice.bidDeadlineAt}, #{notice.openingAt},
-            #{notice.baseAmount}, #{notice.estimatedAmount},
-            #{notice.bidMethod}, #{notice.contractMethod},
-            #{notice.participationQualificationText},
-            #{notice.jointContractAllowed}, #{notice.jointContractText},
-            #{notice.sourceUrl}, #{hasAttachments},
+        ) VALUES
+        <foreach item="r" collection="rows" separator=",">
+        (
+            #{sourceId}, #{r.notice.externalId}, #{r.notice.noticeOrder},
+            #{r.notice.noticeType}, #{r.notice.noticeName},
+            #{r.notice.externalNoticeStatus}, #{r.notice.internationalBidType},
+            #{r.notice.noticeAgency}, #{r.notice.demandAgency},
+            #{r.notice.announcedAt}, #{r.notice.bidStartAt},
+            #{r.notice.bidDeadlineAt}, #{r.notice.openingAt},
+            #{r.notice.baseAmount}, #{r.notice.estimatedAmount},
+            #{r.notice.bidMethod}, #{r.notice.contractMethod},
+            #{r.notice.participationQualificationText},
+            #{r.notice.jointContractAllowed}, #{r.notice.jointContractText},
+            #{r.notice.sourceUrl}, #{r.hasAttachments},
             'COLLECTED', #{crawledAt}, #{crawledAt}
         )
-    </insert>
-
-    <select id="findNoticeId" resultType="long">
-        SELECT bid_notice_id
-        FROM bid_notice
-        WHERE crawl_source_id = #{sourceId}
-          AND external_id = #{externalId}
-          AND notice_ord = #{noticeOrder}
-        LIMIT 1
-    </select>
-
-    <update id="updateCollectedNotice">
-        UPDATE bid_notice
-        SET notice_type = #{notice.noticeType},
-            notice_name = #{notice.noticeName},
-            external_notice_status = #{notice.externalNoticeStatus},
-            international_bid_type = #{notice.internationalBidType},
-            notice_agency = #{notice.noticeAgency},
-            demand_agency = #{notice.demandAgency},
-            announced_at = #{notice.announcedAt},
-            bid_start_at = #{notice.bidStartAt},
-            bid_deadline_at = #{notice.bidDeadlineAt},
-            opening_at = #{notice.openingAt},
-            base_amount = #{notice.baseAmount},
-            estimated_amount = #{notice.estimatedAmount},
-            bid_method = #{notice.bidMethod},
-            contract_method = #{notice.contractMethod},
-            participation_qualification_text = #{notice.participationQualificationText},
-            joint_contract_allowed = #{notice.jointContractAllowed},
-            joint_contract_text = #{notice.jointContractText},
-            source_url = #{notice.sourceUrl},
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            notice_type = VALUES(notice_type),
+            notice_name = VALUES(notice_name),
+            external_notice_status = VALUES(external_notice_status),
+            international_bid_type = VALUES(international_bid_type),
+            notice_agency = VALUES(notice_agency),
+            demand_agency = VALUES(demand_agency),
+            announced_at = VALUES(announced_at),
+            bid_start_at = VALUES(bid_start_at),
+            bid_deadline_at = VALUES(bid_deadline_at),
+            opening_at = VALUES(opening_at),
+            base_amount = VALUES(base_amount),
+            estimated_amount = VALUES(estimated_amount),
+            bid_method = VALUES(bid_method),
+            contract_method = VALUES(contract_method),
+            participation_qualification_text = VALUES(participation_qualification_text),
+            joint_contract_allowed = VALUES(joint_contract_allowed),
+            joint_contract_text = VALUES(joint_contract_text),
+            source_url = VALUES(source_url),
             has_attachment = CASE
-                WHEN #{hasAttachments} THEN TRUE
+                WHEN VALUES(has_attachment) THEN TRUE
                 ELSE has_attachment
             END,
-            crawled_at = #{crawledAt},
-            updated_at = #{crawledAt},
+            crawled_at = VALUES(crawled_at),
+            updated_at = VALUES(crawled_at),
             deleted_at = NULL
-        WHERE bid_notice_id = #{noticeId}
-    </update>
+    </insert>
 
-    <update id="touchObservedAt">
-        UPDATE bid_notice
-        SET crawled_at = #{crawledAt}
-        WHERE bid_notice_id = #{noticeId}
-    </update>
+    <select id="findExistingRawKeys" resultType="com.group3.vitamins.bidding.bidnotice.infrastructure.persistence.mapper.RawKeyPair">
+        SELECT bid_notice_id, raw_payload_hash
+        FROM bid_notice_raw
+        WHERE (bid_notice_id, raw_payload_hash) IN
+        <foreach item="k" collection="keys" open="(" separator="," close=")">
+            (#{k.bidNoticeId}, #{k.rawPayloadHash})
+        </foreach>
+    </select>
 
-    <insert id="insertRawIfAbsent">
+    <insert id="insertRawRecords">
         INSERT IGNORE INTO bid_notice_raw (
             bid_notice_id, crawl_run_id, source_code, payload_type,
             raw_payload, raw_payload_hash, parsed_at, created_at
-        ) VALUES (
-            #{noticeId}, #{runId}, #{sourceCode}, 'JSON',
-            CAST(#{rawPayload} AS JSON), #{rawPayloadHash},
+        ) VALUES
+        <foreach item="rec" collection="records" separator=",">
+        (
+            #{rec.bidNoticeId}, #{runId}, #{sourceCode}, 'JSON',
+            CAST(#{rec.rawPayload} AS JSON), #{rec.rawPayloadHash},
             #{parsedAt}, #{parsedAt}
         )
+        </foreach>
     </insert>
+
+    <update id="touchObservedAtBulk">
+        UPDATE bid_notice
+        SET crawled_at = #{crawledAt}
+        WHERE bid_notice_id IN
+        <foreach item="id" collection="noticeIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
 </mapper>
