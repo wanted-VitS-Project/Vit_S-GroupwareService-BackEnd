@@ -1,9 +1,9 @@
 package com.group3.vitamins.bidding.legacy.presentation;
 
-import com.group3.vitamins.bidding.collectionrun.application.command.StartCollectionRunCommand;
 import com.group3.vitamins.bidding.collectionrun.application.query.GetCollectionRunQuery;
 import com.group3.vitamins.bidding.collectionrun.application.result.CollectionRunResult;
 import com.group3.vitamins.bidding.collectionrun.application.usecase.CollectionRunUseCase;
+import com.group3.vitamins.bidding.collectionrun.presentation.api.request.StartCollectionRunRequest;
 import com.group3.vitamins.bidding.collectionrun.presentation.api.response.CollectionRunResponse;
 import com.group3.vitamins.bidding.collectionrun.presentation.api.response.StartCollectionRunResponse;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
@@ -18,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -34,7 +35,9 @@ public class CollectionRunController {
 
     @Operation(
             summary = "입찰 공고 수동 수집",
-            description = "선택한 수집 조건으로 입찰 공고 수집 작업을 요청합니다."
+            description = "선택한 수집 조건으로 입찰 공고 수집 작업을 요청합니다. "
+                    + "요청 본문의 startedAt·endedAt을 함께 지정하면 그 구간을 우선 조회하고, "
+                    + "생략하면 조건에 저장된 lookbackPeriod로 자동 계산한다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -43,7 +46,9 @@ public class CollectionRunController {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "400",
-                    description = "BIDDING_INACTIVE_COLLECTION_CONDITION"
+                    description = "BIDDING_INACTIVE_COLLECTION_CONDITION · "
+                            + "BIDDING_COLLECTION_RUN_RANGE_INVALID · "
+                            + "BIDDING_COLLECTION_RUN_RANGE_TOO_WIDE"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401",
@@ -66,10 +71,14 @@ public class CollectionRunController {
     public ResponseEntity<ApiResponse<StartCollectionRunResponse>> start(
             @AuthenticationPrincipal String userId,
             @Parameter(description = "실행할 수집 조건 ID")
-            @PathVariable Long conditionId
+            @PathVariable Long conditionId,
+            @RequestBody(required = false) StartCollectionRunRequest request
     ) {
+        StartCollectionRunRequest safeRequest =
+                request == null ? StartCollectionRunRequest.EMPTY : request;
+
         CollectionRunResult result = collectionRunUseCase.start(
-                new StartCollectionRunCommand(conditionId, userId)
+                safeRequest.toCommand(conditionId, userId)
         );
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(

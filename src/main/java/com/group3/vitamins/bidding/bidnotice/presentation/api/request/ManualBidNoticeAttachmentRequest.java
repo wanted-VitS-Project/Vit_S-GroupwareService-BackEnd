@@ -8,12 +8,17 @@ import jakarta.validation.constraints.Size;
 
 public record ManualBidNoticeAttachmentRequest(
 
-        @NotBlank @Size(max = 255)
+        @NotBlank(message = "BIDDING_INVALID_MANUAL_NOTICE|첨부파일 표시명을 입력해 주세요.")
+        @Size(max = 255, message = "BIDDING_INVALID_MANUAL_NOTICE|첨부파일 표시명은 255자를 넘을 수 없습니다.")
         @Schema(description = "첨부파일 표시명", example = "제안요청서.pdf")
         String fileName,
 
-        @NotBlank @Size(max = 1000)
-        @Pattern(regexp = "https?://.+")
+        @NotBlank(message = "BIDDING_INVALID_MANUAL_NOTICE|첨부파일 원문 URL을 입력해 주세요.")
+        @Size(max = 1000, message = "BIDDING_INVALID_MANUAL_NOTICE|첨부파일 원문 URL은 1,000자를 넘을 수 없습니다.")
+        @Pattern(
+                regexp = "https?://.+",
+                message = "BIDDING_INVALID_MANUAL_NOTICE|첨부파일 원문 URL 형식이 올바르지 않습니다. http:// 또는 https://로 시작해야 합니다."
+        )
         @Schema(
                 description = "첨부파일 공개 원문 URL",
                 example = "https://example.org/notices/2026-001/rfp.pdf"

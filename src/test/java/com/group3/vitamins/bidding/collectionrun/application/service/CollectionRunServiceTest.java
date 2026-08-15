@@ -4,6 +4,7 @@ import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingE
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionConditionFilter;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 import com.group3.vitamins.bidding.collectionrun.application.command.StartCollectionRunCommand;
 import com.group3.vitamins.bidding.collectionrun.application.model.CollectionRunOutbox;
 import com.group3.vitamins.bidding.collectionrun.application.port.CollectionRunConditionPort;
@@ -264,6 +265,46 @@ class CollectionRunServiceTest {
     }
 
     @Test
+    @DisplayName("구간을 하나만 지정하면 검증 오류로 거부한다")
+    void rejectsPartialCustomRange() {
+        assertError(
+                () -> service.start(new StartCollectionRunCommand(
+                        CONDITION_ID, USER_ID,
+                        LocalDateTime.of(2026, 7, 1, 0, 0), null
+                )),
+                BiddingErrorCode.BIDDING_COLLECTION_RUN_RANGE_INVALID
+        );
+
+        verify(conditionPort, never()).findOwnedConditionForUpdate(any(), any());
+    }
+
+    @Test
+    @DisplayName("시작 시각이 종료 시각보다 늦으면 검증 오류로 거부한다")
+    void rejectsReversedCustomRange() {
+        assertError(
+                () -> service.start(new StartCollectionRunCommand(
+                        CONDITION_ID, USER_ID,
+                        LocalDateTime.of(2026, 7, 10, 0, 0),
+                        LocalDateTime.of(2026, 7, 1, 0, 0)
+                )),
+                BiddingErrorCode.BIDDING_COLLECTION_RUN_RANGE_INVALID
+        );
+    }
+
+    @Test
+    @DisplayName("수동 조회 구간이 31일을 넘으면 거부한다")
+    void rejectsTooWideCustomRange() {
+        assertError(
+                () -> service.start(new StartCollectionRunCommand(
+                        CONDITION_ID, USER_ID,
+                        LocalDateTime.of(2026, 6, 1, 0, 0),
+                        LocalDateTime.of(2026, 8, 1, 0, 0)
+                )),
+                BiddingErrorCode.BIDDING_COLLECTION_RUN_RANGE_TOO_WIDE
+        );
+    }
+
+    @Test
     @DisplayName("잘못된 실행 생성 요청은 저장소에 접근하지 않는다")
     void rejectsInvalidStartCommand() {
         assertError(
@@ -300,7 +341,7 @@ class CollectionRunServiceTest {
         when(condition.getConditionName()).thenReturn("테스트 수집 조건");
         when(condition.getNoticeTypes()).thenReturn(List.of(BidNoticeType.SERVICE));
         when(condition.getFilters()).thenReturn(testFilter());
-        when(condition.getLastSuccessAt()).thenReturn(null);
+        when(condition.getLookbackPeriod()).thenReturn(CollectionLookbackPeriod.ONE_WEEK);
         when(condition.isActive()).thenReturn(true);
 
         return condition;
@@ -369,7 +410,7 @@ class CollectionRunServiceTest {
                 "테스트 수집 조건",
                 List.of(BidNoticeType.SERVICE),
                 testFilter(),
-                LocalDateTime.of(2026, 8, 9, 6, 0),
+                LocalDateTime.of(2026, 8, 3, 6, 0),
                 LocalDateTime.of(2026, 8, 10, 6, 0)
         );
     }

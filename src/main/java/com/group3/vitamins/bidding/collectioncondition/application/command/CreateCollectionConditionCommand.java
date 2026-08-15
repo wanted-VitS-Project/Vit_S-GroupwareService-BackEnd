@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.collectioncondition.application.command;
 
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionConditionFilter;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 
 import java.util.List;
 import java.time.LocalTime;
@@ -13,6 +14,7 @@ public record CreateCollectionConditionCommand(
         String conditionName,
         List<BidNoticeType> noticeTypes,
         CollectionConditionFilter filters,
+        CollectionLookbackPeriod lookbackPeriod,
         Boolean active,
         Boolean autoCollectionEnabled,
         CollectionScheduleType scheduleType,
@@ -26,7 +28,7 @@ public record CreateCollectionConditionCommand(
             List<BidNoticeType> noticeTypes, CollectionConditionFilter filters,
             Boolean active, String userId, String role
     ) {
-        this(sourceCode, conditionName, noticeTypes, filters, active,
+        this(sourceCode, conditionName, noticeTypes, filters, null, active,
                 false, null, null, null, userId, role);
     }
 }
