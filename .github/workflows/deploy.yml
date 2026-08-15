@@ -87,6 +87,9 @@ jobs:
           VITAMATE_WORKER_TOKEN: ${{ secrets.VITAMATE_WORKER_TOKEN }}
           NARA_API_BASE_URL: ${{ vars.NARA_API_BASE_URL }}
           NARA_API_SERVICE_KEY: ${{ secrets.NARA_API_SERVICE_KEY }}
+          # 입찰 수집 워커 (Redis Stream 소비 · 파이썬 워커와 토큰 공유)
+          BIDDING_WORKER_TOKEN: ${{ secrets.BIDDING_WORKER_TOKEN }}
+          BIDDING_COLLECTION_WORKER_ENABLED: ${{ vars.BIDDING_COLLECTION_WORKER_ENABLED }}
         run: |
           set -euo pipefail
           umask 077
@@ -104,6 +107,16 @@ jobs:
             echo "   → 레포 Settings → Secrets and variables → Actions 에 등록 후 재실행."
             exit 1
           fi
+          # ── 경고만 하는 선택 키 ──
+          # 배포는 성공하는데 기능만 "조용히" 죽는 값들. 특히
+          # BIDDING_COLLECTION_WORKER_ENABLED 는 @ConditionalOnProperty 게이트라
+          # 없으면 RedisCollectionRunJobConsumer 빈이 아예 등록되지 않는다
+          # (에러도 로그도 없이 입찰 수집 스트림 소비만 안 돈다).
+          for k in BIDDING_COLLECTION_WORKER_ENABLED BIDDING_WORKER_TOKEN \
+                   VITAMATE_WORKER_TOKEN NARA_API_BASE_URL NARA_API_SERVICE_KEY; do
+            [ -z "${!k:-}" ] && echo "⚠️ 미설정: $k — 관련 기능이 조용히 비활성화된다"
+          done || true
+
           : > deploy.env
           # 빈 값은 건너뜀 → application.yml 기본값 유지 (빈값 override 방지)
           for k in ECR_REGISTRY SPRING_PROFILES_ACTIVE \
@@ -113,7 +126,8 @@ jobs:
                    CORS_ALLOWED_ORIGINS APP_LOGIN_URL \
                    AWS_REGION S3_BUCKET_NAME \
                    SETTLEMENT_ACCOUNT_ENC_KEY \
-                   VITAMATE_WORKER_TOKEN NARA_API_BASE_URL NARA_API_SERVICE_KEY; do
+                   VITAMATE_WORKER_TOKEN NARA_API_BASE_URL NARA_API_SERVICE_KEY \
+                   BIDDING_WORKER_TOKEN BIDDING_COLLECTION_WORKER_ENABLED; do
             v="${!k:-}"
             [ -n "$v" ] && printf '%s=%s\n' "$k" "$v" >> deploy.env
           done
