@@ -59,20 +59,38 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
         if ("MASTER".equals(role)) {
             return true;
         }
+        return effectivePermission(blockId, userId) == MemberPermission.EDITOR;
+    }
 
+    @Override
+    public boolean canViewBlock(Long blockId, String userId, String role) {
+        if ("ADMIN".equals(role)) {
+            return false;
+        }
+        if ("MASTER".equals(role)) {
+            return true;
+        }
+        return effectivePermission(blockId, userId) != MemberPermission.NONE;
+    }
+
+    /**
+     * 블록이 속한 스텝의 유효 권한을 계산한다 — 프로젝트 권한이 {@code NONE}(미참여 포함)이면
+     * 스텝 오버라이드를 보지 않고 {@code NONE}, 아니면 오버라이드 우선·없으면 프로젝트 권한 상속.
+     * {@code StepAccessPolicy.resolve()} 와 같은 규칙이며, 블록을 못 찾으면 {@code NONE} 이다.
+     */
+    private MemberPermission effectivePermission(Long blockId, String userId) {
         return findBlock(blockId)
                 .map(block -> {
                     MemberPermission projectPermission = projectMemberRepository
                             .findPermission(block.projectId(), userId)
                             .orElse(MemberPermission.NONE);
                     if (projectPermission == MemberPermission.NONE) {
-                        return false;
+                        return MemberPermission.NONE;
                     }
-                    MemberPermission effective = stepPermissionRepository
+                    return stepPermissionRepository
                             .findOverride(block.stepId(), userId)
                             .orElse(projectPermission);
-                    return effective == MemberPermission.EDITOR;
                 })
-                .orElse(false);
+                .orElse(MemberPermission.NONE);
     }
 }
