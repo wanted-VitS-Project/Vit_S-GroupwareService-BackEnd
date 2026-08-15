@@ -110,7 +110,7 @@ public class RedisBidNoticeListCacheAdapter implements BidNoticeListCachePort {
         CacheCriteria criteria = new CacheCriteria(
                 query.startDate(), query.endDate(), query.noticeAgency(),
                 query.businessCategoryId(), query.region(), query.deadlineSoon(),
-                query.keyword(), query.noticeStatus(), query.sort(),
+                query.keyword(), query.noticeStatus(), query.favorite(), query.sort(),
                 query.page(), query.size()
         );
         return DATA_KEY_PREFIX + companyId + ":v" + version + ":" + hash(criteria);
@@ -137,6 +137,7 @@ public class RedisBidNoticeListCacheAdapter implements BidNoticeListCachePort {
             Boolean deadlineSoon,
             String keyword,
             String noticeStatus,
+            Boolean favorite,
             String sort,
             int page,
             int size

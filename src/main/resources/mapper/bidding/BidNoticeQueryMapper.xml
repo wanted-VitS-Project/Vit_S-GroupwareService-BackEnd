@@ -45,6 +45,9 @@
         <if test="query.noticeStatus != null and query.noticeStatus != ''">
             AND state.notice_status = #{query.noticeStatus}
         </if>
+        <if test="query.favorite != null and query.favorite">
+            AND state.is_favorite = 1
+        </if>
     </sql>
 
     <select id="findAll"
@@ -73,6 +76,7 @@
                   AND latest_run.deleted_at IS NULL
             ) THEN TRUE ELSE FALSE END AS is_new,
             state.notice_status,
+            state.is_favorite,
             (
                 SELECT MIN(project_table.project_id)
                 FROM project project_table

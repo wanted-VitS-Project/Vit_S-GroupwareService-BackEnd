@@ -8,6 +8,6 @@ public record BidNoticeListItemResult(
         String sourceUrl, String noticeAgency, Long businessCategoryId,
         String businessCategoryName, BigDecimal baseAmount, BigDecimal estimatedAmount,
         LocalDateTime announcedAt, LocalDateTime bidDeadlineAt, Integer dDay,
-        boolean isNew, String noticeStatus, Long projectId
+        boolean isNew, String noticeStatus, boolean isFavorite, Long projectId
 ) {
 }

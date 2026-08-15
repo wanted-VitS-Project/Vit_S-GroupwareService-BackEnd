@@ -153,9 +153,10 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
         );
     }
 
-    // 공고 첨부는 아직 우리 S3에 없는 외부 원본이라, Worker가 다운로드 후 되올릴 임시 업로드 URL을
-    // 매번 새로 발급한다(재시도로 다시 조회돼도 무방 - 이 키는 이번 왕복에서만 쓰고 그대로 callback에
-    // 되돌아온다). 실제 저장은 Worker가 지정한 대로 믿는다 - Spring은 URL만 발급하고 검증하지 않는다.
+    // 공고 첨부는 대부분 아직 우리 S3에 없는 외부 원본이라, Worker가 다운로드 후 되올릴 임시 업로드
+    // URL을 매번 새로 발급한다(재시도로 다시 조회돼도 무방 - 이 키는 이번 왕복에서만 쓰고 그대로
+    // callback에 되돌아온다). 실제 저장은 Worker가 지정한 대로 믿는다 - Spring은 URL만 발급하고
+    // 검증하지 않는다.
     // ⚠️ companies/{companyId}/ 접두사는 장식이 아니다 - 프로젝트 귀속 시 AttachStagedFileService가
     // 이 접두사로 테넌트 경계를 검증한다(requireTenantScopedTempKey). 빼면 귀속 호출이 전부 400으로 거절된다.
     private BidReviewJobResult.AttachmentJob toAttachmentJob(
@@ -173,10 +174,21 @@ public class BidReviewJobQueryService implements GetBidReviewJobUseCase {
         return new BidReviewJobResult.AttachmentJob(
                 attachment.attachmentId(),
                 attachment.fileName(),
-                attachment.sourceUrl(),
+                resolveDownloadUrl(attachment),
                 uploadUrl,
                 temporaryStorageKey
         );
+    }
+
+    // 직접 등록 공고에 실제 업로드된 첨부(2026-08-14 신설)는 source_url이 없다 - 외부 원본이
+    // 아니라 이미 우리 S3에 있기 때문이다. 이 경우 Worker에게 넘길 다운로드 대상을 presigned GET
+    // URL로 대신 만든다 - 사내 기준자료·사내 문서함 참조가 이미 쓰는 것과 동일한 패턴이다. Worker
+    // 쪽은 URL 출처를 구분하지 않으므로 이 이후 처리(다운로드 → 임시 업로드)는 그대로 재사용된다.
+    private String resolveDownloadUrl(BidReviewNoticeDocumentPort.AttachmentSnapshot attachment) {
+        if (attachment.sourceUrl() != null) {
+            return attachment.sourceUrl();
+        }
+        return fileStoragePort.presignDownload(attachment.storageKey(), attachment.fileName()).url();
     }
 
     // 개인 식별 정보 없이 인원수만 담은 텍스트를 만든다. 세 집계는 교차하지 않고 독립적으로 낸다

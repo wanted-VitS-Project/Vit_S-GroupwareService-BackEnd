@@ -67,7 +67,8 @@ public class BidReviewNoticeDocumentAdapter
                     attachment.bid_notice_attachment_id,
                     attachment.bid_notice_id,
                     attachment.file_name,
-                    attachment.source_url
+                    attachment.source_url,
+                    attachment.storage_key
                 FROM bid_notice_attachment attachment
                 INNER JOIN bid_notice notice
                     ON notice.bid_notice_id = attachment.bid_notice_id
@@ -77,6 +78,7 @@ public class BidReviewNoticeDocumentAdapter
                 WHERE attachment.bid_notice_id = :noticeId
                   AND attachment.bid_notice_attachment_id IN (:attachmentIds)
                   AND attachment.deleted_at IS NULL
+                  AND attachment.upload_status = 'READY'
                   AND notice.deleted_at IS NULL
                   AND state.notice_status <> 'DISMISSED'
                 ORDER BY
@@ -96,7 +98,8 @@ public class BidReviewNoticeDocumentAdapter
                         resultSet.getLong("bid_notice_attachment_id"),
                         resultSet.getLong("bid_notice_id"),
                         resultSet.getString("file_name"),
-                        resultSet.getString("source_url")
+                        resultSet.getString("source_url"),
+                        resultSet.getString("storage_key")
                 )
         );
     }

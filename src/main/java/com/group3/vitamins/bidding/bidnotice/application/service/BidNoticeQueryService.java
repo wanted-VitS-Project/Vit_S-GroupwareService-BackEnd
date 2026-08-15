@@ -77,7 +77,7 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
         return new SearchBidNoticesQuery(
                 query.startDate(), query.endDate(), query.noticeAgency(),
                 query.businessCategoryId(), query.region(), query.deadlineSoon(),
-                query.keyword(), "COLLECTED", query.sort(), query.page(), query.size(),
+                query.keyword(), "COLLECTED", query.favorite(), query.sort(), query.page(), query.size(),
                 query.userId(), query.role()
         );
     }
@@ -119,7 +119,7 @@ public class BidNoticeQueryService implements BidNoticeQueryUseCase {
                 item.sourceUrl(), item.noticeAgency(), item.businessCategoryId(),
                 item.businessCategoryName(), item.baseAmount(), item.estimatedAmount(),
                 item.announcedAt(), item.bidDeadlineAt(), calculateDDay(item.bidDeadlineAt()),
-                item.isNew(), item.noticeStatus(), item.projectId()
+                item.isNew(), item.noticeStatus(), item.isFavorite(), item.projectId()
         );
     }
 

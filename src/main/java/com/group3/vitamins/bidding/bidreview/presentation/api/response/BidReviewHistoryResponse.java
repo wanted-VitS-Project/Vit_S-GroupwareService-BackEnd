@@ -8,15 +8,27 @@ import java.util.List;
 
 public record BidReviewHistoryResponse(
 
-        @Schema(description = "본인이 요청한 검토 이력 최신순 최대 20건")
-        List<HistoryItemResponse> content
+        @Schema(description = "본인이 요청한 검토 이력 최신순")
+        List<HistoryItemResponse> content,
+
+        @Schema(description = "전체 이력 수") long totalElements,
+
+        @Schema(description = "전체 페이지 수") int totalPages,
+
+        @Schema(description = "현재 페이지") int page,
+
+        @Schema(description = "페이지 크기") int size
 ) {
 
     public static BidReviewHistoryResponse from(BidReviewHistoryResult result) {
         return new BidReviewHistoryResponse(
                 result.content().stream()
                         .map(HistoryItemResponse::from)
-                        .toList()
+                        .toList(),
+                result.totalElements(),
+                result.totalPages(),
+                result.page(),
+                result.size()
         );
     }
 
