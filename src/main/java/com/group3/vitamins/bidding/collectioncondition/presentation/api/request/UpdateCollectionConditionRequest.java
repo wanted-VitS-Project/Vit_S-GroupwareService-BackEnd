@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.collectioncondition.presentation.api.request
 
 import com.group3.vitamins.bidding.collectioncondition.application.command.UpdateCollectionConditionCommand;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -22,6 +23,12 @@ public record UpdateCollectionConditionRequest(
 
         @Schema(description = "나라장터 검색 필터")
         CollectionConditionFilterRequest filters,
+
+        @Schema(
+                description = "자동·수동 수집이 매 실행마다 되돌아가 검색할 기간. 생략하면 ONE_WEEK",
+                example = "TWO_WEEKS"
+        )
+        CollectionLookbackPeriod lookbackPeriod,
 
         @Schema(description = "수집 조건 활성화 여부", example = "true")
         Boolean isActive,
@@ -51,6 +58,7 @@ public record UpdateCollectionConditionRequest(
                 conditionName,
                 noticeTypes,
                 filters == null ? null : filters.toDomain(),
+                lookbackPeriod,
                 isActive,
                 autoCollectionEnabled,
                 scheduleType,

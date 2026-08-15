@@ -21,6 +21,12 @@ public record CollectionRunResponse(
         @Schema(description = "수집 실행 상태", example = "COMPLETED")
         CollectionRunStatus runStatus,
 
+        @Schema(description = "실제 조회한 시작 시각(공고게시일시 기준)")
+        LocalDateTime collectionStartedAt,
+
+        @Schema(description = "실제 조회한 종료 시각(공고게시일시 기준)")
+        LocalDateTime collectionEndedAt,
+
         @Schema(description = "전체 수집 건수", example = "30")
         int collectedCount,
 
@@ -50,6 +56,8 @@ public record CollectionRunResponse(
                 result.conditionId(),
                 result.triggerType(),
                 result.runStatus(),
+                result.collectionStartedAt(),
+                result.collectionEndedAt(),
                 result.collectedCount(),
                 result.insertedCount(),
                 result.updatedCount(),

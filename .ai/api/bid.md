@@ -147,6 +147,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
     "excludeClosed": true,
     "internationalBidType": "DOMESTIC"
   },
+  "lookbackPeriod": "TWO_WEEKS",
   "isActive": true,
   "autoCollectionEnabled": true,
   "scheduleType": "WEEKDAYS",
@@ -168,6 +169,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 | `filters.maximumEstimatedPrice` | Long | N | 추정가격 상한, 0 이상이며 하한보다 작을 수 없음 |
 | `filters.excludeClosed` | Boolean | Y | `true`이면 입찰 마감 공고를 외부 검색에서 제외 |
 | `filters.internationalBidType` | String | N | `DOMESTIC`, `INTERNATIONAL`. `null`이면 전체 |
+| `lookbackPeriod` | String | N | `ONE_WEEK`, `TWO_WEEKS`, `ONE_MONTH`. 자동·수동 수집이 매 실행마다 되돌아가 검색할 기간. 생략하면 `ONE_WEEK` |
 | `isActive` | Boolean | Y | 수동 실행 가능한 활성 조건인지 여부 |
 | `autoCollectionEnabled` | Boolean | Y | 정기 자동 수집 사용 여부. `true`이면 `isActive`도 `true`여야 함 |
 | `scheduleType` | String | 조건부 Y | 자동 수집 사용 시 필수. `DAILY`, `WEEKDAYS` |
@@ -201,7 +203,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
 | `noticeTypes=CONSTRUCTION` | `getBidPblancListInfoCnstwkPPSSrch` | 나라장터 검색조건에 의한 공사 공고 조회 |
 | `noticeTypes=SERVICE` | `getBidPblancListInfoServcPPSSrch` | 나라장터 검색조건에 의한 용역 공고 조회 |
 | 기본 수집 실행 | `inqryDiv=1` | 공고게시일시 기준으로 조회 |
-| 실행 조회 시작·종료 시각 | `inqryBgnDt`, `inqryEndDt` | `YYYYMMDDHHMM`. 조건에 저장하지 않고 실행 시 결정 |
+| 실행 조회 시작·종료 시각 | `inqryBgnDt`, `inqryEndDt` | `YYYYMMDDHHMM`. 조건에 저장하지 않고 실행 시 결정한다 — 수동 실행이 `startedAt`/`endedAt`을 지정하면 그 값을, 아니면 `조건.lookbackPeriod`만큼 현재 시각에서 되돌아간 구간을 쓴다(2026-08-15 변경 — 과거의 "직전 성공~지금" 증분 방식은 폐기) |
 | `filters.keywords[]`의 단일 값 | `bidNtceNm` | 공고명 부분 검색 |
 | `filters.regionCodes[]`의 단일 값 | `prtcptLmtRgnCd` | 참가 제한 지역 코드 |
 | `filters.industryCodes[]`의 단일 값 | `indstrytyCd` | 나라장터 업종 코드 |
@@ -277,6 +279,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
       "excludeClosed": true,
       "internationalBidType": "DOMESTIC"
     },
+    "lookbackPeriod": "TWO_WEEKS",
     "isActive": true,
     "autoCollectionEnabled": true,
     "scheduleType": "WEEKDAYS",
@@ -317,6 +320,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
           "excludeClosed": true,
           "internationalBidType": "DOMESTIC"
         },
+        "lookbackPeriod": "TWO_WEEKS",
         "isActive": true,
         "autoCollectionEnabled": true,
         "scheduleType": "WEEKDAYS",
@@ -354,6 +358,7 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
     "excludeClosed": true,
     "internationalBidType": "DOMESTIC"
   },
+  "lookbackPeriod": "ONE_MONTH",
   "isActive": true,
   "autoCollectionEnabled": true,
   "scheduleType": "DAILY",
@@ -361,6 +366,8 @@ PATCH /api/v1/projects/{projectId}/bid-notice-snapshot
   "timezone": "Asia/Seoul"
 }
 ```
+
+`lookbackPeriod`를 생략하면 등록 때처럼 `ONE_WEEK`로 처리하는 것이 아니라, **요청에 없는 필드는 전체 교체 규칙에 따라 그대로 `ONE_WEEK` 기본값이 적용된다.** 기존 값을 유지하고 싶다면 조회한 현재 값을 그대로 다시 보내야 한다.
 
 성공 시 수정된 수집 조건을 등록 응답의 `data`와 같은 구조로 반환한다.
 
@@ -398,7 +405,19 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 
 #### Request Body
 
-없음
+선택. 생략하거나 빈 객체를 보내면 조건에 저장된 `lookbackPeriod`로 자동 계산한다.
+
+```json
+{
+  "startedAt": "2026-07-01T00:00:00",
+  "endedAt": "2026-08-01T00:00:00"
+}
+```
+
+| 필드 | 타입 | 필수 | 규칙 |
+|------|------|------|------|
+| `startedAt` | LocalDateTime | N | `endedAt`과 함께 지정해야 한다. 지정하면 조건의 `lookbackPeriod`보다 우선한다 |
+| `endedAt` | LocalDateTime | N | `startedAt`과 함께 지정해야 하며, `startedAt`보다 늦어야 한다 |
 
 #### 처리 규칙
 
@@ -407,10 +426,15 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 | 조건 소유권 | 현재 회사가 소유한 삭제되지 않은 조건만 실행할 수 있다 |
 | 활성 조건 | `is_active = true`인 조건만 실행할 수 있다 |
 | 중복 실행 | 같은 조건에 `PENDING` 또는 `PROCESSING` 실행이 있으면 새 실행을 거부한다 |
+| 조회 구간 결정 | `startedAt`/`endedAt`을 둘 다 지정하면 그 구간을 그대로 쓴다. 하나만 지정하거나 `startedAt >= endedAt`이면 400. 둘 다 생략하면 `현재 시각 - 조건.lookbackPeriod` ~ `현재 시각`으로 계산한다 |
+| 조회 구간 최대 폭 | 수동 지정 구간은 최대 31일까지 허용한다. 초과하면 400 |
 | 초기 상태 | `PENDING` |
 | 현재 실행 방식 | DB에 `crawl_run`을 `PENDING` 상태로 저장하고 `runId`를 반환한다 |
 | 후속 구현 | Redis Stream 작업 전달, DB Outbox 유실 방지, Spring Worker 처리와 선택적 최대 3회 재시도 계약을 적용한다 |
 | 회사 격리 | `crawl_run -> crawl_condition.company_id` 경로로 현재 회사를 검증한다 |
+
+> 🔖 수동 지정 구간으로 실행해도 조건의 `lastSuccessAt`은 평소대로 갱신된다 — 이 값은 "마지막으로 언제 성공했는지" 표시용일 뿐,
+> 다음 실행의 조회 구간 계산에는 더 이상 쓰이지 않는다(2026-08-15부터 `lookbackPeriod` 고정 방식으로 전환).
 
 #### Success Response
 
@@ -432,6 +456,8 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 |------|------|------|
 | 202 | - | 수집 요청 접수 성공 |
 | 400 | `BIDDING_INACTIVE_COLLECTION_CONDITION` | 비활성 수집 조건 |
+| 400 | `BIDDING_COLLECTION_RUN_RANGE_INVALID` | `startedAt`/`endedAt` 중 하나만 지정했거나, 시작 시각이 종료 시각보다 늦음 |
+| 400 | `BIDDING_COLLECTION_RUN_RANGE_TOO_WIDE` | 수동 지정 조회 구간이 31일을 초과함 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션이 없거나 만료됨 |
 | 403 | `BIDDING_ACCESS_PERMISSION_REQUIRED` | 입찰 관리 권한 없음 |
 | 404 | `BIDDING_COLLECTION_CONDITION_NOT_FOUND` | 현재 회사의 수집 조건이 존재하지 않음 |
@@ -466,6 +492,8 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
 | `conditionId` | 실행한 수집 조건 ID |
 | `triggerType` | 실행 방식. MVP는 `MANUAL` |
 | `runStatus` | 실행 상태 |
+| `collectionStartedAt` | 이 실행이 실제로 조회한 시작 시각(공고게시일시 기준). `startedAt`(실행 프로세스 시각)과 다르다 |
+| `collectionEndedAt` | 이 실행이 실제로 조회한 종료 시각 |
 | `collectedCount` | 전체 조회 건수 |
 | `insertedCount` | 신규 저장 건수 |
 | `updatedCount` | 갱신 건수 |
@@ -485,6 +513,8 @@ Redis Stream 발행, DB Outbox, Spring Worker 처리와 외부 수집처 호출�
     "conditionId": 1,
     "triggerType": "MANUAL",
     "runStatus": "COMPLETED",
+    "collectionStartedAt": "2026-07-27T11:30:00",
+    "collectionEndedAt": "2026-08-10T11:30:00",
     "collectedCount": 40,
     "insertedCount": 12,
     "updatedCount": 5,

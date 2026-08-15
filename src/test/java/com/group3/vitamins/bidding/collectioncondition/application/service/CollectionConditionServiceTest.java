@@ -211,7 +211,7 @@ class CollectionConditionServiceTest {
     ) {
         return new CreateCollectionConditionCommand(
                 "NARA", "자동 수집 조건", List.of(BidNoticeType.SERVICE),
-                validFilter(), true, true, scheduleType, scheduledTime,
+                validFilter(), null, true, true, scheduleType, scheduledTime,
                 "Asia/Seoul", USER_ID, "ADMIN"
         );
     }
