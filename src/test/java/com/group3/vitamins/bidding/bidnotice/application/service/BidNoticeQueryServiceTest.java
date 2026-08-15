@@ -59,7 +59,7 @@ class BidNoticeQueryServiceTest {
     @Test
     void rejectsPageThatWouldOverflowOffset() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 "ANNOUNCED_DESC", Integer.MAX_VALUE / 100 + 1, 100,
                 "EMP001", "ADMIN"
         );
@@ -75,14 +75,14 @@ class BidNoticeQueryServiceTest {
     @Test
     void calculatesListDDayWithApplicationClock() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
         );
         BidNoticeListItemResult item = new BidNoticeListItemResult(
                 1L, "공고", "NARA", "나라장터", null, "기관", null, null,
                 BigDecimal.ONE, BigDecimal.TEN, null,
                 LocalDateTime.of(2026, 8, 14, 18, 0), null,
-                false, "COLLECTED", null
+                false, "COLLECTED", false, null
         );
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
         when(queryPort.findAll(eq(COMPANY_ID), any(SearchBidNoticesQuery.class)))
@@ -100,7 +100,7 @@ class BidNoticeQueryServiceTest {
     @Test
     void returnsCachedListWithoutCallingDatabase() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
         );
         var cached = new com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeListResult(
@@ -122,14 +122,14 @@ class BidNoticeQueryServiceTest {
     @Test
     void recalculatesDDayWhenReturningCachedList() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
         );
         BidNoticeListItemResult cachedItem = new BidNoticeListItemResult(
                 1L, "공고", "NARA", "나라장터", null, "기관", null, null,
                 BigDecimal.ONE, BigDecimal.TEN, null,
                 LocalDateTime.of(2026, 8, 14, 18, 0), 99,
-                false, "COLLECTED", null
+                false, "COLLECTED", false, null
         );
         var cached = new com.group3.vitamins.bidding.bidnotice.application.result.BidNoticeListResult(
                 List.of(cachedItem), 1, 1, 0, 20
@@ -147,7 +147,7 @@ class BidNoticeQueryServiceTest {
     @Test
     void bypassesCacheForDeadlineSoonQuery() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, true, null, null,
+                null, null, null, null, null, true, null, null, null,
                 "DEADLINE_ASC", 0, 20, "EMP001", "ADMIN"
         );
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
@@ -165,7 +165,7 @@ class BidNoticeQueryServiceTest {
     @Test
     void rejectsListWhenAccessIsDeniedWithoutCallingQueryPort() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "USER"
         );
         doThrow(new ForbiddenException(BiddingErrorCode.BIDDING_ACCESS_PERMISSION_REQUIRED))
@@ -191,7 +191,7 @@ class BidNoticeQueryServiceTest {
     @Test
     void listQueryUsesCurrentCompanyId() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
         );
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
@@ -208,9 +208,36 @@ class BidNoticeQueryServiceTest {
     }
 
     @Test
+    void preservesFavoriteFilterAndFlagThroughDefaultStatusAndDDayRecalculation() {
+        SearchBidNoticesQuery query = new SearchBidNoticesQuery(
+                null, null, null, null, null, null, null, null, true,
+                "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
+        );
+        BidNoticeListItemResult favoriteItem = new BidNoticeListItemResult(
+                1L, "공고", "NARA", "나라장터", null, "기관", null, null,
+                BigDecimal.ONE, BigDecimal.TEN, null,
+                LocalDateTime.of(2026, 8, 14, 18, 0), null,
+                false, "COLLECTED", true, null
+        );
+        when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
+        when(queryPort.findAll(eq(COMPANY_ID), any(SearchBidNoticesQuery.class)))
+                .thenReturn(List.of(favoriteItem));
+        when(queryPort.count(eq(COMPANY_ID), any(SearchBidNoticesQuery.class))).thenReturn(1L);
+
+        var result = service.handle(query);
+
+        ArgumentCaptor<SearchBidNoticesQuery> queryCaptor =
+                ArgumentCaptor.forClass(SearchBidNoticesQuery.class);
+        verify(queryPort).findAll(eq(COMPANY_ID), queryCaptor.capture());
+        assertThat(queryCaptor.getValue().favorite()).isTrue();
+        assertThat(queryCaptor.getValue().noticeStatus()).isEqualTo("COLLECTED");
+        assertThat(result.content().get(0).isFavorite()).isTrue();
+    }
+
+    @Test
     void preservesExplicitDismissedStatusForDismissedNoticeList() {
         SearchBidNoticesQuery query = new SearchBidNoticesQuery(
-                null, null, null, null, null, null, null, "DISMISSED",
+                null, null, null, null, null, null, null, "DISMISSED", null,
                 "ANNOUNCED_DESC", 0, 20, "EMP001", "ADMIN"
         );
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);

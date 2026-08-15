@@ -8,6 +8,7 @@ public record CompanyBidNoticeState(
         Long noticeId,
         BidNoticeCompanyStatus status,
         String dismissReason,
+        boolean isFavorite,
         LocalDateTime updatedAt
 ) {
     public CompanyBidNoticeState {
@@ -22,6 +23,7 @@ public record CompanyBidNoticeState(
                 noticeId,
                 BidNoticeCompanyStatus.DISMISSED,
                 reason,
+                isFavorite,
                 changedAt
         );
     }
@@ -32,6 +34,30 @@ public record CompanyBidNoticeState(
                 noticeId,
                 BidNoticeCompanyStatus.COLLECTED,
                 null,
+                isFavorite,
+                changedAt
+        );
+    }
+
+    // 회사 공용 관심 등록 - notice_status와 독립적이라 제외(DISMISSED) 상태에서도 걸 수 있다.
+    public CompanyBidNoticeState markFavorite(LocalDateTime changedAt) {
+        return new CompanyBidNoticeState(
+                companyId,
+                noticeId,
+                status,
+                dismissReason,
+                true,
+                changedAt
+        );
+    }
+
+    public CompanyBidNoticeState unmarkFavorite(LocalDateTime changedAt) {
+        return new CompanyBidNoticeState(
+                companyId,
+                noticeId,
+                status,
+                dismissReason,
+                false,
                 changedAt
         );
     }

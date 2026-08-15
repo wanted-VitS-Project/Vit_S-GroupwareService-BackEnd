@@ -50,6 +50,7 @@ public class CompanyBidNoticeStateRepositoryAdapter implements CompanyBidNoticeS
                         row.bidNoticeId(),
                         BidNoticeCompanyStatus.valueOf(row.noticeStatus()),
                         row.dismissReason(),
+                        row.isFavorite(),
                         row.updatedAt()
                 ));
     }
@@ -61,6 +62,7 @@ public class CompanyBidNoticeStateRepositoryAdapter implements CompanyBidNoticeS
                 state.noticeId(),
                 state.status().name(),
                 state.dismissReason(),
+                state.isFavorite(),
                 state.updatedAt()
         );
         if (updated != 1) {

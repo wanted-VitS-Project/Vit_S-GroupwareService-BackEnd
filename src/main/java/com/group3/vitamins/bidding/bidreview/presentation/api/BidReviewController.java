@@ -183,11 +183,14 @@ public class BidReviewController {
 
     @Operation(
             summary = "공고별 입찰 문서 검토 이력 조회",
-            description = "현재 회사에서 본인이 요청한 검토 이력을 최신순으로 최대 20건 조회합니다."
+            description = "현재 회사에서 본인이 요청한 검토 이력을 최신순으로 페이지 단위 조회합니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200", description = "조회 성공. 이력이 없으면 빈 배열"
+                    responseCode = "200", description = "조회 성공. 이력이 없으면 content가 빈 배열(페이지 메타데이터는 그대로 포함)"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "BIDDING_INVALID_REVIEW_REQUEST"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401", description = "AUTH_UNAUTHENTICATED"
@@ -203,11 +206,17 @@ public class BidReviewController {
     public ResponseEntity<ApiResponse<BidReviewHistoryResponse>> getHistory(
             @Parameter(description = "조회할 입찰 공고 ID")
             @PathVariable Long noticeId,
+            @Parameter(description = "0부터 시작하는 페이지 번호")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기. 최대 50")
+            @RequestParam(defaultValue = "20") int size,
             Authentication authentication
     ) {
         BidReviewHistoryResult result = getBidReviewHistoryUseCase.get(
                 new GetBidReviewHistoryQuery(
                         noticeId,
+                        page,
+                        size,
                         authentication.getName(),
                         RequesterRole.from(authentication)
                 )

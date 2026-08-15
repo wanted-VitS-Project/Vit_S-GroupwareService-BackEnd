@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Collection;
 
@@ -81,5 +83,26 @@ public interface BidNoticeSummaryJpaRepository
 
     Optional<BidNoticeSummaryJpaEntity> findBySummaryIdAndDeletedAtIsNull(
             Long summaryId
+    );
+
+    // 정상 흐름에서는 요약과 outbox가 같은 트랜잭션에 저장돼 나오지 않아야 하는 상태다 - 그래도
+    // 살아있는(PENDING) outbox가 하나도 없이 오래 멈춘 요약을 방어적으로 찾아 재발행 스케줄러가 훑는다.
+    @Query(value = """
+            SELECT s.bid_notice_summary_id
+            FROM bid_notice_summary s
+            WHERE s.summary_status IN ('PENDING', 'PROCESSING')
+              AND s.deleted_at IS NULL
+              AND s.updated_at < :staleBefore
+              AND NOT EXISTS (
+                  SELECT 1 FROM bid_notice_summary_outbox o
+                  WHERE o.bid_notice_summary_id = s.bid_notice_summary_id
+                    AND o.publish_status = 'PENDING'
+              )
+            ORDER BY s.bid_notice_summary_id
+            LIMIT :batchLimit
+            """, nativeQuery = true)
+    List<Long> findOrphanedCandidateIds(
+            @Param("staleBefore") LocalDateTime staleBefore,
+            @Param("batchLimit") int batchLimit
     );
 }

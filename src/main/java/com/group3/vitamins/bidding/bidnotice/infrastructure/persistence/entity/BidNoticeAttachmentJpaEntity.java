@@ -25,7 +25,14 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BidNoticeAttachmentJpaEntity {
 
-    private static final String DEFAULT_ATTACHMENT_KIND = "NOTICE_SPEC";
+    // 링크형(첨부 URL) 첨부의 attachment_kind. 업로드형(MANUAL_UPLOAD)과 순번 네임스페이스가
+    // 겹치지 않도록 분리한다(UNIQUE(bid_notice_id, attachment_kind, attachment_order)).
+    public static final String LINK_ATTACHMENT_KIND = "NOTICE_SPEC";
+    public static final String UPLOAD_ATTACHMENT_KIND = "MANUAL_UPLOAD";
+
+    private static final String UPLOAD_STATUS_UPLOADING = "UPLOADING";
+    private static final String UPLOAD_STATUS_READY = "READY";
+    private static final String UPLOAD_STATUS_FAILED = "FAILED";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,8 +51,20 @@ public class BidNoticeAttachmentJpaEntity {
     @Column(name = "file_name", nullable = false, length = 500)
     private String fileName;
 
-    @Column(name = "source_url", nullable = false, length = 1000)
+    @Column(name = "source_url", length = 1000)
     private String sourceUrl;
+
+    @Column(name = "storage_key", length = 1000)
+    private String storageKey;
+
+    @Column(name = "upload_status", nullable = false, length = 20)
+    private String uploadStatus;
+
+    @Column(name = "size_bytes")
+    private Long sizeBytes;
+
+    @Column(name = "mime_type", length = 100)
+    private String mimeType;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -66,10 +85,11 @@ public class BidNoticeAttachmentJpaEntity {
                 new BidNoticeAttachmentJpaEntity();
 
         entity.bidNoticeId = bidNoticeId;
-        entity.attachmentKind = DEFAULT_ATTACHMENT_KIND;
+        entity.attachmentKind = LINK_ATTACHMENT_KIND;
         entity.attachmentOrder = convertOrder(attachment.order());
         entity.fileName = attachment.fileName();
         entity.sourceUrl = attachment.sourceUrl();
+        entity.uploadStatus = UPLOAD_STATUS_READY;
         entity.createdAt = now;
         return entity;
     }
@@ -83,10 +103,35 @@ public class BidNoticeAttachmentJpaEntity {
         BidNoticeAttachmentJpaEntity entity =
                 new BidNoticeAttachmentJpaEntity();
         entity.bidNoticeId = bidNoticeId;
-        entity.attachmentKind = DEFAULT_ATTACHMENT_KIND;
+        entity.attachmentKind = LINK_ATTACHMENT_KIND;
         entity.attachmentOrder = convertOrder(attachment.attachmentOrder());
         entity.fileName = attachment.fileName();
         entity.sourceUrl = attachment.sourceUrl();
+        entity.uploadStatus = UPLOAD_STATUS_READY;
+        entity.createdAt = now;
+        return entity;
+    }
+
+    // 직접 등록 공고의 업로드 대상 첨부를 UPLOADING 상태로 생성합니다. attachmentOrder는
+    // UPLOAD_ATTACHMENT_KIND 네임스페이스 안에서 호출자가 다음 순번을 계산해 넘긴다.
+    public static BidNoticeAttachmentJpaEntity createPendingUpload(
+            Long bidNoticeId,
+            int attachmentOrder,
+            String fileName,
+            String storageKey,
+            long sizeBytes,
+            String mimeType,
+            LocalDateTime now
+    ) {
+        BidNoticeAttachmentJpaEntity entity = new BidNoticeAttachmentJpaEntity();
+        entity.bidNoticeId = bidNoticeId;
+        entity.attachmentKind = UPLOAD_ATTACHMENT_KIND;
+        entity.attachmentOrder = convertOrder(attachmentOrder);
+        entity.fileName = fileName;
+        entity.storageKey = storageKey;
+        entity.uploadStatus = UPLOAD_STATUS_UPLOADING;
+        entity.sizeBytes = sizeBytes;
+        entity.mimeType = mimeType;
         entity.createdAt = now;
         return entity;
     }
@@ -123,6 +168,14 @@ public class BidNoticeAttachmentJpaEntity {
         this.updatedAt = now;
         this.deletedAt = null;
     }
+    public boolean isUploading() {
+        return UPLOAD_STATUS_UPLOADING.equals(this.uploadStatus);
+    }
+
+    public boolean isFailed() {
+        return UPLOAD_STATUS_FAILED.equals(this.uploadStatus);
+    }
+
     // 최신 공고 응답에서 사라진 첨부파일을 논리 삭제합니다.
     public void softDelete(LocalDateTime now) {
         if (this.deletedAt != null) {

@@ -1,12 +1,15 @@
 package com.group3.vitamins.bidding.bidsummary.presentation.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.group3.vitamins.bidding.bidsummary.application.command.AbandonBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.command.ConfirmBidNoticeSummaryCommand;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryQuery;
 import com.group3.vitamins.bidding.bidsummary.application.query.GetBidNoticeSummaryHistoryQuery;
+import com.group3.vitamins.bidding.bidsummary.application.result.AbandonBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.BidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.CreateBidNoticeSummaryResult;
 import com.group3.vitamins.bidding.bidsummary.application.result.ConfirmBidNoticeSummaryResult;
+import com.group3.vitamins.bidding.bidsummary.application.usecase.AbandonBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.ConfirmBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.CreateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSummaryUseCase;
@@ -14,6 +17,7 @@ import com.group3.vitamins.bidding.bidsummary.application.usecase.GetBidNoticeSu
 import com.group3.vitamins.bidding.bidsummary.application.usecase.UpdateBidNoticeSummaryUseCase;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.request.CreateBidNoticeSummaryRequest;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.request.UpdateBidNoticeSummaryRequest;
+import com.group3.vitamins.bidding.bidsummary.presentation.api.response.AbandonBidNoticeSummaryResponse;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.response.BidNoticeSummaryResponse;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.response.BidNoticeSummaryHistoryResponse;
 import com.group3.vitamins.bidding.bidsummary.presentation.api.response.ConfirmBidNoticeSummaryResponse;
@@ -47,6 +51,7 @@ public class BidNoticeSummaryController {
     private final GetBidNoticeSummaryUseCase getUseCase;
     private final UpdateBidNoticeSummaryUseCase updateUseCase;
     private final ConfirmBidNoticeSummaryUseCase confirmUseCase;
+    private final AbandonBidNoticeSummaryUseCase abandonUseCase;
 
     @Operation(
             summary = "입찰 공고 AI 요약 요청",
@@ -209,6 +214,36 @@ public class BidNoticeSummaryController {
         return ResponseEntity.ok(ApiResponse.of(
                 HttpStatus.OK.value(), "입찰 공고 AI 요약 확정 성공",
                 ConfirmBidNoticeSummaryResponse.from(result)
+        ));
+    }
+
+    @Operation(
+            summary = "입찰 AI 요약 중단",
+            description = "요청자가 진행 중(PENDING/PROCESSING)인 AI 요약을 스스로 끝냅니다. 이후 Worker가 결과를 " +
+                    "보내와도 조용히 무시됩니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "요약 중단 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "BIDDING_INVALID_SUMMARY_REQUEST"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "AUTH_UNAUTHENTICATED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "BIDDING_ACCESS_PERMISSION_REQUIRED"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "BIDDING_SUMMARY_NOT_FOUND"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "BIDDING_SUMMARY_NOT_ABANDONABLE")
+    })
+    @PatchMapping("/summaries/{summaryId}/abandon")
+    public ResponseEntity<ApiResponse<AbandonBidNoticeSummaryResponse>> abandon(
+            @Parameter(description = "중단할 AI 요약 ID") @PathVariable Long summaryId,
+            Authentication authentication
+    ) {
+        AbandonBidNoticeSummaryResult result = abandonUseCase.abandon(
+                new AbandonBidNoticeSummaryCommand(
+                        summaryId, authentication.getName(),
+                        RequesterRole.from(authentication)
+                )
+        );
+        return ResponseEntity.ok(ApiResponse.of(
+                HttpStatus.OK.value(), "입찰 공고 AI 요약 중단 성공",
+                AbandonBidNoticeSummaryResponse.from(result)
         ));
     }
 }

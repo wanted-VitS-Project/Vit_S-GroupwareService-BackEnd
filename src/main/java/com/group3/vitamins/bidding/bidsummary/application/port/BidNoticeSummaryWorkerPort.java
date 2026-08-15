@@ -33,6 +33,11 @@ public interface BidNoticeSummaryWorkerPort {
             LocalDateTime now
     );
 
+    // 살아있는(PENDING) outbox가 하나도 없이 오래 멈춘 요약을 찾아 재큐잉하거나, 재시도를 소진했으면
+    // 실패로 종료합니다. 정상 흐름에서는 발생하지 않아야 하는 상태를 방어적으로 복구하는 안전망입니다.
+    // 반환값은 실제로 손댄 건수입니다.
+    int recoverOrphaned(LocalDateTime staleBefore, int batchLimit, LocalDateTime now);
+
     record JobData(
             Long summaryId,
             Long companyId,

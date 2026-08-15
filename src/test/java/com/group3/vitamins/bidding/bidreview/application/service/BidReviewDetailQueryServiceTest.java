@@ -79,6 +79,7 @@ class BidReviewDetailQueryServiceTest {
         );
 
         assertThat(result.reviewId()).isEqualTo(REVIEW_ID);
+        assertThat(result.retryCount()).isEqualTo(2);
         assertThat(result.documents()).hasSize(2);
         assertThat(result.documents())
                 .filteredOn(document -> "COMPANY_DOCUMENT_REFERENCE".equals(document.documentRole()))
@@ -147,7 +148,7 @@ class BidReviewDetailQueryServiceTest {
         return new ReviewRow(
                 REVIEW_ID, companyId, NOTICE_ID, requestedBy,
                 "검토 지시", "COMPLETED", "검토 결과", null,
-                NOW, NOW, null, null
+                NOW, NOW, null, null, 2
         );
     }
 }

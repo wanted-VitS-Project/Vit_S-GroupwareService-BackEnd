@@ -5,7 +5,7 @@ import java.time.LocalDate;
 public record SearchBidNoticesQuery(
         LocalDate startDate, LocalDate endDate, String noticeAgency,
         Long businessCategoryId, String region, Boolean deadlineSoon,
-        String keyword, String noticeStatus, String sort,
+        String keyword, String noticeStatus, Boolean favorite, String sort,
         int page, int size, String userId, String role
 ) {
 }

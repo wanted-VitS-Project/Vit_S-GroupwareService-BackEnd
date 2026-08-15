@@ -31,6 +31,7 @@ public class BidReviewSourceQueryAdapter implements BidReviewSourceQueryPort {
                    AND state.company_id = :companyId
                 WHERE attachment.bid_notice_id = :noticeId
                   AND attachment.deleted_at IS NULL
+                  AND attachment.upload_status = 'READY'
                   AND notice.deleted_at IS NULL
                   AND state.notice_status <> 'DISMISSED'
                 ORDER BY

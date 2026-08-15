@@ -97,6 +97,16 @@ public enum BiddingErrorCode implements ErrorCode {
             "제외 상태가 아닌 입찰 공고입니다."
     ),
 
+    BIDDING_NOTICE_ALREADY_FAVORITED(
+            "BIDDING_NOTICE_ALREADY_FAVORITED",
+            "이미 관심 등록된 입찰 공고입니다."
+    ),
+
+    BIDDING_NOTICE_NOT_FAVORITED(
+            "BIDDING_NOTICE_NOT_FAVORITED",
+            "관심 등록되지 않은 입찰 공고입니다."
+    ),
+
     BIDDING_INVALID_SUMMARY_REQUEST(
             "BIDDING_INVALID_SUMMARY_REQUEST",
             "입찰 공고 AI 요약 요청이 올바르지 않습니다."
@@ -136,6 +146,11 @@ public enum BiddingErrorCode implements ErrorCode {
             "수정할 수 없는 입찰 공고 AI 요약입니다."
     ),
 
+    BIDDING_SUMMARY_NOT_ABANDONABLE(
+            "BIDDING_SUMMARY_NOT_ABANDONABLE",
+            "진행 중이 아닌 입찰 공고 AI 요약은 중단할 수 없습니다."
+    ),
+
     BIDDING_SUMMARY_NOT_COMPLETED(
             "BIDDING_SUMMARY_NOT_COMPLETED",
             "완료되지 않은 입찰 공고 AI 요약은 확정할 수 없습니다."
@@ -154,6 +169,36 @@ public enum BiddingErrorCode implements ErrorCode {
     BIDDING_SUMMARY_ALREADY_LINKED(
             "BIDDING_SUMMARY_ALREADY_LINKED",
             "이미 다른 프로젝트에 연결된 입찰 공고 AI 요약입니다."
+    ),
+
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_LIMIT_EXCEEDED(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_LIMIT_EXCEEDED",
+            "직접 등록 공고 첨부는 최대 10개까지 등록할 수 있습니다."
+    ),
+
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_NOT_FOUND(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_NOT_FOUND",
+            "업로드 대상 첨부를 찾을 수 없습니다."
+    ),
+
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_ALREADY_COMPLETED",
+            "이미 완료 처리된 업로드입니다."
+    ),
+
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_UPLOAD_FAILED",
+            "이미 실패로 종료된 업로드입니다. 새 업로드를 다시 시작해 주세요."
+    ),
+
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_OBJECT_NOT_FOUND",
+            "업로드한 파일을 저장소에서 찾을 수 없습니다."
+    ),
+
+    BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH(
+            "BIDDING_MANUAL_NOTICE_ATTACHMENT_SIZE_MISMATCH",
+            "업로드된 파일 크기가 요청과 다릅니다."
     );
 
     private final String code;

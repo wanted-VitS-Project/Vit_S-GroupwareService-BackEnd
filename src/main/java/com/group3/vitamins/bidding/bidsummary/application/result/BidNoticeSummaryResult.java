@@ -22,6 +22,7 @@ public record BidNoticeSummaryResult(
         LocalDateTime confirmedAt,
         Long projectId,
         String errorMessage,
+        int retryCount,
         LocalDateTime requestedAt,
         LocalDateTime completedAt,
         LocalDateTime updatedAt
@@ -35,7 +36,7 @@ public record BidNoticeSummaryResult(
                 details.qualificationSummary(), details.taskSummary(),
                 details.riskSummary(), details.confirmed(),
                 details.confirmedBy(), details.confirmedAt(),
-                details.projectId(), details.errorMessage(),
+                details.projectId(), details.errorMessage(), details.retryCount(),
                 details.requestedAt(), details.completedAt(), details.updatedAt()
         );
     }
