@@ -82,8 +82,13 @@
         </foreach>
     </select>
 
+    <!--
+        ⚠️ INSERT IGNORE 대신 무의미한 자기 자신 대입으로 UNIQUE(bid_notice_id, raw_payload_hash)
+        충돌만 조용히 넘긴다. INSERT IGNORE는 잘못된 JSON·NOT NULL·FK 위반 같은 무관한 오류까지
+        전부 경고로 낮춰서 원문 저장이 조용히 누락돼도 알 수가 없다.
+    -->
     <insert id="insertRawRecords">
-        INSERT IGNORE INTO bid_notice_raw (
+        INSERT INTO bid_notice_raw (
             bid_notice_id, crawl_run_id, source_code, payload_type,
             raw_payload, raw_payload_hash, parsed_at, created_at
         ) VALUES
@@ -94,6 +99,7 @@
             #{parsedAt}, #{parsedAt}
         )
         </foreach>
+        ON DUPLICATE KEY UPDATE bid_notice_id = bid_notice_id
     </insert>
 
     <update id="touchObservedAtBulk">
