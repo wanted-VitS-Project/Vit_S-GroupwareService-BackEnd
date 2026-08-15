@@ -20,12 +20,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class CollectionRunService implements CollectionRunUseCase {
+
+    private static final int MAX_MANUAL_RANGE_DAYS = 31;
 
     private final CollectionRunConditionPort conditionPort;
     private final CollectionRunRepository runRepository;
@@ -37,6 +40,7 @@ public class CollectionRunService implements CollectionRunUseCase {
     @Override
     public CollectionRunResult start(StartCollectionRunCommand command) {
         validateStartCommand(command);
+        validateCustomRange(command);
 
         Long companyId = currentCompanyIdProvider.currentCompanyId();
 
@@ -57,7 +61,9 @@ public class CollectionRunService implements CollectionRunUseCase {
                 companyId,
                 CollectionRunTriggerType.MANUAL,
                 command.userId(),
-                LocalDateTime.now(clock)
+                LocalDateTime.now(clock),
+                command.startedAt(),
+                command.endedAt()
         );
 
         return CollectionRunResult.from(savedRun);
@@ -97,6 +103,26 @@ public class CollectionRunService implements CollectionRunUseCase {
                 || query.runId() == null
                 || query.runId() <= 0) {
             throw invalidRunRequest();
+        }
+    }
+
+    // 수동 지정 조회 구간이 있으면 함께 지정됐는지, 순서와 최대 폭을 지켰는지 검증합니다.
+    private void validateCustomRange(StartCollectionRunCommand command) {
+        LocalDateTime startedAt = command.startedAt();
+        LocalDateTime endedAt = command.endedAt();
+
+        if (startedAt == null && endedAt == null) {
+            return;
+        }
+        if (startedAt == null || endedAt == null || !startedAt.isBefore(endedAt)) {
+            throw new ValidationException(
+                    BiddingErrorCode.BIDDING_COLLECTION_RUN_RANGE_INVALID
+            );
+        }
+        if (Duration.between(startedAt, endedAt).toDays() > MAX_MANUAL_RANGE_DAYS) {
+            throw new ValidationException(
+                    BiddingErrorCode.BIDDING_COLLECTION_RUN_RANGE_TOO_WIDE
+            );
         }
     }
 

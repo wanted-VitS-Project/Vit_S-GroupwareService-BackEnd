@@ -47,6 +47,9 @@ public class CollectionConditionJpaEntity {
     @Column(name = "enabled", nullable = false)
     private boolean enabled;
 
+    @Column(name = "lookback_period", nullable = false, length = 20)
+    private String lookbackPeriod;
+
     @Column(name = "auto_collection_enabled", nullable = false)
     private boolean autoCollectionEnabled;
 
@@ -91,6 +94,7 @@ public class CollectionConditionJpaEntity {
             String conditionName,
             JsonNode params,
             boolean enabled,
+            String lookbackPeriod,
             boolean autoCollectionEnabled,
             String scheduleType,
             LocalTime scheduledTime,
@@ -110,6 +114,7 @@ public class CollectionConditionJpaEntity {
         this.conditionName = conditionName;
         this.params = params;
         this.enabled = enabled;
+        this.lookbackPeriod = lookbackPeriod;
         this.autoCollectionEnabled = autoCollectionEnabled;
         this.scheduleType = scheduleType;
         this.scheduledTime = scheduledTime;
@@ -133,7 +138,7 @@ public class CollectionConditionJpaEntity {
             LocalDateTime deletedAt
     ) {
         this(crawlConditionId, companyId, crawlSource, conditionName, params,
-                enabled, false, null, null, null, null, null,
+                enabled, "ONE_WEEK", false, null, null, null, null, null,
                 lastSuccessAt, lastCollectedCount, createdBy, createdAt,
                 updatedAt, deletedAt);
     }

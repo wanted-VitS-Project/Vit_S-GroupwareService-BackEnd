@@ -87,6 +87,7 @@ class CollectionConditionRepositoryAdapterTest {
         CollectionCondition source = CollectionCondition.create(
                 COMPANY_ID, "NARA", "평일 자동 수집",
                 List.of(BidNoticeType.SERVICE), condition(COMPANY_ID).getFilters(),
+                CollectionLookbackPeriod.ONE_WEEK,
                 true, true, CollectionScheduleType.WEEKDAYS,
                 LocalTime.of(9, 0), "Asia/Seoul", nextRunAt,
                 "EMP001", LocalDateTime.of(2026, 8, 11, 10, 0)
@@ -254,6 +255,7 @@ class CollectionConditionRepositoryAdapterTest {
                 name,
                 List.of(BidNoticeType.SERVICE),
                 condition(COMPANY_ID).getFilters(),
+                CollectionLookbackPeriod.ONE_WEEK,
                 active,
                 autoCollectionEnabled,
                 autoCollectionEnabled ? CollectionScheduleType.DAILY : null,
