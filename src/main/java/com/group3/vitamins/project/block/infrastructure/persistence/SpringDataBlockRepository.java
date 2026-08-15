@@ -19,6 +19,18 @@ public interface SpringDataBlockRepository extends JpaRepository<BlockJpaEntity,
 
     List<BlockJpaEntity> findByBlockIdInAndDeletedAtIsNull(Collection<Long> blockIds);
 
+    List<BlockJpaEntity> findByStepIdInAndDeletedAtIsNullOrderByStepIdAscRowIndexAscSortOrderAsc(
+            Collection<Long> stepIds);
+
+    /**
+     * 프로젝트의 살아있는 블록 수 (복제 상한 판정 · PRJ-018).
+     * {@code block.project_id} 가 없어 {@code step} 을 조인한다 — {@code idx_step_project} + {@code idx_block_step} 커버.
+     */
+    @Query("select count(b) from BlockJpaEntity b, StepJpaEntity s "
+            + "where b.stepId = s.stepId and s.projectId = :projectId "
+            + "and b.deletedAt is null and s.deletedAt is null")
+    int countByProjectId(@Param("projectId") Long projectId);
+
     boolean existsByStepIdAndTypeAndDeletedAtIsNull(Long stepId, BlockType type);
 
     Optional<BlockJpaEntity> findByTypeAndTypeIdAndDeletedAtIsNull(BlockType type, Long typeId);

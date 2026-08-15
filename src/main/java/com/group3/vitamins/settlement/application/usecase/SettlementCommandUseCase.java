@@ -19,6 +19,7 @@ public interface SettlementCommandUseCase {
             Long plannedAmount,
             Long plannedTaxAmount,
             LocalDate plannedDate,
+            LocalDate taxInvoiceDueDate,
             String traderName,
             String bankName,
             String maskedAccountNumber,

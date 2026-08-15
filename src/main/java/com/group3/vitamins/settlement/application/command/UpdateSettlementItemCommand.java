@@ -12,6 +12,7 @@ public record UpdateSettlementItemCommand(
         Long plannedAmount,
         Long plannedTaxAmount,
         LocalDate plannedDate,
+        LocalDate taxInvoiceDueDate,
         String traderName,
         String bankName,
         String accountNumber,

@@ -27,6 +27,10 @@ public class BidReviewCallbackService implements HandleBidReviewCallbackUseCase 
     private static final String DEFAULT_IGNORED_REASON =
             "attempt_mismatch_or_already_finished";
 
+    private static final String ROLE_BID_ATTACHMENT = "BID_ATTACHMENT";
+    private static final String ROLE_INTERNAL_REFERENCE = "INTERNAL_REFERENCE";
+    private static final String ROLE_COMPANY_DOCUMENT_REFERENCE = "COMPANY_DOCUMENT_REFERENCE";
+
     private final BidReviewWorkerPort workerPort;
     private final Clock clock;
 
@@ -116,6 +120,7 @@ public class BidReviewCallbackService implements HandleBidReviewCallbackUseCase 
                         citation.documentRole(),
                         citation.bidAttachmentId(),
                         citation.referenceFileId(),
+                        citation.companyDocumentVersionId(),
                         citation.fileName(),
                         citation.pageNumber(),
                         citation.sheetName(),
@@ -167,6 +172,43 @@ public class BidReviewCallbackService implements HandleBidReviewCallbackUseCase 
                 || command.retryable()) {
             invalid();
         }
+        validateCitations(command.citations());
+    }
+
+    // citation마다 documentRole에 맞는 식별자만 채워져 있는지 확인한다. 검증 없이 넘기면
+    // 역할과 식별자가 어긋난 값(예: BID_ATTACHMENT인데 referenceFileId만 있음)이 저장소 조회에서
+    // 다른 문서의 근거로 잘못 연결될 수 있다(CodeRabbit 2026-08-13 피드백).
+    private void validateCitations(List<HandleBidReviewCallbackCommand.CitationInputCommand> citations) {
+        if (citations == null) {
+            return;
+        }
+
+        for (HandleBidReviewCallbackCommand.CitationInputCommand citation : citations) {
+            if (!hasConsistentIdentifier(citation)) {
+                invalid();
+            }
+        }
+    }
+
+    private boolean hasConsistentIdentifier(HandleBidReviewCallbackCommand.CitationInputCommand citation) {
+        boolean hasAttachmentId = isPositive(citation.bidAttachmentId());
+        boolean hasReferenceFileId = isPositive(citation.referenceFileId());
+        boolean hasCompanyDocumentVersionId = isPositive(citation.companyDocumentVersionId());
+
+        if (ROLE_BID_ATTACHMENT.equals(citation.documentRole())) {
+            return hasAttachmentId && !hasReferenceFileId && !hasCompanyDocumentVersionId;
+        }
+        if (ROLE_INTERNAL_REFERENCE.equals(citation.documentRole())) {
+            return hasReferenceFileId && !hasAttachmentId && !hasCompanyDocumentVersionId;
+        }
+        if (ROLE_COMPANY_DOCUMENT_REFERENCE.equals(citation.documentRole())) {
+            return hasCompanyDocumentVersionId && !hasAttachmentId && !hasReferenceFileId;
+        }
+        return false;
+    }
+
+    private boolean isPositive(Long value) {
+        return value != null && value > 0;
     }
 
     private void validateFailed(HandleBidReviewCallbackCommand command) {

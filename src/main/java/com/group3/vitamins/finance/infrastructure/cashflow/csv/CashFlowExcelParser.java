@@ -42,6 +42,7 @@ public class CashFlowExcelParser {
 
     private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter TIME_ONLY = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final DataFormatter dataFormatter = new DataFormatter();
 
@@ -59,6 +60,13 @@ public class CashFlowExcelParser {
 
             int headerRowIndex = findHeaderRowIndex(sheet, lastRowNum);
             Row headerRow = sheet.getRow(headerRowIndex);
+            // ⚠️ null 체크 필요 (2026-08-13, CodeRabbit 지적) — findHeaderRowIndex는 값이 채워진 행을 하나도
+            // 못 찾으면 초기값 0을 돌려주는데, 0번 행 객체 자체가 없는 시트(서식만 남은 빈 시트, 아래쪽
+            // 행에만 셀이 있는 시트)면 getRow(0)이 null이다. 그대로 readHeaders에 넘기면 NPE가 나고,
+            // 아래 포괄 catch가 404로 바꿔버려서 로그에 NPE 스택만 남아 원인 추적이 어렵다.
+            if (headerRow == null) {
+                throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
+            }
             HeaderColumns headerColumns = readHeaders(headerRow);
             if (headerColumns.headers().isEmpty()) {
                 throw new NotFoundException(FinanceErrorCode.FINANCE_INVALID_CSV_FILE);
@@ -214,13 +222,23 @@ public class CashFlowExcelParser {
     }
 
     /**
-     * 날짜 서식 셀은 시간이 자정이면 날짜만("yyyy-MM-dd"), 아니면 날짜+시간("yyyy-MM-dd HH:mm:ss")으로
-     * 정규화한다(뒤 단계의 {@code CashFlowCsvRowParser}가 이미 이 두 포맷을 시도 목록에 갖고 있다).
-     * 일반 숫자는 BigDecimal로 훑어 "12345.0"·과학표기 오염을 없앤다.
+     * 날짜 서식 셀은 세 갈래로 정규화한다 — 시각만 있으면 "HH:mm:ss", 시간이 자정이면 날짜만
+     * "yyyy-MM-dd", 둘 다 있으면 "yyyy-MM-dd HH:mm:ss"(뒤 단계의 {@code CashFlowCsvRowParser}가 이
+     * 포맷들을 시도 목록에 갖고 있다). 일반 숫자는 BigDecimal로 훑어 "12345.0"·과학표기 오염을 없앤다.
+     *
+     * <p>⚠️ **시각 전용 셀 처리는 값(시리얼)이 1 미만인지로 판정한다** (2026-08-13, 프론트 제보로 발견).
+     * 엑셀은 "11:20:15"처럼 시각만 넣은 셀을 "0일차 + 시각"인 소수(0.472…)로 저장하고, 이걸 그대로
+     * {@code getLocalDateTimeCellValue()}로 읽으면 기준일인 **1899-12-31이 날짜로 따라붙는다.**
+     * 거래일자·거래시간이 분리된 은행 엑셀(SEPARATE)에서 미리보기에 "1899-12-31 11:20:15"가 보이고
+     * 업로드는 "시간 형식을 해석할 수 없습니다"로 실패하던 원인이 이것이다. 하루 미만이면 날짜 성분이
+     * 애초에 없는 값이므로 시각만 남긴다.
      */
     private String numeric(Cell cell) {
         if (DateUtil.isCellDateFormatted(cell)) {
             LocalDateTime dateTime = cell.getLocalDateTimeCellValue();
+            if (cell.getNumericCellValue() < 1.0d) {
+                return dateTime.toLocalTime().format(TIME_ONLY);
+            }
             return dateTime.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)
                     ? dateTime.toLocalDate().format(DATE_ONLY)
                     : dateTime.format(DATE_TIME);

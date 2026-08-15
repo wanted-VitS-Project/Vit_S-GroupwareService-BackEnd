@@ -28,7 +28,28 @@ public enum FinanceErrorCode implements ErrorCode {
     FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE("FINANCE_CASH_FLOW_LINKED_CANNOT_EXCLUDE",
             "이미 매칭된 항목은 제외 처리할 수 없습니다."),
     FINANCE_CASH_FLOW_AMOUNT_INVALID("FINANCE_CASH_FLOW_AMOUNT_INVALID", "금액은 0보다 커야 합니다."),
-    FINANCE_PAGE_QUERY_INVALID("FINANCE_PAGE_QUERY_INVALID", "페이지 조회 조건이 올바르지 않습니다.");
+    FINANCE_PAGE_QUERY_INVALID("FINANCE_PAGE_QUERY_INVALID", "페이지 조회 조건이 올바르지 않습니다."),
+    FINANCE_TAX_INVOICE_NOT_FOUND("FINANCE_TAX_INVOICE_NOT_FOUND", "존재하지 않는 세금계산서입니다."),
+    FINANCE_TAX_INVOICE_ALREADY_MATCHED("FINANCE_TAX_INVOICE_ALREADY_MATCHED", "이미 매칭된 항목입니다."),
+    FINANCE_TAX_MATCH_TARGET_NOT_FOUND("FINANCE_TAX_MATCH_TARGET_NOT_FOUND", "존재하지 않는 세금계산서 또는 정산 블록입니다."),
+    FINANCE_TAX_TYPE_MISMATCH("FINANCE_TAX_TYPE_MISMATCH", "세금계산서 구분과 정산 블록 타입이 일치하지 않습니다."),
+    FINANCE_TAX_INVOICE_NOT_MATCHED("FINANCE_TAX_INVOICE_NOT_MATCHED", "매칭되지 않은 항목입니다."),
+    // 아래 3개는 메시지가 입출금 쪽 코드와 같지만 code 문자열 자체가 API 계약이라(프론트가 이 값으로
+    // 에러 분기를 짠다) 세금계산서 전용으로 새로 만든다 — 세금계산서 API에서 FINANCE_CASH_FLOW_* 가
+    // 나가면 분기 코드가 헷갈린다. 매칭 3종에서 이미 세운 기조와 동일하다.
+    FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING("FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING",
+            "필수 항목이 누락되었습니다."),
+    FINANCE_TAX_INVOICE_LINKED_CANNOT_DELETE("FINANCE_TAX_INVOICE_LINKED_CANNOT_DELETE",
+            "매칭된 항목은 삭제할 수 없습니다. 먼저 매칭을 해제해주세요."),
+    FINANCE_TAX_INVOICE_LINKED_CANNOT_EXCLUDE("FINANCE_TAX_INVOICE_LINKED_CANNOT_EXCLUDE",
+            "이미 매칭된 항목은 제외 처리할 수 없습니다."),
+    // 2026-08-13 신설 — "매칭된 항목은 제외 못 함"만 있고 그 반대가 없어서, 제외 처리된 항목을 정산 블록에
+    // 매칭할 수 있었다. is_excluded는 "프로젝트와 무관해 미연결 집계에서 뺄 대상"이라는 뜻이라 정산 블록에
+    // 붙이는 것과 앞뒤가 안 맞고, 붙으면 "미연결 집계에선 빠졌는데 정산 현황엔 연결로 보이는" 상태가 된다.
+    FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH("FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH",
+            "제외 처리된 항목은 매칭할 수 없습니다. 먼저 제외를 취소해주세요."),
+    FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH("FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH",
+            "제외 처리된 항목은 매칭할 수 없습니다. 먼저 제외를 취소해주세요.");
     // 401(미인증)·500(예상 못한 서버 오류)은 도메인 코드로 안 만든다 — GlobalExceptionHandler 가
     // AUTH_UNAUTHENTICATED/COMMON_INTERNAL_ERROR 로 공통 처리한다.
 

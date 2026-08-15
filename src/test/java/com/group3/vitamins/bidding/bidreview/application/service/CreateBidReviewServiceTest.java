@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.bidreview.application.service;
 
 import com.group3.vitamins.bidding.bidreview.application.command.CreateBidReviewCommand;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCommandPort;
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewCompanyDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewReferenceFilePort;
 import com.group3.vitamins.bidding.bidreview.application.result.CreateBidReviewResult;
@@ -41,6 +42,7 @@ class CreateBidReviewServiceTest {
     private static final Long NOTICE_ID = 20L;
     private static final Long ATTACHMENT_ID = 30L;
     private static final Long REFERENCE_FILE_ID = 40L;
+    private static final Long COMPANY_DOCUMENT_VERSION_ID = 50L;
     private static final String USER_ID = "EMP001";
     private static final String ROLE = "MEMBER";
     private static final String PROMPT = "기준 문서와 비교해서 금액·일정 관련 리스크를 짚어줘.";
@@ -49,6 +51,7 @@ class CreateBidReviewServiceTest {
     private BidReviewCommandPort commandPort;
     private BidReviewNoticeDocumentPort noticeDocumentPort;
     private BidReviewReferenceFilePort referenceFilePort;
+    private BidReviewCompanyDocumentPort companyDocumentPort;
     private BiddingAccessPolicy biddingAccessPolicy;
     private CreateBidReviewService service;
 
@@ -57,6 +60,7 @@ class CreateBidReviewServiceTest {
         commandPort = mock(BidReviewCommandPort.class);
         noticeDocumentPort = mock(BidReviewNoticeDocumentPort.class);
         referenceFilePort = mock(BidReviewReferenceFilePort.class);
+        companyDocumentPort = mock(BidReviewCompanyDocumentPort.class);
         biddingAccessPolicy = mock(BiddingAccessPolicy.class);
         CurrentCompanyIdProvider companyIdProvider = mock(CurrentCompanyIdProvider.class);
         Clock clock = Clock.fixed(
@@ -68,6 +72,7 @@ class CreateBidReviewServiceTest {
                 commandPort,
                 noticeDocumentPort,
                 referenceFilePort,
+                companyDocumentPort,
                 biddingAccessPolicy,
                 companyIdProvider,
                 clock
@@ -76,7 +81,7 @@ class CreateBidReviewServiceTest {
         when(companyIdProvider.currentCompanyId()).thenReturn(COMPANY_ID);
         when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
                 .thenReturn(Optional.of(new BidReviewNoticeDocumentPort.NoticeSnapshot(
-                        NOTICE_ID, "스마트시티 통합관제 플랫폼 구축 용역"
+                        NOTICE_ID, "스마트시티 통합관제 플랫폼 구축 용역", null
                 )));
         when(noticeDocumentPort.findAttachments(COMPANY_ID, NOTICE_ID, List.of(ATTACHMENT_ID)))
                 .thenReturn(List.of(new BidReviewNoticeDocumentPort.AttachmentSnapshot(
@@ -176,6 +181,49 @@ class CreateBidReviewServiceTest {
     }
 
     @Test
+    @DisplayName("사내 문서함 참조를 선택하면 COMPANY_DOCUMENT_REFERENCE 문서로 함께 생성한다")
+    void createsPendingReviewWithCompanyDocumentReference() {
+        when(companyDocumentPort.findAccessibleDocuments(List.of(COMPANY_DOCUMENT_VERSION_ID)))
+                .thenReturn(List.of(readyCompanyDocument()));
+
+        CreateBidReviewResult result = service.create(command(
+                List.of(ATTACHMENT_ID), List.of(), List.of(COMPANY_DOCUMENT_VERSION_ID)
+        ));
+
+        assertThat(result.reviewId()).isEqualTo(100L);
+
+        ArgumentCaptor<List<BidReviewDocument>> documentsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(commandPort).savePendingWithDocumentsAndOutbox(any(), documentsCaptor.capture());
+
+        List<BidReviewDocument> documents = documentsCaptor.getValue();
+        assertThat(documents)
+                .extracting(BidReviewDocument::documentRole)
+                .containsExactlyInAnyOrder(
+                        BidReviewDocumentRole.BID_ATTACHMENT,
+                        BidReviewDocumentRole.COMPANY_DOCUMENT_REFERENCE
+                );
+        assertThat(documents)
+                .filteredOn(document -> document.documentRole() == BidReviewDocumentRole.COMPANY_DOCUMENT_REFERENCE)
+                .extracting(BidReviewDocument::companyDocumentVersionId)
+                .containsExactly(COMPANY_DOCUMENT_VERSION_ID);
+    }
+
+    @Test
+    @DisplayName("다른 회사 소속이거나 미완료된 사내 문서함 참조가 섞이면 접근을 거부한다")
+    void rejectsWhenCompanyDocumentNotAccessibleForCompany() {
+        when(companyDocumentPort.findAccessibleDocuments(List.of(COMPANY_DOCUMENT_VERSION_ID)))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(command(
+                List.of(ATTACHMENT_ID), List.of(), List.of(COMPANY_DOCUMENT_VERSION_ID)
+        )))
+                .isInstanceOf(ForbiddenException.class)
+                .satisfies(exception -> assertThat(((ForbiddenException) exception).getErrorCode())
+                        .isEqualTo(BidReviewErrorCode.BIDDING_REVIEW_DOCUMENT_ACCESS_DENIED));
+        verify(commandPort, never()).savePendingWithDocumentsAndOutbox(any(), any());
+    }
+
+    @Test
     @DisplayName("같은 회사·공고·요청자의 활성 검토가 있으면 사전 검사에서 거부한다")
     void rejectsWhenActiveReviewAlreadyExists() {
         when(commandPort.existsProcessing(COMPANY_ID, NOTICE_ID, USER_ID))
@@ -249,10 +297,19 @@ class CreateBidReviewServiceTest {
             List<Long> bidAttachmentIds,
             List<Long> referenceFileIds
     ) {
+        return command(bidAttachmentIds, referenceFileIds, List.of());
+    }
+
+    private CreateBidReviewCommand command(
+            List<Long> bidAttachmentIds,
+            List<Long> referenceFileIds,
+            List<Long> companyDocumentVersionIds
+    ) {
         return new CreateBidReviewCommand(
                 NOTICE_ID,
                 bidAttachmentIds,
                 referenceFileIds,
+                companyDocumentVersionIds,
                 PROMPT,
                 USER_ID,
                 ROLE
@@ -262,6 +319,12 @@ class CreateBidReviewServiceTest {
     private BidReviewReferenceFilePort.ReferenceFileSnapshot readyReference() {
         return new BidReviewReferenceFilePort.ReferenceFileSnapshot(
                 REFERENCE_FILE_ID, "회사소개서.pdf", "COMPLETED", "COMPLETED"
+        );
+    }
+
+    private BidReviewCompanyDocumentPort.CompanyDocumentReferenceSnapshot readyCompanyDocument() {
+        return new BidReviewCompanyDocumentPort.CompanyDocumentReferenceSnapshot(
+                COMPANY_DOCUMENT_VERSION_ID, "재무제표.xlsx"
         );
     }
 

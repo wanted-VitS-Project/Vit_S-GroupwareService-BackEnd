@@ -109,7 +109,10 @@ public record BidReviewCallbackRequest(
             @Schema(description = "근거 순위")
             int rankOrder,
 
-            @Schema(description = "문서 역할", allowableValues = {"BID_ATTACHMENT", "INTERNAL_REFERENCE"})
+            @Schema(
+                    description = "문서 역할",
+                    allowableValues = {"BID_ATTACHMENT", "INTERNAL_REFERENCE", "COMPANY_DOCUMENT_REFERENCE"}
+            )
             String documentRole,
 
             @Schema(description = "공고 첨부 ID")
@@ -117,6 +120,9 @@ public record BidReviewCallbackRequest(
 
             @Schema(description = "입찰 기준자료 ID")
             Long referenceFileId,
+
+            @Schema(description = "사내 문서함 참조 버전 ID")
+            Long companyDocumentVersionId,
 
             @Schema(description = "파일명")
             String fileName,
@@ -137,6 +143,7 @@ public record BidReviewCallbackRequest(
                     documentRole,
                     bidAttachmentId,
                     referenceFileId,
+                    companyDocumentVersionId,
                     fileName,
                     pageNumber,
                     sheetName,

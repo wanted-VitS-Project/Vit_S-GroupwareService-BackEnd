@@ -8,6 +8,15 @@ public record ProjectImageItemResponse(
         @Schema(description = "속한 블록 ID", example = "3")
         Long imgBlockId,
 
+        @Schema(description = "속한 블록 제목. 제목을 지정하지 않은 블록이면 null", example = "현장 사진", nullable = true)
+        String blockTitle,
+
+        @Schema(description = "속한 스텝 ID", example = "7")
+        Long stepId,
+
+        @Schema(description = "속한 스텝 이름", example = "실시설계")
+        String stepName,
+
         @Schema(description = "이미지 ID", example = "10")
         Long imgId,
 

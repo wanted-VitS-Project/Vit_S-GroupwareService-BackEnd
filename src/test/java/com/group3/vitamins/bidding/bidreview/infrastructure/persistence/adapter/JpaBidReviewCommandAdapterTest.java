@@ -112,7 +112,7 @@ class JpaBidReviewCommandAdapterTest {
     void ignoresCompletedReviewWhenDetectingActiveProcessing() {
         BidReviewJpaEntity completed = BidReviewJpaEntity.from(
                 pendingReview(COMPANY_ID, UUID.randomUUID().toString())
-                        .complete("검토 결과 요약", NOW)
+                        .complete("검토 결과 요약", NOW, null)
         );
         reviewRepository.saveAndFlush(completed);
 

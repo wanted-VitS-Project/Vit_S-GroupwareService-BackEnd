@@ -168,6 +168,13 @@ public class JpaCollectionRunOutboxStoreAdapter
         }
     }
 
+    // 발행 완료 후 오래된 Outbox 행을 정리합니다.
+    @Override
+    @Transactional
+    public int deletePublishedBefore(LocalDateTime cutoff) {
+        return outboxRepository.deletePublishedBefore(cutoff);
+    }
+
     // DB payload를 Redis Publisher가 사용할 모델로 복원합니다.
     private ClaimedCollectionRunOutbox toClaimedOutbox(
             CollectionRunOutboxJpaEntity outbox

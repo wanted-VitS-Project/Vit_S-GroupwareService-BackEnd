@@ -28,6 +28,7 @@ public record HandleBidReviewCallbackCommand(
             String documentRole,
             Long bidAttachmentId,
             Long referenceFileId,
+            Long companyDocumentVersionId,
             String fileName,
             Integer pageNumber,
             String sheetName,

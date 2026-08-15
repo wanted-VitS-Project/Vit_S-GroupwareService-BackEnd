@@ -67,9 +67,23 @@ public record SettlementProjectListResponse(
                     + "미완료 회차가 없으면 null", example = "2026-09-10", nullable = true)
             LocalDate nextPlannedDate,
 
-            @Schema(description = "대표 상태 문구. 지금은 \"정산완료\"(모든 회차 완료) 또는 \"미연결 N건\" "
-                    + "(미연결 회차 수) 둘 중 하나만 나간다 — 추후 세분화될 수 있다", example = "미연결 2건")
-            String settlementStatusSummary,
+            @Schema(description = "입출금이 아직 연결되지 않은 회차 수 (세금계산서만 연결된 회차도 포함). "
+                    + "2026-08-14부터 문자열 settlementStatusSummary를 대체한다 — \"정산완료\" 여부는 "
+                    + "completedRoundCount == totalRoundCount 로 판단하면 된다", example = "2")
+            Integer paymentUnlinkedCount,
+
+            @Schema(description = "세금계산서가 연결되지 않은 회차 수. 입출금 연결 여부와 무관하게 "
+                    + "세금계산서만 기준으로 센다(입금이 끝난 회차도 세금계산서가 없으면 포함된다)",
+                    example = "3")
+            Integer taxInvoiceUnlinkedCount,
+
+            @Schema(description = "입출금 지연일 — 입출금 기한이 지났는데 아직 연결되지 않은 회차 중 "
+                    + "가장 오래 밀린 일수. 지연이 없으면 0", example = "5")
+            Integer paymentOverdueDays,
+
+            @Schema(description = "세금계산서 지연일 — 세금계산서 기한이 지났는데 아직 연결되지 않은 회차 중 "
+                    + "가장 오래 밀린 일수. 기한이 없는 회차(면세 등)는 제외한다. 지연이 없으면 0", example = "3")
+            Integer taxInvoiceOverdueDays,
 
             @Schema(description = "프로젝트 상태", example = "IN_PROGRESS")
             String projectStatus,
@@ -91,7 +105,10 @@ public record SettlementProjectListResponse(
                     view.completedRoundCount(),
                     view.totalRoundCount(),
                     view.nextPlannedDate(),
-                    view.settlementStatusSummary(),
+                    view.paymentUnlinkedCount(),
+                    view.taxInvoiceUnlinkedCount(),
+                    view.paymentOverdueDays(),
+                    view.taxInvoiceOverdueDays(),
                     view.projectStatus(),
                     view.endedOn()
             );

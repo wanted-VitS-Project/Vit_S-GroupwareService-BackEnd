@@ -91,10 +91,13 @@ public record BidReview(
         );
     }
 
-    // AI 검토 결과를 완료 상태로 저장하고 임시파일 만료 시각을 설정합니다.
+    // AI 검토 결과를 완료 상태로 저장하고 임시파일 만료 시각을 설정합니다. 공고 입찰마감일시까지
+    // 보관하고(2026-08-13 정책 변경 - 종전 완료 후 고정 3시간), 마감일이 없거나 이미 지났으면
+    // 완료 시각 + 3시간으로 되돌린다(fallback).
     public BidReview complete(
             String result,
-            LocalDateTime completedAt
+            LocalDateTime completedAt,
+            LocalDateTime noticeDeadlineAt
     ) {
         requireWorkerCallbackState();
         Objects.requireNonNull(result, "검토 결과는 필수입니다.");
@@ -113,7 +116,7 @@ public record BidReview(
                 null,
                 null,
                 completedAt,
-                completedAt.plusHours(3),
+                resolveExpiresAt(completedAt, noticeDeadlineAt),
                 abandonedAt,
                 cleanupStartedAt,
                 cleanupCompletedAt,
@@ -121,11 +124,12 @@ public record BidReview(
         );
     }
 
-    // 오류 정보를 저장하고 임시파일 만료 시각을 설정합니다.
+    // 오류 정보를 저장하고 임시파일 만료 시각을 설정합니다. complete()와 동일한 보관 정책을 따른다.
     public BidReview fail(
             String errorCode,
             String errorMessage,
-            LocalDateTime failedAt
+            LocalDateTime failedAt,
+            LocalDateTime noticeDeadlineAt
     ) {
         requireWorkerCallbackState();
         Objects.requireNonNull(errorMessage, "실패 메시지는 필수입니다.");
@@ -144,12 +148,21 @@ public record BidReview(
                 errorCode,
                 errorMessage,
                 failedAt,
-                failedAt.plusHours(3),
+                resolveExpiresAt(failedAt, noticeDeadlineAt),
                 abandonedAt,
                 cleanupStartedAt,
                 cleanupCompletedAt,
                 failedAt
         );
+    }
+
+    // 공고 입찰마감일시까지 보관한다 - 마감일이 없거나(NULL) 이미 지난 과거 시각이면 판단 기준으로 쓸 수
+    // 없으므로 기존 정책(종료 시각 + 3시간)으로 되돌린다.
+    private static LocalDateTime resolveExpiresAt(LocalDateTime baseAt, LocalDateTime noticeDeadlineAt) {
+        if (noticeDeadlineAt != null && noticeDeadlineAt.isAfter(baseAt)) {
+            return noticeDeadlineAt;
+        }
+        return baseAt.plusHours(3);
     }
 
     // Worker의 처리 실패가 일시적이면 새 attemptId를 발급해 재시도 대기 상태로 되돌립니다.

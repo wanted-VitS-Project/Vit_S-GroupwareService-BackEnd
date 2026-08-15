@@ -1,9 +1,11 @@
 package com.group3.vitamins.bidding.bidreview.infrastructure.persistence.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group3.vitamins.bidding.bidreview.application.port.BidReviewNoticeDocumentPort;
 import com.group3.vitamins.bidding.bidreview.application.port.BidReviewWorkerPort;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReview;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocument;
+import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewDocumentRole;
 import com.group3.vitamins.bidding.bidreview.domain.model.BidReviewStatus;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewCitationJpaEntity;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.entity.BidReviewDocumentJpaEntity;
@@ -13,6 +15,7 @@ import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.reposito
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.repository.BidReviewDocumentJpaRepository;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.repository.BidReviewJpaRepository;
 import com.group3.vitamins.bidding.bidreview.infrastructure.persistence.repository.BidReviewOutboxJpaRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +31,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.when;
 
 @DataJpaTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:bid-review-worker;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -66,6 +72,16 @@ class JpaBidReviewWorkerAdapterTest {
 
     @Autowired
     private BidReviewOutboxJpaRepository outboxRepository;
+
+    @Autowired
+    private BidReviewNoticeDocumentPort noticeDocumentPort;
+
+    // noticeDocumentPort는 Mockito mock @Bean이라 Spring 테스트 컨텍스트와 함께 테스트 클래스
+    // 전체에서 재사용된다 - 한 테스트가 건 스텁이 다음 테스트로 새어나가지 않게 매번 리셋한다.
+    @BeforeEach
+    void resetNoticeDocumentPortStub() {
+        reset(noticeDocumentPort);
+    }
 
     @Test
     @DisplayName("현재 attemptId와 일치하면 작업을 점유하고 PROCESSING으로 전환한다")
@@ -140,7 +156,7 @@ class JpaBidReviewWorkerAdapterTest {
                         31L, "READY", "tmp/reviews/71/31.pdf", 204800L, "application/pdf"
                 )),
                 List.of(new BidReviewWorkerPort.CitationInput(
-                        1, "INTERNAL_REFERENCE", null, 501L, "원가계산_기준.pdf", 3, null, "발췌문"
+                        1, "INTERNAL_REFERENCE", null, 501L, null, "원가계산_기준.pdf", 3, null, "발췌문"
                 )),
                 NOW
         );
@@ -155,11 +171,70 @@ class JpaBidReviewWorkerAdapterTest {
         List<BidReviewCitationJpaEntity> citations = citationRepository.findAll();
         assertThat(citations).hasSize(1);
         Long referenceDocumentId = documentRepository
-                .findByReviewIdAndReferenceFileId(reviewId, 501L)
+                .findByReviewIdAndDocumentRoleAndReferenceFileId(
+                        reviewId, BidReviewDocumentRole.INTERNAL_REFERENCE, 501L)
                 .orElseThrow()
                 .getReviewDocumentId();
         assertThat(citations.get(0).getReviewDocumentId()).isEqualTo(referenceDocumentId);
         assertThat(citations.get(0).getExcerpt()).isEqualTo("발췌문");
+    }
+
+    @Test
+    @DisplayName("COMPLETED callback은 사내 문서함 참조 근거도 companyDocumentVersionId로 연결한다")
+    void completesReviewWithCompanyDocumentCitation() {
+        String attemptId = UUID.randomUUID().toString();
+        Long reviewId = seedProcessingReview(attemptId);
+        seedDocument(reviewId, 31L, null, "제안요청서.pdf");
+        seedCompanyDocument(reviewId, 9001L, "재무제표.xlsx");
+
+        BidReviewWorkerPort.CallbackUpdate update = workerAdapter.complete(
+                reviewId,
+                attemptId,
+                "재정 상태가 양호합니다.",
+                List.of(new BidReviewWorkerPort.DocumentOutcome(
+                        31L, "READY", "tmp/reviews/71/31.pdf", 204800L, "application/pdf"
+                )),
+                List.of(new BidReviewWorkerPort.CitationInput(
+                        1, "COMPANY_DOCUMENT_REFERENCE", null, null, 9001L, "재무제표.xlsx", null, "시트1", "발췌문"
+                )),
+                NOW
+        );
+
+        assertThat(update.accepted()).isTrue();
+
+        List<BidReviewCitationJpaEntity> citations = citationRepository.findAll();
+        assertThat(citations).hasSize(1);
+        Long companyDocumentId = documentRepository
+                .findByReviewIdAndDocumentRoleAndCompanyDocumentVersionId(
+                        reviewId, BidReviewDocumentRole.COMPANY_DOCUMENT_REFERENCE, 9001L)
+                .orElseThrow()
+                .getReviewDocumentId();
+        assertThat(citations.get(0).getReviewDocumentId()).isEqualTo(companyDocumentId);
+    }
+
+    @Test
+    @DisplayName("공고 입찰마감일시가 미래면 완료 시각 + 3시간이 아니라 그 마감일시까지 보관한다")
+    void completeExpiresAtNoticeDeadline() {
+        String attemptId = UUID.randomUUID().toString();
+        Long reviewId = seedProcessingReview(attemptId);
+        seedDocument(reviewId, 31L, null, "제안요청서.pdf");
+        LocalDateTime deadline = LocalDateTime.of(2026, 8, 30, 18, 0);
+        when(noticeDocumentPort.findAccessibleNotice(COMPANY_ID, NOTICE_ID))
+                .thenReturn(Optional.of(new BidReviewNoticeDocumentPort.NoticeSnapshot(
+                        NOTICE_ID, "스마트시티 통합관제 용역", deadline
+                )));
+
+        workerAdapter.complete(
+                reviewId, attemptId, "재정 상태가 양호합니다.",
+                List.of(new BidReviewWorkerPort.DocumentOutcome(
+                        31L, "READY", "tmp/reviews/71/31.pdf", 204800L, "application/pdf"
+                )),
+                null,
+                NOW
+        );
+
+        BidReviewJpaEntity persisted = reviewRepository.findById(reviewId).orElseThrow();
+        assertThat(persisted.getExpiresAt()).isEqualTo(deadline);
     }
 
     @Test
@@ -238,12 +313,25 @@ class JpaBidReviewWorkerAdapterTest {
         documentRepository.saveAndFlush(BidReviewDocumentJpaEntity.from(reviewId, document));
     }
 
+    private void seedCompanyDocument(Long reviewId, Long companyDocumentVersionId, String fileName) {
+        BidReviewDocument document =
+                BidReviewDocument.createCompanyDocumentReference(companyDocumentVersionId, fileName, NOW);
+        documentRepository.saveAndFlush(BidReviewDocumentJpaEntity.from(reviewId, document));
+    }
+
     @TestConfiguration
     static class JacksonConfig {
 
         @Bean
         ObjectMapper objectMapper() {
             return new ObjectMapper().findAndRegisterModules();
+        }
+
+        @Bean
+        BidReviewNoticeDocumentPort noticeDocumentPort() {
+            // 기본(스텁 없음)은 Optional.empty() - complete()/fail()이 완료·실패 시각 + 3시간
+            // fallback으로 처리하므로 기존 테스트들의 만료 시각 검증은 그대로 유지된다.
+            return mock(BidReviewNoticeDocumentPort.class);
         }
     }
 }

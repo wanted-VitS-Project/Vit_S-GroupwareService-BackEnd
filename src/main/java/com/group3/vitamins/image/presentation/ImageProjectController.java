@@ -59,7 +59,8 @@ public class ImageProjectController {
 
         List<ProjectImageItemResponse> images = views.stream()
                 .map(view -> new ProjectImageItemResponse(
-                        view.imgBlockId(), view.imgId(), view.originalName(),
+                        view.imgBlockId(), view.blockTitle(), view.stepId(), view.stepName(),
+                        view.imgId(), view.originalName(),
                         view.imageUrl(), view.caption(), view.createdAt()))
                 .toList();
 

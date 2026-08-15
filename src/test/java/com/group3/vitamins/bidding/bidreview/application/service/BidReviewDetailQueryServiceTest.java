@@ -56,21 +56,39 @@ class BidReviewDetailQueryServiceTest {
         when(detailQueryPort.findReview(REVIEW_ID))
                 .thenReturn(Optional.of(ownReview()));
         when(detailQueryPort.findDocuments(REVIEW_ID))
-                .thenReturn(List.of(new DocumentRow(
-                        "BID_ATTACHMENT", 31L, null, "제안요청서.pdf", "READY"
-                )));
+                .thenReturn(List.of(
+                        new DocumentRow(
+                                "BID_ATTACHMENT", 31L, null, null, "제안요청서.pdf", "READY"
+                        ),
+                        new DocumentRow(
+                                "COMPANY_DOCUMENT_REFERENCE", null, null, 9001L, "재무제표.xlsx", "READY"
+                        )
+                ));
         when(detailQueryPort.findCitations(REVIEW_ID))
-                .thenReturn(List.of(new CitationRow(
-                        1, "INTERNAL_REFERENCE", null, 501L, "원가계산_기준.pdf", 3, null, "발췌문"
-                )));
+                .thenReturn(List.of(
+                        new CitationRow(
+                                1, "INTERNAL_REFERENCE", null, 501L, null, "원가계산_기준.pdf", 3, null, "발췌문"
+                        ),
+                        new CitationRow(
+                                2, "COMPANY_DOCUMENT_REFERENCE", null, null, 9001L, "재무제표.xlsx", null, "시트1", "발췌문2"
+                        )
+                ));
 
         BidReviewDetailResult result = service.get(
                 new GetBidReviewDetailQuery(REVIEW_ID, USER_ID, ROLE)
         );
 
         assertThat(result.reviewId()).isEqualTo(REVIEW_ID);
-        assertThat(result.documents()).hasSize(1);
-        assertThat(result.citations()).hasSize(1);
+        assertThat(result.documents()).hasSize(2);
+        assertThat(result.documents())
+                .filteredOn(document -> "COMPANY_DOCUMENT_REFERENCE".equals(document.documentRole()))
+                .extracting(BidReviewDetailResult.DocumentResult::companyDocumentVersionId)
+                .containsExactly(9001L);
+        assertThat(result.citations()).hasSize(2);
+        assertThat(result.citations())
+                .filteredOn(citation -> "COMPANY_DOCUMENT_REFERENCE".equals(citation.documentRole()))
+                .extracting(BidReviewDetailResult.CitationResult::companyDocumentVersionId)
+                .containsExactly(9001L);
     }
 
     @Test

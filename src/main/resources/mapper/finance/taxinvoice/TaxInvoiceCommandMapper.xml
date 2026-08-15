@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceCommandMapper">
+
+    <!--
+        ⚠️ company_id 필터 없음(의도적) — uk_tax_invoice_approval_no가 회사 스코프 없이 테이블 전체에서
+        유일해야 한다(국세청 승인번호는 전국 유일값). deleted_at IS NULL만 거른다 — cash_flow의
+        findExistingDedupKeys와 동일한 기조(소프트 삭제된 건 재사용 가능하다고 봄). 실제 승인번호가
+        삭제 후 재등록될 일은 거의 없어 이 필터로 인한 리스크는 낮다고 판단(2026-08-12).
+    -->
+    <select id="findExistingApprovalNos" resultType="java.lang.String">
+        SELECT approval_no
+        FROM tax_invoice
+        WHERE deleted_at IS NULL
+        AND approval_no IN
+        <foreach collection="candidates" item="no" open="(" separator="," close=")">
+            #{no}
+        </foreach>
+    </select>
+
+    <!-- 호출부(FinanceCommandService)에서 이미 중복 제거된 행만 넘어온다. type은 요청 전체에 하나뿐이라 반복 바인딩. -->
+    <insert id="insertAll">
+        INSERT INTO tax_invoice
+        (company_id, type, approval_no, issued_no, supplier_biz_no, buyer_biz_no, buyer_name,
+        supply_amount, tax_amount, total_amount, item_name, ceo_name, sub_biz_no, memo, source_type)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{companyId}, #{type}, #{r.approvalNo}, #{r.issuedNo}, #{r.supplierBizNo}, #{r.buyerBizNo}, #{r.buyerName},
+            #{r.supplyAmount}, #{r.taxAmount}, #{r.totalAmount}, #{r.itemName}, #{r.ceoName}, #{r.subBizNo}, #{r.memo}, 'CSV')
+        </foreach>
+    </insert>
+
+    <!--
+        settle_block_id IS NULL 조건을 UPDATE 문 자체에 걸어서 "확인 후 쓰기" 사이의 틈을 없앤다 —
+        두 사용자가 같은 tax_invoice를 동시에 매칭 시도하면 한쪽만 성공해야 한다(cash_flow의
+        updateCashFlowMatch와 동일한 이유).
+    -->
+    <!--
+        is_excluded = FALSE 조건 추가 (2026-08-13, CodeRabbit 지적) — 서비스가 제외 여부를 검사한 뒤
+        이 UPDATE 사이에 남이 제외 처리하면 "제외됐는데 매칭된" 모순 상태가 된다. UPDATE는 스냅샷이
+        아니라 최신 커밋 값을 보므로 이 조건이 그 경합을 잡아낸다.
+    -->
+    <update id="updateTaxInvoiceMatch">
+        UPDATE tax_invoice
+        SET settle_block_id = #{settleId}, linked_by = #{linkedBy}, linked_at = #{linkedAt}
+        WHERE tax_id = #{taxId} AND company_id = #{companyId}
+        AND settle_block_id IS NULL AND deleted_at IS NULL
+        AND is_excluded = FALSE
+    </update>
+
+    <!--
+        ⚠️ 실적값(actual_amount·actual_date)은 건드리지 않는다 (2026-08-13 규칙 확정) — 실제로 돈이
+        움직인 기록은 입출금 소관이라, 세금계산서 매칭은 status 만 올린다. 세금계산서 금액을 실적으로
+        넣으면 paidAmountRatio(= actual 합계 ÷ total)가 "실입금 진행률"이 아니게 된다.
+
+        status = 'PENDING' 조건은 "이미 입출금이 붙은 블록의 PARTIAL/COMPLETED 를 WAITING 으로
+        떨어뜨리지 않기" 위한 것이다 — 그 경우 0행이 정상이고, 호출부는 실패로 처리하지 않는다.
+    -->
+    <update id="markSettlementBlockWaiting">
+        UPDATE settlement_block
+        SET status = 'WAITING'
+        WHERE settle_id = #{settleId} AND status = 'PENDING'
+    </update>
+
+    <!--
+        settle_block_id IS NOT NULL 조건을 걸어야 동시 해제 요청 중 한쪽만 성공한다 (2026-08-13,
+        CodeRabbit 지적) — tax_id 만 보면 두 요청이 모두 1행 성공으로 보고된다. deleted_at 조건은
+        다른 UPDATE들과 기준을 맞춘 것이다.
+    -->
+    <update id="clearTaxInvoiceMatch">
+        UPDATE tax_invoice
+        SET settle_block_id = NULL, linked_by = NULL, linked_at = NULL
+        WHERE tax_id = #{taxId} AND company_id = #{companyId}
+        AND settle_block_id IS NOT NULL AND deleted_at IS NULL
+    </update>
+
+    <!--
+        status = 'WAITING' 조건이 "입출금이 아직 붙어 있는지"를 대신 판정한다 — 입출금이 붙어 있으면
+        블록은 PARTIAL/COMPLETED 이므로 0행이 되고 상태·실적값이 그대로 남는다. 별도 EXISTS 조회가 필요 없다.
+    -->
+    <update id="resetSettlementBlockFromWaiting">
+        UPDATE settlement_block
+        SET status = 'PENDING'
+        WHERE settle_id = #{settleId} AND status = 'WAITING'
+        <!--
+            해제 직후 남이 다른 세금계산서를 같은 블록에 매칭했다면(그 경우 status 는 WAITING 그대로다)
+            PENDING 으로 떨어뜨리면 안 된다 — 입출금 해제 쪽과 같은 종류의 경합 방어다(2026-08-13).
+        -->
+        AND NOT EXISTS (
+        SELECT 1 FROM tax_invoice ti
+        WHERE ti.settle_block_id = #{settleId} AND ti.deleted_at IS NULL
+        )
+    </update>
+
+    <update id="updateTaxInvoiceMemo">
+        UPDATE tax_invoice SET memo = #{memo}, updated_at = NOW()
+        WHERE tax_id = #{taxId} AND company_id = #{companyId} AND deleted_at IS NULL
+    </update>
+
+    <!--
+        settle_block_id IS NULL 조건을 UPDATE 문 자체에 걸어서 "매칭 확인 후 삭제" 사이의 틈을 없앤다 —
+        확인 직후 남이 매칭하면 0행이 되고, 호출부가 400으로 되돌린다(cash_flow의 softDeleteBatch와 동일).
+    -->
+    <!--
+        ⚠️ company_id 조건 필수 (2026-08-13, CodeRabbit 지적) — 호출부(findDeleteCandidates)가 회사 스코프로
+        걸러주지만, 거기서 원본 요청 ID를 그대로 넘기는 실수 하나로 타사 세금계산서가 지워진다.
+        테넌트 격리는 UPDATE 문 자체에 둔다.
+    -->
+    <update id="softDeleteBatch">
+        UPDATE tax_invoice SET deleted_at = NOW()
+        WHERE company_id = #{companyId} AND deleted_at IS NULL AND settle_block_id IS NULL
+        AND tax_id IN
+        <foreach collection="taxIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!--
+        company_id 조건은 softDeleteBatch와 같은 이유(테넌트 격리를 UPDATE 문에 둔다).
+
+        ⚠️ 제외(true)할 때만 settle_block_id IS NULL 조건을 건다 (2026-08-13, CodeRabbit 지적) — 서비스가
+        매칭 여부를 검사한 뒤 이 UPDATE 사이에 남이 매칭하면 "매칭됐는데 제외된" 모순 상태가 된다.
+        제외 취소(false)는 매칭 여부와 무관하게 항상 허용이라 조건을 걸지 않는다.
+    -->
+    <update id="updateExcludedBatch">
+        UPDATE tax_invoice SET is_excluded = #{isExcluded}, updated_at = NOW()
+        <!-- deleted_at 조건은 다른 UPDATE들과 기준을 맞춘 것 — 사전 조회 직후 소프트 삭제된 행의
+             플래그를 바꾸지 않는다(2026-08-13, CodeRabbit 지적). -->
+        WHERE company_id = #{companyId} AND deleted_at IS NULL
+        <if test="isExcluded">AND settle_block_id IS NULL</if>
+        AND tax_id IN
+        <foreach collection="taxIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+</mapper>

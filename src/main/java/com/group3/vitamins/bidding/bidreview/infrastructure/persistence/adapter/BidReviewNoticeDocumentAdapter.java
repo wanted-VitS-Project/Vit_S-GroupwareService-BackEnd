@@ -24,7 +24,8 @@ public class BidReviewNoticeDocumentAdapter
         String sql = """
                 SELECT
                     notice.bid_notice_id,
-                    notice.notice_name
+                    notice.notice_name,
+                    notice.bid_deadline_at
                 FROM bid_notice notice
                 INNER JOIN company_bid_notice_state state
                     ON state.bid_notice_id = notice.bid_notice_id
@@ -43,7 +44,10 @@ public class BidReviewNoticeDocumentAdapter
                 parameters,
                 (resultSet, rowNumber) -> new NoticeSnapshot(
                         resultSet.getLong("bid_notice_id"),
-                        resultSet.getString("notice_name")
+                        resultSet.getString("notice_name"),
+                        resultSet.getTimestamp("bid_deadline_at") == null
+                                ? null
+                                : resultSet.getTimestamp("bid_deadline_at").toLocalDateTime()
                 )
         ).stream().findFirst();
     }

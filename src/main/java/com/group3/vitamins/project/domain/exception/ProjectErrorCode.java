@@ -32,8 +32,18 @@ public enum ProjectErrorCode implements ErrorCode {
             "프로젝트에 접근할 권한이 없습니다."),
     PROJECT_EDIT_DENIED("PROJECT_EDIT_DENIED",
             "프로젝트를 편집할 권한이 없습니다."),
-    PROJECT_DELETE_NOT_ALLOWED("PROJECT_DELETE_NOT_ALLOWED",
-            "진행 전이 아니거나 스텝이 남아 있어 삭제할 수 없습니다. 종결로 처리해 주세요."),
+    /**
+     * PRJ-014 — 진행 전이 아니거나 스텝이 남은 프로젝트를 확인 없이 지우려 할 때 (DEL-016 패턴).
+     *
+     * <p>⚠️ <b>금지가 아니다.</b> {@code confirm=true} 재요청이면 그대로 삭제된다. 프론트는 이 코드를
+     * 받으면 메시지를 그대로 띄우고 확인 버튼을 붙인다 — 예전 {@code PROJECT_DELETE_NOT_ALLOWED} 처럼
+     * 「종결로 처리하라」로 유도하면 사용자가 삭제할 방법을 영영 못 찾는다.
+     *
+     * <p>메시지는 지워질 스텝 수를 담아 {@code ConflictException(code, message)} 로 덮어쓴다.
+     * 코드가 바뀌면 프론트 분기가 깨지므로 <b>메시지만</b> 바꾼다.
+     */
+    PROJECT_DELETE_CONFIRM_REQUIRED("PROJECT_DELETE_CONFIRM_REQUIRED",
+            "삭제하면 되돌릴 수 없습니다. 삭제하려면 확인이 필요합니다."),
     CATEGORY_IDS_REQUIRED("CATEGORY_IDS_REQUIRED",
             "연결할 사업 카테고리를 선택해 주세요."),
     BUSINESS_CATEGORY_DUPLICATED("BUSINESS_CATEGORY_DUPLICATED",
@@ -50,6 +60,12 @@ public enum ProjectErrorCode implements ErrorCode {
             "참여자를 찾을 수 없습니다."),
     MEMBER_SELF_EDIT_DENIED("MEMBER_SELF_EDIT_DENIED",
             "자기 자신의 권한 행은 변경할 수 없습니다."),
+    /**
+     * 복제 대상이 너무 커서 거부한다 (PRJ-018). 메시지는 실제 블록 수를 담아
+     * {@code ValidationException(code, message)} 로 덮어쓴다 — 코드가 바뀌면 프론트 분기가 깨진다.
+     */
+    PROJECT_DUPLICATE_TOO_LARGE("PROJECT_DUPLICATE_TOO_LARGE",
+            "복제할 블록이 너무 많습니다. 원본의 블록을 줄여 주세요."),
     PROJECT_VERSION_REQUIRED("PROJECT_VERSION_REQUIRED",
             "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
     PROJECT_VERSION_CONFLICT("PROJECT_VERSION_CONFLICT",

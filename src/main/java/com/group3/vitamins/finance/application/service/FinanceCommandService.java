@@ -5,7 +5,14 @@ import com.group3.vitamins.finance.application.command.CashFlowCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.CreateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.DeleteCashFlowsCommand;
 import com.group3.vitamins.finance.application.command.MatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.MatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvPreviewCommand;
+import com.group3.vitamins.finance.application.command.TaxInvoiceCsvUploadCommand;
 import com.group3.vitamins.finance.application.command.UnmatchCashFlowCommand;
+import com.group3.vitamins.finance.application.command.UnmatchTaxInvoiceCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceMemoCommand;
+import com.group3.vitamins.finance.application.command.DeleteTaxInvoicesCommand;
+import com.group3.vitamins.finance.application.command.UpdateTaxInvoiceExclusionCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowCommand;
 import com.group3.vitamins.finance.application.command.UpdateCashFlowExclusionCommand;
 import com.group3.vitamins.finance.application.port.PagePermissionPort;
@@ -29,6 +36,19 @@ import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowCsvTable;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowDateTimeMode;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.CashFlowUploadFileReader;
 import com.group3.vitamins.finance.infrastructure.cashflow.csv.ParsedCashFlowRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceCommandMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMapper;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceDeleteCandidateRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchLookupRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMatchResultRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceMemoRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.ParsedTaxInvoiceRow;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvColumnRecommender;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvMapping;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvRecommendation;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvRowParser;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceCsvTable;
+import com.group3.vitamins.finance.infrastructure.taxinvoice.csv.TaxInvoiceUploadFileReader;
 import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
@@ -69,6 +89,11 @@ public class FinanceCommandService implements FinanceCommandUseCase {
     private final CashFlowCsvRowParser cashFlowCsvRowParser;
     private final CashFlowCommandMapper cashFlowCommandMapper;
     private final CashFlowMapper cashFlowMapper;
+    private final TaxInvoiceUploadFileReader taxInvoiceUploadFileReader;
+    private final TaxInvoiceCsvColumnRecommender taxInvoiceCsvColumnRecommender;
+    private final TaxInvoiceCsvRowParser taxInvoiceCsvRowParser;
+    private final TaxInvoiceCommandMapper taxInvoiceCommandMapper;
+    private final TaxInvoiceMapper taxInvoiceMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -275,6 +300,371 @@ public class FinanceCommandService implements FinanceCommandUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public TaxInvoiceCsvPreviewView previewTaxInvoiceCsv(TaxInvoiceCsvPreviewCommand command) {
+        log.info("세금계산서 CSV 컬럼 추천 조회 요청 - userId={}", command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        TaxInvoiceCsvTable table =
+                taxInvoiceUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
+        TaxInvoiceCsvRecommendation recommendation =
+                taxInvoiceCsvColumnRecommender.recommend(table.headers(), table.titleText());
+
+        List<Map<String, String>> sampleRows = table.rows().stream()
+                .limit(SAMPLE_ROW_LIMIT)
+                .map(row -> toDisplayRow(table.headers(), row))
+                .toList();
+
+        return new TaxInvoiceCsvPreviewView(
+                table.headers(), sampleRows, recommendation.recommendedType(),
+                toTaxInvoiceMappingView(recommendation.mapping())
+        );
+    }
+
+    private TaxInvoiceCsvMappingView toTaxInvoiceMappingView(TaxInvoiceCsvMapping mapping) {
+        return new TaxInvoiceCsvMappingView(
+                mapping.approvalNoColumn(), mapping.issuedDateColumn(),
+                mapping.supplierBizNoColumn(), mapping.buyerBizNoColumn(), mapping.buyerNameColumn(),
+                mapping.supplyAmountColumn(), mapping.taxAmountColumn(), mapping.totalAmountColumn(),
+                mapping.itemNameColumn(), mapping.ceoNameColumn(), mapping.subBizNoColumn(), mapping.memoColumn()
+        );
+    }
+
+    // cash_flow의 uploadCashFlowCsv와 동일한 이유로 @Transactional을 안 붙인다 — 파일 파싱은 DB 접근이
+    // 없고, insertAll은 단일 INSERT문으로 그 자체가 원자적이다. 조회(findExistingApprovalNos)와 굳이
+    // 같은 트랜잭션으로 묶을 이유가 없다 — uk_tax_invoice_approval_no 유니크 제약이 최종 방어선이다.
+    @Override
+    public TaxInvoiceCsvUploadView uploadTaxInvoiceCsv(TaxInvoiceCsvUploadCommand command) {
+        log.info("세금계산서(CSV 기반) 업로드 요청 - userId={}, type={}", command.userId(), command.type());
+
+        assertEditAccess(command.userId(), command.role());
+
+        String type = parseTaxInvoiceType(command.type());
+        TaxInvoiceCsvMapping mapping = new TaxInvoiceCsvMapping(
+                command.approvalNoColumn(), command.issuedDateColumn(),
+                command.supplierBizNoColumn(), command.buyerBizNoColumn(), command.buyerNameColumn(),
+                command.supplyAmountColumn(), command.taxAmountColumn(), command.totalAmountColumn(),
+                command.itemNameColumn(), command.ceoNameColumn(), command.subBizNoColumn(), command.memoColumn()
+        );
+
+        TaxInvoiceCsvTable table =
+                taxInvoiceUploadFileReader.read(command.fileBytes(), command.fileName(), command.password());
+        validateTaxInvoiceMapping(table.headers(), mapping);
+
+        List<ParsedTaxInvoiceRow> parsedRows = taxInvoiceCsvRowParser.parseRows(table, mapping);
+
+        Set<String> seenApprovalNos = new HashSet<>();
+        if (!parsedRows.isEmpty()) {
+            List<String> candidates = parsedRows.stream().map(ParsedTaxInvoiceRow::approvalNo).toList();
+            seenApprovalNos.addAll(taxInvoiceCommandMapper.findExistingApprovalNos(candidates));
+        }
+
+        List<ParsedTaxInvoiceRow> toInsert = new ArrayList<>();
+        List<TaxInvoiceDuplicateRowView> duplicateRows = new ArrayList<>();
+        for (ParsedTaxInvoiceRow row : parsedRows) {
+            // seenApprovalNos에는 DB에 이미 있는 승인번호뿐 아니라, 같은 파일 안에서 먼저 처리된 행의
+            // 승인번호도 함께 쌓인다 — 파일 내부 중복도 같은 로직으로 걸러진다.
+            if (!seenApprovalNos.add(row.approvalNo())) {
+                duplicateRows.add(new TaxInvoiceDuplicateRowView(row.approvalNo(), "이미 등록된 승인번호입니다."));
+            } else {
+                toInsert.add(row);
+            }
+        }
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        int savedCount = toInsert.isEmpty()
+                ? 0
+                : insertTaxInvoicesWithConcurrentDuplicateRetry(companyId, type, toInsert, duplicateRows);
+
+        return new TaxInvoiceCsvUploadView(table.rows().size(), savedCount, duplicateRows.size(), duplicateRows);
+    }
+
+    /**
+     * 세금계산서를 정산 블록에 연결한다.
+     *
+     * <p>⭐ 정산 블록 하나에는 <b>입출금 1건 + 세금계산서 1장</b>이 각각 붙고, 두 원장은 서로를 막지
+     * 않는다(2026-08-13 확정). 그래서 매칭 가능 판정을 블록 status 로 하지 않는다 — {@code PARTIAL}은
+     * "입출금이 붙었다"만 말해주고 세금계산서 유무는 알려주지 않기 때문에, {@code tax_invoice} 를 직접
+     * 보는 수밖에 없다. status 는 판정 기준이 아니라 <b>결과값</b>이다:
+     * {@code PENDING}이면 {@code WAITING}(정산 대기)으로 올리고, 이미 {@code PARTIAL}/{@code COMPLETED}
+     * 면 그대로 둔다. 실적값도 건드리지 않는다(입출금 소관).
+     */
+    @Override
+    @Transactional
+    public TaxInvoiceMatchView matchTaxInvoice(MatchTaxInvoiceCommand command) {
+        log.info("세금계산서 블록 매칭 요청 - taxId={}, settleId={}, userId={}",
+                command.taxId(), command.settleId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        TaxInvoiceMatchLookupRow taxInvoice = taxInvoiceMapper.findMatchLookup(command.taxId(), companyId);
+        if (taxInvoice == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_MATCH_TARGET_NOT_FOUND);
+        }
+        if (taxInvoice.settleBlockId() != null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_ALREADY_MATCHED);
+        }
+        // 제외 처리(is_excluded)된 항목은 "프로젝트와 무관해 미연결 집계에서 뺀 대상"이라 정산 블록에 붙일
+        // 수 없다(2026-08-13 추가) — 제외 API가 "매칭된 건 제외 못 함"으로 막는 것과 대칭이다. 붙게 두면
+        // 미연결 집계에선 빠져 있는데 정산 현황엔 연결로 보이는 상태가 된다. 해제(unmatch)는 안 막는다 —
+        // 이미 붙어 있는 걸 떼는 건 그 모순을 없애는 방향이다.
+        if (Boolean.TRUE.equals(taxInvoice.isExcluded())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_EXCLUDED_CANNOT_MATCH);
+        }
+
+        // 회사 스코프 확인 — companyId 없이는 타사 settleId를 그대로 매칭시킬 수 있다(cash_flow와 동일 이유).
+        com.group3.vitamins.finance.infrastructure.taxinvoice.SettlementBlockMatchRow settlementBlock =
+                taxInvoiceMapper.findSettlementBlockForMatch(command.settleId(), companyId);
+        if (settlementBlock == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_MATCH_TARGET_NOT_FOUND);
+        }
+        // settlementBlock.type()은 아직 항목이 작성된 적 없는 빈 블록이면 null이다 — Objects.equals로
+        // null도 안전하게 "불일치"로 처리한다(cash_flow의 matchCashFlow와 동일 이유).
+        if (!Objects.equals(settlementBlock.type(), taxInvoice.type())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_TYPE_MISMATCH);
+        }
+
+        // ⚠️ 여기서 블록 행을 잠그고, 잠근 뒤에 다시 확인한다 — 순서가 중요하다.
+        // 세금계산서는 이미 PARTIAL/COMPLETED인 블록에 붙을 때 status를 안 바꾸므로, 입출금 매칭처럼
+        // "상태 조건부 UPDATE"가 경합 지점이 되어주지 못한다. 잠금 없이 EXISTS만 보면 서로 다른
+        // 세금계산서 2건이 같은 블록으로 동시에 들어와 둘 다 통과할 수 있다(블록당 1장 규칙 위반).
+        // findLinkedTaxInvoiceId가 잠금 읽기(FOR UPDATE)인 이유는 매퍼 XML 주석 참고.
+        // 잠금 결과가 null이면 위 조회와 이 잠금 사이에 블록이 소프트 삭제된 것이다 — 삭제된 블록에
+        // 연결하면 안 되므로 중단한다(2026-08-13, CodeRabbit 지적).
+        if (taxInvoiceMapper.lockSettlementBlockForUpdate(command.settleId()) == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_MATCH_TARGET_NOT_FOUND);
+        }
+        Long linkedTaxId = taxInvoiceMapper.findLinkedTaxInvoiceId(command.settleId());
+        if (linkedTaxId != null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
+        }
+
+        LocalDateTime linkedAt = LocalDateTime.now();
+        int taxInvoiceUpdated = taxInvoiceCommandMapper.updateTaxInvoiceMatch(
+                command.taxId(), command.settleId(), command.userId(), linkedAt, companyId);
+        if (taxInvoiceUpdated == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_ALREADY_MATCHED);
+        }
+
+        // 0행이면 이 블록이 이미 PARTIAL/COMPLETED(입출금이 붙음)라는 뜻 — 정상이므로 확인하지 않는다.
+        taxInvoiceCommandMapper.markSettlementBlockWaiting(command.settleId());
+
+        TaxInvoiceMatchResultRow result = taxInvoiceMapper.findMatchResultById(command.taxId(), companyId);
+        return new TaxInvoiceMatchView(
+                command.taxId(), result.settleId(), result.roundName(), result.projectName(),
+                result.linkedBy(), result.linkedByName(), result.linkedAt());
+    }
+
+    /**
+     * 세금계산서 연결을 해제한다. 입출금이 아직 붙어 있으면 블록 상태·실적값을 그대로 두고,
+     * 세금계산서만 붙어 있던 블록({@code WAITING})이면 {@code PENDING}(미연결)으로 되돌린다.
+     */
+    @Override
+    @Transactional
+    public void unmatchTaxInvoice(UnmatchTaxInvoiceCommand command) {
+        log.info("세금계산서 블록 매칭 해제 요청 - taxId={}, userId={}", command.taxId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        TaxInvoiceMatchLookupRow taxInvoice = taxInvoiceMapper.findMatchLookup(command.taxId(), companyId);
+        if (taxInvoice == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
+        }
+        if (taxInvoice.settleBlockId() == null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_MATCHED);
+        }
+
+        // ⚠️ 영향 행 수를 확인해야 조건부 UPDATE(settle_block_id IS NOT NULL)의 동시성 보장이 응답까지
+        // 이어진다 — 버리면 동시 해제 요청 두 건이 모두 200을 받는다(2026-08-13, CodeRabbit 지적).
+        if (taxInvoiceCommandMapper.clearTaxInvoiceMatch(command.taxId(), companyId) == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_MATCHED);
+        }
+        taxInvoiceCommandMapper.resetSettlementBlockFromWaiting(taxInvoice.settleBlockId());
+    }
+
+    /**
+     * 세금계산서 메모 수정. 세금계산서는 수동 등록이 없어 전부 CSV/엑셀로 들어오므로 **메모만** 고칠 수
+     * 있다 — 승인번호·금액·사업자번호는 국세청 발급 원본 값이라 손대지 않는다. 입출금 수정 API가
+     * {@code sourceType != MANUAL} 인 항목을 메모만 허용하는 것과 같은 규칙이다(그래서 요청 바디에
+     * 애초에 memo 하나만 둬서, 다른 필드를 보낼 경로 자체를 없앴다 — 400 분기가 필요 없다).
+     *
+     * <p>매칭 여부는 보지 않는다 — 입출금도 매칭된 항목의 메모는 항상 수정 가능하다.
+     */
+    @Override
+    @Transactional
+    public TaxInvoiceMemoView updateTaxInvoiceMemo(UpdateTaxInvoiceMemoCommand command) {
+        log.info("세금계산서 메모 수정 요청 - taxId={}, userId={}", command.taxId(), command.userId());
+
+        assertEditAccess(command.userId(), command.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        if (taxInvoiceMapper.findMemoById(command.taxId(), companyId) == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
+        }
+
+        taxInvoiceCommandMapper.updateTaxInvoiceMemo(command.taxId(), command.memo(), companyId);
+
+        TaxInvoiceMemoRow result = taxInvoiceMapper.findMemoById(command.taxId(), companyId);
+        return new TaxInvoiceMemoView(result.taxId(), result.memo(), result.updatedAt());
+    }
+
+    /**
+     * 세금계산서 배치 삭제(소프트 삭제). 매칭된 항목은 먼저 매칭을 해제해야 지울 수 있다 — 지워버리면
+     * 정산 블록이 참조하던 연결 이력이 붕 뜬다. 처리 못 한 항목은 전체를 실패시키지 않고
+     * {@code skippedItems}로 사유와 함께 돌려준다(입출금 배치 삭제와 동일한 구조·규칙).
+     */
+    @Override
+    @Transactional
+    public TaxInvoiceDeleteResultView deleteTaxInvoices(DeleteTaxInvoicesCommand command) {
+        log.info("세금계산서 배치 삭제 요청 - userId={}, count={}",
+                command.userId(), command.taxIds() == null ? 0 : command.taxIds().size());
+
+        assertEditAccess(command.userId(), command.role());
+
+        if (command.taxIds() == null || command.taxIds().isEmpty()) {
+            throw new ValidationException(
+                    FinanceErrorCode.FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING, "삭제할 항목을 선택해주세요.");
+        }
+        // 같은 ID를 두 번 보내면 IN절은 한 행만 지우는데 deletedCount는 두 번 세게 된다 — 중복 제거 후 처리.
+        List<Long> requestedIds = command.taxIds().stream().distinct().toList();
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        // ⚠️ Collectors.toMap은 값이 null이면(미매칭 = settleBlockId null인 정상 케이스) NPE를 던진다
+        // (입출금 쪽에서 실제 500으로 겪은 함정) — HashMap.put은 null 값을 허용하므로 직접 채운다.
+        Map<Long, Long> settleBlockByTaxId = new HashMap<>();
+        for (TaxInvoiceDeleteCandidateRow row : taxInvoiceMapper.findDeleteCandidates(requestedIds, companyId)) {
+            settleBlockByTaxId.put(row.taxId(), row.settleBlockId());
+        }
+
+        List<Long> deletable = new ArrayList<>();
+        List<SkippedTaxInvoiceView> skipped = new ArrayList<>();
+        for (Long taxId : requestedIds) {
+            if (!settleBlockByTaxId.containsKey(taxId)) {
+                skipped.add(new SkippedTaxInvoiceView(
+                        taxId, FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND.getMessage()));
+            } else if (settleBlockByTaxId.get(taxId) != null) {
+                skipped.add(new SkippedTaxInvoiceView(
+                        taxId, FinanceErrorCode.FINANCE_TAX_INVOICE_LINKED_CANNOT_DELETE.getMessage()));
+            } else {
+                deletable.add(taxId);
+            }
+        }
+
+        // deletable.size()가 아니라 실제로 지운 행 수를 쓴다 — 조회~삭제 사이에 동시 매칭돼 조건부
+        // UPDATE(settle_block_id IS NULL)가 걸러낸 행까지 "삭제 완료"로 보고하면 안 된다.
+        int deletedCount = deletable.isEmpty() ? 0 : taxInvoiceCommandMapper.softDeleteBatch(deletable, companyId);
+
+        return new TaxInvoiceDeleteResultView(deletedCount, skipped);
+    }
+
+    /**
+     * 세금계산서 연결 제외/포함 처리(배치). 입출금 쪽과 동일하게 처리 못 한 항목은 예외로 전체를
+     * 되돌리지 않고 {@code skippedItems}로 사유와 함께 돌려준다 — 목록에서 여러 건을 골라 한 번에
+     * 처리하는 화면이라 한 건 때문에 전체가 실패하면 쓰기 어렵다.
+     */
+    @Override
+    @Transactional
+    public TaxInvoiceExclusionResultView updateTaxInvoiceExclusion(UpdateTaxInvoiceExclusionCommand command) {
+        log.info("세금계산서 연결 제외 처리 요청 - userId={}, isExcluded={}, count={}",
+                command.userId(), command.isExcluded(),
+                command.taxIds() == null ? 0 : command.taxIds().size());
+
+        assertEditAccess(command.userId(), command.role());
+
+        if (command.taxIds() == null || command.taxIds().isEmpty() || command.isExcluded() == null) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_TAX_INVOICE_REQUIRED_FIELD_MISSING);
+        }
+        // 같은 ID를 두 번 보내면 updatedCount가 부풀려진다(입출금 쪽 CodeRabbit 지적과 동일) — 중복 제거.
+        List<Long> requestedIds = command.taxIds().stream().distinct().toList();
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        Map<Long, Long> settleBlockByTaxId = new HashMap<>();
+        for (TaxInvoiceDeleteCandidateRow row : taxInvoiceMapper.findDeleteCandidates(requestedIds, companyId)) {
+            settleBlockByTaxId.put(row.taxId(), row.settleBlockId());
+        }
+
+        List<Long> updatable = new ArrayList<>();
+        List<SkippedTaxInvoiceView> skipped = new ArrayList<>();
+        for (Long taxId : requestedIds) {
+            if (!settleBlockByTaxId.containsKey(taxId)) {
+                skipped.add(new SkippedTaxInvoiceView(
+                        taxId, FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND.getMessage()));
+            } else if (command.isExcluded() && settleBlockByTaxId.get(taxId) != null) {
+                // 제외 취소(false)는 매칭 여부와 무관하게 항상 허용 — "이미 매칭됨"은 제외(true)할 때만 막는다.
+                skipped.add(new SkippedTaxInvoiceView(
+                        taxId, FinanceErrorCode.FINANCE_TAX_INVOICE_LINKED_CANNOT_EXCLUDE.getMessage()));
+            } else {
+                updatable.add(taxId);
+            }
+        }
+
+        // updatable.size()가 아니라 실제 영향 행 수를 쓴다 (2026-08-13, CodeRabbit 지적) — 위 검사와 이
+        // UPDATE 사이에 남이 매칭하면 조건부 UPDATE(settle_block_id IS NULL)가 그 행을 걸러내는데,
+        // size()를 응답하면 처리되지 않은 건까지 "처리됨"으로 보고한다. 배치 삭제(deletedCount)와 동일 기준.
+        int updatedCount = updatable.isEmpty()
+                ? 0
+                : taxInvoiceCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
+
+        return new TaxInvoiceExclusionResultView(updatedCount, skipped);
+    }
+
+    /** cash_flow의 insertWithConcurrentDuplicateRetry와 동일한 이유·동일한 구조. */
+    private int insertTaxInvoicesWithConcurrentDuplicateRetry(
+            Long companyId, String type, List<ParsedTaxInvoiceRow> toInsert, List<TaxInvoiceDuplicateRowView> duplicateRows) {
+        try {
+            return taxInvoiceCommandMapper.insertAll(companyId, type, toInsert);
+        } catch (DuplicateKeyException e) {
+            List<String> candidates = toInsert.stream().map(ParsedTaxInvoiceRow::approvalNo).toList();
+            Set<String> latestApprovalNos = new HashSet<>(taxInvoiceCommandMapper.findExistingApprovalNos(candidates));
+
+            List<ParsedTaxInvoiceRow> retryInsert = new ArrayList<>();
+            for (ParsedTaxInvoiceRow row : toInsert) {
+                if (latestApprovalNos.contains(row.approvalNo())) {
+                    duplicateRows.add(new TaxInvoiceDuplicateRowView(row.approvalNo(), "이미 등록된 승인번호입니다."));
+                } else {
+                    retryInsert.add(row);
+                }
+            }
+            return retryInsert.isEmpty() ? 0 : taxInvoiceCommandMapper.insertAll(companyId, type, retryInsert);
+        }
+    }
+
+    private String parseTaxInvoiceType(String raw) {
+        if (!"INCOME".equals(raw) && !"OUTCOME".equals(raw)) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CSV_MAPPING_REQUIRED, "type 값이 올바르지 않습니다.");
+        }
+        return raw;
+    }
+
+    private void validateTaxInvoiceMapping(List<String> headers, TaxInvoiceCsvMapping mapping) {
+        requireColumn(headers, mapping.approvalNoColumn(), "approvalNoColumn");
+        requireColumn(headers, mapping.issuedDateColumn(), "issuedDateColumn");
+        requireColumn(headers, mapping.supplierBizNoColumn(), "supplierBizNoColumn");
+        requireColumn(headers, mapping.buyerBizNoColumn(), "buyerBizNoColumn");
+        requireColumn(headers, mapping.buyerNameColumn(), "buyerNameColumn");
+        requireColumn(headers, mapping.supplyAmountColumn(), "supplyAmountColumn");
+        requireColumn(headers, mapping.taxAmountColumn(), "taxAmountColumn");
+        requireColumn(headers, mapping.totalAmountColumn(), "totalAmountColumn");
+
+        // itemName/ceoName/subBizNo/memo는 선택 — 보냈으면 실제 CSV에 있는 컬럼인지만 확인한다.
+        if (StringUtils.hasText(mapping.itemNameColumn())) {
+            requireColumn(headers, mapping.itemNameColumn(), "itemNameColumn");
+        }
+        if (StringUtils.hasText(mapping.ceoNameColumn())) {
+            requireColumn(headers, mapping.ceoNameColumn(), "ceoNameColumn");
+        }
+        if (StringUtils.hasText(mapping.subBizNoColumn())) {
+            requireColumn(headers, mapping.subBizNoColumn(), "subBizNoColumn");
+        }
+        if (StringUtils.hasText(mapping.memoColumn())) {
+            requireColumn(headers, mapping.memoColumn(), "memoColumn");
+        }
+    }
+
+    @Override
     @Transactional
     public CashFlowMatchView matchCashFlow(MatchCashFlowCommand command) {
         log.info("입출금 내역 블록 매칭 요청 - cashFlowId={}, settleId={}, userId={}",
@@ -290,6 +680,10 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (cashFlow.settleBlockId() != null) {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_ALREADY_MATCHED);
         }
+        // 제외 처리된 항목은 매칭 불가 — 세금계산서 쪽 matchTaxInvoice와 같은 규칙·같은 이유(2026-08-13 추가).
+        if (Boolean.TRUE.equals(cashFlow.isExcluded())) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_EXCLUDED_CANNOT_MATCH);
+        }
 
         // 회사 스코프 확인(2026-08-11 추가) — companyId 없이는 타사 settleId를 그대로 매칭시킬 수 있었다.
         SettlementBlockMatchRow settlementBlock = cashFlowMapper.findSettlementBlockForMatch(command.settleId(), companyId);
@@ -302,16 +696,20 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         if (!Objects.equals(settlementBlock.type(), cashFlow.type())) {
             throw new ValidationException(FinanceErrorCode.FINANCE_MATCH_TYPE_MISMATCH);
         }
-        // 정산 블록 1건당 매칭은 1번뿐이다(2026-08-10 확정) — 부족분은 실무팀이 새 회차를 만들어 매칭한다.
-        if (!"PENDING".equals(settlementBlock.status())) {
+        // 블록당 입출금은 1건뿐이다(2026-08-10 확정) — 부족분은 실무팀이 새 회차를 만들어 매칭한다.
+        // ⚠️ WAITING(세금계산서만 붙은 블록)도 허용한다(2026-08-13 규칙 확정) — 세금계산서가 먼저 오고
+        // 입금이 나중에 들어오는 게 정상 흐름이라, PENDING만 허용하면 그 블록엔 입금을 못 붙인다.
+        // PARTIAL/COMPLETED면 이미 입출금이 붙었다는 뜻이라 거부한다.
+        if (!"PENDING".equals(settlementBlock.status()) && !"WAITING".equals(settlementBlock.status())) {
             throw new ValidationException(FinanceErrorCode.FINANCE_SETTLEMENT_BLOCK_ALREADY_MATCHED);
         }
 
         // 위 두 확인(조회)과 아래 저장 사이에 남이 먼저 매칭할 수 있다 — 정산 블록 쪽을
-        // status = 'PENDING' 조건부 UPDATE로 먼저 확정해서 "1건당 1매칭" 규칙을 원자적으로 지키고,
-        // 성공했을 때만 cash_flow 쪽을 settle_block_id IS NULL 조건부로 확정한다(2026-08-11,
+        // status IN ('PENDING','WAITING') 조건부 UPDATE로 먼저 확정해서 "1건당 1매칭" 규칙을 원자적으로
+        // 지키고, 성공했을 때만 cash_flow 쪽을 settle_block_id IS NULL 조건부로 확정한다(2026-08-11,
         // CodeRabbit 지적 — 기존엔 두 UPDATE 모두 조건·영향행 확인이 없어 동시 매칭 시 정산 블록에
-        // 두 건이 겹쳐 연결될 수 있었다).
+        // 두 건이 겹쳐 연결될 수 있었다). 입출금은 매칭 시 status가 반드시 바뀌므로 이 조건부 UPDATE
+        // 자체가 경합 지점이 되어준다 — 세금계산서 쪽처럼 별도 행 잠금이 필요 없는 이유다.
         LocalDateTime linkedAt = LocalDateTime.now();
         String status = cashFlow.amount().compareTo(settlementBlock.plannedAmount()) >= 0 ? "COMPLETED" : "PARTIAL";
         int blockUpdated = cashFlowCommandMapper.updateSettlementBlockMatchResult(
@@ -348,7 +746,12 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_MATCHED);
         }
 
-        cashFlowCommandMapper.clearCashFlowMatch(command.cashFlowId());
+        // 세금계산서 해제와 같은 이유로 영향 행 수를 확인한다(동시 해제 요청 중 한쪽만 성공해야 한다).
+        if (cashFlowCommandMapper.clearCashFlowMatch(command.cashFlowId()) == 0) {
+            throw new ValidationException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_MATCHED);
+        }
+        // 세금계산서가 아직 붙어 있으면 PENDING이 아니라 WAITING(정산 대기)으로 되돌린다 — 판정은
+        // 쿼리 안에서 한다(2026-08-13 규칙 확정, CashFlowCommandMapper.xml 주석 참고). 실적값은 항상 비운다.
         cashFlowCommandMapper.resetSettlementBlockMatch(cashFlow.settleBlockId());
     }
 
@@ -475,7 +878,7 @@ public class FinanceCommandService implements FinanceCommandUseCase {
         // softDeleteBatch가 실제로 지운 행 수를 그대로 쓴다 — deletable.size()를 그대로 응답하면
         // 조회(findDeleteCandidates)~삭제 사이에 동시 매칭돼 조건부 UPDATE가 걸러낸 행까지
         // "삭제 완료"로 잘못 보고하게 된다(2026-08-11, CodeRabbit 지적).
-        int deletedCount = deletable.isEmpty() ? 0 : cashFlowCommandMapper.softDeleteBatch(deletable);
+        int deletedCount = deletable.isEmpty() ? 0 : cashFlowCommandMapper.softDeleteBatch(deletable, companyId);
 
         return new CashFlowDeleteResultView(deletedCount, skipped);
     }
@@ -515,11 +918,12 @@ public class FinanceCommandService implements FinanceCommandUseCase {
             }
         }
 
-        if (!updatable.isEmpty()) {
-            cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded());
-        }
+        // 세금계산서 쪽과 같은 이유로 실제 영향 행 수를 쓴다(배치 삭제의 deletedCount와 동일 기준).
+        int updatedCount = updatable.isEmpty()
+                ? 0
+                : cashFlowCommandMapper.updateExcludedBatch(updatable, command.isExcluded(), companyId);
 
-        return new CashFlowExclusionResultView(updatable.size(), skipped);
+        return new CashFlowExclusionResultView(updatedCount, skipped);
     }
 
     private String validateType(String raw) {

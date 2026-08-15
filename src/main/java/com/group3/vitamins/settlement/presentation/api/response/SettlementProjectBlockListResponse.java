@@ -30,6 +30,8 @@ public record SettlementProjectBlockListResponse(
             @Schema(description = "예정일", example = "2026-05-10", nullable = true)
             LocalDate plannedDate,
 
+
+
             @Schema(description = "예정금액", example = "270000000", nullable = true)
             Long plannedAmount,
 

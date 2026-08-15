@@ -154,6 +154,11 @@ public class SettlementQueryService implements SettlementQueryUseCase {
         long completedRoundCount = row.completedRoundCount() == null ? 0L : row.completedRoundCount();
         long totalRoundCount = row.totalRoundCount() == null ? 0L : row.totalRoundCount();
         long pendingRoundCount = row.pendingRoundCount() == null ? 0L : row.pendingRoundCount();
+        long taxInvoiceUnlinkedCount =
+                row.taxInvoiceUnlinkedCount() == null ? 0L : row.taxInvoiceUnlinkedCount();
+        long paymentOverdueDays = row.paymentOverdueDays() == null ? 0L : row.paymentOverdueDays();
+        long taxInvoiceOverdueDays =
+                row.taxInvoiceOverdueDays() == null ? 0L : row.taxInvoiceOverdueDays();
 
         return new SettlementProjectView(
                 row.projectId(),
@@ -167,20 +172,20 @@ public class SettlementQueryService implements SettlementQueryUseCase {
                 (int) completedRoundCount,
                 (int) totalRoundCount,
                 row.nextPlannedDate(),
-                settlementStatusSummary(totalRoundCount, completedRoundCount, pendingRoundCount),
+                (int) pendingRoundCount,
+                (int) taxInvoiceUnlinkedCount,
+                (int) paymentOverdueDays,
+                (int) taxInvoiceOverdueDays,
                 row.projectStatus(),
                 row.endedOn()
         );
     }
 
-    // 회차 하나하나의 예정일까지 따지는 세분화(계산서 미발행·입금 대기 N일 등)는 아직 안 한다 — 지금은
-    // "전부 완료됐는지"와 "미연결(PENDING) 회차가 몇 건인지"만 구분한다. 추후 규칙이 늘어날 수 있다.
-    private String settlementStatusSummary(long totalRoundCount, long completedRoundCount, long pendingRoundCount) {
-        if (totalRoundCount > 0 && completedRoundCount == totalRoundCount) {
-            return "정산완료";
-        }
-        return "미연결 " + pendingRoundCount + "건";
-    }
+    // settlementStatusSummary(문자열) 제거 (2026-08-14, 사용자 확정) — 원장별 미연결·지연을 전부 숫자로
+    // 내려주게 되면서 이 문구가 담던 정보가 모두 계산 가능해졌다("정산완료"는
+    // completedRoundCount == totalRoundCount, "미연결 N건"은 paymentUnlinkedCount). 서버가 표현(문구·색)을
+    // 결정하지 않게 하려는 것이고, 애초에 문자열로 둔 이유(2026-08-09 "세분화 규칙이 없어서 단순화")도
+    // 원장별 구분이 생기면서 사라졌다.
 
     @Override
     public SettlementProjectBlockListView getProjectSettlementBlocks(SettlementProjectBlockListQuery query) {

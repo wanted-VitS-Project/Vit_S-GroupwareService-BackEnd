@@ -62,6 +62,9 @@
         COALESCE(agg.completed_round_count, 0) AS completedRoundCount,
         COALESCE(agg.total_round_count, 0) AS totalRoundCount,
         COALESCE(agg.pending_round_count, 0) AS pendingRoundCount,
+        COALESCE(agg.tax_invoice_unlinked_count, 0) AS taxInvoiceUnlinkedCount,
+        COALESCE(agg.payment_overdue_days, 0) AS paymentOverdueDays,
+        COALESCE(agg.tax_invoice_overdue_days, 0) AS taxInvoiceOverdueDays,
         nxt.planned_date AS nextPlannedDate,
         p.status AS projectStatus,
         p.ended_on AS endedOn
@@ -73,7 +76,38 @@
         SUM(CASE WHEN sb.type = 'OUTCOME' THEN sb.actual_amount ELSE 0 END) AS total_outcome,
         SUM(CASE WHEN sb.type = 'INCOME' THEN sb.actual_amount ELSE 0 END) AS total_income,
         SUM(CASE WHEN sb.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_round_count,
-        SUM(CASE WHEN sb.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_round_count,
+        <!--
+            ⚠️ 미연결 = status IN ('PENDING','WAITING') (2026-08-13 변경) — WAITING은 "세금계산서만
+            붙고 입금은 아직"인 상태라 정산이 안 끝난 회차다. 예전엔 PENDING만 셌는데 WAITING이
+            실제로 쓰이기 시작하면서 그 회차가 어느 카운트에도 안 잡혔다. 재무 요약의
+            settlementUnlinkedCount와 같은 기준으로 통일했다.
+        -->
+        SUM(CASE WHEN sb.status IN ('PENDING', 'WAITING') THEN 1 ELSE 0 END) AS pending_round_count,
+        <!--
+            세금계산서 미연결 회차 수 — ⚠️ status로 판정할 수 없다. PARTIAL/COMPLETED는 "입출금이
+            붙었다"만 말해주고 세금계산서 유무는 알려주지 않으므로, tax_invoice를 직접 봐야 한다.
+            WAITING은 세금계산서가 이미 붙은 상태라 여기서 빠지는 게 맞다(2026-08-13).
+        -->
+        SUM(CASE WHEN NOT EXISTS (
+        SELECT 1 FROM tax_invoice ti
+        WHERE ti.settle_block_id = sb.settle_id AND ti.deleted_at IS NULL
+        ) THEN 1 ELSE 0 END) AS tax_invoice_unlinked_count,
+        <!--
+            지연일 = "기한이 지났는데 아직 연결되지 않은" 회차의 최대 경과일 (2026-08-14, 사용자 확정).
+            ⚠️ "이미 받았지만 기한보다 늦게 받은" 과거 이력은 지연으로 세지 않는다 — 이 화면은 지금
+            문제인 것을 보여주는 재무 현황이라, 해결된 건은 빼는 게 맞다는 판단이다.
+            여러 회차가 밀려 있으면 MAX(가장 급한 것)만 낸다 — 건수보다 심각도가 한눈에 보인다.
+            지연이 없으면 서브쿼리가 NULL을 내고 바깥에서 COALESCE로 0이 된다(0 = 지연 없음).
+            기한 당일은 지연이 아니다(&lt; CURDATE()).
+        -->
+        MAX(CASE WHEN sb.status IN ('PENDING', 'WAITING') AND sb.planned_date &lt; CURDATE()
+        THEN DATEDIFF(CURDATE(), sb.planned_date) END) AS payment_overdue_days,
+        <!-- 세금계산서 기한이 NULL(면세 등 세금계산서를 안 받는 회차)이면 비교가 NULL이라 자동 제외된다. -->
+        MAX(CASE WHEN sb.tax_invoice_due_date &lt; CURDATE()
+        AND NOT EXISTS (
+        SELECT 1 FROM tax_invoice ti2
+        WHERE ti2.settle_block_id = sb.settle_id AND ti2.deleted_at IS NULL
+        ) THEN DATEDIFF(CURDATE(), sb.tax_invoice_due_date) END) AS tax_invoice_overdue_days,
         COUNT(*) AS total_round_count
         FROM settlement_block sb
         JOIN block b ON b.block_id = sb.block_id

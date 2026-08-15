@@ -1,9 +1,12 @@
 package com.group3.vitamins.project.application.service;
 
+import com.group3.vitamins.global.application.event.DomainEventPublisher;
+import com.group3.vitamins.global.application.tenant.CurrentCompanyIdProvider;
 import com.group3.vitamins.global.domain.common.error.exception.ConflictException;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
+import com.group3.vitamins.notification.domain.event.NotificationRequestedEvent;
 import com.group3.vitamins.project.application.command.AddMemberCommand;
 import com.group3.vitamins.project.application.command.ChangeMemberPermissionCommand;
 import com.group3.vitamins.project.application.command.RemoveMemberCommand;
@@ -15,8 +18,10 @@ import com.group3.vitamins.project.application.usecase.ProjectAccessUseCase;
 import com.group3.vitamins.project.application.usecase.ProjectMemberCommandUseCase;
 import com.group3.vitamins.project.domain.exception.ProjectErrorCode;
 import com.group3.vitamins.project.domain.model.MemberPermission;
+import com.group3.vitamins.project.domain.model.Project;
 import com.group3.vitamins.project.domain.model.ProjectMember;
 import com.group3.vitamins.project.domain.repository.ProjectMemberRepository;
+import com.group3.vitamins.project.domain.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,13 +33,25 @@ import java.time.LocalDateTime;
 @Transactional
 public class ProjectMemberCommandService implements ProjectMemberCommandUseCase {
 
+    private static final String NOTIFICATION_TYPE_INVITED = "PROJECT_INVITED";
+    private static final String NOTIFICATION_TARGET_TYPE = "PROJECT";
+    private static final String NOTIFICATION_TITLE_INVITED = "프로젝트 초대";
+
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final EmployeeLookupPort employeeLookupPort;
     private final StepPermissionCleanupPort stepPermissionCleanupPort;
     private final StagePermissionDefaultCleanupPort stagePermissionDefaultCleanupPort;
+    private final CurrentCompanyIdProvider currentCompanyIdProvider;
+    private final DomainEventPublisher domainEventPublisher;
 
-    /** 참여자를 한 명 추가한다. 응답에 쓸 이름을 조회하면서 사원 존재 여부도 함께 판정한다. */
+    /**
+     * 참여자를 한 명 추가한다. 응답에 쓸 이름을 조회하면서 사원 존재 여부도 함께 판정한다.
+     *
+     * <p>추가된 본인에게 초대 알림을 발행한다. 이동 대상은 프로젝트 PK 하나로 화면이 열려
+     * {@code targetContext} 는 없다.
+     */
     @Override
     public MemberResult addMember(AddMemberCommand command) {
         //권한 검증
@@ -58,9 +75,27 @@ public class ProjectMemberCommandService implements ProjectMemberCommandUseCase 
         ProjectMember saved = projectMemberRepository.save(ProjectMember.create(
                 command.projectId(), command.userId(), permission, LocalDateTime.now()));
 
+        //초대 알림 발행
+        publishInvitedNotification(command.projectId(), command.userId());
+
         //리턴
         return new MemberResult(saved.getProjectMemberId(), saved.getUserId(),
                 name, saved.getPermission().name());
+    }
+
+    /**
+     * 초대 알림을 발행한다. 프로젝트명을 문구에 담아야 목록에서 어느 프로젝트인지 알아볼 수 있어
+     * 여기서 한 번 더 조회한다 — 권한 판정({@code requireEditable})은 이름을 돌려주지 않는다.
+     */
+    private void publishInvitedNotification(Long projectId, String recipientUserId) {
+        Project project = projectRepository
+                .findById(projectId, currentCompanyIdProvider.currentCompanyId())
+                .orElseThrow(() -> new NotFoundException(ProjectErrorCode.PROJECT_NOT_FOUND));
+
+        domainEventPublisher.publish(NotificationRequestedEvent.of(
+                recipientUserId, NOTIFICATION_TYPE_INVITED, NOTIFICATION_TITLE_INVITED,
+                project.getName() + "에 초대되었습니다.",
+                NOTIFICATION_TARGET_TYPE, projectId, null));
     }
 
     /** 참여자 권한 등급을 바꾼다. */
