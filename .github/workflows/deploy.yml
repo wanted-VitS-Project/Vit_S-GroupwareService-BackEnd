@@ -87,6 +87,9 @@ jobs:
           VITAMATE_WORKER_TOKEN: ${{ secrets.VITAMATE_WORKER_TOKEN }}
           NARA_API_BASE_URL: ${{ vars.NARA_API_BASE_URL }}
           NARA_API_SERVICE_KEY: ${{ secrets.NARA_API_SERVICE_KEY }}
+          # 입찰 수집 워커 (Redis Stream 소비 · 파이썬 워커와 토큰 공유)
+          BIDDING_WORKER_TOKEN: ${{ secrets.BIDDING_WORKER_TOKEN }}
+          BIDDING_COLLECTION_WORKER_ENABLED: ${{ vars.BIDDING_COLLECTION_WORKER_ENABLED }}
         run: |
           set -euo pipefail
           umask 077
@@ -104,6 +107,29 @@ jobs:
             echo "   → 레포 Settings → Secrets and variables → Actions 에 등록 후 재실행."
             exit 1
           fi
+          # ── 불리언 값 검증 ──
+          # @ConditionalOnProperty 는 havingValue 를 대소문자 무시 비교하므로 true/TRUE 는 먹지만
+          # 1·yes·오탈자는 안 먹는다. 그런데 값이 비어 있지 않으니 아래 경고에도 안 걸리고
+          # deploy.env 에는 그대로 실려서, "배포는 성공 + 워커만 침묵"이 된다. 여기서 끊는다.
+          case "$(printf '%s' "${BIDDING_COLLECTION_WORKER_ENABLED:-}" | tr '[:upper:]' '[:lower:]')" in
+            ''|true|false) ;;
+            *)
+              echo "❌ BIDDING_COLLECTION_WORKER_ENABLED 값이 잘못됨: '$BIDDING_COLLECTION_WORKER_ENABLED'"
+              echo "   → true 또는 false 만 허용된다(대소문자 무관). 워커를 켜려면 true."
+              exit 1
+              ;;
+          esac
+
+          # ── 경고만 하는 선택 키 ──
+          # 배포는 성공하는데 기능만 "조용히" 죽는 값들. 특히
+          # BIDDING_COLLECTION_WORKER_ENABLED 는 @ConditionalOnProperty 게이트라
+          # 없으면 RedisCollectionRunJobConsumer 빈이 아예 등록되지 않는다
+          # (에러도 로그도 없이 입찰 수집 스트림 소비만 안 돈다).
+          for k in BIDDING_COLLECTION_WORKER_ENABLED BIDDING_WORKER_TOKEN \
+                   VITAMATE_WORKER_TOKEN NARA_API_BASE_URL NARA_API_SERVICE_KEY; do
+            [ -z "${!k:-}" ] && echo "⚠️ 미설정: $k — 관련 기능이 조용히 비활성화된다"
+          done || true
+
           : > deploy.env
           # 빈 값은 건너뜀 → application.yml 기본값 유지 (빈값 override 방지)
           for k in ECR_REGISTRY SPRING_PROFILES_ACTIVE \
@@ -113,7 +139,8 @@ jobs:
                    CORS_ALLOWED_ORIGINS APP_LOGIN_URL \
                    AWS_REGION S3_BUCKET_NAME \
                    SETTLEMENT_ACCOUNT_ENC_KEY \
-                   VITAMATE_WORKER_TOKEN NARA_API_BASE_URL NARA_API_SERVICE_KEY; do
+                   VITAMATE_WORKER_TOKEN NARA_API_BASE_URL NARA_API_SERVICE_KEY \
+                   BIDDING_WORKER_TOKEN BIDDING_COLLECTION_WORKER_ENABLED; do
             v="${!k:-}"
             [ -n "$v" ] && printf '%s=%s\n' "$k" "$v" >> deploy.env
           done
@@ -185,5 +212,20 @@ jobs:
 
       - name: S3 시크릿 정리 (at-rest 제거)
         if: always()
+        # ⚠️ 실패를 삼키지 않는다. deploy.env 에는 DB·메일·워커 토큰이 전부 들어 있어서,
+        #    삭제가 실패했는데 워크플로가 초록으로 끝나면 시크릿이 S3 에 남은 걸 아무도 모른다.
+        #    일시적 오류를 위해 3회까지 재시도하고, 그래도 안 지워지면 스텝을 실패시킨다.
         run: |
-          aws s3 rm "${S3_PREFIX}.env" || true
+          set -uo pipefail
+          for i in 1 2 3; do
+            if aws s3 rm "${S3_PREFIX}.env"; then
+              echo "✅ S3 .env 삭제 완료"
+              exit 0
+            fi
+            echo "⚠️ S3 .env 삭제 실패 ($i/3) — 5초 후 재시도"
+            sleep 5
+          done
+          echo "❌ S3 에서 .env 를 삭제하지 못했다. 시크릿이 at-rest 로 남아 있다."
+          echo "   → 즉시 수동 삭제: aws s3 rm ${S3_PREFIX}.env"
+          echo "   → 삭제 후 노출된 시크릿 로테이션을 검토할 것."
+          exit 1
