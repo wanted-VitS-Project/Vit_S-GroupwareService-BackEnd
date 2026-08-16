@@ -4,7 +4,6 @@ import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndex
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort.FileIndexStatusUpdateResult;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort.ReclaimResult;
 import com.group3.vitamins.vitamate.fileindex.domain.model.FileIndexStatus;
-import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.entity.FileIndexEntity;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -58,6 +57,12 @@ public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStoreP
 
     @Override
     @Transactional
+    public void compensatePublishFailure(Long fileVersionId, String attemptId, LocalDateTime now) {
+        fileIndexJpaRepository.compensateFailedPublish(fileVersionId, attemptId, now);
+    }
+
+    @Override
+    @Transactional
     public FileIndexStatusUpdateResult upsertStatus(
             Long fileVersionId,
             String indexAttemptId,
@@ -84,7 +89,7 @@ public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStoreP
             }
 
             if (indexStatus == FileIndexStatus.FAILED && retryable) {
-                FileIndexStatusUpdateResult retried = tryImmediateRetry(fileVersionId, now);
+                FileIndexStatusUpdateResult retried = tryImmediateRetry(fileVersionId, resolvedAttemptId, now);
                 if (retried != null) {
                     return retried;
                 }
@@ -112,16 +117,13 @@ public class JpaVitamateFileIndexStoreAdapter implements VitamateFileIndexStoreP
     }
 
     // FAILED로 확정한 직후, 재시도 상한 미만이면 같은 트랜잭션에서 바로 PENDING + 새 attemptId로
-    // 되돌린다. 상한을 이미 채웠으면 null을 반환해 방금 확정한 FAILED를 그대로 둔다.
-    private FileIndexStatusUpdateResult tryImmediateRetry(Long fileVersionId, LocalDateTime now) {
-        FileIndexEntity entity = fileIndexJpaRepository.findById(fileVersionId).orElse(null);
-        if (entity == null || entity.getRetryCount() >= FileIndexLeasePolicy.MAX_RETRY_COUNT) {
-            return null;
-        }
-
+    // 되돌린다. 상한 판정까지 전부 retryAfterFailure의 WHERE 절 안에서 원자적으로 이뤄진다 —
+    // 별도 선행 조회로 판정하면 조회와 UPDATE 사이에 값이 바뀔 수 있다(check-then-act).
+    private FileIndexStatusUpdateResult tryImmediateRetry(Long fileVersionId, String failedAttemptId, LocalDateTime now) {
         String newAttemptId = UUID.randomUUID().toString();
         int updatedCount = fileIndexJpaRepository.retryAfterFailure(
-                fileVersionId, newAttemptId, now.plus(FileIndexLeasePolicy.LEASE_DURATION), now
+                fileVersionId, failedAttemptId, FileIndexLeasePolicy.MAX_RETRY_COUNT,
+                newAttemptId, now.plus(FileIndexLeasePolicy.LEASE_DURATION), now
         );
         if (updatedCount == 0) {
             return null;

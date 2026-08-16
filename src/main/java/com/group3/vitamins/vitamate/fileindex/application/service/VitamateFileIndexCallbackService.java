@@ -68,7 +68,7 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
         if (statusUpdateResult.requeued()) {
             log.warn("Vitamate file index retryable failure requeued - fileVersionId={}, oldIndexAttemptId={}, newIndexAttemptId={}",
                     command.fileVersionId(), command.indexAttemptId(), statusUpdateResult.indexAttemptId());
-            registerAfterCommitRequeue(command.fileVersionId(), now);
+            registerAfterCommitRequeue(command.fileVersionId(), statusUpdateResult.indexAttemptId(), now);
         }
 
         log.info("Vitamate file index status saved - fileVersionId={}, indexAttemptId={}, indexStatus={}",
@@ -128,27 +128,29 @@ public class VitamateFileIndexCallbackService implements HandleVitamateFileIndex
 
     // 이 콜백 트랜잭션이 실제로 커밋된 뒤에만 재발행한다 — 커밋 전에 발행하면, 이후 같은
     // 트랜잭션에서 다른 이유로 롤백될 때 DB는 되돌아가는데 큐에는 이미 작업이 나간 상태가 된다.
-    private void registerAfterCommitRequeue(Long fileVersionId, LocalDateTime now) {
+    private void registerAfterCommitRequeue(Long fileVersionId, String newAttemptId, LocalDateTime now) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            publishRequeue(fileVersionId, now);
+            publishRequeue(fileVersionId, newAttemptId, now);
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                publishRequeue(fileVersionId, now);
+                publishRequeue(fileVersionId, newAttemptId, now);
             }
         });
     }
 
-    // 재발행에 실패해도 즉시 재시도 상한을 다시 채우지는 않는다 — PENDING으로 남아 있으므로
-    // 재시도 스케줄러의 lease 만료 재claim이 안전망으로 나중에 다시 집어간다.
-    private void publishRequeue(Long fileVersionId, LocalDateTime now) {
+    // 재발행이 실패하면 실제로는 아무 시도도 안 일어난 것이므로, 방금 소모한 retry_count를
+    // 되돌린다 — 안 돌려주면 큐 발행 장애만으로 재시도 기회가 소진된다.
+    private void publishRequeue(Long fileVersionId, String newAttemptId, LocalDateTime now) {
         try {
             jobPublisherPort.publish(new VitamateFileIndexJobPublisherPort.FileIndexJob(fileVersionId, 0, now));
         } catch (RuntimeException e) {
-            log.error("Vitamate file index requeue publish failed - fileVersionId={}", fileVersionId, e);
+            log.error("Vitamate file index requeue publish failed - fileVersionId={}, indexAttemptId={}",
+                    fileVersionId, newAttemptId, e);
+            fileIndexStore.compensatePublishFailure(fileVersionId, newAttemptId, LocalDateTime.now());
         }
     }
 }

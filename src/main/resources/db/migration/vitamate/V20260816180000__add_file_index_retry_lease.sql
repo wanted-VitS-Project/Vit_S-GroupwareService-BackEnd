@@ -7,8 +7,21 @@ ALTER TABLE file_index
     ADD COLUMN processing_started_at DATETIME NULL COMMENT '현재 시도가 시작된 시각' AFTER retry_count,
     ADD COLUMN lease_expires_at DATETIME NULL COMMENT '현재 시도의 점유 만료 시각 — 이 시각이 지나야 재claim 가능' AFTER processing_started_at;
 
+-- ⚠️ 배포 시점에 이미 PENDING/PROCESSING인 행은 lease_expires_at이 NULL로 시작되는데,
+-- 재시도 스케줄러의 후보 조회는 lease_expires_at IS NOT NULL을 요구한다. 백필하지 않으면
+-- 이 행들은 워커가 죽어도 영원히 재claim도 최종 실패 처리도 안 되고 방치된다 — updated_at
+-- 기반 옛 판정 로직이 이 마이그레이션에서 완전히 대체되므로 다른 안전망이 없다.
+UPDATE file_index
+   SET processing_started_at = updated_at,
+       lease_expires_at = updated_at
+ WHERE index_status IN ('PENDING', 'PROCESSING')
+   AND lease_expires_at IS NULL;
+
+-- ⚠️ 상한을 DB CHECK로 못박으면 정책값(FileIndexLeasePolicy.MAX_RETRY_COUNT)을 바꿀 때마다
+-- 반드시 새 마이그레이션이 따라와야 한다. 실제 상한 판정은 애플리케이션 쿼리 조건
+-- (retry_count < :maxRetryCount)이 담당하므로, DB 제약은 음수 방지 정도만 남긴다.
 ALTER TABLE file_index
-    ADD CONSTRAINT chk_file_index_retry_count CHECK (retry_count >= 0 AND retry_count <= 2);
+    ADD CONSTRAINT chk_file_index_retry_count CHECK (retry_count >= 0);
 
 ALTER TABLE file_index
     ADD INDEX idx_file_index_worker_claim (index_status, lease_expires_at);

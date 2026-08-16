@@ -51,35 +51,4 @@ public class FileIndexEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
-
-    // fileVersionId 기준으로 새 인덱싱 상태 row를 만든다.
-    public FileIndexEntity(Long fileVersionId, LocalDateTime now) {
-        this.fileVersionId = fileVersionId;
-        this.indexStatus = FileIndexStatus.PENDING;
-        this.createdAt = now;
-        this.updatedAt = now;
-    }
-
-    // Python callback 상태에 맞춰 인덱싱 상태를 갱신한다.
-    public void changeStatus(String indexAttemptId, FileIndexStatus status, String errorMessage, LocalDateTime now) {
-        this.indexAttemptId = indexAttemptId;
-        this.indexStatus = status;
-        this.updatedAt = now;
-        this.deletedAt = null;
-
-        if (status == FileIndexStatus.COMPLETED) {
-            this.indexErrorMessage = null;
-            this.indexedAt = now;
-            return;
-        }
-
-        if (status == FileIndexStatus.FAILED) {
-            this.indexErrorMessage = errorMessage;
-            this.indexedAt = null;
-            return;
-        }
-
-        this.indexErrorMessage = null;
-        this.indexedAt = null;
-    }
 }

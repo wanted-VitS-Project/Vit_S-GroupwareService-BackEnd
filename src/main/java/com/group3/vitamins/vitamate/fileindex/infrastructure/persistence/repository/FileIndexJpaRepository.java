@@ -100,8 +100,10 @@ public interface FileIndexJpaRepository extends JpaRepository<FileIndexEntity, L
     );
 
     // FAILED 판정 직후, 같은 트랜잭션 안에서 재시도 가능(retryable) 판정이면 즉시 PENDING으로
-    // 되돌리고 새 attemptId를 발급한다. index_status='FAILED' 조건으로 우리가 방금 실패 처리한
-    // 바로 그 행만 대상이 되도록 펜싱한다.
+    // 되돌리고 새 attemptId를 발급한다. index_status='FAILED' + index_attempt_id(방금 실패
+    // 처리한 바로 그 시도) + retry_count < maxRetryCount를 WHERE 절에서 한 번에 확인한다 —
+    // 상한 판정을 호출 측의 선행 조회에 맡기면(check-then-act) 그 사이 값이 바뀌어 retry_count가
+    // 상한을 넘고 chk_file_index_retry_count 위반으로 트랜잭션이 실패할 수 있다.
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
         UPDATE file_index
@@ -114,12 +116,34 @@ public interface FileIndexJpaRepository extends JpaRepository<FileIndexEntity, L
                updated_at = :now
          WHERE file_version_id = :fileVersionId
            AND index_status = 'FAILED'
+           AND index_attempt_id = :failedAttemptId
+           AND retry_count < :maxRetryCount
            AND deleted_at IS NULL
         """, nativeQuery = true)
     int retryAfterFailure(
             @Param("fileVersionId") Long fileVersionId,
+            @Param("failedAttemptId") String failedAttemptId,
+            @Param("maxRetryCount") int maxRetryCount,
             @Param("newAttemptId") String newAttemptId,
             @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt,
+            @Param("now") LocalDateTime now
+    );
+
+    // 재큐잉을 확정했지만(retry_count를 이미 소모) 실제 발행(Redis publish)이 실패했을 때, 실제로는
+    // 아무 시도도 안 일어났으니 방금 소모한 retry_count를 돌려준다. index_attempt_id로 펜싱해
+    // 그 사이 다른 경로(예: 재시도 스케줄러)가 이미 이 행을 건드렸으면 되돌리지 않는다.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+        UPDATE file_index
+           SET retry_count = GREATEST(retry_count - 1, 0),
+               updated_at = :now
+         WHERE file_version_id = :fileVersionId
+           AND index_status = 'PENDING'
+           AND index_attempt_id = :attemptId
+        """, nativeQuery = true)
+    int compensateFailedPublish(
+            @Param("fileVersionId") Long fileVersionId,
+            @Param("attemptId") String attemptId,
             @Param("now") LocalDateTime now
     );
 

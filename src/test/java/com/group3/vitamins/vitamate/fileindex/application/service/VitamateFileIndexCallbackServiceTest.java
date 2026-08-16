@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -161,6 +162,22 @@ class VitamateFileIndexCallbackServiceTest {
             verify(jobPublisherPort).publish(argThat(
                     (VitamateFileIndexJobPublisherPort.FileIndexJob job) -> job.fileVersionId().equals(FILE_VERSION_ID)
             ));
+        }
+
+        @Test
+        @DisplayName("compensates the spent retry_count when the requeue publish itself fails")
+        void compensatesRetryCountWhenPublishFails() {
+            when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("Gemini rate limit exceeded"), eq(true), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, NEW_INDEX_ATTEMPT_ID, FileIndexStatus.PENDING, null, true));
+            doThrow(new RuntimeException("redis down"))
+                    .when(jobPublisherPort).publish(any());
+
+            callbackService.handle(
+                    new HandleVitamateFileIndexCallbackCommand(FILE_VERSION_ID, INDEX_ATTEMPT_ID, "FAILED", "Gemini rate limit exceeded", true)
+            );
+
+            verify(fileIndexStore).compensatePublishFailure(eq(FILE_VERSION_ID), eq(NEW_INDEX_ATTEMPT_ID), any());
         }
 
         @Test

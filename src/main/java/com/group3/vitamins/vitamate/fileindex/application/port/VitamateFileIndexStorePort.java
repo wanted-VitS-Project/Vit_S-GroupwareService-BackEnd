@@ -27,6 +27,11 @@ public interface VitamateFileIndexStorePort {
     // 종료시킨 것이고, false면 그 사이 다른 경로로 상태가 이미 바뀐 것이다.
     boolean failExhausted(Long fileVersionId, LocalDateTime now, String errorMessage);
 
+    // 재큐잉(즉시 재시도 또는 스케줄러 claim)까지는 확정했지만 실제 발행(Redis publish)이 실패했을
+    // 때 호출한다. 실제 워커 시도가 없었으니 방금 소모한 retry_count를 되돌린다 — 안 돌려주면
+    // 큐 발행 장애만으로 재시도 기회가 소진된다.
+    void compensatePublishFailure(Long fileVersionId, String attemptId, LocalDateTime now);
+
     FileIndexStatusUpdateResult upsertStatus(
             Long fileVersionId,
             String indexAttemptId,

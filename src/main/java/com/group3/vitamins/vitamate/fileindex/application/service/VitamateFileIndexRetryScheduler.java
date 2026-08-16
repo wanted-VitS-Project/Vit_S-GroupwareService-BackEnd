@@ -71,7 +71,17 @@ public class VitamateFileIndexRetryScheduler {
                 continue;
             }
             claimedCount++;
-            jobPublisherPort.publish(new VitamateFileIndexJobPublisherPort.FileIndexJob(fileVersionId, 0, now));
+
+            // 한 건의 발행 실패가 배치 전체를 중단시키면 안 된다 — 항목 단위로 격리한다.
+            // 발행이 실패하면 실제로는 아무 시도도 안 일어난 것이므로 방금 소모한 retry_count를
+            // 되돌린다(안 돌려주면 큐 발행 장애만으로 재시도 기회가 소진된다).
+            try {
+                jobPublisherPort.publish(new VitamateFileIndexJobPublisherPort.FileIndexJob(fileVersionId, 0, now));
+            } catch (RuntimeException e) {
+                log.error("Vitamate file index retry publish failed - fileVersionId={}, indexAttemptId={}",
+                        fileVersionId, reclaim.newAttemptId(), e);
+                fileIndexStorePort.compensatePublishFailure(fileVersionId, reclaim.newAttemptId(), LocalDateTime.now());
+            }
         }
 
         if (claimedCount > 0) {

@@ -360,6 +360,47 @@ class JpaVitamateFileIndexStoreAdapterTest {
         }
     }
 
+    @Nested
+    @DisplayName("발행 실패 보상(compensatePublishFailure)")
+    class PublishFailureCompensation {
+
+        @Test
+        @DisplayName("방금 소모한 retry_count를 되돌린다")
+        void decrementsRetryCountForMatchingAttempt() {
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, false, NOW.minusMinutes(1));
+            FileIndexStatusUpdateResult retried = adapter.upsertStatus(
+                    ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, "Gemini rate limit exceeded", true, NOW
+            );
+            assertThat(repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow().getRetryCount()).isEqualTo(1);
+
+            adapter.compensatePublishFailure(ACTIVE_FILE_VERSION_ID, retried.indexAttemptId(), NOW);
+
+            assertThat(repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow().getRetryCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("retry_count가 이미 0이면 음수로 내려가지 않는다")
+        void neverGoesNegative() {
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, null, FileIndexStatus.PENDING, null, false, NOW);
+
+            adapter.compensatePublishFailure(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, NOW);
+
+            assertThat(repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow().getRetryCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("attemptId가 다르면(그 사이 다른 경로가 이미 건드림) 되돌리지 않는다")
+        void doesNotCompensateWhenAttemptNoLongerMatches() {
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, false, NOW.minusMinutes(1));
+            adapter.upsertStatus(ACTIVE_FILE_VERSION_ID, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, "Gemini rate limit exceeded", true, NOW);
+            assertThat(repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow().getRetryCount()).isEqualTo(1);
+
+            adapter.compensatePublishFailure(ACTIVE_FILE_VERSION_ID, "다른-attempt-id", NOW);
+
+            assertThat(repository.findById(ACTIVE_FILE_VERSION_ID).orElseThrow().getRetryCount()).isEqualTo(1);
+        }
+    }
+
     // file_index 저장에 필요한 부모 file_version 행을 준비합니다.
     private void insertFileVersion(Long fileVersionId, LocalDateTime deletedAt) {
         jdbcTemplate.update("""
