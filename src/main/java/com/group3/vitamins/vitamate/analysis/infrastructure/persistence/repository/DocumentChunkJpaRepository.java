@@ -12,8 +12,8 @@ import java.util.List;
 // 문서 청크가 선택 문서 버전에 속하는지 검증하는 JPA Repository
 public interface DocumentChunkJpaRepository extends JpaRepository<DocumentChunkEntity, Long> {
 
-    // 청크 ID와 파일 버전 ID가 서로 연결되어 있고 삭제되지 않았는지 확인한다.
-    boolean existsByIdAndFileVersionIdAndDeletedAtIsNull(Long id, Long fileVersionId);
+    // citation 검증에서 청크마다 존재 여부를 반복 조회하지 않도록, 활성 청크를 한 번에 조회한다.
+    List<DocumentChunkEntity> findAllByIdInAndDeletedAtIsNull(List<Long> ids);
 
     // Python worker가 ChromaDB에 저장할 수 있도록 방금 저장된 chunk ID 목록을 조회합니다.
     @Query("""
@@ -57,81 +57,4 @@ public interface DocumentChunkJpaRepository extends JpaRepository<DocumentChunkE
             @Param("now") LocalDateTime now
     );
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = """
-        INSERT INTO document_chunk (
-            file_version_id,
-            chunk_index,
-            page_number,
-            section_title,
-            start_offset,
-            end_offset,
-            token_count,
-            chroma_id,
-            excerpt,
-            embedding_model,
-            embedding_status,
-            created_at,
-            updated_at,
-            deleted_at
-        )
-        VALUES (
-            :fileVersionId,
-            :chunkIndex,
-            :pageNumber,
-            :sectionTitle,
-            :startOffset,
-            :endOffset,
-            :tokenCount,
-            NULL,
-            :excerpt,
-            NULL,
-            'PENDING',
-            :now,
-            :now,
-            NULL
-        )
-        ON DUPLICATE KEY UPDATE
-            page_number = VALUES(page_number),
-            section_title = VALUES(section_title),
-            start_offset = VALUES(start_offset),
-            end_offset = VALUES(end_offset),
-            token_count = VALUES(token_count),
-            chroma_id = NULL,
-            excerpt = VALUES(excerpt),
-            embedding_model = NULL,
-            embedding_status = 'PENDING',
-            updated_at = :now,
-            deleted_at = NULL
-        """, nativeQuery = true)
-    int upsertChunk(
-            @Param("fileVersionId") Long fileVersionId,
-            @Param("chunkIndex") Integer chunkIndex,
-            @Param("pageNumber") Integer pageNumber,
-            @Param("sectionTitle") String sectionTitle,
-            @Param("startOffset") Integer startOffset,
-            @Param("endOffset") Integer endOffset,
-            @Param("tokenCount") Integer tokenCount,
-            @Param("excerpt") String excerpt,
-            @Param("now") LocalDateTime now
-    );
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-        UPDATE DocumentChunkEntity c
-           SET c.chromaId = :chromaId,
-               c.embeddingModel = :embeddingModel,
-               c.embeddingStatus = 'COMPLETED',
-               c.updatedAt = :now
-         WHERE c.fileVersionId = :fileVersionId
-           AND c.id = :documentChunkId
-           AND c.deletedAt IS NULL
-        """)
-    int updateChunkEmbedding(
-            @Param("fileVersionId") Long fileVersionId,
-            @Param("documentChunkId") Long documentChunkId,
-            @Param("chromaId") String chromaId,
-            @Param("embeddingModel") String embeddingModel,
-            @Param("now") LocalDateTime now
-    );
 }

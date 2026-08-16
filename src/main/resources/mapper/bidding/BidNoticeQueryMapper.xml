@@ -66,15 +66,8 @@
             notice.announced_at,
             notice.bid_deadline_at,
             NULL AS d_day,
-            CASE WHEN state.first_seen_run_id = (
-                SELECT MAX(latest_run.crawl_run_id)
-                FROM crawl_run latest_run
-                JOIN crawl_condition latest_condition
-                  ON latest_condition.crawl_condition_id = latest_run.crawl_condition_id
-                WHERE latest_condition.company_id = #{companyId}
-                  AND latest_run.run_status IN ('COMPLETED', 'PARTIAL_SUCCESS')
-                  AND latest_run.deleted_at IS NULL
-            ) THEN TRUE ELSE FALSE END AS is_new,
+            CASE WHEN state.first_seen_run_id = latest_run.crawl_run_id
+                THEN TRUE ELSE FALSE END AS is_new,
             state.notice_status,
             state.is_favorite,
             (
@@ -86,6 +79,27 @@
                   AND project_table.deleted_at IS NULL
             ) AS project_id
         <include refid="noticeJoins"/>
+        <!--
+            현재 회사의 "마지막 성공 수집 실행 ID"는 이 쿼리 전체에서 단 하나의 값이라(companyId에만
+            의존, notice별로 달라지지 않음), 예전처럼 SELECT 절 안 상관 서브쿼리로 행마다 재계산하지
+            않고 단일 행 파생 테이블로 한 번만 계산해 조인한다.
+            ⚠️ MAX(crawl_run_id)가 아니라 finished_at 기준으로 가장 최근 실행을 고른다 — 여러
+            수집조건의 실행이 서로 인터리브되면 ID 순서가 완료 순서와 어긋날 수 있다. 또한
+            ORDER BY ... LIMIT 1은 매칭되는 행이 없으면 결과가 0행이라(MAX()는 항상 1행, NULL로
+            반환) LEFT JOIN이어야 한다 — 그냥 JOIN이면 완료된 실행이 아직 없는 회사의 전체 결과가
+            사라진다.
+        -->
+        LEFT JOIN (
+            SELECT latest_run.crawl_run_id
+            FROM crawl_run latest_run
+            JOIN crawl_condition latest_condition
+              ON latest_condition.crawl_condition_id = latest_run.crawl_condition_id
+            WHERE latest_condition.company_id = #{companyId}
+              AND latest_run.run_status IN ('COMPLETED', 'PARTIAL_SUCCESS')
+              AND latest_run.deleted_at IS NULL
+            ORDER BY latest_run.finished_at DESC, latest_run.crawl_run_id DESC
+            LIMIT 1
+        ) latest_run ON 1 = 1
         <include refid="noticeFilters"/>
         <choose>
             <when test="query.sort == 'DEADLINE_ASC'">

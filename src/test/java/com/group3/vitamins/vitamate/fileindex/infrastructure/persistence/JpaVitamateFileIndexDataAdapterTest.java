@@ -9,17 +9,22 @@ import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndex
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunks;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.adapter.JpaVitamateFileIndexDataAdapter;
+import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.mapper.DocumentChunkBatchMapper;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mybatis.spring.SqlSessionFactoryBean;
+import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import javax.sql.DataSource;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -67,16 +72,31 @@ class JpaVitamateFileIndexDataAdapterTest {
     @Autowired
     private EntityManager entityManager;
 
+    @Autowired
+    private DataSource dataSource;
+
     private FileStoragePort fileStoragePort;
     private JpaVitamateFileIndexDataAdapter adapter;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         fileStoragePort = mock(FileStoragePort.class);
+
+        // MyBatis 매퍼를 JPA와 같은 DataSource로 만들어서, 같은 트랜잭션(커넥션)에 참여하게 한다 —
+        // 그래야 이 테스트의 트랜잭션 롤백이 매퍼가 실행한 INSERT/UPDATE도 함께 되돌린다.
+        SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
+        factoryBean.setDataSource(dataSource);
+        factoryBean.setMapperLocations(new PathMatchingResourcePatternResolver()
+                .getResources("classpath:mapper/vitamate/DocumentChunkBatchMapper.xml"));
+        DocumentChunkBatchMapper documentChunkBatchMapper =
+                new SqlSessionTemplate(factoryBean.getObject())
+                        .getMapper(DocumentChunkBatchMapper.class);
+
         adapter = new JpaVitamateFileIndexDataAdapter(
                 fileVersionRepository,
                 fileRepository,
                 documentChunkRepository,
+                documentChunkBatchMapper,
                 fileIndexRepository,
                 fileStoragePort,
                 entityManager
