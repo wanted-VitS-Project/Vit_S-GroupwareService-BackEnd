@@ -1136,6 +1136,7 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 | `indexStatus` | String | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 중 하나 |
 | `indexAttemptId` | String | 현재 인덱싱 시도 ID. `PENDING`, `PROCESSING`은 생략 가능하고, `COMPLETED`, `FAILED`는 필수 |
 | `errorMessage` | String | 실패 사유. `FAILED`일 때 필수 |
+| `retryable` | Boolean | `FAILED`일 때만 의미가 있다(2026-08-16 추가). `true`면 Gemini 429/크레딧 소진 등 일시적 실패라는 뜻 — 재시도 상한(최대 2회) 안에서 Spring Boot가 같은 트랜잭션에서 즉시 `PENDING` + 새 `indexAttemptId`로 되돌리고 재큐잉한다. `false`/생략이면 영구 실패로 확정한다 |
 
 저장 상태값:
 
@@ -1163,6 +1164,8 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 | 중복 callback | 같은 `fileVersionId`로 여러 번 호출되어도 중복 row를 만들지 않는다 |
 | 시도 ID 생성 | `PENDING`, `PROCESSING` callback에 `indexAttemptId`가 없으면 Spring Boot가 새 값을 생성해 응답한다 |
 | 늦은 callback 차단 | `COMPLETED`, `FAILED`는 현재 `indexAttemptId`와 일치할 때만 저장한다. 일치하지 않으면 `accepted=false`로 응답하고 상태를 바꾸지 않는다 |
+| 점유(lease) | 등록·처리 확인 시점에 15분짜리 점유 시간을 둔다. 이 시간 안에는 재시도 스케줄러가 절대 `indexAttemptId`를 재발급하지 않는다 — Gemini 429 백오프로 처리가 오래 걸려도 살아있는 시도는 안전하다 |
+| 재시도 상한 | `retryable=true`인 `FAILED`는 파일 하나당 최대 2회까지만 자동 재시도한다. 상한을 넘기면 더 재시도하지 않고 `FAILED`로 확정한다 |
 | 상태 검증 | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 외 값은 400 |
 | 실패 메시지 | `FAILED`인데 `errorMessage`가 비어 있으면 400 |
 | 완료 메시지 | `PENDING`, `PROCESSING`, `COMPLETED`이면 기존 `index_error_message`를 제거한다 |
@@ -1188,13 +1191,25 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 }
 ```
 
-**Request 예시 — 실패**
+**Request 예시 — 실패 (영구)**
 
 ```json
 {
   "indexStatus": "FAILED",
   "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
-  "errorMessage": "PDF 텍스트 추출에 실패했습니다."
+  "errorMessage": "PDF 텍스트 추출에 실패했습니다.",
+  "retryable": false
+}
+```
+
+**Request 예시 — 실패 (일시적, 재시도 가능)**
+
+```json
+{
+  "indexStatus": "FAILED",
+  "indexAttemptId": "550e8400-e29b-41d4-a716-446655440000",
+  "errorMessage": "Gemini 요청 한도를 초과했습니다.",
+  "retryable": true
 }
 ```
 
@@ -1215,8 +1230,8 @@ Python worker가 파일 버전 인덱싱 상태를 Spring Boot에 전달하는 �
 |---------|------|------|
 | `accepted` | Boolean | 상태 저장 여부 |
 | `fileVersionId` | Long | 파일 버전 ID |
-| `indexAttemptId` | String | 저장되었거나 검증된 인덱싱 시도 ID |
-| `indexStatus` | String | 저장된 인덱싱 상태 |
+| `indexAttemptId` | String | 저장되었거나 검증된 인덱싱 시도 ID. `retryable=true` FAILED가 즉시 재큐잉되면 새로 발급된 값이 온다 |
+| `indexStatus` | String | 저장된 인덱싱 상태. `retryable=true` FAILED가 재시도 상한 안이면 `FAILED`가 아니라 `PENDING`으로 온다(즉시 재큐잉됨) |
 | `reason` | String | `accepted=false`일 때 무시 사유 |
 
 **Response 예시**
