@@ -262,7 +262,7 @@
 > 이미지 갤러리·휴지통은 이 깊이를 넘길 실사용 케이스가 없고, 제한이 없으면 매우 큰 `page` 값이
 > DB에 거대한 OFFSET으로 그대로 전달돼 자원을 낭비할 수 있다(CodeRabbit 지적).
 
-> sort 파라미터는 없다 — 정렬 기준(생성일 최신순)이 고정이라 선택 옵션 자체가 없다.
+> sort 파라미터는 없다 — 정렬 기준(`created_at` 내림차순, 동일 시각이면 `img_id` 내림차순으로 tie-break)이 고정이라 선택 옵션 자체가 없다.
 
 **Request Body**: 없음
 
@@ -324,7 +324,9 @@
 >
 > **구현 메모** — 휴지통 조회와 조인 체인은 동일(`image → image_block → block → step`, `step.project_id`로 필터)하고 삭제 필터 방향만 반대다(`deleted_at IS NULL` — 활성 이미지만). 관심사가 달라 `ImageGalleryMapper`로 별도 파일 분리, `ImageTrashController`는 이 API 추가로 `ImageProjectController`로 이름을 바꿨다(프로젝트 단위 이미지 API 2종을 함께 담음).
 >
-> 🔄 **페이징 추가 (2026-08-16)** — 프로젝트 이미지가 누적되면 한 번에 전체를 내려주는 게 부담이 될 수 있어 재무 목록 조회와 같은 컨벤션(`page`/`size` + `{page,size,totalElements,totalPages}`)으로 맞췄다. `sort`는 만들지 않았다 — 정렬 기준이 이미 고정(생성일 최신순)이라 프론트가 선택할 옵션 자체가 없다. `page`<0 또는 `size`≤0/>100이면 클램프하지 않고 `400 IMG-012`로 거부한다(재무 `FINANCE_PAGE_QUERY_INVALID`와 동일 원칙).
+> 🔄 **페이징 추가 (2026-08-16)** — 프로젝트 이미지가 누적되면 한 번에 전체를 내려주는 게 부담이 될 수 있어 재무 목록 조회와 같은 컨벤션(`page`/`size` + `{page,size,totalElements,totalPages}`)으로 맞췄다. `sort`는 만들지 않았다 — 정렬 기준이 이미 고정(생성일 최신순)이라 프론트가 선택할 옵션 자체가 없다. `page`<0 또는 `size`≤0/>100, `page`×`size`>100,000이면 클램프하지 않고 `400 IMG-012`로 거부한다(재무 `FINANCE_PAGE_QUERY_INVALID`와 동일 원칙).
+>
+> ⚠️ **`IMG-012`는 `page`/`size`가 숫자로는 파싱됐는데 범위를 벗어난 경우만이다** — `page=abc`처럼 애초에 숫자가 아닌 값은 Spring이 컨트롤러에 들어오기 전에 걸러서 공통 `COMMON_INVALID_REQUEST`로 응답한다(재무 등 다른 페이지네이션 API와 동일한 프레임워크 동작, 2026-08-16 CodeRabbit 지적으로 명확화).
 
 ---
 
@@ -350,7 +352,7 @@
 > 이미지 갤러리·휴지통은 이 깊이를 넘길 실사용 케이스가 없고, 제한이 없으면 매우 큰 `page` 값이
 > DB에 거대한 OFFSET으로 그대로 전달돼 자원을 낭비할 수 있다(CodeRabbit 지적).
 
-> sort 파라미터는 없다 — 정렬 기준(삭제일 최신순)이 고정이라 선택 옵션 자체가 없다.
+> sort 파라미터는 없다 — 정렬 기준(`deleted_at` 내림차순, 동일 시각이면 `img_id` 내림차순으로 tie-break)이 고정이라 선택 옵션 자체가 없다.
 
 **Request Body**: 없음
 
@@ -417,6 +419,8 @@
 > **구현 메모**: `image → image_block → block → step` 을 타고 `step.project_id`로 필터링한다. 여러 테이블 조인이라 Block 도메인에 별도 어댑터를 요청하지 않고 MyBatis로 직접 조회(`ImageTrashMapper`, `.ai/docs/global/MYBATIS.md` 기준에 부합). 삭제된 이미지도 S3 객체는 남아있으므로(소프트 삭제 원칙) `imageUrl`은 정상적으로 presign해서 내려준다.
 >
 > 🔄 **페이징 추가 (2026-08-16)** — 모아보기 조회와 동일한 이유·동일한 컨벤션으로 추가했다. `sort` 없음(정렬 고정), `page`<0 또는 `size`≤0/>100, `page`×`size`>100,000이면 `400 IMG-012`로 거부.
+>
+> ⚠️ **`IMG-012`는 `page`/`size`가 숫자로는 파싱됐는데 범위를 벗어난 경우만이다** — 숫자가 아닌 값은 공통 `COMMON_INVALID_REQUEST`로 응답한다(모아보기 조회와 동일, 2026-08-16 CodeRabbit 지적으로 명확화).
 
 ---
 
