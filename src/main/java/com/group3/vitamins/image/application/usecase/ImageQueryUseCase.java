@@ -53,8 +53,17 @@ public interface ImageQueryUseCase {
     ) {
     }
 
-    //이미지 휴지통 조회 — 프로젝트에 속한 삭제된 이미지 전체
-    List<TrashedImageView> getTrash(GetImageTrashQuery query);
+    //이미지 휴지통 조회 — 프로젝트에 속한 삭제된 이미지(페이지네이션)
+    ImageTrashView getTrash(GetImageTrashQuery query);
+
+    record ImageTrashView(
+            List<TrashedImageView> images,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages
+    ) {
+    }
 
     record TrashedImageView(
             Long imgId,
@@ -66,8 +75,17 @@ public interface ImageQueryUseCase {
     ) {
     }
 
-    //프로젝트 이미지 모아보기 — 프로젝트에 속한 활성 이미지 전체(여러 스텝·블록에 걸침)
-    List<ProjectImageView> getProjectImages(GetProjectImagesQuery query);
+    //프로젝트 이미지 모아보기 — 프로젝트에 속한 활성 이미지(여러 스텝·블록에 걸침, 페이지네이션)
+    ProjectImagesView getProjectImages(GetProjectImagesQuery query);
+
+    record ProjectImagesView(
+            List<ProjectImageView> images,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages
+    ) {
+    }
 
     record ProjectImageView(
             Long imgBlockId,

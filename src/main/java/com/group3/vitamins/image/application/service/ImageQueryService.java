@@ -1,6 +1,7 @@
 package com.group3.vitamins.image.application.service;
 
 import com.group3.vitamins.global.domain.common.error.exception.NotFoundException;
+import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.image.application.policy.ImageEligibilityPolicy;
 import com.group3.vitamins.image.application.port.ImageStoragePort;
 import com.group3.vitamins.image.application.query.GetImageDownloadQuery;
@@ -51,6 +52,12 @@ import java.util.zip.ZipOutputStream;
 @Transactional(readOnly = true)
 @Slf4j
 public class ImageQueryService implements ImageQueryUseCase {
+
+    private static final int MAX_PAGE_SIZE = 100;
+    // 프로젝트 이미지 갤러리·휴지통은 실사용상 이 범위를 넘길 일이 없다(.ai/api/image.md 명세 참고) —
+    // page*size를 int로만 계산하면 큰 값 근처에서 오버플로 경계가 실제 유효 범위와 어긋나고(2026-08-16,
+    // CodeRabbit 지적), 오버플로가 안 나더라도 매우 큰 OFFSET이 그대로 DB로 넘어가 자원을 낭비할 수 있다.
+    private static final long MAX_OFFSET = 100_000L;
 
     private final ImageEligibilityPolicy eligibilityPolicy;
     private final ImageRepository imageRepository;
@@ -257,49 +264,67 @@ public class ImageQueryService implements ImageQueryUseCase {
     }
 
     /**
-     * 이미지 휴지통 — 프로젝트에 속한 삭제된 이미지 전체를 최신순으로 돌려준다. stepId를 하나로
+     * 이미지 휴지통 — 프로젝트에 속한 삭제된 이미지를 최신순으로 페이지네이션 조회한다. stepId를 하나로
      * 특정할 수 없는 프로젝트 전체 조회라, 스텝 단위가 아니라 {@link ProjectAccessUseCase}로 프로젝트
      * 접근 권한만 확인한다(존재하지 않으면 404, 참여자가 아니면 403 — 둘 다 프로젝트 도메인 공통 코드).
      */
     @Override
-    public List<TrashedImageView> getTrash(GetImageTrashQuery query) {
+    public ImageTrashView getTrash(GetImageTrashQuery query) {
         log.info("이미지 휴지통 조회 요청 - projectId={}, userId={}", query.projectId(), query.userId());
 
         projectAccessUseCase.requireAccess(query.projectId(), query.userId(), query.role());
+        validatePageQuery(query.page(), query.size());
 
-        List<TrashedImageView> trashed = imageTrashMapper.findTrashedByProjectId(query.projectId()).stream()
+        List<TrashedImageView> trashed = imageTrashMapper
+                .findTrashedByProjectId(query.projectId(), query.size(), query.page() * query.size()).stream()
                 .map(row -> new TrashedImageView(
                         row.imgId(), row.originalName(),
                         imageStoragePort.presignViewUrl(row.imageUrl()),
                         row.caption(), row.deletedAt(), row.blockDeleted()))
                 .toList();
+        long totalElements = imageTrashMapper.countTrashedByProjectId(query.projectId());
+        int totalPages = (int) Math.ceil((double) totalElements / query.size());
 
         log.info("이미지 휴지통 조회 완료 - projectId={}, count={}", query.projectId(), trashed.size());
 
-        return trashed;
+        return new ImageTrashView(trashed, query.page(), query.size(), totalElements, totalPages);
     }
 
     /**
-     * 프로젝트 이미지 모아보기 — 프로젝트에 속한 활성 이미지 전체를 생성일 최신순으로 돌려준다.
+     * 프로젝트 이미지 모아보기 — 프로젝트에 속한 활성 이미지를 생성일 최신순으로 페이지네이션 조회한다.
      * 휴지통 조회와 동일한 이유로 스텝 단위가 아니라 {@link ProjectAccessUseCase}로 프로젝트 접근
      * 권한만 확인한다. 정렬 기준(최신순)은 명세에 없어 트래시 조회와 동일하게 구현 시 임의 결정.
      */
     @Override
-    public List<ProjectImageView> getProjectImages(GetProjectImagesQuery query) {
+    public ProjectImagesView getProjectImages(GetProjectImagesQuery query) {
         log.info("프로젝트 이미지 모아보기 조회 요청 - projectId={}, userId={}", query.projectId(), query.userId());
 
         projectAccessUseCase.requireAccess(query.projectId(), query.userId(), query.role());
+        validatePageQuery(query.page(), query.size());
 
-        List<ProjectImageView> images = imageGalleryMapper.findActiveByProjectId(query.projectId()).stream()
+        List<ProjectImageView> images = imageGalleryMapper
+                .findActiveByProjectId(query.projectId(), query.size(), query.page() * query.size()).stream()
                 .map(row -> new ProjectImageView(
                         row.imgBlockId(), row.blockTitle(), row.stepId(), row.stepName(),
                         row.imgId(), row.originalName(),
                         imageStoragePort.presignViewUrl(row.imageUrl()),
                         row.caption(), row.createdAt()))
                 .toList();
+        long totalElements = imageGalleryMapper.countActiveByProjectId(query.projectId());
+        int totalPages = (int) Math.ceil((double) totalElements / query.size());
 
         log.info("프로젝트 이미지 모아보기 조회 완료 - projectId={}, count={}", query.projectId(), images.size());
 
-        return images;
+        return new ProjectImagesView(images, query.page(), query.size(), totalElements, totalPages);
+    }
+
+    // 재무 입출금/세금계산서 조회와 동일 컨벤션 — 잘못된 page/size는 클램프 대신 400으로 던진다.
+    // ⚠️ page*size는 long으로 계산한다 — int로 계산하면 큰 값 근처에서 오버플로 자체를 막는 것과
+    // "말이 되는 페이지 깊이인가"가 서로 다른 기준이 되어, 유효해 보이는 조합이 잘못 거부되거나
+    // 반대로 거대한 OFFSET이 그대로 통과하는 경우가 생긴다(2026-08-16, CodeRabbit 지적).
+    private void validatePageQuery(int page, int size) {
+        if (page < 0 || size <= 0 || size > MAX_PAGE_SIZE || (long) page * size > MAX_OFFSET) {
+            throw new ValidationException(ImageErrorCode.PAGE_QUERY_INVALID);
+        }
     }
 }
