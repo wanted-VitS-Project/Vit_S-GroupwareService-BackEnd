@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -38,6 +39,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +57,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -109,6 +112,19 @@ class ApprovalConcurrencyTest {
     private static final String APPROVER_1 = "EMP002";
     private static final String APPROVER_2 = "EMP003";
 
+    /**
+     * 락을 <b>실제로 쥔 뒤</b> 첫 요청을 멈춰 세우기 위한 스파이 2종.
+     *
+     * <p>잠금 조회({@code SELECT ... FOR UPDATE})를 감싸서, 진짜 메서드를 호출해 락을 잡은 다음
+     * 테스트가 풀어줄 때까지 그 자리에 세운다. 트랜잭션이 아직 열려 있으므로 <b>행 잠금이 유지된 채로</b>
+     * 두 번째 요청을 들여보낼 수 있다.
+     *
+     * <p>운영 코드에 테스트용 훅을 심지 않으려고 스파이를 쓴다 — 잠금 지점이 이미 정책 클래스의
+     * 공개 메서드라 그 경계에서 가로채면 충분하다.
+     */
+    @MockitoSpyBean private ApprovalLineProcessingPolicy lineProcessingPolicy;
+    @MockitoSpyBean private ApprovalRevisionEligibilityPolicy revisionEligibilityPolicy;
+
     @Autowired private ApprovalCommandService approvalCommandService;
     @Autowired private SpringDataApprovalRepository approvalRepository;
     @Autowired private SpringDataApprovalRevisionRepository revisionRepository;
@@ -150,7 +166,11 @@ class ApprovalConcurrencyTest {
     void concurrentApproveProcessesOnlyOnce() throws Exception {
         Fixture fixture = submittedApprovalWithTwoLines();
 
-        List<Outcome> outcomes = runConcurrently(2, () ->
+        LockGate gate = new LockGate();
+        Mockito.doAnswer(gate::pauseFirstHolder)
+                .when(lineProcessingPolicy).getApprovalForLineForUpdateOrThrow(Mockito.anyLong());
+
+        List<Outcome> outcomes = runContending(2, gate, () ->
                 approvalCommandService.approve(
                         new ApproveApprovalLineCommand(fixture.firstLineId(), "확인했습니다", APPROVER_1)));
 
@@ -181,7 +201,11 @@ class ApprovalConcurrencyTest {
     void concurrentResubmitCreatesSingleRevision() throws Exception {
         Fixture fixture = rejectedApproval();
 
-        List<Outcome> outcomes = runConcurrently(2, () ->
+        LockGate gate = new LockGate();
+        Mockito.doAnswer(gate::pauseFirstHolder)
+                .when(revisionEligibilityPolicy).getApprovalForUpdateOrThrow(Mockito.anyLong());
+
+        List<Outcome> outcomes = runContending(2, gate, () ->
                 approvalCommandService.resubmit(new ResubmitApprovalCommand(fixture.approvalId(), DRAFTER)));
 
         assertThat(succeeded(outcomes))
@@ -246,30 +270,35 @@ class ApprovalConcurrencyTest {
 
     // ---------------------------------------------------------------- 동시 실행
 
+    /** 락을 쥔 요청을 멈춰 둔 채, 나머지가 정말 대기하는지 지켜보는 시간 */
+    private static final long CONTENTION_WINDOW_MS = 2_000L;
+
     /**
-     * {@code count} 개 스레드를 <b>같은 시점에</b> 출발시켜 작업을 실행한다.
+     * {@code count} 개 요청을 동시에 넣되, <b>락을 잡은 첫 요청을 그 자리에 세워 두고</b>
+     * 나머지가 대기하는지 확인한 뒤 풀어준다.
      *
-     * <p>⚠️ 게이트 없이 그냥 submit 하면 첫 스레드가 커밋을 끝낸 뒤에야 두 번째가 시작돼
-     * <b>경합이 재현되지 않는다.</b> 그러면 락이 없어도 테스트가 통과한다.
+     * <p><b>왜 단순 동시 출발로는 부족한가</b> — 출발만 맞추면 첫 요청이 먼저 커밋하고 두 번째가
+     * 그 뒤에 읽는 순서가 얼마든지 나올 수 있다. 그러면 {@code PESSIMISTIC_WRITE} 를 <b>제거해도</b>
+     * 최종 상태가 같아 테스트가 통과한다 — 락 회귀가 CI 를 그대로 지나간다.
      *
-     * <p>🔖 <b>다만 동시 출발이 "둘 다 전이 전 상태를 읽는 것"까지 보장하지는 않는다.</b>
-     * 락을 뺀 상태에서도 운이 나쁘면 첫 요청이 먼저 커밋하고 두 번째가 그 뒤에 읽어 통과할 수 있다.
-     * 즉 이 테스트는 <b>확률적 재현</b>이다 — 락 회귀를 항상 잡는다고 단정하지 말 것.
-     * 결정적으로 만들려면 첫 요청을 커밋 직전에 멈춰 두 번째를 진입시켜야 하는데, 락이 정상
-     * 동작하는 경우 두 번째가 락에서 대기하므로 <b>서로를 기다리다 테스트가 멈춘다.</b>
-     * 그래서 이 방식을 택했다.
+     * <p><b>이 방식이 결정적인 이유</b> — {@link LockGate} 가 잠금 조회 <b>직후</b>(트랜잭션이 열려
+     * 있고 행 잠금이 유지되는 지점)에서 첫 요청을 멈춘다. 그 상태로 두 번째 요청을 들여보내면
+     * <ul>
+     *   <li>락이 <b>있으면</b> 두 번째가 잠금 조회에서 블로킹돼 아무 요청도 끝나지 않는다</li>
+     *   <li>락이 <b>없으면</b> 두 번째가 그대로 통과해 <b>끝나 버린다</b> → 아래 어설션이 잡는다</li>
+     * </ul>
+     *
+     * <p>⚠️ 예전 주석은 "결정적으로 만들면 서로를 기다리다 멈춘다"며 이 방식을 포기했는데, 그건
+     * <b>첫 요청이 두 번째의 도착을 기다리는</b> 설계에만 해당한다. 여기서는 첫 요청을 풀어주는 주체가
+     * <b>테스트 스레드</b>라 상호 대기가 성립하지 않는다.
      */
-    private List<Outcome> runConcurrently(int count, Callable<Object> task) throws Exception {
+    private List<Outcome> runContending(int count, LockGate gate, Callable<Object> task) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(count);
-        CountDownLatch ready = new CountDownLatch(count);
-        CountDownLatch start = new CountDownLatch(1);
 
         try {
             List<Future<Outcome>> futures = new ArrayList<>();
             for (int i = 0; i < count; i++) {
                 futures.add(pool.submit(() -> {
-                    ready.countDown();
-                    start.await();
                     try {
                         return new Outcome(task.call(), null);
                     } catch (Exception e) {
@@ -278,8 +307,16 @@ class ApprovalConcurrencyTest {
                 }));
             }
 
-            assertThat(ready.await(30, TimeUnit.SECONDS)).as("스레드 준비").isTrue();
-            start.countDown();
+            assertThat(gate.awaitAcquired(30, TimeUnit.SECONDS))
+                    .as("첫 요청이 잠금 조회를 통과할 때까지 기다린다").isTrue();
+
+            // ⭐ 락 회귀를 잡는 지점이다. 첫 요청이 락을 쥔 채 멈춰 있는 동안 다른 요청이 완료됐다면
+            //    그건 잠금 조회가 아무도 막지 않았다는 뜻이다.
+            assertThat(anyCompletedWithin(futures, CONTENTION_WINDOW_MS))
+                    .as("락을 쥔 요청이 커밋하기 전에 다른 요청이 끝나면 안 된다 — 끝났다면 잠금이 사라진 것이다")
+                    .isFalse();
+
+            gate.release();
 
             List<Outcome> outcomes = new ArrayList<>();
             for (Future<Outcome> future : futures) {
@@ -287,7 +324,55 @@ class ApprovalConcurrencyTest {
             }
             return outcomes;
         } finally {
+            // 어설션이 실패해 빠져나가도 붙잡힌 스레드를 풀어준다(이미 열려 있으면 무해).
+            gate.release();
             pool.shutdownNow();
+        }
+    }
+
+    /** 주어진 시간 안에 완료된 요청이 하나라도 있으면 {@code true}. 없으면 끝까지 기다린 뒤 {@code false}. */
+    private static boolean anyCompletedWithin(List<Future<Outcome>> futures, long millis)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + millis * 1_000_000L;
+        while (System.nanoTime() < deadline) {
+            if (futures.stream().anyMatch(Future::isDone)) {
+                return true;
+            }
+            Thread.sleep(20);
+        }
+        return false;
+    }
+
+    /**
+     * 잠금 조회를 통과한 <b>첫</b> 요청 하나만 붙잡아 두는 관문.
+     *
+     * <p>⚠️ 붙잡을 요청을 {@code compareAndSet} 으로 고른다. 락이 사라진 회귀 상황에서는 두 요청이
+     * <b>동시에</b> 잠금 조회를 통과하는데, 그때 둘 다 멈춰 세우면 아무도 완료되지 않아
+     * <b>회귀인데도 어설션이 통과</b>해 버린다. 한 쪽만 붙잡아야 나머지가 끝나는 것이 신호가 된다.
+     */
+    private static final class LockGate {
+
+        private final CountDownLatch acquired = new CountDownLatch(1);
+        private final CountDownLatch hold = new CountDownLatch(1);
+        private final AtomicBoolean holderChosen = new AtomicBoolean();
+
+        /** 진짜 메서드로 락을 잡은 뒤, 첫 요청이면 테스트가 풀어줄 때까지 그 자리에 선다. */
+        Object pauseFirstHolder(InvocationOnMock invocation) throws Throwable {
+            Object result = invocation.callRealMethod();
+            if (holderChosen.compareAndSet(false, true)) {
+                acquired.countDown();
+                // 여기서 멈춰 있는 동안 트랜잭션이 열려 있으므로 행 잠금이 유지된다.
+                hold.await(60, TimeUnit.SECONDS);
+            }
+            return result;
+        }
+
+        boolean awaitAcquired(long timeout, TimeUnit unit) throws InterruptedException {
+            return acquired.await(timeout, unit);
+        }
+
+        void release() {
+            hold.countDown();
         }
     }
 
