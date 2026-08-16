@@ -839,29 +839,13 @@
 
 정렬 — `completedAt` 내림차순, tie 는 `fileId` 내림차순 (flat 전사와 동일).
 
-**Response** (페이지)
+**Response** (페이지) — **FILE-Q-01(전사 목록)·§12 와 동일한 `CompanyFilePageResponse`(항목 = `FileViewResponse`)를 그대로 재사용한다.** 별도 DTO 를 두지 않아 프론트가 파일 카드 컴포넌트를 공유한다.
 
-| 파라미터 | 타입 | 설명 |
-|---|---|---|
-| `data.content[].fileId` | Long | 문서 번호 |
-| `data.content[].name` | String | 문서 표시명 |
-| `data.content[].blockId` | Long | 파일이 매달린 블록 번호(스텝 안 하위 그룹핑용) |
-| `data.content[].blockTitle` | String | 블록 제목 |
-| `data.content[].latestVersionId` | Long | 최신 버전 번호 |
-| `data.content[].latestVersionNo` | int | 최신 버전 차수 |
-| `data.content[].versionCount` | int | 전체 버전 수 (`v1` 부터 항상 표시) |
-| `data.content[].originalFileName` | String | 최신 버전 원본 파일명 |
-| `data.content[].extension` | String | 확장자 |
-| `data.content[].sizeBytes` | Long | 최신 버전 크기 |
-| `data.content[].previewable` | boolean | PDF 만 `true` |
-| `data.content[].uploaderName` | String | 최신 버전 업로더(스냅샷) |
-| `data.content[].uploaderDepartment` · `uploaderPosition` | String | 스냅샷 (`null` 허용) |
-| `data.content[].updatedAt` | String | 최신 버전 업로드 시각 |
-| `data.page` · `data.size` · `data.totalElements` · `data.totalPages` | | 페이징 메타 |
+`data.content[]` 는 `FileViewResponse` — `stepId`·`stepName`·`blockId`·`blockTitle`·`blockDeleted`·`projectId`·`projectName`·`fileId`·`name`·`latestVersionId`·`latestVersionNo`·`versionCount`·`originalFileName`·`extension`·`sizeBytes`·`previewable`·`uploaderName`·`uploaderDepartment`·`uploaderPosition`·`updatedAt`. `data.page`·`size`·`totalElements`·`totalPages` 는 페이징 메타.
 
 정책
 - ⛔ **활성 문서만**(`file.deleted_at IS NULL`) · 완료 버전 1개 이상(§3 과 동일).
-- ⛔ **`blockDeleted` 필드를 두지 않는다** — D안에서 블록 삭제 파일은 휴지통行이라 활성 트리엔 삭제블록 파일이 오지 않는다(항상 false 라 제거). 삭제블록 파일 회수는 §13.
+- ⛔ **`blockDeleted` 는 활성 트리라 항상 `false`** — D안에서 블록 삭제 파일은 휴지통行이라 활성 트리엔 삭제블록 파일이 오지 않는다(쿼리에 `b.deleted_at IS NULL` 명시). 삭제블록 파일 회수는 §13. `stepId`·`stepName`·`projectId`·`projectName` 도 경로로 이미 알지만 재사용 DTO 라 함께 채워진다.
 - ⛔ **presigned URL 미임베드** — 다운로드·미리보기는 클릭 시 §9/§10.
 - ⛔ **검색·확장자 필터 없음** — flat `GET /admin/files` 사용.
 
