@@ -29,6 +29,17 @@ public class FileIndexEntity {
     @Column(name = "index_error_message")
     private String indexErrorMessage;
 
+    // 네이티브 INSERT(upsertStatus)가 이 컬럼을 명시적으로 안 채우고 DB DEFAULT에 맡기므로,
+    // Flyway가 꺼진 테스트(H2 ddl-auto)에서도 같은 기본값이 생성되도록 columnDefinition을 둔다.
+    @Column(name = "retry_count", nullable = false, columnDefinition = "integer default 0")
+    private int retryCount;
+
+    @Column(name = "processing_started_at")
+    private LocalDateTime processingStartedAt;
+
+    @Column(name = "lease_expires_at")
+    private LocalDateTime leaseExpiresAt;
+
     @Column(name = "indexed_at")
     private LocalDateTime indexedAt;
 

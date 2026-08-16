@@ -4,6 +4,7 @@ import com.group3.vitamins.global.domain.common.error.exception.NotFoundExceptio
 import com.group3.vitamins.global.domain.common.error.exception.ValidationException;
 import com.group3.vitamins.vitamate.domain.exception.VitamateErrorCode;
 import com.group3.vitamins.vitamate.fileindex.application.command.HandleVitamateFileIndexCallbackCommand;
+import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexJobPublisherPort;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexStorePort.FileIndexStatusUpdateResult;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexCallbackResult;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -28,14 +30,17 @@ class VitamateFileIndexCallbackServiceTest {
 
     private static final Long FILE_VERSION_ID = 900001L;
     private static final String INDEX_ATTEMPT_ID = "550e8400-e29b-41d4-a716-446655440000";
+    private static final String NEW_INDEX_ATTEMPT_ID = "660e8400-e29b-41d4-a716-446655440000";
 
     private VitamateFileIndexStorePort fileIndexStore;
+    private VitamateFileIndexJobPublisherPort jobPublisherPort;
     private VitamateFileIndexCallbackService callbackService;
 
     @BeforeEach
     void setUp() {
         fileIndexStore = mock(VitamateFileIndexStorePort.class);
-        callbackService = new VitamateFileIndexCallbackService(fileIndexStore);
+        jobPublisherPort = mock(VitamateFileIndexJobPublisherPort.class);
+        callbackService = new VitamateFileIndexCallbackService(fileIndexStore, jobPublisherPort);
     }
 
     @Nested
@@ -46,23 +51,24 @@ class VitamateFileIndexCallbackServiceTest {
         @DisplayName("saves PENDING status")
         void savesPendingStatus() {
             when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PENDING), eq(null), any()))
-                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.PENDING, null));
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PENDING), eq(null), eq(false), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.PENDING, null, false));
 
             VitamateFileIndexCallbackResult result = callbackService.handle(command("PENDING", null));
 
             assertThat(result.accepted()).isTrue();
             assertThat(result.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(result.indexStatus()).isEqualTo("PENDING");
-            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PENDING), eq(null), any());
+            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PENDING), eq(null), eq(false), any());
+            verifyNoInteractions(jobPublisherPort);
         }
 
         @Test
         @DisplayName("saves PROCESSING status")
         void savesProcessingStatus() {
             when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PROCESSING), eq(null), any()))
-                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null));
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PROCESSING), eq(null), eq(false), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.PROCESSING, null, false));
 
             VitamateFileIndexCallbackResult result = callbackService.handle(command("PROCESSING", null));
 
@@ -71,45 +77,46 @@ class VitamateFileIndexCallbackServiceTest {
             assertThat(result.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(result.indexStatus()).isEqualTo("PROCESSING");
             assertThat(result.reason()).isNull();
-            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PROCESSING), eq(null), any());
+            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(null), eq(FileIndexStatus.PROCESSING), eq(null), eq(false), any());
         }
 
         @Test
         @DisplayName("saves COMPLETED status without errorMessage")
         void savesCompletedStatus() {
             when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.COMPLETED), eq(null), any()))
-                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.COMPLETED, null));
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.COMPLETED), eq(null), eq(false), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.COMPLETED, null, false));
 
             VitamateFileIndexCallbackResult result = callbackService.handle(command(INDEX_ATTEMPT_ID, "COMPLETED", null));
 
             assertThat(result.accepted()).isTrue();
             assertThat(result.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(result.indexStatus()).isEqualTo("COMPLETED");
-            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.COMPLETED), eq(null), any());
+            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.COMPLETED), eq(null), eq(false), any());
         }
 
         @Test
         @DisplayName("saves FAILED status with errorMessage")
         void savesFailedStatusWithErrorMessage() {
             when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("extract failed"), any()))
-                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, null));
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("extract failed"), eq(false), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, null, false));
 
             VitamateFileIndexCallbackResult result = callbackService.handle(command(INDEX_ATTEMPT_ID, "FAILED", "extract failed"));
 
             assertThat(result.accepted()).isTrue();
             assertThat(result.indexAttemptId()).isEqualTo(INDEX_ATTEMPT_ID);
             assertThat(result.indexStatus()).isEqualTo("FAILED");
-            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("extract failed"), any());
+            verify(fileIndexStore).upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("extract failed"), eq(false), any());
+            verifyNoInteractions(jobPublisherPort);
         }
 
         @Test
         @DisplayName("returns ignored result when callback attempt is stale")
         void returnsIgnoredResultWhenAttemptIsStale() {
             when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
-            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.COMPLETED), eq(null), any()))
-                    .thenReturn(new FileIndexStatusUpdateResult(false, INDEX_ATTEMPT_ID, FileIndexStatus.COMPLETED, "INDEX_ATTEMPT_MISMATCH"));
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.COMPLETED), eq(null), eq(false), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(false, INDEX_ATTEMPT_ID, FileIndexStatus.COMPLETED, "INDEX_ATTEMPT_MISMATCH", false));
 
             VitamateFileIndexCallbackResult result = callbackService.handle(command(INDEX_ATTEMPT_ID, "COMPLETED", null));
 
@@ -129,7 +136,45 @@ class VitamateFileIndexCallbackServiceTest {
                     .satisfies(exception -> assertThat(((NotFoundException) exception).getErrorCode())
                             .isEqualTo(VitamateErrorCode.VITAMATE_FILE_VERSION_NOT_FOUND));
 
-            verify(fileIndexStore, never()).upsertStatus(any(), any(), any(), any(), any());
+            verify(fileIndexStore, never()).upsertStatus(any(), any(), any(), any(), any(Boolean.class), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("retryable FAILED requeue")
+    class RetryableFailedRequeue {
+
+        @Test
+        @DisplayName("republishes a job when the store immediately requeues a retryable failure")
+        void publishesJobWhenRequeued() {
+            when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("Gemini rate limit exceeded"), eq(true), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, NEW_INDEX_ATTEMPT_ID, FileIndexStatus.PENDING, null, true));
+
+            VitamateFileIndexCallbackResult result = callbackService.handle(
+                    new HandleVitamateFileIndexCallbackCommand(FILE_VERSION_ID, INDEX_ATTEMPT_ID, "FAILED", "Gemini rate limit exceeded", true)
+            );
+
+            assertThat(result.accepted()).isTrue();
+            assertThat(result.indexAttemptId()).isEqualTo(NEW_INDEX_ATTEMPT_ID);
+            assertThat(result.indexStatus()).isEqualTo("PENDING");
+            verify(jobPublisherPort).publish(argThat(
+                    (VitamateFileIndexJobPublisherPort.FileIndexJob job) -> job.fileVersionId().equals(FILE_VERSION_ID)
+            ));
+        }
+
+        @Test
+        @DisplayName("does not publish when the store keeps the failure terminal")
+        void doesNotPublishWhenNotRequeued() {
+            when(fileIndexStore.existsFileVersion(FILE_VERSION_ID)).thenReturn(true);
+            when(fileIndexStore.upsertStatus(eq(FILE_VERSION_ID), eq(INDEX_ATTEMPT_ID), eq(FileIndexStatus.FAILED), eq("Gemini rate limit exceeded"), eq(true), any()))
+                    .thenReturn(new FileIndexStatusUpdateResult(true, INDEX_ATTEMPT_ID, FileIndexStatus.FAILED, null, false));
+
+            callbackService.handle(
+                    new HandleVitamateFileIndexCallbackCommand(FILE_VERSION_ID, INDEX_ATTEMPT_ID, "FAILED", "Gemini rate limit exceeded", true)
+            );
+
+            verifyNoInteractions(jobPublisherPort);
         }
     }
 
@@ -164,19 +209,19 @@ class VitamateFileIndexCallbackServiceTest {
         @Test
         @DisplayName("rejects missing fileVersionId before store access")
         void rejectsMissingFileVersionId() {
-            assertInvalid(new HandleVitamateFileIndexCallbackCommand(null, null, "PROCESSING", null));
+            assertInvalid(new HandleVitamateFileIndexCallbackCommand(null, null, "PROCESSING", null, false));
         }
 
         @Test
         @DisplayName("rejects zero fileVersionId before store access")
         void rejectsZeroFileVersionId() {
-            assertInvalid(new HandleVitamateFileIndexCallbackCommand(0L, null, "PROCESSING", null));
+            assertInvalid(new HandleVitamateFileIndexCallbackCommand(0L, null, "PROCESSING", null, false));
         }
 
         @Test
         @DisplayName("rejects negative fileVersionId before store access")
         void rejectsNegativeFileVersionId() {
-            assertInvalid(new HandleVitamateFileIndexCallbackCommand(-1L, null, "PROCESSING", null));
+            assertInvalid(new HandleVitamateFileIndexCallbackCommand(-1L, null, "PROCESSING", null, false));
         }
 
         @Test
@@ -201,6 +246,6 @@ class VitamateFileIndexCallbackServiceTest {
     }
 
     private HandleVitamateFileIndexCallbackCommand command(String indexAttemptId, String status, String errorMessage) {
-        return new HandleVitamateFileIndexCallbackCommand(FILE_VERSION_ID, indexAttemptId, status, errorMessage);
+        return new HandleVitamateFileIndexCallbackCommand(FILE_VERSION_ID, indexAttemptId, status, errorMessage, false);
     }
 }

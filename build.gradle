@@ -92,6 +92,12 @@ dependencies {
     // --- API Docs ---
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
 
+    // --- 캐시 (JVM 로컬, Caffeine) ---
+    // 배포로만 바뀌는 전역 참조 데이터(비타메이트 검토 템플릿 등) 전용 — 회사별로 갈리는 데이터는
+    // 대상이 아니다(그런 경우는 bidding.bidnotice 처럼 Redis 캐시어사이드를 쓴다). 버전은 Boot BOM 관리.
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+
     // --- Lombok ---
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

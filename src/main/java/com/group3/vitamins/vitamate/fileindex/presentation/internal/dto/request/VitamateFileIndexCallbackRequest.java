@@ -13,7 +13,10 @@ public record VitamateFileIndexCallbackRequest(
         String indexStatus,
 
         @Schema(description = "인덱싱 실패 사유. FAILED일 때 필수", example = "PDF 텍스트 추출에 실패했습니다.")
-        String errorMessage
+        String errorMessage,
+
+        @Schema(description = "FAILED일 때만 의미가 있다. true면 일시적 실패(예: Gemini 429/크레딧 소진)라 재시도 상한 안에서 즉시 재큐잉하고, false/생략이면 영구 실패로 확정한다", example = "false")
+        Boolean retryable
 ) {
 
     // HTTP 요청 값을 application command로 변환한다.
@@ -22,7 +25,8 @@ public record VitamateFileIndexCallbackRequest(
                 fileVersionId,
                 indexAttemptId,
                 indexStatus,
-                errorMessage
+                errorMessage,
+                Boolean.TRUE.equals(retryable)
         );
     }
 }
