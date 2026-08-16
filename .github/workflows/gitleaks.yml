@@ -65,13 +65,33 @@ jobs:
         run: gitleaks version
 
       - name: 스캔
+        env:
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          gitleaks git . \
-            --config .gitleaks.toml \
-            --redact \
-            --verbose \
-            --report-format sarif \
-            --report-path gitleaks-report.sarif
+          set -euo pipefail
+          # ⚠️ PR 은 그 PR 이 실제로 바꾼 커밋(base..head)만 스캔한다.
+          #    전체 히스토리를 스캔하면 과거·타 브랜치에 섞인 오탐(데모 시드 등)까지 PR 을 막아,
+          #    자기 변경과 무관한 실패로 머지가 멈춘다. 전체 히스토리 스캔은 아래가 담당한다:
+          #      · push(develop·main) · merge_group · 매주 월요일 스케줄
+          #    → PR 은 자기 변경만, 나머지 이벤트는 히스토리 전체.
+          if [ "${IS_PR}" = "true" ]; then
+            gitleaks git . \
+              --config .gitleaks.toml \
+              --redact \
+              --verbose \
+              --log-opts="${PR_BASE}..${PR_HEAD}" \
+              --report-format sarif \
+              --report-path gitleaks-report.sarif
+          else
+            gitleaks git . \
+              --config .gitleaks.toml \
+              --redact \
+              --verbose \
+              --report-format sarif \
+              --report-path gitleaks-report.sarif
+          fi
 
       - name: 리포트 업로드 (탐지 시)
         if: failure()
