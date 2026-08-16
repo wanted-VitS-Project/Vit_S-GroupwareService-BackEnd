@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementProjectLookupMapper">
+
+    <!--
+        블록 생성 트랜잭션 안에서 1회 호출된다. block.block_id(PK) -> step.step_id(PK) 로
+        인덱스 seek 두 번이라 사실상 상수 시간이다.
+
+        deleted_at 조건을 걸지 않는다 — 방금 만든 블록을 같은 트랜잭션에서 조회하는 용도다.
+    -->
+    <select id="findProjectIdByBlockId" resultType="java.lang.Long">
+        SELECT st.project_id
+        FROM block b
+        JOIN step st ON st.step_id = b.step_id
+        WHERE b.block_id = #{blockId}
+    </select>
+
+</mapper>

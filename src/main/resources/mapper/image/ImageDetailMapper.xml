@@ -5,6 +5,14 @@
 
 <mapper namespace="com.group3.vitamins.image.infrastructure.blockdetail.ImageDetailMapper">
 
+    <!--
+        2026-08-16 상관 서브쿼리 2개(totalCount, 첫 이미지 판정용 MIN)를 GROUP BY 파생 테이블 1번으로
+        통합 — 기존엔 img_block_id마다(정확히는 필터를 통과한 이미지 행마다) 서브쿼리 2개가 각각
+        재평가됐다. 인덱스 추가는 order_index가 순서 변경으로 자주 바뀌는 컬럼이라 쓰기 비용 부담으로
+        보류했고(2026-08-16), 대신 쿼리만 재구성해 스키마 변경 없이 스캔 횟수를 줄인다.
+        stats에서 블록별 totalCount·최소 order_index를 한 번에 집계해두고, 그 결과와 일치하는
+        image 행(=첫 이미지)만 조인해서 가져온다.
+    -->
     <select id="findFirstImagesByImgBlockIds"
             resultType="com.group3.vitamins.image.infrastructure.blockdetail.ImageDetailRow">
         SELECT i.img_block_id  AS imgBlockId,
@@ -14,16 +22,19 @@
         i.caption       AS caption,
         i.order_index   AS orderIndex,
         i.created_at    AS createdAt,
-        (SELECT COUNT(*) FROM image i3
-        WHERE i3.img_block_id = i.img_block_id AND i3.deleted_at IS NULL) AS totalCount
+        stats.total_count AS totalCount
         FROM image i
+        JOIN (
+        SELECT img_block_id, COUNT(*) AS total_count, MIN(order_index) AS min_order_index
+        FROM image
+        WHERE img_block_id IN
+        <foreach item="id" collection="imgBlockIds" open="(" separator="," close=")">#{id}</foreach>
+        AND deleted_at IS NULL
+        GROUP BY img_block_id
+        ) stats ON stats.img_block_id = i.img_block_id AND stats.min_order_index = i.order_index
         WHERE i.img_block_id IN
         <foreach item="id" collection="imgBlockIds" open="(" separator="," close=")">#{id}</foreach>
         AND i.deleted_at IS NULL
-        AND i.order_index = (
-        SELECT MIN(i2.order_index) FROM image i2
-        WHERE i2.img_block_id = i.img_block_id AND i2.deleted_at IS NULL
-        )
     </select>
 
 </mapper>

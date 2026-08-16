@@ -149,6 +149,44 @@ public class FileCommandService implements FileCommandUseCase {
     }
 
     @Override
+    public int trashByBlockDeletion(Long blockId, String actorUserId) {
+        List<Long> fileIds = fileQueryPort.findActiveFileIdsByBlockId(blockId);
+        if (fileIds.isEmpty()) {
+            return 0;
+        }
+
+        // 1) 결재-잠금 선검사 — 진행 중 결재가 참조하는 파일이 하나라도 있으면 블록 삭제 자체를 막는다
+        //    (D안 · 409 · 트랜잭션 롤백). 개별 휴지통 이동(§5)의 하드 락과 같은 불변식. 검사를 먼저 몰아 하면
+        //    일부만 휴지통에 담긴 채 롤백되는 중간 상태 없이 깔끔하게 실패한다.
+        for (Long fileId : fileIds) {
+            approvalLockQueryPort.findInProgressApproval(fileId)
+                    .ifPresent(approval -> {
+                        throw new ConflictException(
+                                FileErrorCode.FILE_APPROVAL_IN_PROGRESS,
+                                "진행 중인 결재의 대상 문서가 포함돼 블록을 삭제할 수 없습니다 (결재: %s). 결재를 회수하거나 완료한 뒤 삭제하세요."
+                                        .formatted(approval.title()));
+                    });
+        }
+
+        // 2) 전부 휴지통으로. 이미 휴지통이거나 사라진 파일은 건너뛴다(멱등). 권한 재검사는 하지 않는다.
+        LocalDateTime now = LocalDateTime.now();
+        int trashed = 0;
+        for (Long fileId : fileIds) {
+            File file = fileRepository.findById(fileId).orElse(null);
+            if (file == null || file.isDeleted()) {
+                continue;
+            }
+            file.moveToTrash(now);
+            File saved = fileRepository.save(file);
+            // 활동 로그(블록 삭제로 인한 휴지통 이동 = DELETE). 블록은 곧 삭제되지만 block_file link 행은 남아 blockId 로 발행한다.
+            publishActivity(ActivityLogAction.DELETE, blockId, saved.getFileId(), saved.getName(),
+                    actorUserId, List.of(new ActivityFieldChange(null, null, null)));
+            trashed++;
+        }
+        return trashed;
+    }
+
+    @Override
     public FileRestoreResult restore(RestoreFileCommand command) {
         File file = fileRepository.findById(command.fileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));

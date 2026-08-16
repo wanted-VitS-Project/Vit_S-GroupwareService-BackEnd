@@ -127,34 +127,37 @@
         무관하게 계산이 항상 단순하고 충돌이 없다. 회차 번호 중복 자체는 막지 않는다(사용자 결정 —
         paidAmountRatio·SETL-008·다음 정산 예정일 계산 전부 round_no 유일성에 의존하지 않음을 확인함).
     -->
+    <!--
+        2026-08-16 CTE로 재구성 — 기존엔 target(project_id 조회)·maxRoundNo·recommendedTotalAmount
+        각각에서 settlement_block→block→step 조인을 독립적으로 반복해(한 쿼리 안 3번) 실측으로 확인된
+        낭비를 없앴다. project_scope에서 "이 프로젝트에 속한 정산 블록"을 조인 1번으로 미리 뽑아두고,
+        maxRoundNo·recommendedTotalAmount는 그 결과 위에서 필터링·정렬만 한다(조인 재실행 없음).
+        결과 컬럼(maxRoundNo, recommendedTotalAmount)과 값 산출 로직은 기존과 동일 — 쿼리 구조만 바꿨다.
+    -->
     <select id="findRecommendation"
             resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementRecommendationRow">
-        SELECT
-        (SELECT MAX(sbc.round_no) FROM settlement_block sbc
-        JOIN block bc ON bc.block_id = sbc.block_id
-        JOIN step stc ON stc.step_id = bc.step_id
-        WHERE stc.project_id = target.project_id
-        AND sbc.type = #{type}
-        AND sbc.settle_id != #{settleId}
-        ) AS maxRoundNo,
-        (SELECT sbt.total_amount FROM settlement_block sbt
-        JOIN block bt ON bt.block_id = sbt.block_id
-        JOIN step stt ON stt.step_id = bt.step_id
-        WHERE stt.project_id = target.project_id
-        AND sbt.type = #{type}
-        AND sbt.settle_id != #{settleId}
-        AND sbt.total_amount IS NOT NULL
-        AND sbt.deleted_at IS NULL
-        ORDER BY (sbt.status != 'PENDING') DESC, sbt.settle_id ASC
-        LIMIT 1
-        ) AS recommendedTotalAmount
-        FROM (
-        SELECT st0.project_id AS project_id
-        FROM settlement_block sb0
+        WITH project_scope AS (
+        SELECT sb.settle_id, sb.round_no, sb.type, sb.total_amount, sb.status, sb.deleted_at
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE st.project_id = (
+        SELECT st0.project_id FROM settlement_block sb0
         JOIN block b0 ON b0.block_id = sb0.block_id
         JOIN step st0 ON st0.step_id = b0.step_id
         WHERE sb0.settle_id = #{settleId}
-        ) target
+        )
+        )
+        SELECT
+        (SELECT MAX(round_no) FROM project_scope
+        WHERE type = #{type} AND settle_id != #{settleId}
+        ) AS maxRoundNo,
+        (SELECT total_amount FROM project_scope
+        WHERE type = #{type} AND settle_id != #{settleId}
+        AND total_amount IS NOT NULL AND deleted_at IS NULL
+        ORDER BY (status != 'PENDING') DESC, settle_id ASC
+        LIMIT 1
+        ) AS recommendedTotalAmount
     </select>
 
 </mapper>

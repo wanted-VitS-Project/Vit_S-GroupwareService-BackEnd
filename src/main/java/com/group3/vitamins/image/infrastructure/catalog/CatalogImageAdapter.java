@@ -131,8 +131,8 @@ public class CatalogImageAdapter implements ImageRepository {
 
     @Override
     @Transactional
-    public int hardDelete(Long imgId) {
-        return springDataImageRepository.hardDelete(imgId);
+    public int hardDeleteAll(List<Long> imgIds) {
+        return springDataImageRepository.hardDeleteAll(imgIds);
     }
 
     private static final Pageable TOP_1 = PageRequest.of(0, 1);

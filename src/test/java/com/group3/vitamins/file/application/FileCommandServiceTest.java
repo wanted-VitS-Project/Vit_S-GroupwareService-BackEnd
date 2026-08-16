@@ -600,4 +600,84 @@ class FileCommandServiceTest {
                     .satisfies(hasCode(FileErrorCode.FILE_BLOCK_NOT_FOUND));
         }
     }
+
+    @Nested
+    @DisplayName("D안 · 블록 삭제 시 파일 휴지통 이동")
+    class TrashByBlockDeletion {
+
+        private static final Long BLOCK = 12L;
+        private static final Long F1 = 101L;
+        private static final Long F2 = 102L;
+
+        private File active(Long id, String name) {
+            return File.restore(id, PROJECT_ID, name, USER, null, VERSION);
+        }
+
+        @Test
+        @DisplayName("블록의 활성 파일을 모두 휴지통으로 — 권한 재검사 없이 파일별 DELETE 로그 발행")
+        void trashesAllActiveFiles() {
+            File f1 = active(F1, "제안서");
+            File f2 = active(F2, "계약서");
+            when(fileQueryPort.findActiveFileIdsByBlockId(BLOCK)).thenReturn(List.of(F1, F2));
+            when(approvalLockQueryPort.findInProgressApproval(anyLong())).thenReturn(Optional.empty());
+            when(fileRepository.findById(F1)).thenReturn(Optional.of(f1));
+            when(fileRepository.findById(F2)).thenReturn(Optional.of(f2));
+            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            int trashed = service.trashByBlockDeletion(BLOCK, USER);
+
+            assertThat(trashed).isEqualTo(2);
+            assertThat(f1.isDeleted()).isTrue();
+            assertThat(f2.isDeleted()).isTrue();
+            // 블록 삭제 경로는 스텝 편집권한을 재검사하지 않는다(상위에서 이미 판정).
+            verify(stepAccessUseCase, never()).requireEditable(anyLong(), any(), any());
+            // 파일별 DELETE 로그(blockId 로) 발행.
+            ArgumentCaptor<ActivityOccurredEvent> captor = ArgumentCaptor.forClass(ActivityOccurredEvent.class);
+            verify(domainEventPublisher, Mockito.times(2)).publish(captor.capture());
+            assertThat(captor.getAllValues()).allSatisfy(e -> {
+                assertThat(e.action()).isEqualTo(ActivityLogAction.DELETE);
+                assertThat(e.blockId()).isEqualTo(BLOCK);
+            });
+        }
+
+        @Test
+        @DisplayName("활성 파일이 없으면 0 — 저장·로그 없음")
+        void emptyReturnsZero() {
+            when(fileQueryPort.findActiveFileIdsByBlockId(BLOCK)).thenReturn(List.of());
+
+            assertThat(service.trashByBlockDeletion(BLOCK, USER)).isZero();
+            verify(fileRepository, never()).save(any());
+            verify(domainEventPublisher, never()).publish(any());
+        }
+
+        @Test
+        @DisplayName("진행 중 결재 참조 파일이 하나라도 있으면 FILE_APPROVAL_IN_PROGRESS — 아무 파일도 트래시하지 않는다")
+        void approvalLockedBlocksAll() {
+            when(fileQueryPort.findActiveFileIdsByBlockId(BLOCK)).thenReturn(List.of(F1, F2));
+            when(approvalLockQueryPort.findInProgressApproval(F1)).thenReturn(Optional.empty());
+            when(approvalLockQueryPort.findInProgressApproval(F2))
+                    .thenReturn(Optional.of(new ApprovalLockQueryPort.InProgressApproval(9L, "계약서 결재")));
+
+            assertThatThrownBy(() -> service.trashByBlockDeletion(BLOCK, USER))
+                    .satisfies(hasCode(FileErrorCode.FILE_APPROVAL_IN_PROGRESS))
+                    .hasMessageContaining("계약서 결재");
+            // 선검사에서 막혀 어떤 파일도 저장·발행되지 않는다.
+            verify(fileRepository, never()).save(any());
+            verify(domainEventPublisher, never()).publish(any());
+        }
+
+        @Test
+        @DisplayName("이미 휴지통이거나 사라진 파일은 건너뛴다(멱등)")
+        void skipsGoneOrDeleted() {
+            File f1 = active(F1, "제안서");
+            when(fileQueryPort.findActiveFileIdsByBlockId(BLOCK)).thenReturn(List.of(F1, F2));
+            when(approvalLockQueryPort.findInProgressApproval(anyLong())).thenReturn(Optional.empty());
+            when(fileRepository.findById(F1)).thenReturn(Optional.of(f1));
+            when(fileRepository.findById(F2)).thenReturn(Optional.empty()); // 그새 사라짐
+            when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            assertThat(service.trashByBlockDeletion(BLOCK, USER)).isEqualTo(1);
+            assertThat(f1.isDeleted()).isTrue();
+        }
+    }
 }

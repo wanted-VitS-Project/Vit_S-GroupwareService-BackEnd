@@ -41,6 +41,21 @@ regexes = [
 #    예외 자체가 필요 없다.
 #    테스트 fixture 때문에 예외가 꼭 필요하면 파일·라인 단위로 좁혀서 추가할 것.
 
+# ── 데모 시드 SQL 의 source_type = 'HOMETAX_API' 오탐 ──────────
+# generic-api-key 룰이 'HOMETAX_API'(정산 출처 enum 값)의 인접 컬럼을 API 키로 오인한다.
+# 걸린 실제 값은 세금계산서 승인번호(전부 0 으로 채운 데모값)·데모 사용자ID 로 시크릿이 아니다.
+# 범위를 db/demo 의 SQL 로 좁히고, HOMETAX_API 가 있는 라인만 예외로 둔다(regexTarget = line).
+[[allowlists]]
+description = "데모 시드 SQL — 'HOMETAX_API' 인접값 generic-api-key 오탐 (실제 시크릿 아님)"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''^src/main/resources/db/demo/.*\.sql$''',
+]
+regexes = [
+  '''HOMETAX_API''',
+]
+
 # ⚠️ 허용 목록에 항목을 추가할 때 지켜야 할 것
 #    1. 정말 더미 값인지 확인한다. 진짜 시크릿을 넣으면 스캔의 의미가 사라진다.
 #    2. 가능한 한 paths 로 범위를 좁히고 condition = "AND" 를 쓴다.

@@ -37,9 +37,13 @@ public interface ChecklistRepository {
 
     Optional<ChecklistItem> findActiveByChkId(Long chkId);
 
-    /** 블록에 속한 활성 항목 전체 개수 */
-    int countActiveItems(Long chkBlockId);
+    /**
+     * 전체 개수·완료 개수를 쿼리 1번으로 함께 집계한다 (2026-08-16 — 전체 개수와 완료 개수를
+     * 매번 따로 호출하던 것을 통합). 생성/수정/삭제 응답에 둘 다 필요한 지점에서 이걸 쓴다.
+     */
+    CountSummary countSummary(Long chkBlockId);
 
-    /** 블록에 속한 활성 항목 중 완료된 개수 */
-    int countCompletedActiveItems(Long chkBlockId);
+    /** {@link #countSummary(Long)}의 결과. */
+    record CountSummary(int totalCount, int completedCount) {
+    }
 }

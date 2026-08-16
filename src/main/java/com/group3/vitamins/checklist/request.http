@@ -43,7 +43,7 @@ Content-Type: application/json
 }
 
 ### 0-3. [준비] 체크리스트 블록 생성 — 아래 URL의 1을 0-2 응답의 stepId로 교체할 것
-POST localhost:8080/api/v1/steps/12/blocks
+POST localhost:8080/api/v1/steps/1/blocks
 Content-Type: application/json
 
 {
@@ -55,7 +55,7 @@ Content-Type: application/json
 GET localhost:8080/api/v1/steps/12/blocks
 
 ### 체크리스트 항목 생성 — URL의 1을 0-4에서 확인한 chkBlockId로 교체
-POST localhost:8080/api/v1/blocks/checklists/9/items
+POST localhost:8080/api/v1/blocks/checklists/8/items
 Content-Type: application/json
 
 {
@@ -63,7 +63,7 @@ Content-Type: application/json
 }
 
 ### 체크리스트 항목 수정 — URL의 3을 위 생성 응답의 chkId로 교체
-PATCH localhost:8080/api/v1/blocks/checklists/items/26
+PATCH localhost:8080/api/v1/blocks/checklists/items/28
 Content-Type: application/json
 
 {
@@ -72,7 +72,7 @@ Content-Type: application/json
 }
 
 ### 체크리스트 항목 삭제 — URL의 1을 삭제할 chkId로 교체
-DELETE localhost:8080/api/v1/blocks/checklists/items/26
+DELETE localhost:8080/api/v1/blocks/checklists/items/28
 
 ### 블록 삭제 (동훈님 담당, 공용 API) — URL의 1을 0-3 응답의 blockId로 교체할 것.
 ### ⚠️ chkBlockId(0-4에서 확인한 값)가 아니라 공용 block 테이블 PK다. 성공하면
