@@ -13,7 +13,10 @@ import java.util.Optional;
 @Mapper
 public interface ImageTrashMapper {
 
-    List<ImageTrashRow> findTrashedByProjectId(@Param("projectId") Long projectId);
+    List<ImageTrashRow> findTrashedByProjectId(
+            @Param("projectId") Long projectId, @Param("limit") int limit, @Param("offset") int offset);
+
+    long countTrashedByProjectId(@Param("projectId") Long projectId);
 
     /**
      * 복구·완전 삭제 전용 임시 우회 — imgBlockId가 속한 stepId를 block의 삭제 여부와 무관하게 찾는다.

@@ -251,6 +251,15 @@
 | --- | --- | --- |
 | `projectId` | Long | 이미지를 모아볼 프로젝트 ID |
 
+**Query Parameter** (2026-08-16 페이징 추가 — 재무 입출금/세금계산서 조회와 동일 컨벤션)
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `page` | Int | N | 0-base 페이지 번호. 생략하면 0 |
+| `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
+
+> sort 파라미터는 없다 — 정렬 기준(생성일 최신순)이 고정이라 선택 옵션 자체가 없다.
+
 **Request Body**: 없음
 
 **Response Parameter**
@@ -259,7 +268,11 @@
 | --- | --- | --- |
 | `httpStatus` | int | HTTP 상태 코드 |
 | `message` | String | 응답 메시지 |
-| `data.images` | List<Object> | 프로젝트 내 전체(활성) 이미지 목록 |
+| `data.page` | Int | 현재 페이지 번호 (0-base) |
+| `data.size` | Int | 페이지당 개수 |
+| `data.totalElements` | Long | 전체 항목 수 |
+| `data.totalPages` | Int | 전체 페이지 수 |
+| `data.images` | List<Object> | 프로젝트 내 이미지 목록 (현재 페이지분만) |
 | `data.images[].imgBlockId` | Long | 속한 블록 ID |
 | `data.images[].blockTitle` | String | 속한 블록 제목. 제목을 지정하지 않은 블록이면 `null` (2026-08-14 프론트 요청으로 추가) |
 | `data.images[].stepId` | Long | 속한 스텝 ID (2026-08-14 추가) |
@@ -277,6 +290,10 @@
   "httpStatus": 200,
   "message": "프로젝트 이미지 모아보기 조회 성공",
   "data": {
+    "page": 0,
+    "size": 20,
+    "totalElements": 2,
+    "totalPages": 1,
     "images": [
       { "imgId": 10, "imgBlockId": 3, "blockTitle": "착수보고 현장사진", "stepId": 2, "stepName": "착수", "originalName": "회의사진.jpg", "imageUrl": "https://s3.../abc.jpg", "caption": "회의실 전경", "createdAt": "2026-08-01T10:00:00" },
       { "imgId": 15, "imgBlockId": 5, "blockTitle": null, "stepId": 3, "stepName": "중간보고", "originalName": "화이트보드.jpg", "imageUrl": "https://s3.../def.jpg", "caption": "", "createdAt": "2026-08-02T14:00:00" }
@@ -290,6 +307,7 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | — | "프로젝트 이미지 모아보기 조회 성공" |
+| 400 | Bad Request | `IMG-012` | "페이지 조회 조건이 올바르지 않습니다." — `page`<0 · `size`≤0 또는 >100 (2026-08-16 추가) |
 | 403 | Forbidden | `PROJECT_ACCESS_DENIED` | "프로젝트에 접근할 권한이 없습니다." (프로젝트 도메인 공통 코드) |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | "프로젝트를 찾을 수 없습니다." (프로젝트 도메인 공통 코드) |
@@ -301,6 +319,8 @@
 > - **정렬 기준(생성일 최신순)은 명세에 없어 임의로 정함** — 휴지통 조회가 삭제일 최신순인 것과 통일했다.
 >
 > **구현 메모** — 휴지통 조회와 조인 체인은 동일(`image → image_block → block → step`, `step.project_id`로 필터)하고 삭제 필터 방향만 반대다(`deleted_at IS NULL` — 활성 이미지만). 관심사가 달라 `ImageGalleryMapper`로 별도 파일 분리, `ImageTrashController`는 이 API 추가로 `ImageProjectController`로 이름을 바꿨다(프로젝트 단위 이미지 API 2종을 함께 담음).
+>
+> 🔄 **페이징 추가 (2026-08-16)** — 프로젝트 이미지가 누적되면 한 번에 전체를 내려주는 게 부담이 될 수 있어 재무 목록 조회와 같은 컨벤션(`page`/`size` + `{page,size,totalElements,totalPages}`)으로 맞췄다. `sort`는 만들지 않았다 — 정렬 기준이 이미 고정(생성일 최신순)이라 프론트가 선택할 옵션 자체가 없다. `page`<0 또는 `size`≤0/>100이면 클램프하지 않고 `400 IMG-012`로 거부한다(재무 `FINANCE_PAGE_QUERY_INVALID`와 동일 원칙).
 
 ---
 
@@ -315,6 +335,15 @@
 | --- | --- | --- | --- |
 | `projectId` | Long | Y | 삭제된 이미지를 조회할 프로젝트 ID |
 
+**Query Parameter** (2026-08-16 페이징 추가 — 모아보기 조회와 동일 컨벤션)
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `page` | Int | N | 0-base 페이지 번호. 생략하면 0 |
+| `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
+
+> sort 파라미터는 없다 — 정렬 기준(삭제일 최신순)이 고정이라 선택 옵션 자체가 없다.
+
 **Request Body**: 없음
 
 **Response Parameter**
@@ -323,7 +352,11 @@
 | --- | --- | --- |
 | `httpStatus` | int | HTTP 상태 코드 |
 | `message` | String | 응답 메시지 |
-| `data.images` | List<Object> | 삭제된 이미지 목록 |
+| `data.page` | Int | 현재 페이지 번호 (0-base) |
+| `data.size` | Int | 페이지당 개수 |
+| `data.totalElements` | Long | 전체 항목 수 |
+| `data.totalPages` | Int | 전체 페이지 수 |
+| `data.images` | List<Object> | 삭제된 이미지 목록 (현재 페이지분만) |
 | `data.images[].imgId` | Long | 이미지 ID |
 | `data.images[].originalName` | String | 원본 파일명 |
 | `data.images[].imageUrl` | String | 저장소 이미지 URL(presigned) |
@@ -338,6 +371,10 @@
   "httpStatus": 200,
   "message": "이미지 휴지통 조회 성공",
   "data": {
+    "page": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
     "images": [
       {
         "imgId": 10,
@@ -357,6 +394,7 @@
 | 코드 | 상태 | code | 설명 |
 | --- | --- | --- | --- |
 | 200 | OK | — | "이미지 휴지통 조회 성공" |
+| 400 | Bad Request | `IMG-012` | "페이지 조회 조건이 올바르지 않습니다." — `page`<0 · `size`≤0 또는 >100 (2026-08-16 추가) |
 | 403 | Forbidden | `PROJECT_ACCESS_DENIED` | "프로젝트에 접근할 권한이 없습니다." (프로젝트 도메인 공통 코드) |
 | 403 | Forbidden | `AUTH_PASSWORD_RESET_REQUIRED` | "초기 비밀번호를 먼저 변경해 주세요." (전 도메인 공통 게이트) |
 | 404 | Not Found | `PROJECT_NOT_FOUND` | "프로젝트를 찾을 수 없습니다." (프로젝트 도메인 공통 코드) |
@@ -369,6 +407,8 @@
 > - `IMG-016`(401)·`IMG-017`(500)은 다른 API와 동일 이유로 공통 코드로 대체.
 >
 > **구현 메모**: `image → image_block → block → step` 을 타고 `step.project_id`로 필터링한다. 여러 테이블 조인이라 Block 도메인에 별도 어댑터를 요청하지 않고 MyBatis로 직접 조회(`ImageTrashMapper`, `.ai/docs/global/MYBATIS.md` 기준에 부합). 삭제된 이미지도 S3 객체는 남아있으므로(소프트 삭제 원칙) `imageUrl`은 정상적으로 presign해서 내려준다.
+>
+> 🔄 **페이징 추가 (2026-08-16)** — 모아보기 조회와 동일한 이유·동일한 컨벤션으로 추가했다. `sort` 없음(정렬 고정), `page`<0 또는 `size`≤0/>100이면 `400 IMG-012`로 거부.
 
 ---
 

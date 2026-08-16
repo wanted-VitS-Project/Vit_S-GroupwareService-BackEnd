@@ -14,5 +14,8 @@ import java.util.List;
 @Mapper
 public interface ImageGalleryMapper {
 
-    List<ImageGalleryRow> findActiveByProjectId(@Param("projectId") Long projectId);
+    List<ImageGalleryRow> findActiveByProjectId(
+            @Param("projectId") Long projectId, @Param("limit") int limit, @Param("offset") int offset);
+
+    long countActiveByProjectId(@Param("projectId") Long projectId);
 }
