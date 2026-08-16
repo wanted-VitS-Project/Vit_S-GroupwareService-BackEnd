@@ -11,6 +11,7 @@ import com.group3.vitamins.project.step.application.query.StepListQuery;
 import com.group3.vitamins.project.step.application.result.StepDetailResult;
 import com.group3.vitamins.project.step.application.result.StepPerson;
 import com.group3.vitamins.project.step.application.result.StepSummary;
+import com.group3.vitamins.project.step.application.usecase.StepAccessUseCase;
 import com.group3.vitamins.project.step.application.usecase.StepQueryUseCase;
 import com.group3.vitamins.project.step.domain.exception.StepErrorCode;
 import com.group3.vitamins.project.step.domain.model.Step;
@@ -38,6 +39,7 @@ public class StepQueryService implements StepQueryUseCase {
     private final IssueStatLookupPort issueStatLookupPort;
     private final EmployeeLookupPort employeeLookupPort;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final StepAccessUseCase stepAccessUseCase;
     private final StepAccessPolicy stepAccessPolicy;
 
     @Override
@@ -72,17 +74,18 @@ public class StepQueryService implements StepQueryUseCase {
                 .toList();
     }
 
+    /**
+     * 판정은 {@link StepAccessUseCase} 에 맡긴다 — 예전에는 같은 규칙(프로젝트 권한 → 스텝 오버라이드)을
+     * 여기에 복제해 뒀는데, 두 벌이 되면 한쪽만 고쳤을 때 조용히 갈라진다. 404 → 403 순서도 그쪽이 갖는다.
+     */
     @Override
     public StepDetailResult getStepDetail(StepDetailQuery query) {
+        MemberPermission myPermission = stepAccessUseCase
+                .requireAccess(query.stepId(), query.requesterUserId(), query.role())
+                .permission();
+
         Step step = stepRepository.findById(query.stepId())
                 .orElseThrow(() -> new NotFoundException(StepErrorCode.STEP_NOT_FOUND));
-
-        MemberPermission projectPermission = projectAccessUseCase.resolvePermission(
-                step.getProjectId(), query.requesterUserId(), query.role());
-        MemberPermission myPermission = stepAccessPolicy.requireAccess(
-                query.role(), projectPermission,
-                stepPermissionRepository.findOverride(step.getStepId(), query.requesterUserId())
-                        .orElse(null));
 
         IssueStatLookupPort.IssueStatView stat = issueStatLookupPort
                 .countByStepIds(List.of(step.getStepId()))
