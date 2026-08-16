@@ -5,14 +5,14 @@
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 부서 목록 조회 | GET | `/api/v1/departments` | 전체 사용자 |
-| 부서 생성 | POST | `/api/v1/departments` | ADMIN |
-| 부서명 수정 | PATCH | `/api/v1/departments/{departmentId}` | ADMIN |
-| 부서 삭제 | DELETE | `/api/v1/departments/{departmentId}` | ADMIN |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/departments` | [부서 목록 조회](#1-부서-목록-조회) | — | 전체 사용자 |
+| POST | `/api/v1/departments` | [부서 생성](#2-부서-생성) | — | ADMIN |
+| PATCH | `/api/v1/departments/{departmentId}` | [부서명 수정](#3-부서명-수정) | — | ADMIN |
+| DELETE | `/api/v1/departments/{departmentId}` | [부서 삭제](#4-부서-삭제) | — | ADMIN |
 
 **요구사항** `DEPT-001`~`DEPT-011` · **유스케이스** `USC-DEPT-001`~`USC-DEPT-010`
 

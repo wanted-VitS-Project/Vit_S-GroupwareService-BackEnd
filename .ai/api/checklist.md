@@ -4,6 +4,14 @@
 **최종 동기화**: 2026-08-05
 **도메인 담당**: 정림
 
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| POST | `/api/v1/blocks/checklists/{chkBlockId}/items` | [체크리스트 항목 생성](#체크리스트-항목-생성-post-apiv1blockschecklistschkblockiditems) | ✅ 확정 |
+| PATCH | `/api/v1/blocks/checklists/items/{chkId}` | [체크리스트 항목 수정](#체크리스트-항목-수정-patch-apiv1blockschecklistsitemschkid) | ✅ 확정 |
+| DELETE | `/api/v1/blocks/checklists/items/{chkId}` | [체크리스트 항목 삭제](#체크리스트-항목-삭제-delete-apiv1blockschecklistsitemschkid) | ✅ 확정 |
+
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
 > ⚠️ 에러 코드의 **내부 번호는 바뀔 수 있다** (담당자 확인) — 코드 문자열 자체를 구현 기준으로 삼되, 번호 변경 통보 시 함께 갱신할 것.
 

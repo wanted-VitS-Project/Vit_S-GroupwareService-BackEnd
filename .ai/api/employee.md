@@ -5,20 +5,20 @@
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 사원 목록 조회 | GET | `/api/v1/employees` | ADMIN |
-| 사원 이름 검색 (결재선 지정용) | GET | `/api/v1/employees/search` | 로그인 사용자 |
-| 사원 상세 조회 | GET | `/api/v1/employees/{userId}` | ADMIN |
-| 사원 등록 | POST | `/api/v1/employees` | ADMIN |
-| 사원 정보 수정 | PATCH | `/api/v1/employees/{userId}` | ADMIN |
-| 퇴사 처리 | PATCH | `/api/v1/employees/{userId}/resignation` | ADMIN |
-| 엑셀 템플릿 내려받기 | GET | `/api/v1/employees/bulk-template` | ADMIN |
-| 엑셀 일괄 등록 **검증** | POST | `/api/v1/employees/bulk/validate` | ADMIN |
-| 엑셀 일괄 등록 | POST | `/api/v1/employees/bulk` | ADMIN |
-| 프로필 사진 조회(아바타 서빙) | GET | `/api/v1/employees/{userId}/profile-image` | **로그인 사용자 누구나** |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/employees` | [사원 목록 조회](#1-사원-목록-조회) | — | ADMIN |
+| GET | `/api/v1/employees/search` | [사원 이름 검색 (결재선 지정용)](#9-사원-이름-검색-결재선-지정용) | — | 로그인 사용자 |
+| GET | `/api/v1/employees/{userId}` | [사원 상세 조회](#2-사원-상세-조회) | — | ADMIN |
+| POST | `/api/v1/employees` | [사원 등록](#3-사원-등록) | — | ADMIN |
+| PATCH | `/api/v1/employees/{userId}` | [사원 정보 수정](#4-사원-정보-수정) | — | ADMIN |
+| PATCH | `/api/v1/employees/{userId}/resignation` | [퇴사 처리](#5-퇴사-처리) | — | ADMIN |
+| GET | `/api/v1/employees/bulk-template` | [엑셀 템플릿 내려받기](#6-엑셀-템플릿-내려받기) | — | ADMIN |
+| POST | `/api/v1/employees/bulk/validate` | [엑셀 일괄 등록 검증](#7-엑셀-일괄-등록-검증) | — | ADMIN |
+| POST | `/api/v1/employees/bulk` | [엑셀 일괄 등록](#8-엑셀-일괄-등록) | — | ADMIN |
+| GET | `/api/v1/employees/{userId}/profile-image` | [프로필 사진 조회(아바타 서빙)](#10-프로필-사진-조회-아바타-서빙) | — | **로그인 사용자 누구나** |
 
 > ⚠️ **이 목록은 대부분 ADMIN 전용이지만 프로필 사진 조회만 로그인 사용자 전체다** (§9 이름 검색과 같은 예외). 좌상단·프로젝트 멤버·결재선 아바타가 남의 사진을 그려야 하기 때문. `SecurityConfig` 에서 이 경로의 권한을 분리한다. 업로드/삭제(본인만)는 auth 도메인(`auth.md` §5-1·§5-2)에 있다.
 
@@ -58,7 +58,7 @@
 ⛔ **기본은 재직자만이다.** 화면에 퇴사 필터가 없다.
 
 > ⭐ **`is_system` 의 범위** (2026-08-03 통합) — **사람이 아닌 계정 전부**다.
-> `global/PERMISSION.md` §2-2 는 *"배치·크롤러가 쓰는 시스템 사원"* 으로, 제 설계는 *"ADMIN 공용 계정용 가상 사원"* 으로 썼다.
+> `../docs/global/PERMISSION.md` §2-2 는 *"배치·크롤러가 쓰는 시스템 사원"* 으로, 제 설계는 *"ADMIN 공용 계정용 가상 사원"* 으로 썼다.
 > 둘 다 같은 성격이라 정의를 **`ADMIN` · 배치 · 크롤러**로 넓혀 하나로 쓴다.
 
 **Response**

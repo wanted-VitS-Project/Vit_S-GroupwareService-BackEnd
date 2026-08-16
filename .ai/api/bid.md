@@ -6,50 +6,48 @@
 **최종 동기화**: 2026-08-14 (공고 관심 등록/해제 신설 + 목록 조회 favorite 필터 — FE 공유 필요)
 **도메인 담당**: 정현
 
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/bidding/collection-conditions` | [수집 조건 목록 조회](#수집-조건-목록-조회-get-apiv1biddingcollection-conditions) | ✅ 확정 | `BIDDING` |
+| POST | `/api/v1/bidding/collection-conditions` | [수집 조건 등록](#수집-조건-등록-post-apiv1biddingcollection-conditions) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/collection-conditions/{conditionId}` | [수집 조건 수정](#수집-조건-수정-patch-apiv1biddingcollection-conditionsconditionid) | ✅ 확정 | `BIDDING` |
+| POST | `/api/v1/bidding/collection-conditions/{conditionId}/runs` | [입찰 공고 수집 실행](#입찰-공고-수집-실행-post-apiv1biddingcollection-conditionsconditionidruns) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/collection-runs/{runId}` | [수집 실행 결과 조회](#수집-실행-결과-조회-get-apiv1biddingcollection-runsrunid) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/notices` | [입찰 공고 목록 조회](#입찰-공고-목록-조회-get-apiv1biddingnotices) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/notices/{noticeId}` | [입찰 공고 상세 조회](#입찰-공고-상세-조회-get-apiv1biddingnoticesnoticeid) | ✅ 확정 | `BIDDING` |
+| POST | `/api/v1/bidding/notices` | [입찰 공고 직접 등록](#직접-등록-post-apiv1biddingnotices) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/notices/{noticeId}` | [직접 등록 공고 수정](#직접-등록-공고-수정-patch-apiv1biddingnoticesnoticeid) | ✅ 확정 | `BIDDING` |
+| POST | `/api/v1/bidding/notices/{noticeId}/attachments/uploads` | [직접 등록 공고 첨부 업로드 시작](#첨부-업로드-시작-post-apiv1biddingnoticesnoticeidattachmentsuploads) | ✅ 확정 (2026-08-14 신설) | `BIDDING` |
+| POST | `/api/v1/bidding/notices/{noticeId}/attachments/uploads/{attachmentId}/complete` | [직접 등록 공고 첨부 업로드 완료 통보](#첨부-업로드-완료-통보-post-apiv1biddingnoticesnoticeidattachmentsuploadsattachmentidcomplete) | ✅ 확정 (2026-08-14 신설) | `BIDDING` |
+| PATCH | `/api/v1/bidding/notices/{noticeId}/favorite` | [공고 관심 등록](#공고-관심-등록-및-해제-2026-08-14-신설) | ✅ 확정 (2026-08-14 신설) | `BIDDING` |
+| PATCH | `/api/v1/bidding/notices/{noticeId}/unfavorite` | [공고 관심 해제](#공고-관심-등록-및-해제-2026-08-14-신설) | ✅ 확정 (2026-08-14 신설) | `BIDDING` |
+| PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | [공고 제외](#공고-제외-patch-apiv1biddingnoticesnoticeiddismiss) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | [공고 복구](#공고-복구-patch-apiv1biddingnoticesnoticeidrestore) | ✅ 확정 | `BIDDING` |
+| POST | `/api/v1/bidding/notices/{noticeId}/summaries` | [입찰 AI 요약 요청](#입찰-ai-요약-요청-post-apiv1biddingnoticesnoticeidsummaries) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/notices/{noticeId}/summaries` | [공고별 입찰 AI 요약 이력 조회](#공고별-입찰-ai-요약-이력-조회-get-apiv1biddingnoticesnoticeidsummaries) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/summaries/{summaryId}` | [입찰 AI 요약 조회](#입찰-ai-요약-조회-get-apiv1biddingsummariessummaryid) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/summaries/{summaryId}` | [입찰 AI 요약 수정](#입찰-ai-요약-수정-patch-apiv1biddingsummariessummaryid) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | [입찰 AI 요약 확정](#입찰-ai-요약-확정-patch-apiv1biddingsummariessummaryidconfirm) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/summaries/{summaryId}/abandon` | [입찰 AI 요약 중단](#입찰-ai-요약-중단-patch-apiv1biddingsummariessummaryidabandon-2026-08-15-신설) | ✅ 확정 (2026-08-15 신설) | `BIDDING` |
+| GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | [Python 입찰 요약 작업 조회](#python-입찰-요약-작업-조회-get-internalv1biddingsummariessummaryidjobsattemptid) | ✅ 확정 | 내부 서버 |
+| POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | [Python 입찰 요약 결과 callback](#python-입찰-요약-결과-callback-post-internalv1biddingsummariessummaryidcallback) | ✅ 확정 | 내부 서버 |
+| POST | `/api/v1/bidding/notices/{noticeId}/reviews` | [입찰 문서 검토 요청](#입찰-문서-검토-요청-post-apiv1biddingnoticesnoticeidreviews) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/notices/{noticeId}/review-sources` | [입찰 문서 검토 자료 조회](#입찰-문서-검토-자료-조회-get-apiv1biddingnoticesnoticeidreview-sources) | ✅ 확정 | `BIDDING` |
+| ~~GET~~ | ~~`/api/v1/bidding/reference-files`~~ | ~~[입찰 기준자료 파일함 조회](#입찰-기준자료-파일함-crud-4개-api-폐기-2026-08-13)~~ | ❌ 폐기(2026-08-13) | - |
+| ~~POST~~ | ~~`/api/v1/bidding/reference-files/uploads`~~ | ~~[입찰 기준자료 업로드 시작](#입찰-기준자료-파일함-crud-4개-api-폐기-2026-08-13)~~ | ❌ 폐기(2026-08-13) | - |
+| ~~POST~~ | ~~`/api/v1/bidding/reference-files/uploads/{referenceFileId}/complete`~~ | ~~[입찰 기준자료 업로드 완료](#입찰-기준자료-파일함-crud-4개-api-폐기-2026-08-13)~~ | ❌ 폐기(2026-08-13) | - |
+| ~~DELETE~~ | ~~`/api/v1/bidding/reference-files/{referenceFileId}`~~ | ~~[입찰 기준자료 삭제](#입찰-기준자료-파일함-crud-4개-api-폐기-2026-08-13)~~ | ❌ 폐기(2026-08-13) | - |
+| GET | `/api/v1/bidding/notices/{noticeId}/reviews` | [공고별 입찰 문서 검토 이력 조회](#공고별-입찰-문서-검토-이력-조회-get-apiv1biddingnoticesnoticeidreviews) | ✅ 확정 | `BIDDING` |
+| GET | `/api/v1/bidding/reviews/{reviewId}` | [입찰 문서 검토 조회](#입찰-문서-검토-조회-get-apiv1biddingreviewsreviewid) | ✅ 확정 | `BIDDING` |
+| PATCH | `/api/v1/bidding/reviews/{reviewId}/abandon` | [입찰 문서 검토 포기](#입찰-문서-검토-포기-patch-apiv1biddingreviewsreviewidabandon) | ✅ 확정 | `BIDDING` |
+| GET | `/internal/v1/bidding/reviews/{reviewId}/jobs/{attemptId}` | [Python 입찰 문서 검토 작업 조회](#python-입찰-문서-검토-작업-조회-get-internalv1biddingreviewsreviewidjobsattemptid) | ✅ 확정 | 내부 서버 |
+| POST | `/internal/v1/bidding/reviews/{reviewId}/callback` | [Python 입찰 문서 검토 결과 callback](#python-입찰-문서-검토-결과-callback-post-internalv1biddingreviewsreviewidcallback) | ✅ 확정 | 내부 서버 |
+| POST | `/api/v1/bidding/notices/{noticeId}/projects` | [공고 프로젝트 전환](#공고-프로젝트-전환-post-apiv1biddingnoticesnoticeidprojects) | ✅ 확정 | `BIDDING` |
+
 > 상태가 `✅ 확정` 이상인 항목은 프론트와의 계약이다. 임의 변경 금지.
 > 현재 문서는 노션 정리본을 로컬에 옮긴 **초안**이다. 팀 합의와 프론트 공유가 끝나면 상태를 `✅ 확정`으로 바꾼다.
-
----
-
-## 엔드포인트 목록
-
-| 상태 | 기능 | METHOD | URL | 권한 |
-|------|------|--------|-----|------|
-| ✅ 확정 | 수집 조건 목록 조회 | GET | `/api/v1/bidding/collection-conditions` | `BIDDING` |
-| ✅ 확정 | 수집 조건 등록 | POST | `/api/v1/bidding/collection-conditions` | `BIDDING` |
-| ✅ 확정 | 수집 조건 수정 | PATCH | `/api/v1/bidding/collection-conditions/{conditionId}` | `BIDDING` |
-| ✅ 확정 | 입찰 공고 수집 실행 | POST | `/api/v1/bidding/collection-conditions/{conditionId}/runs` | `BIDDING` |
-| ✅ 확정 | 수집 실행 결과 조회 | GET | `/api/v1/bidding/collection-runs/{runId}` | `BIDDING` |
-| ✅ 확정 | 입찰 공고 목록 조회 | GET | `/api/v1/bidding/notices` | `BIDDING` |
-| ✅ 확정 | 입찰 공고 상세 조회 | GET | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
-| ✅ 확정 | 입찰 공고 직접 등록 | POST | `/api/v1/bidding/notices` | `BIDDING` |
-| ✅ 확정 | 직접 등록 공고 수정 | PATCH | `/api/v1/bidding/notices/{noticeId}` | `BIDDING` |
-| ✅ 확정 (2026-08-14 신설) | 직접 등록 공고 첨부 업로드 시작 | POST | `/api/v1/bidding/notices/{noticeId}/attachments/uploads` | `BIDDING` |
-| ✅ 확정 (2026-08-14 신설) | 직접 등록 공고 첨부 업로드 완료 통보 | POST | `/api/v1/bidding/notices/{noticeId}/attachments/uploads/{attachmentId}/complete` | `BIDDING` |
-| ✅ 확정 (2026-08-14 신설) | 공고 관심 등록 | PATCH | `/api/v1/bidding/notices/{noticeId}/favorite` | `BIDDING` |
-| ✅ 확정 (2026-08-14 신설) | 공고 관심 해제 | PATCH | `/api/v1/bidding/notices/{noticeId}/unfavorite` | `BIDDING` |
-| ✅ 확정 | 공고 제외 | PATCH | `/api/v1/bidding/notices/{noticeId}/dismiss` | `BIDDING` |
-| ✅ 확정 | 공고 복구 | PATCH | `/api/v1/bidding/notices/{noticeId}/restore` | `BIDDING` |
-| ✔️ 완료 | 입찰 AI 요약 요청 | POST | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
-| ✔️ 완료 | 공고별 입찰 AI 요약 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/summaries` | `BIDDING` |
-| ✅ 확정 | 입찰 AI 요약 조회 | GET | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
-| ✅ 확정 | 입찰 AI 요약 수정 | PATCH | `/api/v1/bidding/summaries/{summaryId}` | `BIDDING` |
-| ✅ 확정 | 입찰 AI 요약 확정 | PATCH | `/api/v1/bidding/summaries/{summaryId}/confirm` | `BIDDING` |
-| ✅ 확정 (2026-08-15 신설) | 입찰 AI 요약 중단 | PATCH | `/api/v1/bidding/summaries/{summaryId}/abandon` | `BIDDING` |
-| ✔️ 완료 | Python 입찰 요약 작업 조회 | GET | `/internal/v1/bidding/summaries/{summaryId}/jobs/{attemptId}` | 내부 서버 |
-| ✅ 확정 | Python 입찰 요약 결과 callback | POST | `/internal/v1/bidding/summaries/{summaryId}/callback` | 내부 서버 |
-| ✅ 확정 | 입찰 문서 검토 요청 | POST | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
-| ✅ 확정 | 입찰 문서 검토 자료 조회 | GET | `/api/v1/bidding/notices/{noticeId}/review-sources` | `BIDDING` |
-| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 파일함 조회~~ | ~~GET~~ | ~~`/api/v1/bidding/reference-files`~~ | - |
-| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 업로드 시작~~ | ~~POST~~ | ~~`/api/v1/bidding/reference-files/uploads`~~ | - |
-| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 업로드 완료~~ | ~~POST~~ | ~~`/api/v1/bidding/reference-files/uploads/{referenceFileId}/complete`~~ | - |
-| ❌ 폐기(2026-08-13) | ~~입찰 기준자료 삭제~~ | ~~DELETE~~ | ~~`/api/v1/bidding/reference-files/{referenceFileId}`~~ | - |
-| ✅ 확정 | 공고별 입찰 문서 검토 이력 조회 | GET | `/api/v1/bidding/notices/{noticeId}/reviews` | `BIDDING` |
-| ✅ 확정 | 입찰 문서 검토 조회 | GET | `/api/v1/bidding/reviews/{reviewId}` | `BIDDING` |
-| ✅ 확정 | 입찰 문서 검토 포기 | PATCH | `/api/v1/bidding/reviews/{reviewId}/abandon` | `BIDDING` |
-| ✅ 확정 | Python 입찰 문서 검토 작업 조회 | GET | `/internal/v1/bidding/reviews/{reviewId}/jobs/{attemptId}` | 내부 서버 |
-| ✅ 확정 | Python 입찰 문서 검토 결과 callback | POST | `/internal/v1/bidding/reviews/{reviewId}/callback` | 내부 서버 |
-| ✅ 확정 | 공고 프로젝트 전환 | POST | `/api/v1/bidding/notices/{noticeId}/projects` | `BIDDING` |
 
 ---
 

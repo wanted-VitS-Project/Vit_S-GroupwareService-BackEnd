@@ -5,6 +5,20 @@
 **요구사항 명세**: [`../docs/domain/파일/COMPANY-DOC-V1.md`](../docs/domain/파일/COMPANY-DOC-V1.md) (✅ 확정)
 **미러링 기준**: [`file.md`](file.md) — 업로드 2단계·버전·미리보기·다운로드 인프라를 그대로 공유한다
 
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| POST | `/api/v1/admin/company-documents/uploads` | [업로드 시작(발급)](#1-업로드-시작-발급) | — |
+| POST | `/api/v1/admin/company-documents/uploads/{versionId}/complete` | [업로드 완료 통보](#2-업로드-완료-통보) | — |
+| GET | `/api/v1/admin/company-documents` | [문서 목록(카테고리·검색·페이징)](#3-문서-목록-조회) | — |
+| PATCH | `/api/v1/admin/company-documents/{documentId}` | [표시명·카테고리 수정](#4-표시명카테고리-수정) | — |
+| DELETE | `/api/v1/admin/company-documents/{documentId}` | [soft delete](#5-삭제-soft-delete) | — |
+| POST | `/api/v1/admin/company-documents/{documentId}/restore` | [복구](#6-복구) | — |
+| GET | `/api/v1/admin/company-documents/{documentId}/versions` | [버전 이력](#7-버전-이력-조회) | — |
+| GET | `/api/v1/admin/company-document-versions/{versionId}/download` | [다운로드 URL 발급](#8-다운로드-url-발급) | — |
+| GET | `/api/v1/admin/company-document-versions/{versionId}/preview` | [미리보기(PDF 앞 5p)](#9-미리보기-조회) | — |
+
 > 🏢 **사내 문서는 회사(테넌트) 소속 독립 애그리거트다.** 프로젝트·블록·스텝에 붙지 않는다.
 > 관리·조회 **모두 ADMIN 전용**(`전사 관리 › 전사 파일 관리 › 사내 문서함` 탭). 권한은 회사 단위 역할로 판정한다.
 > 모든 조회는 현재 `company_id` 스코프를 강제한다(`CurrentCompanyIdProvider`). 타 회사 문서가 새지 않는다.
@@ -30,22 +44,6 @@
 ### 에러코드 접두어 `CDOC_`
 
 공통 `COMMON_*`(400/403/404/405/500) 과 인증 `AUTH_UNAUTHENTICATED`(401) 는 전 엔드포인트 공통 폴백이다. 아래 표는 도메인 코드만 나열한다.
-
----
-
-## 엔드포인트 (9)
-
-| # | Method · URL | 설명 |
-|---|---|---|
-| 1 | `POST /api/v1/admin/company-documents/uploads` | 업로드 시작(발급) |
-| 2 | `POST /api/v1/admin/company-documents/uploads/{versionId}/complete` | 업로드 완료 통보 |
-| 3 | `GET /api/v1/admin/company-documents` | 문서 목록(카테고리·검색·페이징) |
-| 4 | `PATCH /api/v1/admin/company-documents/{documentId}` | 표시명·카테고리 수정 |
-| 5 | `DELETE /api/v1/admin/company-documents/{documentId}` | soft delete |
-| 6 | `POST /api/v1/admin/company-documents/{documentId}/restore` | 복구 |
-| 7 | `GET /api/v1/admin/company-documents/{documentId}/versions` | 버전 이력 |
-| 8 | `GET /api/v1/admin/company-document-versions/{versionId}/download` | 다운로드 URL 발급 |
-| 9 | `GET /api/v1/admin/company-document-versions/{versionId}/preview` | 미리보기(PDF 앞 5p) |
 
 ---
 

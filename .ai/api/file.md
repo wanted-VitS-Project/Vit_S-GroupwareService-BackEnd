@@ -39,31 +39,28 @@
 - ✅ **D안 확정**(2026-08-16 · 팀 합의) — 블록 삭제→파일 자동 휴지통(cascade 포함 · 결재잠금 시 블록삭제 `409` 거부). 🚧 **구현 착수 대기** — block 도메인이 아웃바운드 포트로 file 일괄 트래시를 호출하는 방식(이미지 `ImageBlockDetailAdapter` 선례). 착수 시 §12/§13 코드의 활성 고아 반환도 함께 정리.
 - 🚧 **남음**: **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-### File (9)
-
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 파일 업로드 시작 | POST | `/api/v1/files/uploads` | 스텝 EDITOR |
-| 파일 업로드 완료 통보 | POST | `/api/v1/files/uploads/{fileVersionId}/complete` | 스텝 EDITOR |
-| 블록 파일 목록 조회 | GET | `/api/v1/blocks/{blockId}/files` | 스텝 접근 권한 |
-| 문서명 수정 | PATCH | `/api/v1/files/{fileId}` | 스텝 EDITOR |
-| 휴지통으로 이동 | DELETE | `/api/v1/files/{fileId}` | 스텝 EDITOR |
-| 휴지통에서 복구 | POST | `/api/v1/files/{fileId}/restore` | 스텝 EDITOR |
-| 영구 삭제 | POST | `/api/v1/files/{fileId}/permanent-deletion` | 스텝 EDITOR |
-| **프로젝트 전체 파일 모아보기** | GET | `/api/v1/projects/{projectId}/files` | 프로젝트 접근 권한 |
-| **프로젝트 휴지통 모아보기** | GET | `/api/v1/projects/{projectId}/files/trash` | 프로젝트 접근 권한 |
-
-### FileVersion (5)
-
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 버전 이력 조회 | GET | `/api/v1/files/{fileId}/versions` | 스텝 접근 권한 |
-| **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
-| 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
-| 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
-| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/projects/{projectId}/file-versions` | 프로젝트 접근 권한 |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| POST | `/api/v1/files/uploads` | [파일 업로드 시작](#1-파일-업로드-시작) | — | 스텝 EDITOR |
+| POST | `/api/v1/files/uploads/{fileVersionId}/complete` | [파일 업로드 완료 통보](#2-파일-업로드-완료-통보) | — | 스텝 EDITOR |
+| GET | `/api/v1/blocks/{blockId}/files` | [블록 파일 목록 조회](#3-블록-파일-목록-조회) | — | 스텝 접근 권한 |
+| PATCH | `/api/v1/files/{fileId}` | [문서명 수정](#4-문서명-수정) | — | 스텝 EDITOR |
+| DELETE | `/api/v1/files/{fileId}` | [휴지통으로 이동](#5-휴지통으로-이동) | — | 스텝 EDITOR |
+| POST | `/api/v1/files/{fileId}/restore` | [휴지통에서 복구](#6-휴지통에서-복구) | — | 스텝 EDITOR |
+| POST | `/api/v1/files/{fileId}/permanent-deletion` | [영구 삭제](#7-영구-삭제) | — | 스텝 EDITOR |
+| GET | `/api/v1/projects/{projectId}/files` | [**프로젝트 전체 파일 모아보기**](#12-프로젝트-전체-파일-모아보기-문서함) | — | 프로젝트 접근 권한 |
+| GET | `/api/v1/projects/{projectId}/files/trash` | [**프로젝트 휴지통 모아보기**](#13-프로젝트-휴지통-모아보기) | — | 프로젝트 접근 권한 |
+| GET | `/api/v1/files/{fileId}/versions` | [버전 이력 조회](#8-버전-이력-조회) | — | 스텝 접근 권한 |
+| GET | `/api/v1/file-versions/{fileVersionId}` | [**버전 단건 조회**](#11-버전-단건-조회--결재용-인터페이스) | — | 스텝 접근 권한 |
+| GET | `/api/v1/file-versions/{fileVersionId}/download` | [다운로드 URL 발급](#9-다운로드-url-발급) | — | 스텝 접근 권한 |
+| GET | `/api/v1/file-versions/{fileVersionId}/preview` | [미리보기 조회](#10-미리보기-조회) | — | 스텝 접근 권한 |
+| GET | `/api/v1/projects/{projectId}/file-versions` | [**파일 버전 목록 조회** (비타메이트 분석 선택용)](#11-파일-버전-목록-조회-비타메이트-분석-선택용) | — | 프로젝트 접근 권한 |
+| GET | `/api/v1/admin/files/projects` | [전사 파일 트리 — 프로젝트 목록](#141-프로젝트-목록) | — | ADMIN |
+| GET | `/api/v1/admin/files/projects/{projectId}/stages` | [전사 파일 트리 — 스테이지 목록](#142-스테이지-목록) | — | ADMIN |
+| GET | `/api/v1/admin/files/projects/{projectId}/steps` | [전사 파일 트리 — 스텝 목록](#143-스텝-목록) | — | ADMIN |
+| GET | `/api/v1/admin/files/steps/{stepId}/files` | [전사 파일 트리 — 스텝 내 파일](#144-스텝-내-파일) | — | ADMIN |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
 
@@ -71,7 +68,7 @@
 
 ⛔ **파일 단위 권한이 없다.** 스텝의 편집/열람 권한을 그대로 따른다. 열람이면 미리보기와 다운로드 둘 다 된다 (`FILE-014`).
 
-### 권한 판정 순서 ⭐ (2026-08-03 · `global/PERMISSION.md` §4·§6 반영)
+### 권한 판정 순서 ⭐ (2026-08-03 · `../docs/global/PERMISSION.md` §4·§6 반영)
 
 ```
 1) 전역 role

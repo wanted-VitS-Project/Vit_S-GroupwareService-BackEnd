@@ -1,5 +1,6 @@
 # 📐 API 규칙
 
+**최종 업데이트**: 2026-08-16 (§0 TL;DR 신설 · `OpenApiConfig` 패키지 경로 정정 · §2-3 `@SecurityRequirement` 미적용 현실 표기 · §3-3 에 `AUTH_UNAUTHENTICATED`(401) 등재)
 **최종 업데이트**: 2026-08-04 (§0·§1·§2 개정 — 노션 계약 폐지, `.ai/api/*.md` 단일 기준. 상태 게이트 삭제)
 **최종 업데이트**: 2026-07-28 (초안 생성 — 공통 컨벤션 팀 합의 전)
 **관리**: 김동현 (DevOps) · **명세 작성**: 각 도메인 담당자
@@ -7,6 +8,21 @@
 > 📖 관련: [CONVENTION.md](CONVENTION.md) · [INFRA.md](INFRA.md) · [PIPELINE.md](PIPELINE.md)
 
 ---
+
+## §0 TL;DR
+
+- **이 문서가 정하는 것**: 명세(`.ai/api/{도메인}.md`)와 코드가 어긋나지 않게 하는 규칙 — 계약의 단일 기준, Swagger 어노테이션, 응답/URL/에러코드/페이징 공통 컨벤션.
+- ⚠️ **조용히 깨지는 함정**
+  - 명세에 없는 필드·에러코드를 "관례상" 채우면 컴파일은 되지만 **프론트 연동 시점에 깨진다.** 없으면 멈추고 md 를 먼저 고친다 (§0-원칙).
+  - null 가능 필드를 설명문으로만 적으면 **OpenAPI 문서에는 흔적이 없다.** `nullable = true` 를 빠뜨리면 프론트 타입이 non-null 로 생성된다 (§2-3-1).
+
+| 섹션 | 내용 |
+|---|---|
+| §0 최우선 원칙 | 명세 이탈 금지 — 없는 엔드포인트·필드·상태코드·에러코드를 지어내지 않는다 |
+| §1 | `.ai/api/{도메인}.md` 가 계약의 단일 기준 (노션 폐지, 별도 승격 절차 없음) |
+| §2 | Swagger 도입 상태·운영 비활성화 · 어노테이션 규칙(`@Tag`/`@Operation`/`@ApiResponses`/`@Schema`) · null 표현 |
+| §3 | 공통 컨벤션 — 응답 포맷 ✅ · 에러코드 의미식 ✅ · URL/페이징 🔴 미확정 |
+| §4 | 변경 이력 |
 
 ## 0. 🚨 최우선 원칙 — 명세는 프론트와의 계약이다
 
@@ -88,7 +104,7 @@ API 코드(Controller · Service · DTO · Repository · 엔드포인트 · 에�
 | 도입 상태 | ✅ **도입 완료** (2026-07-28, springdoc 2.8.17) |
 | Swagger UI | `/swagger-ui.html` |
 | OpenAPI JSON | `/v3/api-docs` |
-| 설정 클래스 | `com.group3.vitamins.config.OpenApiConfig` |
+| 설정 클래스 | `com.group3.vitamins.global.infrastructure.config.OpenApiConfig` |
 
 > ⚠️ **현재 Spring Security 기본 설정에 막혀 있다.** SecurityConfig 작성 시 아래 경로를 허용해야 한다.
 > ```
@@ -109,7 +125,7 @@ API 코드(Controller · Service · DTO · Repository · 엔드포인트 · 에�
 | `build.gradle` | `org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17` |
 | `application.yml` | UI/JSON 경로, 정렬, `paths-to-match: /api/**` |
 | `application-prod.yml` | 운영 비활성화 |
-| `config/OpenApiConfig.java` | 문서 제목·설명·버전 |
+| `global/infrastructure/config/OpenApiConfig.java` | 문서 제목·설명·버전 |
 
 > ⚠️ **버전 주의**: `3.0.x` 는 Spring Boot 4 용이다. 우리는 Boot 3.5.16 이므로 **2.8.x** 를 쓴다.
 > 버전을 올릴 때 Boot 버전과의 대응을 반드시 확인할 것.
@@ -142,10 +158,16 @@ springdoc:
 | Controller 클래스 | `@Tag(name, description)` | ✅ | 도메인 그룹핑. name 은 도메인명 (`Auth`, `User`) |
 | Controller 메서드 | `@Operation(summary, description)` | ✅ | summary = 명세의 "API 명칭" |
 | Controller 메서드 | `@ApiResponses` + `@ApiResponse` | ✅ | 명세에 있는 **모든** 상태코드·에러코드 |
-| 인증 필요 엔드포인트 | `@SecurityRequirement(name = "...")` | ✅ | 자물쇠 표시 |
+| 인증 필요 엔드포인트 | `@SecurityRequirement(name = "...")` | ✅ 규정 / ⚠️ **현재 미적용** | 자물쇠 표시 — 아래 주석 참고 |
 | Path/Query 파라미터 | `@Parameter(description, example)` | ✅ | |
 | DTO 필드 | `@Schema(description, example)` | ✅ | 프론트가 보는 필드 설명 |
 | 내부 전용 엔드포인트 | `@Hidden` | — | 문서에서 숨김 |
+
+> ⚠️ **`@SecurityRequirement` 는 규정이나 현재 코드에 0건이다 (2026-08-16 확인, 컨트롤러 전수).**
+> 규칙을 완화한 것이 **아니다** — 아직 아무도 적용하지 않았을 뿐이라 사실만 적어둔다.
+> 근본 원인은 위 "인증 스킴 미정의" 와 같다: `OpenApiConfig` 에 **스킴 자체가 정의돼 있지 않아** 붙일 이름이 없다.
+> 순서는 `OpenApiConfig` 에 세션 쿠키 스킴 정의 → 컨트롤러에 `@SecurityRequirement` 일괄 적용이다.
+> 규칙을 유지할지 폐기할지는 **팀 결정 사항**이며, 그때까지 이 줄은 백로그 표시로 남긴다.
 
 ### 2-3-1. null 표현 규칙 (2026-08-06 확정)
 
@@ -286,13 +308,14 @@ public record SignupRequest(
   ⛔ **번호식(`AUTH_001`)은 쓰지 않는다** — `.ai/api/` 명세와 실제 코드 전부 의미식이다.
 - 도메인 접두어는 담당자별로 선점해 충돌을 막는다 (`AUTH_`·`ACC_`·`DEPT_`·`EMP_`·`FILE_` 등)
 
-#### ⭐ 공통 에러 코드 — `COMMON_*` (2026-08-04 추가 · 2026-08-07 `405` 추가)
+#### ⭐ 공통 에러 코드 (2026-08-04 추가 · 2026-08-07 `405` 추가 · 2026-08-16 `401` 등재)
 
 **도메인과 무관하게 모든 엔드포인트에서 나올 수 있다.** 프레임워크 레벨 오류라 도메인 코드로 표현할 수 없다.
-프론트는 도메인 코드 분기의 **폴백**으로 이 5개를 처리해야 한다.
+프론트는 도메인 코드 분기의 **폴백**으로 이 6개를 처리해야 한다.
 
 | code | HTTP | 언제 |
 |------|:----:|------|
+| `AUTH_UNAUTHENTICATED` | 401 | **세션 없음/만료 — 미인증.** 접두어는 `AUTH_` 지만 auth 도메인 전용이 아니라 **전 도메인 공통**이다 |
 | `COMMON_INVALID_REQUEST` | 400 | 요청 형식 오류 — 검증 실패 · 타입 불일치 · 필수 파라미터 누락 · 본문 파싱 실패 |
 | `COMMON_FORBIDDEN` | 403 | 인증은 됐으나 권한 부족 (도메인별 403 은 각 도메인 코드를 쓴다) |
 | `COMMON_NOT_FOUND` | 404 | **존재하지 않는 경로.** 리소스 없음이 아니라 URL 자체가 매핑되지 않은 경우 |
@@ -306,11 +329,16 @@ public record SignupRequest(
 > (예: `PATCH /api/v1/notifications` — GET 만 있는 경로). 프론트가 자기 버그와 서버 장애를 구분하지
 > 못하고 `ERROR` 로그도 쌓였다. `COMMON_NOT_FOUND` 와 같은 부류의 누락이었다.
 >
-> 🚨 **도메인 에러에 `COMMON_*` 을 쓰지 마라.** 이 5개는 `GlobalExceptionHandler` 만 발급한다.
+> 🚨 **도메인 에러에 `COMMON_*` 을 쓰지 마라.** 이 6개는 `GlobalExceptionHandler` 만 발급한다.
 > 구현 위치: `global/presentation/api/common/GlobalExceptionHandler.java`
+> (401 은 `AuthenticationException` 핸들러가 발급한다. Security 필터 단계의 401·403 도
+> `CustomAuthenticationEntryPoint`·`CustomAccessDeniedHandler` 를 거쳐 같은 핸들러로 온다)
+>
+> 🆕 **`AUTH_UNAUTHENTICATED`(401) 는 2026-08-16 에 이 표로 옮겨 적었다.** 코드에는 처음부터 있었고
+> `.ai/api/` 전 도메인 명세가 401 에 같은 코드를 쓰는데 이 표에만 빠져 있었다. **새로 만든 코드가 아니다.**
 >
 > 📌 **§3 전체가 미확정 상태**라 이 표도 팀 합의가 필요하다.
-> 다만 **코드에는 이미 5개가 다 나가고 있으므로**, 문서가 현실을 따라가도록 먼저 적어둔다.
+> 다만 **코드에는 이미 6개가 다 나가고 있으므로**, 문서가 현실을 따라가도록 먼저 적어둔다.
 
 ### 3-4. 페이징 🔴
 
@@ -324,8 +352,9 @@ public record SignupRequest(
       (컨트롤러에서 완전정규명을 써야 한다). `ApiResult` 등으로 개명 검토 필요 (팀 결정 대기)
 - [x] `2026-08-04` **에러 코드 표기 = 의미식 확정** (§3-3) — 번호식 폐기
 - [ ] 에러 코드 도메인 접두어 배분
-- [ ] 🔴 **`COMMON_*` 5종을 공통 명세에 반영** (§3-3) — 코드에는 이미 나가고 있는데 명세에 없다.
+- [ ] 🔴 **공통 에러코드 6종(`COMMON_*` 5 + `AUTH_UNAUTHENTICATED`)을 공통 명세에 반영** (§3-3) — 코드에는 이미 나가고 있는데 명세에 없다.
       프론트가 폴백 분기를 못 짠다
+- [ ] ⚠️ **`@SecurityRequirement` 규정 처리** (§2-3) — `OpenApiConfig` 에 인증 스킴 정의 후 일괄 적용할지, 규정을 폐기할지 팀 결정
 - [ ] 위 3-1 ~ 3-4 확정 후 🔴 표시 제거
 
 ---
@@ -334,5 +363,6 @@ public record SignupRequest(
 
 | 날짜 | 변경 내용 | 담당 |
 |------|----------|------|
+| 2026-08-16 | 코드 대조 반영 — §0 TL;DR 신설 · `OpenApiConfig` 실제 패키지(`global.infrastructure.config`)로 정정 · §2-3 `@SecurityRequirement` **규정 유지 + 현재 0건 사실 표기**(완화 아님) · §3-3 에 `AUTH_UNAUTHENTICATED`(401) 등재해 공통 코드 6종화 | 김동현 |
 | 2026-08-04 | **노션 계약 폐지** — `.ai/api/*.md` 를 명세 단일 기준으로. §1 라이프사이클 재작성, 상태 게이트(`📝초안`/`✅확정`) 삭제 | 김동현 |
 | 2026-07-28 | 초안 생성 — 계약 보호 원칙 + 명세 관리 방식 | 김동현 |

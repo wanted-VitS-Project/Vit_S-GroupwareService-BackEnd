@@ -1,8 +1,8 @@
 # ⚙️ CI/CD 파이프라인
 
+**최종 업데이트**: 2026-08-16 (배포 워크플로우 `deploy.yml` 반영 · gitleaks PR diff 스캔 반영 · 브랜치 보호 필수 체크 3종 실측 반영)
 **최종 업데이트**: 2026-08-12 (migration.yml 에 스키마 스모크 스텝 추가 — 엔티티↔스키마 드리프트 검증)
 **최종 업데이트**: 2026-08-11 (Merge Queue 필수 체크용 `merge_group` 트리거 추가)
-**최종 업데이트**: 2026-07-28 (CI · Gitleaks · CodeRabbit 도입)
 **관리**: 김동현 (DevOps)
 
 > `.github/workflows/` 를 수정하기 전에 반드시 이 문서를 먼저 읽는다.
@@ -12,14 +12,32 @@
 
 ---
 
+## §0 TL;DR
+
+- **이 문서가 정하는 것**: `.github/workflows/*` 5개(CI·시크릿 스캔·마이그레이션 검증·배포·의존성 업데이트)의 트리거·역할·시크릿 사용 규칙과, 브랜치 보호 필수 체크와의 연계.
+- ⚠️ **조용히 깨지는 함정**
+  - `ci.yml`·`gitleaks.yml`·`migration.yml` 에 **paths 필터를 넣으면 안 된다** — 셋 다 필수 상태 체크라, 필터로 걸러져 실행 안 되면 GitHub 이 해당 PR 을 영구히 막는다 (§3).
+  - gitleaks 는 **PR 이면 diff(base..head) 만, `push`/`merge_group`/주간이면 전체 히스토리**를 스캔한다 — 범위가 이벤트별로 다르다 (§3).
+
+| 섹션 | 내용 |
+|---|---|
+| §1~2 | 전체 흐름 · 워크플로우 5개 목록(CI·gitleaks·migration·**deploy**·dependabot) + CodeQL |
+| §3 | 워크플로우 상세 — `deploy.yml`(OIDC→ECR→S3→SSM, 2026-08-11 운영 개시) 포함 |
+| §4~5 | 보안 도구 현황 · CodeRabbit 설정 |
+| §6 | `deploy.yml` 이 쓰는 시크릿 8종(키 이름만) |
+| §7 | `main`/`develop` 필수 상태 체크 3종(빌드 & 테스트·시크릿 스캔·마이그레이션 검증) — 이미 걸려 있음 |
+| §8 | 배포 — `deploy.yml` 로 운영 중 |
+
+---
+
 ## 1. 전체 흐름
 
 ```
-PR → develop/main       :  CI(빌드+테스트) · Gitleaks · CodeRabbit 리뷰
-Merge Queue             :  CI(빌드+테스트) · Gitleaks · Flyway 검증 재실행
-push → develop/main     :  CI(빌드+테스트) · Gitleaks
+PR → develop/main       :  CI(빌드+테스트) · Gitleaks(diff 스캔) · Flyway 검증 · CodeRabbit 리뷰
+Merge Queue             :  CI(빌드+테스트) · Gitleaks(전체 히스토리) · Flyway 검증 재실행
+push → develop/main     :  CI(빌드+테스트) · Gitleaks(전체 히스토리) · Flyway 검증
+push → main             :  (위 3개 통과 후) 배포 — OIDC→ECR→S3→SSM으로 EC2 배포
 매주 월 09:00 KST        :  Gitleaks 전체 히스토리 스캔
-배포                     :  ⬜ 미구축
 ```
 
 ---
@@ -29,11 +47,11 @@ push → develop/main     :  CI(빌드+테스트) · Gitleaks
 | 파일 | 트리거 | 하는 일 | 상태 |
 |------|--------|---------|------|
 | `ci.yml` | PR·Merge Queue·push → `develop`/`main` | JDK17 + Gradle 빌드·테스트 + 테스트 결과 발행 | ✅ |
-| `gitleaks.yml` | PR·Merge Queue·push → `develop`/`main`, 주간 cron | 시크릿 스캔 | ✅ |
+| `gitleaks.yml` | PR·Merge Queue·push → `develop`/`main`, 주간 cron | 시크릿 스캔 (**PR 은 diff 만, 나머지는 전체 히스토리** — §3 참고) | ✅ |
 | `migration.yml` | PR·Merge Queue·push → `develop`/`main` | 실제 MySQL 에 Flyway 적용 검증 + 스키마 스모크(엔티티↔스키마 드리프트) | ✅ |
+| `deploy.yml` | `push`→`main`(paths: `src/**`,`build.gradle`,`settings.gradle`,`Dockerfile`,`deploy/**`,워크플로우 자체) · `workflow_dispatch` | OIDC 인증 → ECR 이미지 빌드/푸시 → S3(.env, SSE) → SSM 으로 EC2 `docker compose` 기동 (§8 참고) | ✅ 2026-08-11 운영 개시 |
 | `dependabot.yml` | **매월** 09:00 KST | 액션·Gradle 의존성 버전 PR | ✅ |
 | CodeQL | GitHub 관리 (Default setup) | 코드 취약점 정적 분석 | ✅ |
-| 배포 | — | — | ⬜ 미구축 |
 
 ### 🔒 액션 버전 고정 정책
 
@@ -159,12 +177,18 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 
 | 항목 | 내용 |
 |------|------|
-| 트리거 | `pull_request` / `push` → `develop`, `main` + 매주 월 00:00 UTC |
+| 트리거 | `pull_request` / `merge_group` / `push` → `develop`, `main` + 매주 월 00:00 UTC |
 | 방식 | **gitleaks CLI 바이너리 직접 실행** (v8.30.1) |
 | 무결성 | 다운로드 후 **SHA-256 체크섬 검증**, 통과 시에만 압축 해제 |
 | 설정 | `.gitleaks.toml` (기본 룰셋 확장 + 경로 한정 허용목록) |
-| 범위 | `fetch-depth: 0` — 커밋 히스토리 전체 |
+| 체크아웃 범위 | `fetch-depth: 0` — 커밋 히스토리 전체를 받아온다 |
+| **스캔 범위** | **PR 이벤트는 그 PR 이 바꾼 커밋만**(`gitleaks git . --log-opts="${PR_BASE}..${PR_HEAD}"`). **`push`·`merge_group`·주간 cron 은 전체 히스토리**를 스캔한다 |
 | 산출물 | 탐지 시 SARIF 리포트 업로드 |
+
+> 🔀 **2026-08-16 변경 (`39f98e7c`)**: 이전에는 PR 도 전체 히스토리를 스캔해서, 과거 커밋이나
+> 다른 브랜치에 섞인 오탐(데모 시드 등)이 **자기 변경과 무관한 PR 까지 막았다.**
+> 이제 PR 은 `base..head` diff 범위만 보고, 전체 히스토리 검증은 `push`(develop·main)·
+> `merge_group`·매주 월요일 스케줄이 담당한다 — 결국 머지 전후로 전체 히스토리도 반드시 훑는다.
 
 > ⚠️ **버전을 올릴 때 `GITLEAKS_SHA256` 도 반드시 함께 갱신**한다.
 > 릴리스의 `gitleaks_<ver>_checksums.txt` 에서 `linux_x64` 값을 가져온다.
@@ -174,6 +198,32 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 > 라이선스 키(`GITLEAKS_LICENSE`)를 요구**한다. gitleaks CLI 자체는 MIT 라이선스라
 > 바이너리를 직접 받아 쓰면 키 없이 동일한 스캔이 된다.
 
+### `deploy.yml` — Spring 배포 (EC2)
+
+> 이전 team05 배포 파이프라인 이식판. 2026-08-11 추가, 2026-08-15까지 갱신. **운영 중.**
+
+| 항목 | 내용 |
+|------|------|
+| 트리거 | `push`→`main`(paths 필터: `src/**`,`build.gradle`,`settings.gradle`,`Dockerfile`,`deploy/**`,워크플로우 자체) · `workflow_dispatch`(수동) |
+| 인증 | **OIDC 키리스** — `aws-actions/configure-aws-credentials` 로 `secrets.AWS_ROLE_ARN` 을 assume. 액세스키 없음 |
+| 동시성 | 같은 ref 배포는 직렬화(`cancel-in-progress: false`) — 진행 중 배포를 취소하지 않는다 |
+
+**흐름 (5 스텝)**
+
+1. **이미지 빌드 & ECR 푸시** — `docker build` → ECR 에 `:${{ github.sha }}` 와 `:latest` 두 태그로 push
+2. **.env 조립** — GitHub Secrets/Variables 값을 러너에서 파일로 조립(필수 키 누락 시 배포 자체를 실패시키는 가드 포함). 시크릿을 SSM 명령 텍스트에 절대 넣지 않기 위한 설계
+3. **S3 업로드** — `deploy/` 배포 자산 + 조립한 `.env` 를 S3 에 업로드. `.env` 는 **SSE(서버측 암호화)** 로 저장
+4. **SSM 으로 EC2 기동** — `aws ssm send-command` 로 EC2 에 `docker compose pull && docker compose up -d` 실행을 지시(SSM 명령 자체에는 시크릿이 실리지 않는다). 기동 확인은 `localhost:8080` 의 HTTP 응답 유무로 판정
+5. **S3 시크릿 정리** — `always()` 로 실행되어 업로드했던 `.env` 를 S3 에서 삭제(at-rest 잔존 방지). 삭제 실패 시 스텝을 **실패시켜** 조용히 넘어가지 않게 한다
+
+> ⚠️ **기동 확인은 "HTTP 응답 존재" 로만 판정한다.** actuator 를 아직 도입하지 않아 인증 없이
+> 200 을 주는 엔드포인트가 없기 때문이다. `/actuator/health` 도입 후 엄밀 검증으로 강화할 예정(백로그).
+>
+> ⚠️ **`SPRING_PROFILES_ACTIVE=prod` 를 워크플로우가 고정 주입**한다. 로컬 설정과 무관하게
+> 배포에서는 항상 `prod` 프로필로 뜬다 — Swagger 노출 방지.
+
+전체 시크릿·Variable 키 이름은 [§6](#6-시크릿-의존성), 배포 대상 인프라 구조는 [INFRA.md](INFRA.md) 참고.
+
 ---
 
 ## 4. 보안 도구
@@ -182,7 +232,7 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 |------|------|------|------|
 | **GitHub Secret Scanning** | 알려진 시크릿 패턴 탐지 | 저장소 전체 상시 | ✅ |
 | **Push Protection** | 시크릿이 포함된 push 를 **거부** | push 시점 | ✅ |
-| **Gitleaks** | 커스텀 룰 + 히스토리 스캔 | PR·push·주간 | ✅ |
+| **Gitleaks** | 커스텀 룰 스캔 (PR: diff / push·merge_group·주간: 전체 히스토리) | PR·push·주간 | ✅ |
 | **Dependabot 알림** | 의존성 취약점 **알림** | 상시 | ✅ |
 | **Dependabot 자동 수정 PR** | 취약점 자동 패치 PR | — | ⬜ 미사용 |
 | **Dependabot 버전 업데이트** | 액션·의존성 버전 PR | **매월** 09:00 KST | ✅ |
@@ -252,7 +302,27 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 
 ## 6. 시크릿 의존성
 
-> 현재 CI 워크플로우는 **시크릿을 사용하지 않는다.** 배포 워크플로우 구축 시 추가된다.
+`ci.yml`·`gitleaks.yml`·`migration.yml` 은 시크릿을 쓰지 않는다(`migration.yml` 은 CI 전용 컨테이너
+더미 값만 사용). `deploy.yml` 이 아래 GitHub Secrets 를 쓴다 — **키 이름만** 적는다.
+
+| 키 이름 | 용도 |
+|---------|------|
+| `AWS_ROLE_ARN` | OIDC 로 assume 할 배포용 IAM Role |
+| `DB_PASSWORD` | RDS 접속 비밀번호 |
+| `REDIS_PASSWORD` | Redis 인증(`--requirepass`) |
+| `MAIL_PASSWORD` | Gmail 앱 비밀번호 |
+| `SETTLEMENT_ACCOUNT_ENC_KEY` | 정산 계좌 암호화 키(Base64 32바이트) — 없으면 기동 실패 |
+| `VITAMATE_WORKER_TOKEN` | 비타메이트 연동 토큰 (선택) |
+| `NARA_API_SERVICE_KEY` | 나라장터 API 서비스키 (선택) |
+| `BIDDING_WORKER_TOKEN` | 입찰 수집 워커 인증 토큰 — 파이썬 레포와 **같은 값** 이어야 함 |
+
+값이 URL·호스트명처럼 비밀은 아니지만 배포별로 달라지는 것들은 GitHub **Variables**(`vars.*`)로
+따로 관리한다. 전체 Secrets/Variables 키 목록은 [INFRA.md §5](INFRA.md) 참고.
+
+> ⚠️ **Variables 는 Secrets 와 달리 Actions 로그에서 자동 마스킹되지 않는다.**
+> `echo`, `aws ssm get-command-invocation` 출력 등에 Variable 값이 그대로 찍힐 수 있다.
+> 도메인·호스트명처럼 그 자체로는 "시크릿"이 아니어도 노출을 원치 않는 값은 로그 출력을
+> 최소화하도록 워크플로우를 작성할 것.
 
 **시크릿 추가 절차**
 1. GitHub → Settings → Secrets and variables → Actions 에 등록
@@ -264,27 +334,47 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 
 ## 7. 브랜치 보호와의 연계
 
-현재 브랜치 보호에는 **상태 체크 필수화가 걸려 있지 않다.** 보호 규칙을 만들 때
-CI 가 아직 없었기 때문이다.
+`main` · `develop` 모두 아래 3개 잡이 **필수 상태 체크(required status checks)** 로 걸려 있다
+(2026-08-16 `gh api repos/.../branches/{브랜치}/protection` 실측).
 
-- [ ] CI 가 몇 번 안정적으로 돌아간 것을 확인한 뒤, `develop`/`main` 보호 규칙에
-      **required status checks** 로 `빌드 & 테스트`, `시크릿 스캔` 을 추가한다.
+| 필수 체크 이름 | 워크플로우 | 잡 |
+|---|---|---|
+| `빌드 & 테스트` | `ci.yml` | `build` |
+| `시크릿 스캔` | `gitleaks.yml` | `scan` |
+| `마이그레이션 검증` | `migration.yml` | `migrate` |
 
-이걸 걸어야 "테스트 깨진 PR 은 머지 불가"가 실제로 강제된다.
+이 3개 중 하나라도 실패하거나 아직 도착하지 않으면 PR 머지 버튼이 열리지 않는다.
+(단 `enforce_admins` 설정에 대해서는 [CONVENTION.md §1](CONVENTION.md) 참고.)
 
 ---
 
 ## 8. 배포
 
-⬜ 미구축. 배포 환경 확정 후 작성.
+✅ **`deploy.yml` 로 운영 중** (2026-08-11 개시). 상세는 [§3 `deploy.yml`](#deployyml--spring-배포-ec2) 참고.
 
 | 환경 | 트리거 | 방식 | 상태 |
 |------|--------|------|------|
-| dev | — | — | ⬜ |
-| prod | — | — | ⬜ |
+| prod | `push`→`main`(경로 필터) · `workflow_dispatch` | OIDC → ECR 빌드/푸시 → S3(.env, SSE) → SSM 으로 EC2 `docker compose` 기동 | ✅ |
+| dev | — | 별도 배포 흐름 없음 | ⬜ 미구축 |
 
-> ⚠️ 운영 배포 시 **`SPRING_PROFILES_ACTIVE=prod` 설정이 필수**다.
-> 빠뜨리면 Swagger UI 가 그대로 열려 API 구조 전체가 노출된다.
+**전체 흐름 요약**
+
+```
+push → main (또는 수동 실행)
+  → OIDC 로 AWS 자격증명 획득 (액세스키 없음)
+  → 이미지 빌드 → ECR 푸시
+  → Secrets/Variables → .env 조립 → S3 업로드 (SSE)
+  → SSM send-command → EC2 에서 S3 동기화 → docker compose pull/up
+  → HTTP 응답으로 기동 확인
+  → S3 의 .env 삭제 (at-rest 시크릿 제거)
+```
+
+> ⚠️ 운영 배포 시 **`SPRING_PROFILES_ACTIVE=prod` 설정이 필수**다. `deploy.yml` 이 이 값을
+> 고정 주입하므로 워크플로우를 거치는 한 자동으로 지켜진다. 빠뜨리면 Swagger UI 가 그대로 열려
+> API 구조 전체가 노출된다 — 수동으로 배포 스크립트를 우회할 때만 위험하다.
+>
+> ⚠️ EC2·ECR·S3 등 배포 대상 인프라의 리소스 이름·포트 구조는 [INFRA.md](INFRA.md) 참고.
+> 실제 IP·계정ID·버킷명은 이 문서에도 INFRA.md 에도 쓰지 않는다(GitHub Variables 로만 존재).
 
 ---
 
@@ -292,6 +382,7 @@ CI 가 아직 없었기 때문이다.
 
 | 날짜 | 변경 내용 | 담당 |
 |------|----------|------|
+| 2026-08-16 | gitleaks.yml — PR 은 diff(base..head) 만 스캔하도록 범위 분리 (`39f98e7c`) | 김동현 |
+| 2026-08-11 | deploy.yml 신설·운영 개시 — OIDC→ECR→S3→SSM EC2 배포 파이프라인 | 김동현 |
 | 2026-08-12 | migration.yml 에 스키마 스모크 스텝 추가 (Redis 컨테이너·콜레이션 고정·`validate` 기동) | 김동현 |
 | 2026-07-28 | CI · Gitleaks 워크플로우, CodeRabbit 설정, GitHub 보안 기능 활성화 | 김동현 |
-| 2026-07-28 | 문서 골격 생성 | 김동현 |
