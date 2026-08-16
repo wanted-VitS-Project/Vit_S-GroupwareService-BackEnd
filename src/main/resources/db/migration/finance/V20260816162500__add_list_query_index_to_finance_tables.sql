@@ -9,6 +9,9 @@
 --    수천~수만 건 규모가 됐을 때를 대비한 선제 조치다.
 -- ⚠️ 기존 uk_cash_flow_dedup(company_id, bank_name, ...)은 목적이 달라(중복 방지) 이 용도로
 --    못 쓴다 — company_id 다음이 bank_name이라 정렬(traded_at)까지 이어지지 않는다.
+-- ⚠️ 범위 밖: `sort=AMOUNT_DESC`(금액순, .ai/api/finance.md 명세상 정식 옵션)는 이 인덱스로
+--    커버되지 않는다 — 정렬 컬럼이 amount/total_amount라 여전히 filesort가 걸린다.
+--    아직 성능 문제로 실측되지 않아 이번 작업 범위에서 제외했다. 필요해지면 별도 인덱스로 다룬다.
 
 ALTER TABLE cash_flow
   ADD INDEX idx_cash_flow_list (company_id, deleted_at, traded_at);

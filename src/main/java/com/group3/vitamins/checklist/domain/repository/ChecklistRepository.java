@@ -38,9 +38,8 @@ public interface ChecklistRepository {
     Optional<ChecklistItem> findActiveByChkId(Long chkId);
 
     /**
-     * 전체 개수·완료 개수를 쿼리 1번으로 함께 집계한다 (2026-08-16 — {@link #countActiveItems}와
-     * {@link #countCompletedActiveItems}를 매번 따로 호출하던 걸 통합). 생성/수정/삭제 응답에
-     * 둘 다 필요한 지점에서 이걸 쓴다.
+     * 전체 개수·완료 개수를 쿼리 1번으로 함께 집계한다 (2026-08-16 — 전체 개수와 완료 개수를
+     * 매번 따로 호출하던 것을 통합). 생성/수정/삭제 응답에 둘 다 필요한 지점에서 이걸 쓴다.
      */
     CountSummary countSummary(Long chkBlockId);
 
