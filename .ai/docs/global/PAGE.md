@@ -20,7 +20,7 @@
 ---
 
 > 이 문서는 **어떤 화면이 있고 각 화면이 무슨 역할인가**, 그리고 **누가 만드나**를 정의한다.
-
+>
 > 🔑 **권한 표기** — 전역 role 서열 · `page_code` 카탈로그의 정본은 [`PERMISSION.md` §1~§3](PERMISSION.md) 이다.
 > `BIDDING` · `FINANCE` 는 role 이 아니라 **`page_permission.page_code`** 값이다.
 >

@@ -42,7 +42,7 @@
 > team05 인프라를 재사용한다(A안) — EC2·ECR·RDS 등 컴퓨트/저장소를 새로 만들지 않고 이전 프로젝트 리소스를 이어 쓴다.
 > 리버스 프록시(nginx 등) 앞단 구성은 아직 이 문서에 확정되지 않았다 — §8 의 요구사항만 정해져 있다.
 
-```
+```text
 [GitHub Actions: deploy.yml] --OIDC(키리스)--> [AWS]
                                                   │
                                           [ECR: team05/backend]
@@ -185,7 +185,9 @@
 > **실제로는 이 파일이 레포에 존재하지 않는다** (2026-08-16 확인) — 필요한 키는 아래 준비물 항목과
 > `application.yml` 의 `${...}` 자리로 유추해서 직접 채워야 한다. 템플릿 부재는 별도 확인·정리가 필요하다.
 
-로컬 실행에 필요한 2가지 준비물: ① `SETTLEMENT_ACCOUNT_ENC_KEY`(Base64 32바이트, 직접 생성) ② 로컬 MySQL 에 DB 생성 — 이름은 자기 `application-local.yml` 의 `spring.datasource.url` 과 맞춘다 (배포 예시 `deploy/.env.example` 은 `vitamins`).
+로컬 실행에 필요한 준비물: ① `SETTLEMENT_ACCOUNT_ENC_KEY`(Base64 32바이트, 직접 생성) ② `application-local.yml` 의 `spring.datasource.url` 을 **팀 공용 RDS** 로 지정(기본 경로 — 별도 DB 생성 불필요).
+
+> 🧪 **예외 — throwaway 로컬 MySQL.** 공유 RDS 를 더럽히면 안 되는 검증(마이그레이션 리허설·E2E)은 Docker 로 일회용 MySQL 을 띄우고 `url` 만 그쪽으로 바꿔 쓴다. 이때만 DB 를 직접 만들며 이름은 `url` 과 맞추면 된다(배포 예시 `deploy/.env.example` 은 `vitamins`). 검증 후 컨테이너째 버린다.
 
 ---
 

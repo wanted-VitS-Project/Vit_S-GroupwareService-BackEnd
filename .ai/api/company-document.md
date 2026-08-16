@@ -7,17 +7,17 @@
 
 ## §0 엔드포인트 요약
 
-| 메서드 | 경로 | 무엇 | 상태 |
-|---|---|---|---|
-| POST | `/api/v1/admin/company-documents/uploads` | [업로드 시작(발급)](#1-업로드-시작-발급) | — |
-| POST | `/api/v1/admin/company-documents/uploads/{versionId}/complete` | [업로드 완료 통보](#2-업로드-완료-통보) | — |
-| GET | `/api/v1/admin/company-documents` | [문서 목록(카테고리·검색·페이징)](#3-문서-목록-조회) | — |
-| PATCH | `/api/v1/admin/company-documents/{documentId}` | [표시명·카테고리 수정](#4-표시명카테고리-수정) | — |
-| DELETE | `/api/v1/admin/company-documents/{documentId}` | [soft delete](#5-삭제-soft-delete) | — |
-| POST | `/api/v1/admin/company-documents/{documentId}/restore` | [복구](#6-복구) | — |
-| GET | `/api/v1/admin/company-documents/{documentId}/versions` | [버전 이력](#7-버전-이력-조회) | — |
-| GET | `/api/v1/admin/company-document-versions/{versionId}/download` | [다운로드 URL 발급](#8-다운로드-url-발급) | — |
-| GET | `/api/v1/admin/company-document-versions/{versionId}/preview` | [미리보기(PDF 앞 5p)](#9-미리보기-조회) | — |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| POST | `/api/v1/admin/company-documents/uploads` | [업로드 시작(발급)](#1-업로드-시작-발급) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| POST | `/api/v1/admin/company-documents/uploads/{versionId}/complete` | [업로드 완료 통보](#2-업로드-완료-통보) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| GET | `/api/v1/admin/company-documents` | [문서 목록(카테고리·검색·페이징)](#3-문서-목록-조회) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| PATCH | `/api/v1/admin/company-documents/{documentId}` | [표시명·카테고리 수정](#4-표시명카테고리-수정) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| DELETE | `/api/v1/admin/company-documents/{documentId}` | [soft delete](#5-삭제-soft-delete) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| POST | `/api/v1/admin/company-documents/{documentId}/restore` | [복구](#6-복구) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| GET | `/api/v1/admin/company-documents/{documentId}/versions` | [버전 이력](#7-버전-이력-조회) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| GET | `/api/v1/admin/company-document-versions/{versionId}/download` | [다운로드 URL 발급](#8-다운로드-url-발급) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
+| GET | `/api/v1/admin/company-document-versions/{versionId}/preview` | [미리보기(PDF 앞 5p)](#9-미리보기-조회) | — | ADMIN (`ACC_ADMIN_REQUIRED`) |
 
 > 🏢 **사내 문서는 회사(테넌트) 소속 독립 애그리거트다.** 프로젝트·블록·스텝에 붙지 않는다.
 > 관리·조회 **모두 ADMIN 전용**(`전사 관리 › 전사 파일 관리 › 사내 문서함` 탭). 권한은 회사 단위 역할로 판정한다.

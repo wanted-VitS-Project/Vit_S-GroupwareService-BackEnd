@@ -43,15 +43,17 @@ src/main/resources/db/migration/vitamate
 파일명 형식:
 
 ```text
-VyyyyMMddHHmm__description.sql
+VyyyyMMddHHmmss__description.sql
 ```
+
+> ⚠️ **14자리(초 단위)다.** 초기 3개(`V202608031739__init_schema` 등)만 12자리로 남아 있고, 이후 마이그레이션 90여 개는 전부 14자리다 (2026-08-16 실측). 새 파일은 반드시 14자리로 — 12자리로 만들면 정렬상 과거로 밀려 순서가 깨진다.
 
 예시:
 
 ```text
-V202608031000__create_user_tables.sql
-V202608031010__create_project_tables.sql
-V202608031020__create_payment_tables.sql
+V20260809130000__replace_payment_and_tax_invoice_with_settlement.sql
+V20260812150000__add_version_settlement.sql
+V20260816170100__add_project_id_to_settlement_block.sql
 ```
 
 규칙:

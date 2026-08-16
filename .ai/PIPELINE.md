@@ -14,14 +14,14 @@
 
 ## §0 TL;DR
 
-- **이 문서가 정하는 것**: `.github/workflows/*` 5개(CI·시크릿 스캔·마이그레이션 검증·배포·의존성 업데이트)의 트리거·역할·시크릿 사용 규칙과, 브랜치 보호 필수 체크와의 연계.
+- **이 문서가 정하는 것**: `.github/workflows/*` **4개**(CI·시크릿 스캔·마이그레이션 검증·배포)의 트리거·역할·시크릿 사용 규칙과, 브랜치 보호 필수 체크와의 연계. Dependabot(`.github/dependabot.yml` 설정 파일)과 CodeQL(GitHub 관리형 Default setup)은 워크플로우 파일이 아니라 별도 항목으로 다룬다.
 - ⚠️ **조용히 깨지는 함정**
   - `ci.yml`·`gitleaks.yml`·`migration.yml` 에 **paths 필터를 넣으면 안 된다** — 셋 다 필수 상태 체크라, 필터로 걸러져 실행 안 되면 GitHub 이 해당 PR 을 영구히 막는다 (§3).
   - gitleaks 는 **PR 이면 diff(base..head) 만, `push`/`merge_group`/주간이면 전체 히스토리**를 스캔한다 — 범위가 이벤트별로 다르다 (§3).
 
 | 섹션 | 내용 |
 |---|---|
-| §1~2 | 전체 흐름 · 워크플로우 5개 목록(CI·gitleaks·migration·**deploy**·dependabot) + CodeQL |
+| §1~2 | 전체 흐름 · 워크플로우 4개(CI·gitleaks·migration·**deploy**) + Dependabot 설정 + CodeQL(관리형) |
 | §3 | 워크플로우 상세 — `deploy.yml`(OIDC→ECR→S3→SSM, 2026-08-11 운영 개시) 포함 |
 | §4~5 | 보안 도구 현황 · CodeRabbit 설정 |
 | §6 | `deploy.yml` 이 쓰는 시크릿 8종(키 이름만) |
@@ -32,7 +32,7 @@
 
 ## 1. 전체 흐름
 
-```
+```text
 PR → develop/main       :  CI(빌드+테스트) · Gitleaks(diff 스캔) · Flyway 검증 · CodeRabbit 리뷰
 Merge Queue             :  CI(빌드+테스트) · Gitleaks(전체 히스토리) · Flyway 검증 재실행
 push → develop/main     :  CI(빌드+테스트) · Gitleaks(전체 히스토리) · Flyway 검증
@@ -189,7 +189,7 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 > 다른 브랜치에 섞인 오탐(데모 시드 등)이 **자기 변경과 무관한 PR 까지 막았다.**
 > 이제 PR 은 `base..head` diff 범위만 보고, 전체 히스토리 검증은 `push`(develop·main)·
 > `merge_group`·매주 월요일 스케줄이 담당한다 — 결국 머지 전후로 전체 히스토리도 반드시 훑는다.
-
+>
 > ⚠️ **버전을 올릴 때 `GITLEAKS_SHA256` 도 반드시 함께 갱신**한다.
 > 릴리스의 `gitleaks_<ver>_checksums.txt` 에서 `linux_x64` 값을 가져온다.
 > 검증 없이 받은 바이너리를 실행하면 변조된 tarball 이 CI 권한으로 실행될 수 있다.
@@ -214,7 +214,7 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 2. **.env 조립** — GitHub Secrets/Variables 값을 러너에서 파일로 조립(필수 키 누락 시 배포 자체를 실패시키는 가드 포함). 시크릿을 SSM 명령 텍스트에 절대 넣지 않기 위한 설계
 3. **S3 업로드** — `deploy/` 배포 자산 + 조립한 `.env` 를 S3 에 업로드. `.env` 는 **SSE(서버측 암호화)** 로 저장
 4. **SSM 으로 EC2 기동** — `aws ssm send-command` 로 EC2 에 `docker compose pull && docker compose up -d` 실행을 지시(SSM 명령 자체에는 시크릿이 실리지 않는다). 기동 확인은 `localhost:8080` 의 HTTP 응답 유무로 판정
-5. **S3 시크릿 정리** — `always()` 로 실행되어 업로드했던 `.env` 를 S3 에서 삭제(at-rest 잔존 방지). 삭제 실패 시 스텝을 **실패시켜** 조용히 넘어가지 않게 한다
+5. **S3 임시 객체 정리** — `always()` 로 실행되어 업로드했던 `.env` 를 S3 에서 삭제(S3 에 남는 임시 객체 제거). 삭제 실패 시 스텝을 **실패시켜** 조용히 넘어가지 않게 한다. ⚠️ 이 삭제는 **S3 쪽만** 지운다 — EC2 의 `/opt/spring/.env` 는 컨테이너 기동에 필요해 남는다. EC2 파일 권한·보존 정책은 INFRA.md 에 별도 정리 필요(확인 필요)
 
 > ⚠️ **기동 확인은 "HTTP 응답 존재" 로만 판정한다.** actuator 를 아직 도입하지 않아 인증 없이
 > 200 을 주는 엔드포인트가 없기 때문이다. `/actuator/health` 도입 후 엄밀 검증으로 강화할 예정(백로그).
@@ -359,7 +359,7 @@ Flyway 적용만으로는 **SQL 이 성공적으로 실행됐는지**만 확인�
 
 **전체 흐름 요약**
 
-```
+```text
 push → main (또는 수동 실행)
   → OIDC 로 AWS 자격증명 획득 (액세스키 없음)
   → 이미지 빌드 → ECR 푸시

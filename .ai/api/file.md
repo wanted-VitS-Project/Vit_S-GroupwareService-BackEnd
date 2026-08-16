@@ -53,7 +53,7 @@
 | GET | `/api/v1/projects/{projectId}/files` | [**프로젝트 전체 파일 모아보기**](#12-프로젝트-전체-파일-모아보기-문서함) | — | 프로젝트 접근 권한 |
 | GET | `/api/v1/projects/{projectId}/files/trash` | [**프로젝트 휴지통 모아보기**](#13-프로젝트-휴지통-모아보기) | — | 프로젝트 접근 권한 |
 | GET | `/api/v1/files/{fileId}/versions` | [버전 이력 조회](#8-버전-이력-조회) | — | 스텝 접근 권한 |
-| GET | `/api/v1/file-versions/{fileVersionId}` | [**버전 단건 조회**](#11-버전-단건-조회--결재용-인터페이스) | — | 스텝 접근 권한 |
+| GET | `/api/v1/file-versions/{fileVersionId}` | [**버전 단건 조회**](#8-1-버전-단건-조회--결재용-인터페이스) | — | 스텝 접근 권한 |
 | GET | `/api/v1/file-versions/{fileVersionId}/download` | [다운로드 URL 발급](#9-다운로드-url-발급) | — | 스텝 접근 권한 |
 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | [미리보기 조회](#10-미리보기-조회) | — | 스텝 접근 권한 |
 | GET | `/api/v1/projects/{projectId}/file-versions` | [**파일 버전 목록 조회** (비타메이트 분석 선택용)](#11-파일-버전-목록-조회-비타메이트-분석-선택용) | — | 프로젝트 접근 권한 |
@@ -431,7 +431,7 @@
 
 ---
 
-## 11. 버전 단건 조회 ⭐ (결재용 인터페이스)
+## 8-1. 버전 단건 조회 ⭐ (결재용 인터페이스)
 
 | 항목 | 내용 |
 |------|------|
