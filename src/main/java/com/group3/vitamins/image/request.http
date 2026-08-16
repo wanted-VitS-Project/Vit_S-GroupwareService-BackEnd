@@ -124,6 +124,15 @@ GET localhost:8080/api/v1/projects/1/images?size=0
 ### 모아보기 — size 101(최대 초과) → 400 IMG-012 확인
 GET localhost:8080/api/v1/projects/1/images?size=101
 
+### 모아보기 — page*size 정확히 100000(경계값) → 200 확인 (2026-08-16, CodeRabbit 지적 반영)
+GET localhost:8080/api/v1/projects/1/images?page=1000&size=100
+
+### 모아보기 — page*size 100000 초과 → 400 IMG-012 확인
+GET localhost:8080/api/v1/projects/1/images?page=1001&size=100
+
+### 모아보기 — 오버플로 근접값(page=Integer.MAX_VALUE, size=1)도 이제 400 IMG-012로 막히는지 확인
+GET localhost:8080/api/v1/projects/1/images?page=2147483647&size=1
+
 ### 이미지 휴지통 조회 — URL의 1을 0-1 응답의 projectId로 교체할 것.
 ### 위에서 삭제한 이미지들(단건 삭제·수정 API 배열 누락·블록 삭제로 인한 일괄 삭제 전부)이 다 보이는지 확인할 것.
 ### 접근 권한 없는 계정(프로젝트 미참여)으로 호출하면 403 PROJECT_ACCESS_DENIED, 없는 projectId면 404 PROJECT_NOT_FOUND 확인
@@ -135,6 +144,9 @@ GET localhost:8080/api/v1/projects/1/images/trash?page=0&size=1
 
 ### 휴지통 — page 음수 → 400 IMG-012 확인
 GET localhost:8080/api/v1/projects/1/images/trash?page=-1
+
+### 휴지통 — size 0 → 400 IMG-012 확인
+GET localhost:8080/api/v1/projects/1/images/trash?size=0
 
 ### 휴지통 — size 101(최대 초과) → 400 IMG-012 확인
 GET localhost:8080/api/v1/projects/1/images/trash?size=101

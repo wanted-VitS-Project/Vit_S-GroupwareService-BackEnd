@@ -54,6 +54,10 @@ import java.util.zip.ZipOutputStream;
 public class ImageQueryService implements ImageQueryUseCase {
 
     private static final int MAX_PAGE_SIZE = 100;
+    // 프로젝트 이미지 갤러리·휴지통은 실사용상 이 범위를 넘길 일이 없다(.ai/api/image.md 명세 참고) —
+    // page*size를 int로만 계산하면 큰 값 근처에서 오버플로 경계가 실제 유효 범위와 어긋나고(2026-08-16,
+    // CodeRabbit 지적), 오버플로가 안 나더라도 매우 큰 OFFSET이 그대로 DB로 넘어가 자원을 낭비할 수 있다.
+    private static final long MAX_OFFSET = 100_000L;
 
     private final ImageEligibilityPolicy eligibilityPolicy;
     private final ImageRepository imageRepository;
@@ -315,8 +319,11 @@ public class ImageQueryService implements ImageQueryUseCase {
     }
 
     // 재무 입출금/세금계산서 조회와 동일 컨벤션 — 잘못된 page/size는 클램프 대신 400으로 던진다.
+    // ⚠️ page*size는 long으로 계산한다 — int로 계산하면 큰 값 근처에서 오버플로 자체를 막는 것과
+    // "말이 되는 페이지 깊이인가"가 서로 다른 기준이 되어, 유효해 보이는 조합이 잘못 거부되거나
+    // 반대로 거대한 OFFSET이 그대로 통과하는 경우가 생긴다(2026-08-16, CodeRabbit 지적).
     private void validatePageQuery(int page, int size) {
-        if (page < 0 || size <= 0 || size > MAX_PAGE_SIZE || page > Integer.MAX_VALUE / size) {
+        if (page < 0 || size <= 0 || size > MAX_PAGE_SIZE || (long) page * size > MAX_OFFSET) {
             throw new ValidationException(ImageErrorCode.PAGE_QUERY_INVALID);
         }
     }
