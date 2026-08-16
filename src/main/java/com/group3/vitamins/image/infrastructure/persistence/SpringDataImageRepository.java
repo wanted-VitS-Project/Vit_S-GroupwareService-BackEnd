@@ -93,8 +93,13 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
             + "WHERE i.imgId = :imgId AND i.imgBlockId = :imgBlockId AND i.deletedAt IS NOT NULL")
     int restore(@Param("imgId") Long imgId, @Param("imgBlockId") Long imgBlockId, @Param("orderIndex") int orderIndex);
 
-    /** 소프트 삭제된(휴지통) 항목만 대상으로 하는 조건부 하드 삭제. */
+    /**
+     * 소프트 삭제된(휴지통) 항목만 대상으로 하는 조건부 하드 삭제 — 여러 건을 한 번에 지운다
+     * (2026-08-16 — 건마다 DELETE를 반복 호출하던 걸 IN절 배치 하나로 통합).
+     *
+     * @return 실제로 삭제된 행 수 — 요청한 imgIds 개수보다 적으면 그 사이 레이스(이미 복구됨 등)가 있었다는 뜻
+     */
     @Modifying(clearAutomatically = true)
-    @Query("DELETE FROM ImageJpaEntity i WHERE i.imgId = :imgId AND i.deletedAt IS NOT NULL")
-    int hardDelete(@Param("imgId") Long imgId);
+    @Query("DELETE FROM ImageJpaEntity i WHERE i.imgId IN :imgIds AND i.deletedAt IS NOT NULL")
+    int hardDeleteAll(@Param("imgIds") List<Long> imgIds);
 }

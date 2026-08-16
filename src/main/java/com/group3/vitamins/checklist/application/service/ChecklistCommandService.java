@@ -52,8 +52,9 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
         eligibilityPolicy.assertEditPermission(command.chkBlockId(), command.userId(), command.role());
 
         ChecklistItem created = checklistRepository.create(command.chkBlockId(), command.content());
-        int completedCount = checklistRepository.countCompletedActiveItems(command.chkBlockId());
-        int totalCount = checklistRepository.countActiveItems(command.chkBlockId());
+        ChecklistRepository.CountSummary summary = checklistRepository.countSummary(command.chkBlockId());
+        int completedCount = summary.completedCount();
+        int totalCount = summary.totalCount();
 
         log.info("체크리스트 항목 생성 완료 - chkId={}", created.getChkId());
 
@@ -94,8 +95,9 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
 
         ChecklistItem updated = checklistRepository.updateFields(
                 command.chkId(), command.content(), command.changeStatusTo());
-        int completedCount = checklistRepository.countCompletedActiveItems(updated.getChkBlockId());
-        int totalCount = checklistRepository.countActiveItems(updated.getChkBlockId());
+        ChecklistRepository.CountSummary summary = checklistRepository.countSummary(updated.getChkBlockId());
+        int completedCount = summary.completedCount();
+        int totalCount = summary.totalCount();
 
         log.info("체크리스트 항목 수정 완료 - chkId={}", updated.getChkId());
 
@@ -140,8 +142,9 @@ public class ChecklistCommandService implements ChecklistCommandUseCase {
             throw new NotFoundException(ChecklistErrorCode.ITEM_NOT_FOUND);
         }
 
-        int completedCount = checklistRepository.countCompletedActiveItems(before.getChkBlockId());
-        int totalCount = checklistRepository.countActiveItems(before.getChkBlockId());
+        ChecklistRepository.CountSummary summary = checklistRepository.countSummary(before.getChkBlockId());
+        int completedCount = summary.completedCount();
+        int totalCount = summary.totalCount();
 
         log.info("체크리스트 항목 삭제 완료 - chkId={}", command.chkId());
 

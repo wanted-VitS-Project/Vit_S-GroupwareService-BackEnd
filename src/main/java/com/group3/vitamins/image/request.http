@@ -3,7 +3,7 @@ POST localhost:8080/api/v1/auth/login
 Content-Type: application/json
 
 {
-    "userId": "EMP001",
+    "userId": "vitas-EMP006",
     "password": ""
 }
 
@@ -43,7 +43,7 @@ Content-Type: application/json
 }
 
 ### 0-3. [준비] 이미지 블록 생성 — 아래 URL의 1을 0-2 응답의 stepId로 교체할 것
-POST localhost:8080/api/v1/steps/15/blocks
+POST localhost:8080/api/v1/steps/1/blocks
 Content-Type: application/json
 
 {
@@ -98,7 +98,7 @@ Content-Type: application/json
 }
 
 ### 이미지 항목 삭제 (단건) — imgId를 실제 삭제할 이미지 ID로 교체할 것
-DELETE localhost:8080/api/v1/blocks/images/items/11
+DELETE localhost:8080/api/v1/blocks/images/items/7
 
 ### 블록 삭제 (동훈님 담당, 공용 API) — URL의 1을 0-3 응답의 blockId로 교체할 것.
 ### ⚠️ imgBlockId(0-4에서 확인한 값)가 아니라 공용 block 테이블 PK다. 성공하면
@@ -124,7 +124,7 @@ PATCH localhost:8080/api/v1/blocks/images/items/restore
 Content-Type: application/json
 
 {
-    "imgIds": []
+    "imgIds": [7]
 }
 
 ### 이미지 완전 삭제(하드 삭제) — imgIds를 휴지통 조회에서 확인한 삭제된 imgId들로 교체할 것.
@@ -138,5 +138,5 @@ DELETE localhost:8080/api/v1/blocks/images/items/hard
 Content-Type: application/json
 
 {
-    "imgIds": [11, 10, 9, 8, 5]
+    "imgIds": [7]
 }

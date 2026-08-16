@@ -17,56 +17,66 @@
         프로젝트까지 매번 집계하게 된다(데이터가 쌓일수록 이 조회가 선형으로 느려짐). 여전히 앱→DB
         왕복은 이 쿼리 1개뿐이다 — SQL 안에 스캔 범위를 줄이는 서브쿼리를 추가한 것뿐이다.
     -->
+    <!--
+        2026-08-16 CTE로 재구성 — 기존엔 메인 조회·agg 집계·agg 스코프 좁히기(target) 각각에서
+        settlement_block→block→step 조인을 독립적으로 반복해(한 쿼리 안 3번) 실측으로 확인된 낭비를
+        없앴다. target_rows가 요청받은 settleIds에 대해 조인 1번으로 project_id까지 같이 뽑아두고,
+        agg의 스코프 좁히기는 target_rows의 project_id를 그대로 재사용한다(조인 재실행 없음) — agg
+        자체의 집계 대상(같은 프로젝트의 전체 활성 블록)은 target_rows와 다른 행 집합이라 그 조인만 남는다.
+        결과 컬럼·값 산출 로직은 기존과 동일 — 쿼리 구조만 바꿨다.
+    -->
     <select id="findBySettleIds"
             resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementDetailRow">
-        SELECT sb.settle_id AS settleId,
-        sb.round_no AS roundNo,
-        sb.type AS type,
-        sb.status AS status,
-        sb.total_amount AS totalAmount,
-        sb.planned_amount AS plannedAmount,
-        sb.planned_tax_amount AS plannedTaxAmount,
-        sb.planned_date AS plannedDate,
-        sb.tax_invoice_due_date AS taxInvoiceDueDate,
+        WITH target_rows AS (
+        SELECT sb.settle_id, sb.round_no, sb.type, sb.status, sb.total_amount,
+        sb.planned_amount, sb.planned_tax_amount, sb.planned_date, sb.tax_invoice_due_date,
+        sb.trader_name, sb.bank_name, sb.account_number, sb.account_holder,
+        sb.actual_amount, sb.actual_date, sb.created_at, sb.version,
+        st.project_id AS project_id
+        FROM settlement_block sb
+        JOIN block b ON b.block_id = sb.block_id
+        JOIN step st ON st.step_id = b.step_id
+        WHERE sb.settle_id IN
+        <foreach item="id" collection="settleIds" open="(" separator="," close=")">#{id}</foreach>
+        AND sb.deleted_at IS NULL
+        ),
+        agg AS (
+        SELECT st2.project_id AS project_id, sb2.type AS type, SUM(sb2.actual_amount) AS actual_amount_sum
+        FROM settlement_block sb2
+        JOIN block b2 ON b2.block_id = sb2.block_id
+        JOIN step st2 ON st2.step_id = b2.step_id
+        WHERE sb2.deleted_at IS NULL
+        AND st2.project_id IN (SELECT DISTINCT project_id FROM target_rows)
+        GROUP BY st2.project_id, sb2.type
+        )
+        SELECT tr.settle_id AS settleId,
+        tr.round_no AS roundNo,
+        tr.type AS type,
+        tr.status AS status,
+        tr.total_amount AS totalAmount,
+        tr.planned_amount AS plannedAmount,
+        tr.planned_tax_amount AS plannedTaxAmount,
+        tr.planned_date AS plannedDate,
+        tr.tax_invoice_due_date AS taxInvoiceDueDate,
         <!--
             세금계산서 연결 여부 — status로는 판정할 수 없다(PARTIAL/COMPLETED는 "입출금이 붙었다"만
             말해준다). tax_invoice를 직접 봐야 정확하다(2026-08-14 프론트 요청으로 추가).
         -->
         EXISTS (
         SELECT 1 FROM tax_invoice ti
-        WHERE ti.settle_block_id = sb.settle_id AND ti.deleted_at IS NULL
+        WHERE ti.settle_block_id = tr.settle_id AND ti.deleted_at IS NULL
         ) AS taxInvoiceLinked,
-        sb.trader_name AS traderName,
-        sb.bank_name AS bankName,
-        sb.account_number AS accountNumber,
-        sb.account_holder AS accountHolder,
-        sb.actual_amount AS actualAmount,
-        sb.actual_date AS actualDate,
-        sb.created_at AS createdAt,
-        sb.version AS version,
+        tr.trader_name AS traderName,
+        tr.bank_name AS bankName,
+        tr.account_number AS accountNumber,
+        tr.account_holder AS accountHolder,
+        tr.actual_amount AS actualAmount,
+        tr.actual_date AS actualDate,
+        tr.created_at AS createdAt,
+        tr.version AS version,
         agg.actual_amount_sum AS actualAmountSum
-        FROM settlement_block sb
-        JOIN block b ON b.block_id = sb.block_id
-        JOIN step st ON st.step_id = b.step_id
-        LEFT JOIN (
-        SELECT st2.project_id AS project_id, sb2.type AS type, SUM(sb2.actual_amount) AS actual_amount_sum
-        FROM settlement_block sb2
-        JOIN block b2 ON b2.block_id = sb2.block_id
-        JOIN step st2 ON st2.step_id = b2.step_id
-        WHERE sb2.deleted_at IS NULL
-        AND st2.project_id IN (
-        SELECT DISTINCT st3.project_id
-        FROM settlement_block sb3
-        JOIN block b3 ON b3.block_id = sb3.block_id
-        JOIN step st3 ON st3.step_id = b3.step_id
-        WHERE sb3.settle_id IN
-        <foreach item="id" collection="settleIds" open="(" separator="," close=")">#{id}</foreach>
-        )
-        GROUP BY st2.project_id, sb2.type
-        ) agg ON agg.project_id = st.project_id AND agg.type = sb.type
-        WHERE sb.settle_id IN
-        <foreach item="id" collection="settleIds" open="(" separator="," close=")">#{id}</foreach>
-        AND sb.deleted_at IS NULL
+        FROM target_rows tr
+        LEFT JOIN agg ON agg.project_id = tr.project_id AND agg.type = tr.type
     </select>
 
 </mapper>

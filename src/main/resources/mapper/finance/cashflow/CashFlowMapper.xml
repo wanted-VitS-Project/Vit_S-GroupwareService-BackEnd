@@ -27,8 +27,11 @@
         LEFT JOIN employee e ON e.user_id = cf.linked_by
         WHERE cf.deleted_at IS NULL
         AND cf.company_id = #{companyId}
-        <if test="startDate != null">AND DATE(cf.traded_at) &gt;= #{startDate}</if>
-        <if test="endDate != null">AND DATE(cf.traded_at) &lt;= #{endDate}</if>
+        <!-- ⚠️ 컬럼을 DATE()로 감싸지 않는다 — 감싸면 인덱스를 못 타서 매번 풀스캔한다(2026-08-16).
+             날짜 파라미터를 datetime 컬럼과 비교할 땐 자정(00:00:00)으로 암묵 변환되므로,
+             endDate는 "다음날 자정 미만"으로 잡아야 그날 23:59:59까지 포함된다(DATE()와 결과 동일). -->
+        <if test="startDate != null">AND cf.traded_at &gt;= #{startDate}</if>
+        <if test="endDate != null">AND cf.traded_at &lt; DATE_ADD(#{endDate}, INTERVAL 1 DAY)</if>
         <if test="unlinked != null and unlinked == true">AND cf.settle_block_id IS NULL</if>
         <if test="projectId != null">AND p.project_id = #{projectId}</if>
         <if test="keyword != null and keyword != ''">
