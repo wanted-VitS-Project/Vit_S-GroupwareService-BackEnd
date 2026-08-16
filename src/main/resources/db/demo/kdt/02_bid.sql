@@ -34,12 +34,12 @@
 -- 직접 등록 공고(8001)는 이 조건과 무관하다. 나라장터 수집분 6건이 여기서 나왔다는 이력이다.
 INSERT IGNORE INTO crawl_condition
   (crawl_condition_id, company_id, crawl_source_id, condition_name, params,
-   enabled, auto_collection_enabled, schedule_type, scheduled_time, timezone,
+   enabled, lookback_period, auto_collection_enabled, schedule_type, scheduled_time, timezone,
    next_run_at, last_success_at, last_collected_count, created_by) VALUES
 (8001, 3, 1, '디지털 교육 용역 · 훈련 위탁',
  JSON_OBJECT('keywords', JSON_ARRAY('디지털 교육', '직업훈련', '이러닝', 'LMS'),
              'excludeKeywords', JSON_ARRAY('급식', '시설공사')),
- 1, 1, 'DAILY', '07:30:00', 'Asia/Seoul',
+ 1, 'ONE_WEEK', 1, 'DAILY', '07:30:00', 'Asia/Seoul',
  '2026-08-17 07:30:00', '2026-08-16 07:30:00', 3, 'vitaedu-VE101');
 
 INSERT IGNORE INTO crawl_run
