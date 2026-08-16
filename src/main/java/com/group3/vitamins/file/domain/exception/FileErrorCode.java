@@ -82,7 +82,11 @@ public enum FileErrorCode implements ErrorCode {
     FILE_PREVIEW_NOT_SUPPORTED("FILE_PREVIEW_NOT_SUPPORTED",
             "PDF 만 미리보기를 지원합니다."),
     FILE_PREVIEW_FAILED("FILE_PREVIEW_FAILED",
-            "미리보기 생성에 실패했습니다.");
+            "미리보기 생성에 실패했습니다."),
+
+    // --- 전사 파일 트리(§14) · 🔴 신설 제안 코드(팀 접두어 배분 확인 필요) ---
+    FILE_STEP_NOT_FOUND("FILE_STEP_NOT_FOUND",
+            "존재하지 않는 스텝입니다.");
 
     private final String code;
     private final String message;

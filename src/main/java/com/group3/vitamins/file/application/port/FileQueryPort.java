@@ -2,6 +2,9 @@ package com.group3.vitamins.file.application.port;
 
 import com.group3.vitamins.file.application.query.CompanyFileCriteria;
 import com.group3.vitamins.file.application.query.MyProjectFileCriteria;
+import com.group3.vitamins.file.application.result.AdminTreeProjectProjection;
+import com.group3.vitamins.file.application.result.AdminTreeStageProjection;
+import com.group3.vitamins.file.application.result.AdminTreeStepProjection;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileViewProjection;
@@ -86,4 +89,33 @@ public interface FileQueryPort {
      * adminAll 이면 스텝 권한 필터를 스킵한다(멤버십은 유지). 프로젝트 → 스텝 → 블록 순 정렬.
      */
     List<FileViewProjection> findMyProjectFiles(MyProjectFileCriteria criteria);
+
+    // ─── 전사 파일 트리 탐색(§14 · ADMIN) ─── 회사 스코프는 project.company_id 로 건다.
+
+    /** §14.1 회사 프로젝트 한 페이지(이름 오름차순). */
+    List<AdminTreeProjectProjection> findAdminTreeProjects(long companyId, int limit, long offset);
+
+    /** §14.1 회사 프로젝트 총 건수. */
+    long countAdminTreeProjects(long companyId);
+
+    /** §14.2/14.3 프로젝트가 회사에 존재하는지(활성). 없으면 PROJECT_NOT_FOUND(404) 판정용. */
+    boolean existsProjectInCompany(long companyId, Long projectId);
+
+    /** §14.2 프로젝트의 활성 스테이지(sortOrder 오름차순). */
+    List<AdminTreeStageProjection> findAdminTreeStages(long companyId, Long projectId);
+
+    /** §14.2 미분류 버킷 노출 판정 — 프로젝트에 stage 미소속(stage_id IS NULL) 활성 스텝이 있는지. */
+    boolean existsUnassignedStep(long companyId, Long projectId);
+
+    /** §14.3 프로젝트의 스텝(sortOrder 오름차순). stageId 가 null 이면 미분류(stage_id IS NULL). */
+    List<AdminTreeStepProjection> findAdminTreeSteps(long companyId, Long projectId, Long stageId);
+
+    /** §14.4 스텝이 회사에 존재하는지(활성). 없으면 FILE_STEP_NOT_FOUND(404) 판정용. */
+    boolean existsStepInCompany(long companyId, Long stepId);
+
+    /** §14.4 스텝의 파일 한 페이지(문서 단위 최신 완료 버전). fileView* 조각 재사용 + 스텝 필터. */
+    List<FileViewProjection> findAdminTreeStepFiles(long companyId, Long stepId, int limit, long offset);
+
+    /** §14.4 스텝의 파일 총 건수. */
+    long countAdminTreeStepFiles(long companyId, Long stepId);
 }
