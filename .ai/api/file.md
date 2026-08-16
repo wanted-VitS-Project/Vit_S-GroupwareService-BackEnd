@@ -1,5 +1,6 @@
 # 📎 File · FileVersion API
 
+**최종 업데이트**: 2026-08-16 (블록 생명주기 **D안 확정** — 블록/스텝/스테이지 삭제 시 파일 자동 휴지통 · 결재잠금 시 블록삭제 409 · A안 폐기 · §11/§12/§13 고아 규칙 정리 · **§14 전사 파일 트리 탐색 4종 신설**)
 **최종 업데이트**: 2026-08-16 (§1 — `APPROVAL` 블록 동명 검사 면제. 결재 문서 제거 후 같은 파일 재첨부가 영구 409 로 막히던 문제)
 **최종 업데이트**: 2026-08-07 (§12 프로젝트 전체 파일 모아보기 · §13 휴지통 모아보기 신설 · §7 파생데이터 정리 포트 선호출 명시) · **담당**: 김동현 · Domain `프로젝트` · SUB-Domain `File` · `FileVersion`
 
@@ -23,7 +24,11 @@
 | §11 버전목록 스코프 | **프로젝트 전체** — 경로 `GET /projects/{projectId}/file-versions` (블록 단위 폐기) |
 | 업로드 대상 블록(§1) | **`FILE` + `APPROVAL`** — 결재 블록 드롭존도 공용 파일 API 재사용. `block_file`+`approval_document` **이중 링크**. **단 §3 목록은 `FILE` 전용**(결재 파일은 결재 상세에서 조회) |
 
-**블록 생명주기 분리 (A안 확정 · `../docs/global/BLOCK.md` §4-4 근거)** — 블록 삭제는 파일을 건드리지 않는다. 파일은 `file.project_id` 소속으로 살아남고, 조회는 `block.deleted_at IS NULL` 로 거른다. 블록 삭제 후 남은 파일 접근은 §11(프로젝트 전체 보기)로 회수한다. `block_file` 은 hard delete(파일 영구삭제 시 `ON DELETE CASCADE`).
+**블록 생명주기 — D안 확정 (2026-08-16 · 팀 합의 완료 · `../docs/global/BLOCK.md` §4-4 근거)** — 블록을 삭제하면 그 블록에 매달린 파일도 **함께 휴지통으로 이동**한다(`file.deleted_at` 세팅). 스텝·스테이지 삭제로 블록이 cascade 삭제될 때도 동일하다. 단 진행 중 결재가 참조하는 파일이 하나라도 있으면 **블록 삭제를 `409`(`FILE_APPROVAL_IN_PROGRESS`)로 거부**한다 — 기존 "결재중 파일은 삭제 못 함" 불변식을 유지한다. 파일 데이터 자체는 `file.project_id` 소속으로 남아 §6 복구가 가능하며, 블록은 복구 기능이 없으므로(`BLOCK.md` `BLK-014`) 복구된 파일은 `blockId:null`·`blockDeleted:true` 로 프로젝트 문서함에 돌아온다. `block_file` 은 hard delete(파일 영구삭제 시 `ON DELETE CASCADE`).
+
+> ⚠️ 이전 **A안**(블록 삭제 시 파일을 활성 상태로 남겨 고아 파일로 둠)은 **폐기**했다(2026-08-16). 그래서 **정상 흐름에서는 활성 고아 파일이 생기지 않는다** — 블록이 삭제된 파일은 휴지통(§13)에 있다.
+> 🔸 **단 예외 하나: §6 복구.** 휴지통 간 파일을 §6 로 복구하면 원블록이 이미 삭제됐으므로 `blockId:null`·`blockDeleted:true` 인 **활성 고아로 되살아난다.** 즉 활성 고아는 '블록 자동 휴지통 이동'이 없애고 '§6 복구'가 다시 만든다 — §12·blockDeleted 정의는 이 경우를 유지한다.
+> 배선 구현(block→file 일괄 트래시)이 끝나기 전까지는 §12/§13 코드가 아직 A안(블록 삭제 파일을 상시 활성 고아로 반환)일 수 있다.
 
 **착수 범위 (2026-08-06 · CRUD 우선)**
 
@@ -31,7 +36,8 @@
 - ✅ **§7 영구삭제**(파생데이터 정리 포트 선호출 포함) — develop 머지 완료. **§6 복구** — 구현·실기동 검증 완료(`feat/file-restore`, PR 대기).
 - ✅ **§12 프로젝트 전체 파일 모아보기**(`GET /projects/{projectId}/files`) — 구현 완료(`feat/file-restore`). 문서 단위 최신 완료 버전 1행 + 스텝·블록 위치 · 고아 파일 포함 · 프로젝트 접근 권한.
 - ✅ **§13 프로젝트 휴지통 모아보기**(`GET /projects/{projectId}/files/trash`) — 구현 완료(`feat/file-trash-list`). §12 와 조인 동일 · 필터만 `deleted_at IS NOT NULL` · deletedAt 내림차순 · 고아 파일 포함 · 프로젝트 접근 권한.
-- 🚧 **남음**: **D안**(블록 삭제→파일 자동 휴지통, 동훈 협의). **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
+- ✅ **D안 확정**(2026-08-16 · 팀 합의) — 블록 삭제→파일 자동 휴지통(cascade 포함 · 결재잠금 시 블록삭제 `409` 거부). 🚧 **구현 착수 대기** — block 도메인이 아웃바운드 포트로 file 일괄 트래시를 호출하는 방식(이미지 `ImageBlockDetailAdapter` 선례). 착수 시 §12/§13 코드의 활성 고아 반환도 함께 정리.
+- 🚧 **남음**: **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
 
 ## 엔드포인트
 
@@ -90,14 +96,16 @@
 
 ⚠️ **`ADMIN`·`MASTER` 가 남의 프로젝트 파일을 수정·삭제하면 `privileged_override = 1` 을 로그에 표기한다** (`PERMISSION.md` §2-1).
 
-### 블록과 파일의 소유 관계 ⚠️
+### 블록과 파일의 소유 관계 ⚠️ (D안 · 2026-08-16)
 
-> `BLOCK.md` §4-4: **파일은 프로젝트 소속**(`file.project_id`)이고 블록은 그걸 **참조**한다. **블록을 지워도 파일은 산다.**
+> `BLOCK.md` §4-4: **파일은 프로젝트 소속**(`file.project_id`)이고 블록은 그걸 **참조**한다. **블록을 지우면 그 파일은 휴지통으로 간다** — 데이터는 프로젝트 소속으로 남아 복구할 수 있지만(§6), 활성 상태로는 남지 않는다(D안).
 
 | 상황 | 결과 |
 |---|---|
-| 블록 삭제 | `block_file` 연결이 무효가 된다. **`file` 은 그대로 살아 있다** |
-| 파일 휴지통 이동 | 블록 연결은 유지된다 (복구하면 그 자리로 돌아온다) |
+| 블록 삭제 | 그 블록의 파일이 **휴지통으로 이동**(`file.deleted_at` 세팅). cascade(스텝/스테이지 삭제)도 동일. `block_file` 링크는 남는다 |
+| 결재-잠금 파일 포함 블록 삭제 | **`409` 로 블록 삭제 거부** (`FILE_APPROVAL_IN_PROGRESS`) |
+| 파일 휴지통 이동(개별) | 블록 연결은 유지된다 (복구하면 그 자리로 돌아온다) |
+| 삭제된 블록의 파일 복구(§6) | `blockId:null` · `blockDeleted:true` 로 프로젝트 문서함에 복구(블록은 복구 없음) |
 
 ### 🔴 soft delete — `CASCADE` 가 발동하지 않는다 (2026-08-03 추가)
 
@@ -109,7 +117,7 @@
           → block_file 행이 그대로 남는다   ← 여기가 함정
 ```
 
-⛔ **모든 파일 조회에서 `block.deleted_at IS NULL` 을 명시적으로 확인한다.** FK 에 맡기면 삭제된 블록의 파일이 계속 조회된다.
+⛔ **블록 단위 파일 조회(§3)에서 `block.deleted_at IS NULL` 을 명시적으로 확인한다.** FK 에 맡기면 삭제된 블록이 없는 블록으로 처리되지 않는다. (D안에서 활성 목록은 `file.deleted_at IS NULL` 로도 이미 걸러지지만, `block_file` 행이 남는 이 함정 자체는 유효하다.)
 
 | 상황 | 처리 |
 |---|---|
@@ -580,7 +588,7 @@
 **정책**
 - ⛔ **업로드 완료된 버전만**(`upload_status = COMPLETED`) 반환한다.
 - ⛔ **휴지통 파일은 기본 제외**(`file.deleted_at IS NULL`).
-- ✅ **프로젝트 전체 범위** — 특정 블록이 아니라 프로젝트에 속한 모든 문서(`file.project_id`)의 버전을 본다. **블록이 삭제돼 고아가 된 파일도 포함**된다(파일은 프로젝트 소속).
+- ✅ **프로젝트 전체 범위** — 특정 블록이 아니라 프로젝트에 속한 모든 문서(`file.project_id`)의 버전을 본다. ⛔ **블록이 삭제된 파일은 휴지통으로 가므로(D안) 이 활성 목록엔 나오지 않는다** — `file.deleted_at IS NULL` 로 이미 제외된다(이전 "고아 파일 포함" 규칙 폐기).
 - ✅ **과거 버전도 목록에 포함**한다 (같은 파일의 이전 버전도 선택 가능).
 - 인덱싱 상태가 `COMPLETED` 인 버전만 프론트에서 **선택 가능**하게 처리한다 (목록에는 다 내려주되 프론트가 비활성화).
 
@@ -637,7 +645,7 @@
 - ⛔ **활성 문서만** 반환한다 (`file.deleted_at IS NULL`). 휴지통은 §13.
 - ⛔ **문서 단위 최신 버전 1행.** 완료된 버전이 하나도 없는 문서는 제외한다(§3 과 동일).
 - ⛔ **presigned URL 을 임베드하지 않는다.** 다운로드는 클릭 시 §9(`GET /file-versions/{fileVersionId}/download`, 5분 URL)를 호출한다 — 문서함에 수십 개일 때 단명 URL 대량 발급을 피한다.
-- ✅ **고아 파일 포함** — 블록이 soft delete 돼도 파일은 프로젝트 소속으로 살아남는다(§11 원칙). 이 경우 `blockId:null`·`blockDeleted:true`, `stepId·stepName` 은 삭제된 블록 행에 남은 `step_id` 로 해석한다.
+- ⛔ **활성 고아는 정상 흐름에선 안 생긴다(D안 · 2026-08-16)** — 블록 삭제 시 파일이 휴지통(§13)行이라 삭제블록 파일이 이 활성 목록에 바로 오지 않는다. **단 §6 복구로 되살아난 파일은 원블록이 삭제됐으면 `blockId:null`·`blockDeleted:true` 로 이 목록에 남는다** — 그래서 `blockDeleted` 는 대개 `false` 지만 '복구된 고아'에서 `true` 일 수 있다(프론트는 blockDeleted 배지를 유지). 이전 "블록 삭제 파일을 상시 활성 고아로 포함" 규칙은 폐기했다.
 - 정렬 — `stepId` → `blockId` → 블록 연결일 오름차순(§3 정렬과 동일 계열).
 
 | 코드 | code | 설명 |
@@ -682,7 +690,7 @@
 
 **정책**
 - ⛔ **휴지통 문서만** 반환한다 (`file.deleted_at IS NOT NULL`).
-- ✅ **고아 파일 포함** — 블록 삭제로 §3 에서 사라진 파일도 여기서 보이고, 복구(§6)·영구삭제(§7)의 대상이 된다.
+- ✅ **블록 삭제로 자동 휴지통행한 파일 포함(D안)** — 블록(또는 스텝/스테이지 cascade) 삭제로 휴지통에 온 파일이 여기 보이며, 블록도 삭제됐으면 `blockDeleted:true` 로 표시된다. 복구(§6)·영구삭제(§7)의 대상이 된다.
 - ⛔ **presigned URL 미임베드** — 휴지통에서는 다운로드 진입점을 두지 않는다(복구·영구삭제만).
 - 정렬 — `deletedAt` 내림차순(이미지 휴지통과 통일).
 
@@ -692,3 +700,162 @@
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 | 403 | `FILE_ACCESS_PERMISSION_REQUIRED` | 프로젝트 접근(열람) 권한 없음 |
 | 404 | `PROJECT_NOT_FOUND` | 프로젝트 없음 (공용 `ProjectAccessUseCase` 판정) |
+
+---
+
+## 14. 전사 파일 트리 탐색 (ADMIN · 파일 탐색기)
+
+**전사 파일을 flat 목록(FILE-Q-01, `GET /api/v1/admin/files`) 대신 윈도우 탐색기식 계층으로 lazy-load 하는 read model이다.** 프로젝트 → 스테이지 → 스텝 → 파일 4단계. 노드를 클릭할 때마다 그 자식만 조회한다. 회사 전체 파일을 한 번에 집계하지 않아 상위 레벨이 가볍다.
+
+⛔ **이건 읽기 전용 파일 탐색 projection이다** — 스테이지/스텝의 정식 CRUD API가 아니다.
+⛔ **검색·필터는 이 트리가 아니라 기존 flat 목록(`GET /api/v1/admin/files`)을 쓴다.** 검색은 계층을 가로지르기 때문이다.
+⛔ **활성(`deleted_at IS NULL`)만 본다.** 휴지통은 §13. D안에서 블록 삭제 파일은 휴지통行이므로 트리에 삭제블록 파일은 없다.
+
+### 공통
+
+| 항목 | 값 |
+|---|---|
+| 권한 | **ADMIN 전용** (`FileAdminPolicy.assertAdmin`) — flat 전사 API와 동일 |
+| 회사 스코프 | `project.company_id` (서버 주입 · 요청 파라미터 아님) |
+| 페이징 | `page`(0-base, 기본 `0`) · `size`(기본 `10`) — **14.1·14.4 만** 적용 |
+| 공통 에러 | `401 AUTH_UNAUTHENTICATED` · `403 ACC_ADMIN_REQUIRED`(ADMIN 아님) |
+
+| # | API명칭 | METHOD · URL | 페이징 |
+|---|---|---|:---:|
+| 14.1 | 트리 — 프로젝트 목록 | `GET /api/v1/admin/files/projects` | O |
+| 14.2 | 트리 — 스테이지 목록 | `GET /api/v1/admin/files/projects/{projectId}/stages` | X |
+| 14.3 | 트리 — 스텝 목록 | `GET /api/v1/admin/files/projects/{projectId}/steps` | X |
+| 14.4 | 트리 — 스텝 내 파일 | `GET /api/v1/admin/files/steps/{stepId}/files` | O |
+
+---
+
+### 14.1 프로젝트 목록
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/admin/files/projects` |
+| 인증 필요 | Y · ADMIN |
+
+**Request Parameter** — `page` int N(기본 0) · `size` int N(기본 10)
+
+정렬 — 프로젝트명 오름차순, tie 는 `projectId` 오름차순.
+
+**Response** (페이지)
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.content[].projectId` | Long | 프로젝트 번호 |
+| `data.content[].name` | String | 프로젝트명 |
+| `data.content[].status` | String | 프로젝트 상태 |
+| `data.content[].clientName` | String | 발주처 (`nullable`) |
+| `data.content[].updatedAt` | String | 최종 수정 시각 |
+| `data.page` · `data.size` | int | 0-base 페이지 · 페이지 크기 |
+| `data.totalElements` | long | 전체 건수 |
+| `data.totalPages` | int | 전체 페이지 수 |
+
+정책 — ⛔ 활성 프로젝트 전부(파일 유무로 필터하지 않는다 — 빈 프로젝트도 노출).
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
+
+---
+
+### 14.2 스테이지 목록
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/admin/files/projects/{projectId}/stages` |
+| 인증 필요 | Y · ADMIN |
+
+**Path Parameter** — `projectId` Long Y
+
+정렬 — `sortOrder` 오름차순. **"미분류" 버킷은 맨 뒤.**
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.stages[].stageId` | Long | 스테이지 번호. **미분류 버킷은 `null`** (`nullable`) |
+| `data.stages[].name` | String | 스테이지명. 미분류 버킷은 `"미분류"` |
+| `data.stages[].sortOrder` | int | 정렬 순서 |
+
+정책
+- ⛔ **활성 스테이지 전부** — 파일 유무로 필터하지 않는다(빈 스테이지도 노출).
+- ✅ **가상 "미분류" 버킷** — 프로젝트에 `stageId IS NULL` 스텝이 하나라도 있으면 맨 뒤에 `stageId:null` 버킷을 추가한다. 없으면 추가하지 않는다. 프론트는 이 버킷 클릭 시 14.3 을 `stageId` 없이 호출한다.
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
+| 404 | `PROJECT_NOT_FOUND` | 회사에 없는 `projectId` |
+
+---
+
+### 14.3 스텝 목록
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/admin/files/projects/{projectId}/steps` |
+| 인증 필요 | Y · ADMIN |
+
+**Path Parameter** — `projectId` Long Y
+**Request Parameter** — `stageId` Long **N**
+
+⛔ **`stageId` 를 주면 그 스테이지의 스텝, 생략하면 `stageId IS NULL`(미분류) 스텝을 반환한다.** 트리에서 "모든 스텝 평면 조회"는 쓰지 않으므로 생략 = 미분류로 못박는다.
+
+정렬 — `sortOrder` 오름차순.
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.steps[].stepId` | Long | 스텝 번호 |
+| `data.steps[].name` | String | 스텝명 |
+| `data.steps[].sortOrder` | int | 정렬 순서 |
+| `data.steps[].status` | String | 스텝 상태 |
+
+정책 — ⛔ 활성 스텝 전부(파일 유무 필터 없음).
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
+| 404 | `PROJECT_NOT_FOUND` | 회사에 없는 `projectId` |
+
+---
+
+### 14.4 스텝 내 파일
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/admin/files/steps/{stepId}/files` |
+| 인증 필요 | Y · ADMIN |
+
+**Path Parameter** — `stepId` Long Y
+**Request Parameter** — `page` int N(기본 0) · `size` int N(기본 10)
+
+정렬 — `completedAt` 내림차순, tie 는 `fileId` 내림차순 (flat 전사와 동일).
+
+**Response** (페이지) — **FILE-Q-01(전사 목록)·§12 와 동일한 `CompanyFilePageResponse`(항목 = `FileViewResponse`)를 그대로 재사용한다.** 별도 DTO 를 두지 않아 프론트가 파일 카드 컴포넌트를 공유한다.
+
+`data.content[]` 는 `FileViewResponse` — `stepId`·`stepName`·`blockId`·`blockTitle`·`blockDeleted`·`projectId`·`projectName`·`fileId`·`name`·`latestVersionId`·`latestVersionNo`·`versionCount`·`originalFileName`·`extension`·`sizeBytes`·`previewable`·`uploaderName`·`uploaderDepartment`·`uploaderPosition`·`updatedAt`. `data.page`·`size`·`totalElements`·`totalPages` 는 페이징 메타.
+
+정책
+- ⛔ **활성 문서만**(`file.deleted_at IS NULL`) · 완료 버전 1개 이상(§3 과 동일).
+- ⛔ **`blockDeleted` 는 활성 트리라 항상 `false`** — D안에서 블록 삭제 파일은 휴지통行이라 활성 트리엔 삭제블록 파일이 오지 않는다(쿼리에 `b.deleted_at IS NULL` 명시). 삭제블록 파일 회수는 §13. `stepId`·`stepName`·`projectId`·`projectName` 도 경로로 이미 알지만 재사용 DTO 라 함께 채워진다.
+- ⛔ **presigned URL 미임베드** — 다운로드·미리보기는 클릭 시 §9/§10.
+- ⛔ **검색·확장자 필터 없음** — flat `GET /admin/files` 사용.
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (없으면 빈 배열) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+| 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
+| 404 | `FILE_STEP_NOT_FOUND` | 회사에 없는 `stepId` 🔴 **신설 제안 코드**(아래 참고) |
+
+> 🔴 **신설 에러코드 `FILE_STEP_NOT_FOUND`** — 14.4 의 `stepId` 가 회사 스코프에 없을 때의 404 다. 현재 file 도메인에 대응 코드가 없어 새로 제안한다(`FILE_` 접두어). 프론트는 트리에서 받은 `stepId` 만 넘기므로 동시삭제 등 예외 경로에서만 발생한다. **확정 전까지 표기용** — 팀 확인 후 반영.
