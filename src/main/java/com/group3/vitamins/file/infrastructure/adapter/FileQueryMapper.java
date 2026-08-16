@@ -21,6 +21,8 @@ public interface FileQueryMapper {
 
     Long findBlockIdByFileId(@Param("fileId") Long fileId);
 
+    List<Long> findActiveFileIdsByBlockId(@Param("blockId") Long blockId);
+
     Long findStepIdByFileIdIncludingDeletedBlock(@Param("fileId") Long fileId);
 
     List<FileVersionProjection> findCompletedVersions(@Param("fileId") Long fileId);

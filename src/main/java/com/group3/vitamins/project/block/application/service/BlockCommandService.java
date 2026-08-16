@@ -14,6 +14,7 @@ import com.group3.vitamins.project.block.application.command.MoveBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockCommand;
 import com.group3.vitamins.project.block.application.command.UpdateBlockLayoutCommand;
 import com.group3.vitamins.project.block.application.port.BlockDetailPort;
+import com.group3.vitamins.project.block.application.port.BlockFileTrashPort;
 import com.group3.vitamins.project.block.application.port.IssueBlockUnlinkPort;
 import com.group3.vitamins.project.block.application.result.BlockLayoutResult;
 import com.group3.vitamins.project.block.application.result.BlockMoveResult;
@@ -66,6 +67,7 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
     private final EmployeeLookupPort employeeLookupPort;
     private final BlockDetailRegistry blockDetailRegistry;
     private final IssueBlockUnlinkPort issueBlockUnlinkPort;
+    private final BlockFileTrashPort blockFileTrashPort;
     private final StepAccessUseCase stepAccessUseCase;
     private final DomainEventPublisher domainEventPublisher;
 
@@ -354,6 +356,12 @@ public class BlockCommandService implements BlockCommandUseCase, BlockCascadeUse
 
         block.delete(now);
         blockRepository.save(block);
+
+        // D안(2026-08-16): 블록에 매달린 활성 파일을 휴지통으로 이동한다. 직접 삭제·스텝/스테이지 cascade 공용 경로다.
+        // 진행 중 결재가 참조하는 파일이 있으면 여기서 FILE_APPROVAL_IN_PROGRESS(409)로 트랜잭션 전체가 롤백된다.
+        // ⚠️ unlinkDetail 뒤에 둔다 — unlinkDetail 의 @Modifying(clearAutomatically) 가 앞선 file 변경을 flush 없이
+        //    비울 수 있어, 파일 soft delete 는 그 clear 이후에 일어나야 유실되지 않는다.
+        blockFileTrashPort.trashByBlockId(block.getBlockId(), requesterUserId);
     }
 
     /**

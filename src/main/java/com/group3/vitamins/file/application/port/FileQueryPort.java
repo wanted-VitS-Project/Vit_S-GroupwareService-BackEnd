@@ -29,6 +29,12 @@ public interface FileQueryPort {
     Optional<Long> findBlockIdByFileId(Long fileId);
 
     /**
+     * 블록에 매달린 <b>활성</b> 파일(file.deleted_at IS NULL)의 file_id 목록 — 블록 삭제 시 휴지통 이동 대상(D안).
+     * 이미 휴지통인 파일은 제외한다(멱등). 링크가 없으면 빈 리스트.
+     */
+    List<Long> findActiveFileIdsByBlockId(Long blockId);
+
+    /**
      * 문서가 매달린 블록의 스텝 ID — <b>블록이 soft delete 됐어도</b> 돌려준다(§6 복구용).
      * 블록이 삭제돼도 복구는 성공해야 하므로, 삭제된 블록의 스텝으로도 권한을 판정할 수 있어야 한다.
      * block_file 링크가 없으면 empty.

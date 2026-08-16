@@ -31,6 +31,15 @@
          LIMIT 1
     </select>
 
+    <!-- 블록에 매달린 활성 파일 id (D안 · 블록 삭제 시 휴지통 이동 대상). file.deleted_at IS NULL 만. -->
+    <!-- block_file 은 블록이 죽어도 남지만, 여기선 삭제 전 블록의 활성 파일을 훑는 용도라 block.deleted_at 은 보지 않는다. -->
+    <select id="findActiveFileIdsByBlockId" resultType="long">
+        SELECT bf.file_id
+          FROM block_file bf
+          JOIN file f ON f.file_id = bf.file_id AND f.deleted_at IS NULL
+         WHERE bf.block_id = #{blockId}
+    </select>
+
     <!-- 문서→블록→스텝의 step_id. block.deleted_at 을 보지 않는다 — §6 복구는 블록이 삭제돼도 되므로 -->
     <!-- 삭제된 블록의 스텝으로도 권한을 판정해야 한다. block_file 행은 블록이 죽어도 남는다. -->
     <select id="findStepIdByFileIdIncludingDeletedBlock" resultType="long">
