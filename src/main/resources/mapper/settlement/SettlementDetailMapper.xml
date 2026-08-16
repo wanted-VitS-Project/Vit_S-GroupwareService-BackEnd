@@ -7,8 +7,9 @@
 
     <!--
         actualAmountSum: 이 행의 project_id + type과 같은 활성 정산 블록 전체의 actual_amount 합계.
-        block -> step 을 타고 project_id 를 구한 뒤, 같은 project_id·type 그룹으로 미리 합산해두고
-        (파생 테이블 agg) 원래 행에 조인해서 붙인다 — 요청받은 settle_id 개수와 무관하게 쿼리 1발.
+        settlement_block 이 비정규화로 들고 있는 project_id 를 직접 읽어(V20260816170100), 같은
+        project_id·type 그룹으로 미리 합산해두고 (파생 테이블 agg) 원래 행에 조인해서 붙인다 —
+        요청받은 settle_id 개수와 무관하게 쿼리 1발.
         type 이 NULL(빈 상세 행)이면 agg 와 매칭되지 않아 actualAmountSum 이 NULL로 내려오고,
         어댑터가 이를 0으로 취급한다(진행률 0.0).
 
@@ -18,12 +19,11 @@
         왕복은 이 쿼리 1개뿐이다 — SQL 안에 스캔 범위를 줄이는 서브쿼리를 추가한 것뿐이다.
     -->
     <!--
-        2026-08-16 CTE로 재구성 — 기존엔 메인 조회·agg 집계·agg 스코프 좁히기(target) 각각에서
-        settlement_block→block→step 조인을 독립적으로 반복해(한 쿼리 안 3번) 실측으로 확인된 낭비를
-        없앴다. target_rows가 요청받은 settleIds에 대해 조인 1번으로 project_id까지 같이 뽑아두고,
-        agg의 스코프 좁히기는 target_rows의 project_id를 그대로 재사용한다(조인 재실행 없음) — agg
-        자체의 집계 대상(같은 프로젝트의 전체 활성 블록)은 target_rows와 다른 행 집합이라 그 조인만 남는다.
-        결과 컬럼·값 산출 로직은 기존과 동일 — 쿼리 구조만 바꿨다.
+        2026-08-16 project_id 비정규화(V20260816170100)로 settlement_block→block→step 조인을
+        통째로 걷어냈다 — 기존엔 메인 조회·agg 집계·agg 스코프 좁히기 각각에서 이 3단 조인을 독립적으로
+        반복했다(한 쿼리 안 3번). 이제 settlement_block 이 project_id 를 직접 들고 있어 조인이 없다.
+        target_rows가 요청받은 settleIds의 project_id 를 뽑아두고, agg의 스코프 좁히기는 그 project_id
+        를 그대로 재사용한다. 결과 컬럼·값 산출 로직은 기존과 동일 — 데이터 소스만 바꿨다.
     -->
     <select id="findBySettleIds"
             resultType="com.group3.vitamins.settlement.infrastructure.blockdetail.SettlementDetailRow">
@@ -32,22 +32,18 @@
         sb.planned_amount, sb.planned_tax_amount, sb.planned_date, sb.tax_invoice_due_date,
         sb.trader_name, sb.bank_name, sb.account_number, sb.account_holder,
         sb.actual_amount, sb.actual_date, sb.created_at, sb.version,
-        st.project_id AS project_id
+        sb.project_id AS project_id
         FROM settlement_block sb
-        JOIN block b ON b.block_id = sb.block_id
-        JOIN step st ON st.step_id = b.step_id
         WHERE sb.settle_id IN
         <foreach item="id" collection="settleIds" open="(" separator="," close=")">#{id}</foreach>
         AND sb.deleted_at IS NULL
         ),
         agg AS (
-        SELECT st2.project_id AS project_id, sb2.type AS type, SUM(sb2.actual_amount) AS actual_amount_sum
+        SELECT sb2.project_id AS project_id, sb2.type AS type, SUM(sb2.actual_amount) AS actual_amount_sum
         FROM settlement_block sb2
-        JOIN block b2 ON b2.block_id = sb2.block_id
-        JOIN step st2 ON st2.step_id = b2.step_id
         WHERE sb2.deleted_at IS NULL
-        AND st2.project_id IN (SELECT DISTINCT project_id FROM target_rows)
-        GROUP BY st2.project_id, sb2.type
+        AND sb2.project_id IN (SELECT DISTINCT project_id FROM target_rows)
+        GROUP BY sb2.project_id, sb2.type
         )
         SELECT tr.settle_id AS settleId,
         tr.round_no AS roundNo,

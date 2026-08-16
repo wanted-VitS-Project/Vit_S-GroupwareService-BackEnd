@@ -15,8 +15,13 @@ public interface SettlementRepository {
     /**
      * 내용이 빈 상세 행을 만들고 그 PK 를 돌려준다. 블록 생성 트랜잭션에서 Block 도메인이 호출한다.
      * 생성 시점 판단은 Block 도메인이 하고, 실제 INSERT 는 이 도메인이 한다.
+     *
+     * <p>{@code projectId} 는 프로젝트 단위 집계를 조인 없이 하기 위해 행에 스탬핑하는 값이다
+     * ({@code V20260816170100}). Block 도메인은 이 값을 넘겨주지 않으므로
+     * ({@code BlockDetailPort.createDetail} 은 blockId 만 받는다) 정산 도메인이
+     * {@code SettlementProjectLookupPort} 로 직접 찾아서 채운다.
      */
-    Long create(Long blockId);
+    Long create(Long blockId, Long projectId);
 
     Optional<Settlement> findActiveBySettleId(Long settleId);
 
