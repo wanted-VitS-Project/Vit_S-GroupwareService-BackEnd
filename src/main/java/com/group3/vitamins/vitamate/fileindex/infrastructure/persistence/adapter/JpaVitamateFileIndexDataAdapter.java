@@ -94,6 +94,8 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
                 indexAttemptId,
                 "PENDING",
                 null,
+                now,
+                now.plus(FileIndexLeasePolicy.LEASE_DURATION),
                 null,
                 now
         );
