@@ -1,0 +1,32 @@
+-- =====================================================================
+-- 알림 목록 조회(VIW-001~005) 복합 인덱스
+-- =====================================================================
+-- 무엇: notification 에 (user_id, deleted_at, created_at, notification_id) 복합 인덱스를 추가한다.
+-- 왜:   목록 조회는 아래 형태인데 지금은 이걸 받쳐줄 인덱스가 없다.
+--         WHERE user_id = ? AND deleted_at IS NULL [+ type/read 필터]
+--         ORDER BY created_at DESC, notification_id DESC LIMIT ?
+--       현재 인덱스는 PK 와 FK 자동 인덱스(user_id) 뿐이라, user_id 로 그 사용자의 알림을
+--       **전부** 꺼낸 뒤 deleted_at 을 거르고 filesort 로 정렬한다. Page 조회라 같은 스캔이
+--       count 쿼리에서 한 번 더 돈다.
+--
+-- ⚠️ 이 테이블은 이 프로젝트에서 가장 빨리 커지는 축이다. NOTI-V1.md §1-2 가 보존 기간 자동
+--    정리(구 RET-001)를 폐기하면서 "사용자가 안 지우면 알림이 무한정 쌓인다"를 명시적으로
+--    감수했다. 즉 1인당 행 수에 상한이 없다 — 지금은 안 느려도 시간이 지나면 반드시 느려진다.
+--
+-- 컬럼 순서 근거:
+--   user_id      등치 — 본인 알림만(VIW-001). 선두 고정
+--   deleted_at   IS NULL 은 인덱스에서 등치로 취급된다. 여기 없으면 삭제분 판정에 행을 꺼내야 한다
+--   created_at   ORDER BY 흡수 — Using filesort 제거(VIW-002 최신순은 고정이라 옵션이 없다)
+--   notification_id  동시각 타이브레이커까지 인덱스 순서로 덮어 정렬을 완전히 없앤다
+--
+-- category(notification_type LIKE 'X%')·isRead 는 인덱스에 넣지 않는다 — 선택적 필터라
+-- 정렬 컬럼보다 앞에 두면 필터가 없는 호출에서 정렬이 다시 깨지고, 뒤에 두면 어차피 안 쓰인다.
+-- 위 3개로 좁힌 뒤의 잔여 필터로 남기는 것이 맞다.
+--
+-- 🔖 남는 정리 대상: FK 자동 인덱스(fk_notification_user)는 이 인덱스의 prefix 라 중복이다.
+--    이번에 걷지 않는다 — 인덱스명이 제약명과 다르게 잡힌 경우 DROP 이 실패해 마이그레이션이
+--    통째로 멈추는데, 얻는 것은 INSERT 시 작은 인덱스 하나의 쓰기 비용뿐이라 수지가 안 맞는다.
+--    실제 인덱스명을 SHOW CREATE TABLE notification 으로 확인한 뒤 별도 마이그레이션으로 뺀다.
+
+ALTER TABLE notification
+    ADD KEY idx_notification_user_list (user_id, deleted_at, created_at, notification_id);
