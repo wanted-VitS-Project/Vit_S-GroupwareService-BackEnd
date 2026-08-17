@@ -51,7 +51,8 @@ public record SettlementProjectBlockListResponse(
             @Schema(description = "은행명. OUTCOME인 경우만 값 있음", example = "신한은행", nullable = true)
             String bankName,
 
-            @Schema(description = "계좌번호(마스킹). OUTCOME인 경우만 값 있음", example = "100******444", nullable = true)
+            @Schema(description = "계좌번호(마스킹 없는 원본). OUTCOME인 경우만 값 있음 — 이 API는 재무팀만 접근 가능"
+                    + "(FINANCE 페이지 권한)", example = "100555074444", nullable = true)
             String accountNumber,
 
             @Schema(description = "예금주. OUTCOME인 경우만 값 있음", example = "홍길동", nullable = true)

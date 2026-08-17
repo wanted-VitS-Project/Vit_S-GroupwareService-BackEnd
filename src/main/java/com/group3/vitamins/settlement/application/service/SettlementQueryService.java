@@ -222,7 +222,9 @@ public class SettlementQueryService implements SettlementQueryUseCase {
                 row.taxInvoiceAmount(),
                 row.paidType(),
                 row.bankName(),
-                accountNumberCipher.decryptAndMask(row.accountNumber()),
+                // 마스킹 없이 원본 그대로 (2026-08-16, 담당자 확정) — 이 API는 FINANCE 페이지 권한자
+                // (재무팀)만 도달하고, 재무팀은 실제 송금 처리를 위해 원본 계좌번호가 필요하다.
+                row.accountNumber() == null ? null : accountNumberCipher.decrypt(row.accountNumber()),
                 row.accountHolder(),
                 row.paidDate(),
                 row.paidAmount(),
