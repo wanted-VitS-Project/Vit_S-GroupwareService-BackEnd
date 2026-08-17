@@ -1,8 +1,8 @@
 # 🔒 동시수정 정합성 — 낙관적 락 표준
 
+**최종 업데이트**: 2026-08-16 (§0 TL;DR 신설 — 기존 「3줄 요약」 통합 · §7-1 을 **실제 적용된 마이그레이션 파일**로 정정(배정 번호는 §7-2 에 그대로 남는다) · §9 순서 7 상태 갱신 — 나머지 6개 중 **5개 완료, 결재만 미착수**)
 **최종 업데이트**: 2026-08-11 (§9-3·§9-4 신설 — 블록·프로젝트 낙관락 완료. 프로젝트 계열 4도메인 종료)
 **최종 업데이트**: 2026-08-11 (§9-2 신설 — 스텝 낙관락 구현 · §7 번호 대역 재배정 · §3-3 정정)
-**최종 업데이트**: 2026-08-10 (신설 — 동시수정 방어를 **낙관락 단일 정책**으로 확정. Redis 편집 잠금·SSE 사전 차단 폐기)
 **담당**: 김동현 (DevOps)
 **적용 범위**: 프로젝트 협업 영역 전 도메인 (10개 테이블 + 묶음 4종)
 **명세상태**: ✅ **확정** — 구현 착수 가능
@@ -12,11 +12,22 @@
 
 ---
 
-## 0. 3줄 요약
+## §0 TL;DR
 
-1. **동시수정 방어는 낙관적 락 하나로 통일한다.** 편집 잠금(Redis)·SSE 사전 차단은 **폐기**.
-2. 충돌은 **저장 시점 409** 로 잡고, 사용자에게 **재조회 / 덮어쓰기**를 묻는다.
-3. **체크리스트·관리자 설정 5종은 제외.** 클릭이 곧 저장이거나, 애초에 겹치지 않는다.
+- **이 문서가 정하는 것**: ① 동시수정 방어는 **낙관적 락 하나로 통일**한다 — 편집 잠금(Redis)·SSE 사전 차단은 **폐기**. ② 충돌은 **저장 시점 409** 로 잡고 사용자에게 **재조회 / 덮어쓰기**를 묻는다. ③ **체크리스트·관리자 설정 5종은 제외** — 클릭이 곧 저장이거나, 애초에 겹치지 않는다.
+- ⚠️ **조용히 깨지는 함정 ①**: **JPA `@Version` 금지.** detached `merge` 라 **항상 통과**한다 — 예외도 안 나고 테스트도 통과하는데 유실만 남는다 (§6-1).
+- ⚠️ **조용히 깨지는 함정 ②**: **조회 응답에 `version` 누락.** 프론트가 보낼 값이 없어 `0`·`null` 을 보내고 **모든 저장이 409** 가 된다 (§6-3).
+
+| 섹션 | 내용 |
+|---|---|
+| §1 | 검사는 두 곳 — **저장 시점 `WHERE version=?` 이 본체**, 진입 시점 검사는 선택. 트랜잭션·격리수준으로는 못 막는다 |
+| §2 | 적용 9도메인(10테이블) · 제외 대상과 그 이유 |
+| §3 | 참조 구현(스테이지) — 조건부 UPDATE 포트 + **0행이면 409**, 덮어쓰기는 DB 현재 버전을 기대값으로 |
+| §4 | 목록 통째 전송 API 는 **묶음 version 컬럼을 만들지 않고** 항목별 version + **전체 롤백** |
+| §5 | API 계약 — 조회(목록 포함) 응답에 `version` 필수 · 409 `{도메인}_VERSION_CONFLICT` |
+| §6 | 금지·조용히 깨지는 지점 7종 (§6-5 요약표) |
+| §7 | 마이그레이션 — 버전 번호는 **하위 폴더 전체를 통틀어 유일**해야 한다(재귀 스캔) |
+| §8~§11 | 폐기된 검토안 · 작업 순서 · 검증 순서 · 변경 이력 |
 
 ---
 
@@ -474,14 +485,17 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 
 **전부 `ALTER TABLE {테이블} ADD COLUMN version INT NOT NULL DEFAULT 1;` 한 줄씩이다.** 묶음 컬럼은 없다 (§4-2).
 
+⚠️ **아래는 실제 적용된 파일이다 (2026-08-16 확인).** §7-2 의 배정 번호와 다른 것이 있는데, 배정 이후 담당자별 머지 시점이 갈리면서 실제 번호가 달라졌다. **이미 적용된 파일의 번호는 바꾸지 않는다** (§7-2 마지막 줄).
+
 | 파일 | 테이블 |
 |---|---|
 | `db/migration/project/V20260811120000__add_version_project_domain.sql` | `project` · `stage` · `step` · `block` |
-| `db/migration/text/V20260811130000__add_version_text.sql` | `text` |
-| `db/migration/image/V20260811140000__add_version_image.sql` | `image` ⚠️ `image_block` 이 아니다 — 캡션은 자식 `image` 행에 있다 |
-| `db/migration/settlement/V20260811150000__add_version_settlement.sql` | `settlement_block` |
-| `db/migration/approval/V20260811160000__add_version_approval_revision.sql` | `approval_revision` |
-| `db/migration/issue/V20260811170000__add_version_issue_file.sql` | `issue` · `file` |
+| `db/migration/issue/V20260811150000__add_version_issue.sql` | `issue` |
+| `db/migration/file/V20260811160900__add_version_file.sql` | `file` — 이슈와 **한 파일이 아니라 따로** 들어갔다 |
+| `db/migration/text/V20260811190000__add_version_text.sql` | `text` |
+| `db/migration/image/V20260812100000__add_version_image.sql` | `image` ⚠️ `image_block` 이 아니다 — 캡션은 자식 `image` 행에 있다 |
+| `db/migration/settlement/V20260812150000__add_version_settlement.sql` | `settlement_block` |
+| **(없음)** | `approval_revision` — ⬜ **미착수** (§9 순서 7) |
 
 ### 7-2. ⚠️ 번호 대역을 미리 배정한다
 
@@ -536,7 +550,7 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 | 4 | **스텝 낙관락** | 김동현 | ✅ 완료 (2026-08-11) — 조건부 UPDATE 3종 |
 | 5 | **블록 낙관락** | 김동현 | ✅ 완료 (2026-08-11) — 조건부 UPDATE 3종 |
 | 6 | **프로젝트 낙관락** (마이그레이션 컬럼은 2번에서 이미 넣었다) | 김동현 | ✅ 완료 (2026-08-11) — 조건부 UPDATE 2종 · MyBatis 동반 수정 |
-| 7 | 나머지 6개 도메인 각자 구현 | 담당자 6명 | ⬜ (선행: 2) |
+| 7 | 나머지 6개 도메인 각자 구현 | 담당자 6명 | 🔶 **5/6 완료** (2026-08-16 확인) — `text`·`image`·`settlement`·`issue`·`file` 은 마이그레이션 + `{도메인}_VERSION_CONFLICT` 까지 들어갔다. **결재(`approval_revision`) 만 미착수** — version 컬럼도 에러코드도 없다 |
 
 > 📌 **검증 (2026-08-11)**: `clean` 후 **전체 테스트 775개 통과** (159 클래스 · 실패 0 · 에러 0).
 > 프로젝트 계열 4도메인(project·stage·step·block)이 전부 낙관락 적용 완료다.
@@ -612,7 +626,7 @@ stageRepository.save(stage.rename(command.name()));    // 이 사이에 남이 �
 | `ProjectDetailRow` | `createdAt` 뒤 · `categoryId` 앞 |
 | `mapper/project/ProjectDetailQueryMapper.xml` | `p.created_at` 뒤 · `bc.business_category_id` 앞 |
 
-두 위치가 어긋나면 **컴파일도 되고 예외도 안 나는데 값이 전부 한 칸씩 밀린다** (§6-7).
+두 위치가 어긋나면 **컴파일도 되고 예외도 안 나는데 값이 전부 한 칸씩 밀린다** (§6-5 요약표 7번).
 `ProjectMapperTest` 가 왕복 검증으로 이걸 지킨다 — version 단언을 추가해 뒀다.
 
 ⚠️ **`ProjectMapper` 가 두 개다** (`infrastructure/persistence` · `infrastructure/adapter`). 한쪽만 고치면 컴파일이 잡아 주지만, 존재 자체를 모르고 시작하면 헤맨다.

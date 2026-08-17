@@ -18,7 +18,7 @@ public class EmployeeSearchQueryAdapter implements EmployeeSearchQueryPort {
     private final EmployeeSearchQueryMapper employeeSearchQueryMapper;
 
     @Override
-    public List<EmployeeSearchRow> searchByName(String name, Long companyId) {
-        return employeeSearchQueryMapper.searchByName(name, companyId);
+    public List<EmployeeSearchRow> search(String name, Long departmentId, Long companyId) {
+        return employeeSearchQueryMapper.search(name, departmentId, companyId);
     }
 }

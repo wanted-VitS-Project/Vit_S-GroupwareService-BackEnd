@@ -38,16 +38,17 @@ public class PasswordResetMailSender implements PasswordResetMailPort {
 
     /**
      * @param toEmail     수신 이메일 (호출부가 존재를 이미 확인했다)
+     * @param userId      로그인 아이디(사번). 본문에 함께 안내한다
      * @param name        사원 이름 (인사말)
      * @param rawPassword 평문 임시 비밀번호. 로그에 남기지 않는다
      */
     @Override
-    public void sendTempPassword(String toEmail, String name, String rawPassword) {
+    public void sendTempPassword(String toEmail, String userId, String name, String rawPassword) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(toEmail);
         message.setSubject("[VitaminS] 임시 비밀번호가 발급되었습니다");
-        message.setText(buildBody(name, rawPassword));
+        message.setText(buildBody(userId, name, rawPassword));
 
         try {
             mailSender.send(message);
@@ -60,19 +61,20 @@ public class PasswordResetMailSender implements PasswordResetMailPort {
         }
     }
 
-    private String buildBody(String name, String rawPassword) {
+    private String buildBody(String userId, String name, String rawPassword) {
         return """
                 %s님, 안녕하세요.
 
                 관리자에 의해 임시 비밀번호가 발급되었습니다.
 
+                  로그인 아이디(사번): %s
                   임시 비밀번호: %s
 
                 아래 주소로 로그인한 뒤 반드시 새 비밀번호로 변경해 주세요.
                   %s
 
                 본인이 요청하지 않았다면 관리자에게 문의해 주세요.
-                """.formatted(name, rawPassword, loginUrl);
+                """.formatted(name, userId, rawPassword, loginUrl);
     }
 
     /** 로그용 마스킹 — {@code ab***@domain} */

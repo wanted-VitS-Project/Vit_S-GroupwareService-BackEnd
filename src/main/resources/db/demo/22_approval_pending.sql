@@ -33,13 +33,13 @@
 -- ── 블록 8건 (각 스텝 row3 에 APPROVAL 1 + 2) ─────────────────────
 INSERT INTO block (block_id, step_id, title, type, type_id, owner, row_index, col_span, sort_order, created_by) VALUES
 (9350,9011,'4월 추가 쿠폰 예산 승인','APPROVAL',9042,'vitawear-VW110',3,1,0,'vitawear-VW110'),
-(9351,9011,'봄 아우터 이미지 교체 승인','APPROVAL',9043,'vitawear-VW102',3,2,1,'vitawear-VW102'),
+(9351,9011,'봄 아우터 이미지 교체 승인','APPROVAL',9043,'vitawear-VW102',3,1,1,'vitawear-VW102'),
 (9352,9014,'3차 정산 예상액 확정 승인','APPROVAL',9044,'vitawear-VW108',3,1,0,'vitawear-VW108'),
-(9353,9014,'반품 차감 이의 재제기 승인','APPROVAL',9045,'vitawear-VW109',3,2,1,'vitawear-VW109'),
+(9353,9014,'반품 차감 이의 재제기 승인','APPROVAL',9045,'vitawear-VW109',3,1,1,'vitawear-VW109'),
 (9354,9402,'3차 발주 대금 집행 승인','APPROVAL',9046,'vitawear-VW111',3,1,0,'vitawear-VW111'),
-(9355,9402,'공장 단가 인상 수용 승인','APPROVAL',9047,'vitawear-VW113',3,2,1,'vitawear-VW113'),
+(9355,9402,'공장 단가 인상 수용 승인','APPROVAL',9047,'vitawear-VW113',3,1,1,'vitawear-VW113'),
 (9356,9403,'사이즈 검수 외주 잔금 승인','APPROVAL',9048,'vitawear-VW107',3,1,0,'vitawear-VW107'),
-(9357,9403,'상세페이지 수정비 추가 집행 승인','APPROVAL',9049,'vitawear-VW105',3,2,1,'vitawear-VW105');
+(9357,9403,'상세페이지 수정비 추가 집행 승인','APPROVAL',9049,'vitawear-VW105',3,1,1,'vitawear-VW105');
 
 -- ── 결재 8건 (전부 IN_PROGRESS — 완료 안 된 상태여야 ACTIVE 가 산다) ──
 INSERT INTO approval (approval_id, block_id, user_id, status, current_revision_no, completed_at) VALUES

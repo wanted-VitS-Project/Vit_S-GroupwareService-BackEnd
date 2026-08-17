@@ -140,7 +140,7 @@ class AccountPasswordResetServiceTest {
         ArgumentCaptor<Map<String, String>> captor = ArgumentCaptor.forClass(Map.class);
         verify(accountPasswordUpdater, times(1)).applyResets(captor.capture());
         assertThat(captor.getValue()).containsOnlyKeys("EMP001");
-        verify(mailSender, times(1)).sendTempPassword(anyString(), anyString(), anyString());
+        verify(mailSender, times(1)).sendTempPassword(anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -149,7 +149,7 @@ class AccountPasswordResetServiceTest {
         when(accountQueryPort.findTargets(any(), eq(1L)))
                 .thenReturn(List.of(row("EMP001", "a@vit.com", "MEMBER")));
         doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
-                .when(mailSender).sendTempPassword(anyString(), anyString(), anyString());
+                .when(mailSender).sendTempPassword(anyString(), anyString(), anyString(), anyString());
 
         PasswordResetResult result = service.resetPasswords(command("ADMIN", List.of("EMP001")));
 

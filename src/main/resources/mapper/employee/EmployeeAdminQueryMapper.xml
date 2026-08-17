@@ -46,7 +46,8 @@
                a.role                 AS role,
                a.status               AS accountStatus,
                a.must_change_password AS mustChangePassword,
-               e.resigned_at          AS resignedAt
+               e.resigned_at          AS resignedAt,
+               e.profile_image_key    AS profileImageKey
           FROM employee e
           JOIN account a           ON a.user_id = e.user_id
           LEFT JOIN department d    ON d.department_id = e.department_id AND d.company_id = e.company_id

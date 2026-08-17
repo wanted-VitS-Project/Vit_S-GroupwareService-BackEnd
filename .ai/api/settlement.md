@@ -24,13 +24,17 @@
   `SettlementDetail`(이 API 응답과 동일한 필드)을 채운다. 계좌번호는 항상 마스킹된 값만 담긴다(원문 복호화 결과를
   그대로 내보내지 않는다).
 
-| 상태 | 기능 | METHOD | URL | 권한 |
-|------|------|--------|-----|------|
-| ✅ 확정 (구현 완료) | 정산 항목 수정 시 조회 | GET | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
-| ✅ 확정 (구현 완료) | 정산 항목 작성/수정 | PATCH | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
-| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산현황 필터 옵션 조회 | GET | `/api/v1/projects/settlements/filters` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 프로젝트 조회 | GET | `/api/v1/projects/settlements` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 블록 조회 | GET | `/api/v1/projects/{projectId}/settlements` | 접근 권한 보유자(재무 관리 페이지) |
+---
+
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| GET | `/api/v1/projects/settlements/filters` | [정산현황 필터 옵션 조회](#정산현황-필터-옵션-조회-get-apiv1projectssettlementsfilters) | ✅ 확정 (구현 완료, 임시 권한 어댑터) |
+| GET | `/api/v1/projects/settlements` | [정산 현황 프로젝트 조회](#정산-현황-프로젝트-조회-get-apiv1projectssettlements) | ✅ 확정 (구현 완료, 임시 권한 어댑터) |
+| GET | `/api/v1/projects/{projectId}/settlements` | [정산 현황 블록 조회](#정산-현황-블록-조회-get-apiv1projectsprojectidsettlements) | ✅ 확정 (구현 완료, 임시 권한 어댑터) |
+| GET | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | [정산 항목 수정 시 조회](#정산-항목-수정-시-조회-get-apiv1blockssettlementssettleiditemstypeincomeoutcome) | ✅ 확정 (구현 완료) |
+| PATCH | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | [정산 항목 작성/수정](#정산-항목-작성수정-patch-apiv1blockssettlementssettleiditemstypeincomeoutcome) | ✅ 확정 (구현 완료) |
 
 ---
 
@@ -267,7 +271,7 @@
 | `data.blocks[].taxInvoiceAmount` | Long | 세금계산서 금액 — **이 정산 블록의 `plannedTaxAmount`와 같은 값** (아래 메모 참고) |
 | `data.blocks[].paidType` | String | 입출금 구분(`INCOME`\|`OUTCOME`) |
 | `data.blocks[].bankName` | String | 은행명(`OUTCOME`만, 아니면 null) |
-| `data.blocks[].accountNumber` | String | 계좌번호(마스킹, `OUTCOME`만, 아니면 null) |
+| `data.blocks[].accountNumber` | String | 계좌번호(마스킹 없는 원본, `OUTCOME`만, 아니면 null) — 2026-08-16 변경, 아래 메모 참고 |
 | `data.blocks[].accountHolder` | String | 예금주(`OUTCOME`만, 아니면 null) |
 | `data.blocks[].paidDate` | LocalDate | 실제 입출금일 |
 | `data.blocks[].paidAmount` | Long | 실제 입출금액 |
@@ -318,6 +322,12 @@
 - **✅ 회사 범위(company_id) 반영 (2026-08-11 추가)** — `existsActiveProject`(404 판정)와
   `findProjectSettlementBlocks` 둘 다 `project.company_id = #{companyId}` 조건을 추가했다 — 다른 회사의
   `projectId`를 넣으면 존재하지 않는 것과 동일하게 404로 처리된다(크로스테넌트 조회 차단).
+- **`accountNumber` 마스킹 해제 (2026-08-16, 담당자 확정)** — 이 API는 `PagePermissionPort`(`FINANCE` 페이지
+  권한)로만 접근 가능해 실무팀이 아니라 재무팀만 도달한다. 재무팀은 실제 송금 처리를 위해 원본 계좌번호가
+  필요한데, 지금까지는 여기서도 마스킹된 값만 나가서 재무팀이 원본을 볼 정식 경로가 없었다(원본이 나가는
+  다른 API는 프로젝트 편집 권한이 필요해 실무팀 쪽 화면이었음). `AccountNumberCipher.decrypt`(마스킹 없이)로
+  바꿨다 — `decryptAndMask`를 쓰던 다른 응답(정산 항목 조회 등, 실무팀·불특정 다수가 보는 화면)은 그대로
+  마스킹 유지.
 
 ### 정산 항목 수정 시 조회 `GET /api/v1/blocks/settlements/{settleId}/items?type={INCOME|OUTCOME}`
 

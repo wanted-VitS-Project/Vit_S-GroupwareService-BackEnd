@@ -4,22 +4,25 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <!--
-  사원 이름 검색 (결재선 지정용, employee.md §9). 사원·부서·직급 3테이블 조인 조회.
+  사원 후보 검색 (결재선·참여자 지정용, employee.md §9). 사원·부서·직급 3테이블 조인 조회.
   namespace = Mapper 인터페이스 전체 경로 · id = 메서드명 (팀 MyBatis 컨벤션).
   컬럼 별칭 = EmployeeSearchRow 컴포넌트명이라 record 생성자로 자동 매핑된다(AuthQueryMapper 선례).
 -->
 <mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.EmployeeSearchQueryMapper">
 
     <!--
-      결재자 후보. 시스템 계정·퇴사자·삭제 사원 제외 (is_system=0 · resigned_at IS NULL · deleted_at IS NULL).
+      후보 조회. 시스템 계정·퇴사자·삭제 사원 제외 (is_system=0 · resigned_at IS NULL · deleted_at IS NULL).
       부서·직급은 미배정일 수 있어 LEFT JOIN(동명이인 구분용 표시 필드, null 허용).
+      name·departmentId 는 선택 조건 — 서비스가 "둘 다 null" 을 막으므로 여기선 있는 것만 건다.
+      ⚠️ name 이 null 이면 LIKE 자체를 걸지 않는다 — CONCAT('%',null,'%') 는 아무것도 안 맞아 부서 조회를 죽인다.
     -->
-    <select id="searchByName"
+    <select id="search"
             resultType="com.group3.vitamins.employee.application.result.EmployeeSearchRow">
-        SELECT e.user_id AS userId,
-               e.name    AS name,
-               d.name    AS department,
-               jp.name   AS position
+        SELECT e.user_id          AS userId,
+               e.name             AS name,
+               d.name             AS department,
+               jp.name            AS position,
+               e.profile_image_key AS profileImageKey
           FROM employee e
           LEFT JOIN department d     ON d.department_id = e.department_id AND d.company_id = e.company_id
           LEFT JOIN job_position jp  ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id
@@ -27,8 +30,17 @@
            AND e.company_id = #{companyId}
            AND e.resigned_at IS NULL
            AND e.deleted_at IS NULL
-           AND e.name LIKE CONCAT('%', #{name}, '%')
-         ORDER BY e.name ASC
+           <!--
+             ⚠️ %·_ 를 리터럴로 이스케이프한다 — 안 하면 name='%' 하나로 부분일치 계약을 우회해
+             회사 전 사원을 열람할 수 있다(#{name} 바인딩은 주입만 막지 와일드카드는 못 막는다). ! 를 escape 문자로.
+           -->
+           <if test="name != null">
+               AND e.name LIKE CONCAT('%',
+                   REPLACE(REPLACE(REPLACE(#{name}, '!', '!!'), '%', '!%'), '_', '!_'),
+                   '%') ESCAPE '!'
+           </if>
+           <if test="departmentId != null">AND e.department_id = #{departmentId}</if>
+         ORDER BY e.name ASC, e.user_id ASC
     </select>
 
 </mapper>

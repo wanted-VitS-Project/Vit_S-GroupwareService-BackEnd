@@ -32,15 +32,15 @@
 >
 > 요구사항 근거: [`../docs/domain/결재·알림/NOTI-V1.md`](../docs/domain/결재·알림/NOTI-V1.md)
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| # | API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|---|
-| 1 | 알림 목록 조회 | GET | `/api/v1/notifications` | 인증 사용자(본인 알림만) |
-| 2 | 알림 삭제 | DELETE | `/api/v1/notifications/{notificationId}` | 인증 사용자(본인 알림만) |
-| 3 | 알림 이동 대상 조회 | GET | `/api/v1/notifications/{notificationId}/target` | 인증 사용자(본인 알림만) |
-| 4 | 알림 읽음 처리 | PATCH | `/api/v1/notifications/{notificationId}/read` | 인증 사용자(본인 알림만) |
-| 5 | 실시간 알림 수신(SSE) | GET | `/api/v1/notifications/stream` | 인증 사용자(본인 알림만) |
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| GET | `/api/v1/notifications` | [알림 목록 조회](#1-알림-목록-조회) | ✅ 확정 |
+| DELETE | `/api/v1/notifications/{notificationId}` | [알림 삭제](#2-알림-삭제) | ✅ 확정 |
+| GET | `/api/v1/notifications/{notificationId}/target` | [알림 이동 대상 조회](#3-알림-이동-대상-조회) | ✅ 확정 |
+| PATCH | `/api/v1/notifications/{notificationId}/read` | [알림 읽음 처리](#4-알림-읽음-처리) | ✅ 확정 |
+| GET | `/api/v1/notifications/stream` | [실시간 알림 수신(SSE)](#5-실시간-알림-수신-sse) | ✅ 확정 |
 
 ⭐ **알림 생성 공개 API는 없다**(`INV-01`) — `#27`(이벤트 인프라)이 내부적으로만 생성한다.
 ⭐ **읽음 처리 경로는 두 가지다** — 이동 대상 조회(#3) 시 자동(`ACT-004`), 또는 명시 호출(#4, `ACT-006`). 이동 없이 읽음만 표시할 때 #4를 쓴다.

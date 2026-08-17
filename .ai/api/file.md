@@ -39,39 +39,39 @@
 - ✅ **D안 확정**(2026-08-16 · 팀 합의) — 블록 삭제→파일 자동 휴지통(cascade 포함 · 결재잠금 시 블록삭제 `409` 거부). 🚧 **구현 착수 대기** — block 도메인이 아웃바운드 포트로 file 일괄 트래시를 호출하는 방식(이미지 `ImageBlockDetailAdapter` 선례). 착수 시 §12/§13 코드의 활성 고아 반환도 함께 정리.
 - 🚧 **남음**: **#138 의 `index_status` 쓰기(갱신)는 AI 도메인 별도 이슈**(읽기만 file 도메인 소관 · 배정현 확인)
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-### File (9)
-
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 파일 업로드 시작 | POST | `/api/v1/files/uploads` | 스텝 EDITOR |
-| 파일 업로드 완료 통보 | POST | `/api/v1/files/uploads/{fileVersionId}/complete` | 스텝 EDITOR |
-| 블록 파일 목록 조회 | GET | `/api/v1/blocks/{blockId}/files` | 스텝 접근 권한 |
-| 문서명 수정 | PATCH | `/api/v1/files/{fileId}` | 스텝 EDITOR |
-| 휴지통으로 이동 | DELETE | `/api/v1/files/{fileId}` | 스텝 EDITOR |
-| 휴지통에서 복구 | POST | `/api/v1/files/{fileId}/restore` | 스텝 EDITOR |
-| 영구 삭제 | POST | `/api/v1/files/{fileId}/permanent-deletion` | 스텝 EDITOR |
-| **프로젝트 전체 파일 모아보기** | GET | `/api/v1/projects/{projectId}/files` | 프로젝트 접근 권한 |
-| **프로젝트 휴지통 모아보기** | GET | `/api/v1/projects/{projectId}/files/trash` | 프로젝트 접근 권한 |
-
-### FileVersion (5)
-
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 버전 이력 조회 | GET | `/api/v1/files/{fileId}/versions` | 스텝 접근 권한 |
-| **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
-| 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
-| 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
-| **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/projects/{projectId}/file-versions` | 프로젝트 접근 권한 |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| POST | `/api/v1/files/uploads` | [파일 업로드 시작](#1-파일-업로드-시작) | — | 스텝 EDITOR |
+| POST | `/api/v1/files/uploads/{fileVersionId}/complete` | [파일 업로드 완료 통보](#2-파일-업로드-완료-통보) | — | 스텝 EDITOR |
+| GET | `/api/v1/blocks/{blockId}/files` | [블록 파일 목록 조회](#3-블록-파일-목록-조회) | — | 스텝 접근 권한 |
+| PATCH | `/api/v1/files/{fileId}` | [문서명 수정](#4-문서명-수정) | — | 스텝 EDITOR |
+| DELETE | `/api/v1/files/{fileId}` | [휴지통으로 이동](#5-휴지통으로-이동) | — | 스텝 EDITOR |
+| POST | `/api/v1/files/{fileId}/restore` | [휴지통에서 복구](#6-휴지통에서-복구) | — | 스텝 EDITOR |
+| POST | `/api/v1/files/{fileId}/permanent-deletion` | [영구 삭제](#7-영구-삭제) | — | 스텝 EDITOR |
+| GET | `/api/v1/projects/{projectId}/files` | [**프로젝트 전체 파일 모아보기**](#12-프로젝트-전체-파일-모아보기-문서함) | — | 프로젝트 접근 권한 |
+| GET | `/api/v1/projects/{projectId}/files/trash` | [**프로젝트 휴지통 모아보기**](#13-프로젝트-휴지통-모아보기) | — | 프로젝트 접근 권한 |
+| GET | `/api/v1/files/{fileId}/versions` | [버전 이력 조회](#8-버전-이력-조회) | — | 스텝 접근 권한 · 결재선 참여† |
+| GET | `/api/v1/file-versions/{fileVersionId}` | [**버전 단건 조회**](#8-1-버전-단건-조회--결재용-인터페이스) | — | 스텝 접근 권한 · 결재선 참여† |
+| GET | `/api/v1/file-versions/{fileVersionId}/download` | [다운로드 URL 발급](#9-다운로드-url-발급) | — | 스텝 접근 권한 · 결재선 참여† |
+| GET | `/api/v1/file-versions/{fileVersionId}/preview` | [미리보기 조회](#10-미리보기-조회) | — | 스텝 접근 권한 · 결재선 참여† |
+| GET | `/api/v1/projects/{projectId}/file-versions` | [**파일 버전 목록 조회** (비타메이트 분석 선택용)](#11-파일-버전-목록-조회-비타메이트-분석-선택용) | — | 프로젝트 접근 권한 |
+| GET | `/api/v1/admin/files/projects` | [전사 파일 트리 — 프로젝트 목록](#141-프로젝트-목록) | — | ADMIN |
+| GET | `/api/v1/admin/files/projects/{projectId}/stages` | [전사 파일 트리 — 스테이지 목록](#142-스테이지-목록) | — | ADMIN |
+| GET | `/api/v1/admin/files/projects/{projectId}/steps` | [전사 파일 트리 — 스텝 목록](#143-스텝-목록) | — | ADMIN |
+| GET | `/api/v1/admin/files/steps/{stepId}/files` | [전사 파일 트리 — 스텝 내 파일](#144-스텝-내-파일) | — | ADMIN |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
+> † **결재선 참여**(2026-08-17) — 스텝 권한이 없어도 그 파일이 걸린 결재의 결재선에 있으면 읽기 4종이 통과한다(아래 "읽기 경로의 결재선 참여 예외"). 쓰기·블록 파일목록엔 적용 안 됨.
 
 ## 🔑 공통 원칙
 
 ⛔ **파일 단위 권한이 없다.** 스텝의 편집/열람 권한을 그대로 따른다. 열람이면 미리보기와 다운로드 둘 다 된다 (`FILE-014`).
 
-### 권한 판정 순서 ⭐ (2026-08-03 · `global/PERMISSION.md` §4·§6 반영)
+⭐ **읽기 경로의 결재선 참여 예외** (2026-08-17) — 스텝 권한이 없어도 **그 파일이 걸린 결재의 결재선에 요청자가 있으면** 읽기 4종(버전이력·버전단건·다운로드·미리보기)이 통과한다. 프로젝트 미소속 결재자(대표 직급·MASTER)가 결재 상세는 열리는데(`ApprovalViewPolicy` 참여 판정) 첨부는 403 이던 비대칭을 없앤 것이다. **읽기 전용**이며 그 파일이 걸린 결재로만 한정한다(업로드·수정·삭제·블록 파일목록은 예외 없음). 판정은 파일 도메인이 이미 소유한 `ApprovalLockQueryPort` 에 `isApprovalLineParticipant(fileId, userId)` 를 추가해 `file_version→approval_document→approval_revision→approval_line` 조인으로 확인한다(§7 `existsAnyApprovalReference` 와 같은 어댑터, **결재팀 신설 포트 불필요**).
+
+### 권한 판정 순서 ⭐ (2026-08-03 · `../docs/global/PERMISSION.md` §4·§6 반영)
 
 ```
 1) 전역 role
@@ -400,7 +400,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/files/{fileId}/versions` |
-| 인증 필요 | Y · 스텝 접근 권한 |
+| 인증 필요 | Y · 스텝 접근 권한 **또는** 연결된 결재의 결재선 참여(읽기 전용, 공통 원칙 참조) |
 | 요구사항 | VER-001 · VER-002 · VER-007 · VER-010 · USC-VER-001 |
 
 ⛔ **버전 삭제와 되돌리기가 없다.** append-only 이며 조회 전용이다 (`VER-007`).
@@ -434,12 +434,12 @@
 
 ---
 
-## 11. 버전 단건 조회 ⭐ (결재용 인터페이스)
+## 8-1. 버전 단건 조회 ⭐ (결재용 인터페이스)
 
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/file-versions/{fileVersionId}` |
-| 인증 필요 | Y · 스텝 접근 권한 |
+| 인증 필요 | Y · 스텝 접근 권한 **또는** 연결된 결재의 결재선 참여(읽기 전용, 공통 원칙 참조) |
 | 근거 | `BLOCK.md` §4-4 — *"파일 블록 담당이 이 조회 인터페이스를 제공한다"* |
 
 **왜 필요한가** — 결재 블록은 상신 시점의 `file_version_id` 를 `approval_document` 에 박아 **버전을 고정**한다. 이후 결재 화면에서 그 버전 하나를 열어야 하는데, 버전 이력 조회(`/files/{fileId}/versions`)는 `fileId` 를 알아야 하고 목록 전체를 받는다. 결재 쪽은 `fileVersionId` 만 갖고 있다.
@@ -489,7 +489,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/file-versions/{fileVersionId}/download` |
-| 인증 필요 | Y · 스텝 접근 권한 |
+| 인증 필요 | Y · 스텝 접근 권한 **또는** 연결된 결재의 결재선 참여(읽기 전용, 공통 원칙 참조) |
 | 요구사항 | FILE-014 · VER-011 · VER-012 · USC-VER-008 · USC-VER-009 |
 
 ⛔ **파일 바이너리를 반환하지 않는다.** 저장소 다운로드 URL 을 발급하고 클라이언트가 직접 받는다. 서버를 거치지 않아 대역폭과 메모리를 쓰지 않는다.
@@ -513,7 +513,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/file-versions/{fileVersionId}/preview` |
-| 인증 필요 | Y · 스텝 접근 권한 |
+| 인증 필요 | Y · 스텝 접근 권한 **또는** 연결된 결재의 결재선 참여(읽기 전용, 공통 원칙 참조) |
 | 요구사항 | VER-008~010 · FILE-013 · USC-VER-007 |
 
 > 🔑 **저장소 URL 을 발급하지 않는 이유** — presigned URL 을 주면 클라이언트가 **전체 PDF 에 접근**하게 되어 "최대 5페이지" 제한이 무의미해진다. 그래서 미리보기만 **서버가 앞 5페이지를 잘라낸 PDF 를 직접 반환**한다. 다운로드는 어차피 전체를 주는 것이므로 presigned 를 쓴다.

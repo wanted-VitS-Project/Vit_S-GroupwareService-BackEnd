@@ -1,5 +1,6 @@
 package com.group3.vitamins.file.application;
 
+import com.group3.vitamins.file.application.port.ApprovalLockQueryPort;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
 import com.group3.vitamins.file.application.port.FileQueryPort;
 import com.group3.vitamins.file.application.port.FileStoragePort;
@@ -70,6 +71,7 @@ class FileQueryServiceTest {
     private FileStoragePort fileStoragePort;
     private PdfPreviewPort pdfPreviewPort;
     private ProjectAccessUseCase projectAccessUseCase;
+    private ApprovalLockQueryPort approvalLockQueryPort;
     private FileQueryService service;
 
     @BeforeEach
@@ -82,10 +84,11 @@ class FileQueryServiceTest {
         fileStoragePort = Mockito.mock(FileStoragePort.class);
         pdfPreviewPort = Mockito.mock(PdfPreviewPort.class);
         projectAccessUseCase = Mockito.mock(ProjectAccessUseCase.class);
+        approvalLockQueryPort = Mockito.mock(ApprovalLockQueryPort.class);
         service = new FileQueryService(
                 fileVersionRepository, fileRepository, fileQueryPort,
                 blockCatalogPort, stepAccessUseCase, fileStoragePort, pdfPreviewPort,
-                projectAccessUseCase);
+                projectAccessUseCase, approvalLockQueryPort);
     }
 
     // ---- 헬퍼 ---------------------------------------------------------------
@@ -182,6 +185,25 @@ class FileQueryServiceTest {
             assertThatThrownBy(() -> service.getDownloadUrl(FILE_VERSION_ID, USER, ROLE))
                     .satisfies(hasCode(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
         }
+
+        @Test
+        @DisplayName("스텝 권한이 없어도 그 파일 결재의 결재선 참여자면 다운로드된다 (2026-08-17 fallback)")
+        void approvalParticipantBypassesStepAccess() {
+            when(fileVersionRepository.findById(FILE_VERSION_ID))
+                    .thenReturn(Optional.of(version(1, UploadStatus.COMPLETED, "pdf")));
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(stepAccessUseCase.requireAccess(STEP_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+            when(approvalLockQueryPort.isApprovalLineParticipant(FILE_ID, USER)).thenReturn(true);
+            when(fileStoragePort.presignDownload(anyString(), anyString()))
+                    .thenReturn(new FileStoragePort.PresignedUrl("https://s3/get", Instant.now()));
+
+            DownloadUrlResult result = service.getDownloadUrl(FILE_VERSION_ID, USER, ROLE);
+
+            assertThat(result.downloadUrl()).isEqualTo("https://s3/get");
+        }
     }
 
     @Nested
@@ -250,6 +272,37 @@ class FileQueryServiceTest {
 
             assertThatThrownBy(() -> service.getVersionHistory(FILE_ID, USER, ROLE))
                     .satisfies(hasCode(FileErrorCode.FILE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("스텝 권한이 없어도 그 파일 결재의 결재선 참여자면 버전 이력이 조회된다 (2026-08-17 fallback)")
+        void approvalParticipantBypassesStepAccess() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(stepAccessUseCase.requireAccess(STEP_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+            when(approvalLockQueryPort.isApprovalLineParticipant(FILE_ID, USER)).thenReturn(true);
+            when(fileQueryPort.findCompletedVersions(FILE_ID)).thenReturn(List.of(projection(74L, 1)));
+
+            VersionHistoryResult result = service.getVersionHistory(FILE_ID, USER, ROLE);
+
+            assertThat(result.versionCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("스텝 권한도 없고 결재선 참여자도 아니면 FILE_ACCESS_PERMISSION_REQUIRED")
+        void nonParticipantWithoutStepAccessDenied() {
+            when(fileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile()));
+            when(fileQueryPort.findBlockIdByFileId(FILE_ID)).thenReturn(Optional.of(BLOCK_ID));
+            when(blockCatalogPort.resolveAttachableBlockStepId(BLOCK_ID)).thenReturn(Optional.of(STEP_ID));
+            when(stepAccessUseCase.requireAccess(STEP_ID, USER, ROLE))
+                    .thenThrow(new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+            // isApprovalLineParticipant 은 mock 기본값 false
+
+            assertThatThrownBy(() -> service.getVersionHistory(FILE_ID, USER, ROLE))
+                    .satisfies(hasCode(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED));
+            verify(fileQueryPort, never()).findCompletedVersions(FILE_ID);
         }
     }
 
