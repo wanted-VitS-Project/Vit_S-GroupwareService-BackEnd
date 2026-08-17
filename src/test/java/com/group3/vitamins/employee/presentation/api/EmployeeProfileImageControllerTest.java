@@ -20,14 +20,14 @@ class EmployeeProfileImageControllerTest {
     @Test
     @DisplayName("presigned URL 로 302 redirect 하고 Cache-Control 은 max-age=300, private 다")
     void redirectsWithShortMaxAge() {
-        when(profileImageUseCase.resolveViewUrl("vitas-EMP001"))
-                .thenReturn("https://s3.example/presigned?sig=abc");
+        // 도메인 없는 불투명 값 — PUBLIC 레포라 실제처럼 보이는 주소를 커밋하지 않는다.
+        String presigned = "presigned-url-placeholder";
+        when(profileImageUseCase.resolveViewUrl("vitas-EMP001")).thenReturn(presigned);
 
         ResponseEntity<Void> response = controller.serve("vitas-EMP001");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
-        assertThat(response.getHeaders().getLocation())
-                .hasToString("https://s3.example/presigned?sig=abc");
+        assertThat(response.getHeaders().getLocation()).hasToString(presigned);
         // no-store 였다면 브라우저가 매번 왕복 → 깜빡임. 짧은 max-age 로 왕복을 줄이되 presigned(1시간)보다 짧게.
         assertThat(response.getHeaders().getCacheControl()).isEqualTo("max-age=300, private");
     }

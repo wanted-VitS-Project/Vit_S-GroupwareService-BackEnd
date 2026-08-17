@@ -30,7 +30,15 @@
            AND e.company_id = #{companyId}
            AND e.resigned_at IS NULL
            AND e.deleted_at IS NULL
-           <if test="name != null">AND e.name LIKE CONCAT('%', #{name}, '%')</if>
+           <!--
+             ⚠️ %·_ 를 리터럴로 이스케이프한다 — 안 하면 name='%' 하나로 부분일치 계약을 우회해
+             회사 전 사원을 열람할 수 있다(#{name} 바인딩은 주입만 막지 와일드카드는 못 막는다). ! 를 escape 문자로.
+           -->
+           <if test="name != null">
+               AND e.name LIKE CONCAT('%',
+                   REPLACE(REPLACE(REPLACE(#{name}, '!', '!!'), '%', '!%'), '_', '!_'),
+                   '%') ESCAPE '!'
+           </if>
            <if test="departmentId != null">AND e.department_id = #{departmentId}</if>
          ORDER BY e.name ASC, e.user_id ASC
     </select>

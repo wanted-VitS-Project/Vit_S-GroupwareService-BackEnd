@@ -14,13 +14,15 @@ import static org.mockito.Mockito.verify;
 class PasswordResetMailSenderTest {
 
     private final JavaMailSender mailSender = Mockito.mock(JavaMailSender.class);
+    // 도메인 없는 불투명 값 — PUBLIC 레포라 실제처럼 보이는 주소를 커밋하지 않는다.
+    private static final String LOGIN_URL = "login-url-placeholder";
     private final PasswordResetMailSender sender =
-            new PasswordResetMailSender(mailSender, "noreply@vitamins.com", "https://app.example/login");
+            new PasswordResetMailSender(mailSender, "mail-sender", LOGIN_URL);
 
     @Test
     @DisplayName("본문에 사번·이름·임시 비밀번호가 모두 담긴다")
     void bodyContainsUserIdAndPassword() {
-        sender.sendTempPassword("hong@vitamins.com", "vitas-EMP001", "홍길동", "RAW-PW-123");
+        sender.sendTempPassword("recipient-address", "vitas-EMP001", "홍길동", "RAW-PW-123");
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(captor.capture());
@@ -30,6 +32,6 @@ class PasswordResetMailSenderTest {
                 .contains("vitas-EMP001")   // 로그인 아이디(사번) — 이번에 추가된 핵심
                 .contains("홍길동")
                 .contains("RAW-PW-123")
-                .contains("https://app.example/login");
+                .contains(LOGIN_URL);
     }
 }
