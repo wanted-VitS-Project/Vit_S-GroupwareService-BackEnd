@@ -45,7 +45,16 @@ for f in src/main/resources/db/demo/kdt/*.sql; do mysql -h "$DB_HOST" -u "$DB_US
 | 08 | `08_approval.sql` | `approval` **43** · `revision` 44 · `line` 86 · `document` 14 |
 | 09 | `09_bid_review.sql` | `bid_review` 1 · 확정 요약에 프로젝트 연결 |
 | 10 | `10_page_permission.sql` | 화면 접근 권한 **4** (`BIDDING` 3 · `FINANCE` 1) |
-| 11 | `11_activity_log.sql` | 활동 로그 34 · 알림 3 — ⛔ **반드시 맨 마지막** |
+| 11 | `11_activity_log.sql` | 활동 로그 34 · 알림 3 — ⛔ K-디지털 시드의 맨 마지막 |
+| 12 | `12_kb_bid.sql` | ⭐ **KB 추가분** — KB국민은행 디지털 위탁교육 공고 8011(직접등록)·첨부 6·AI요약·상태·이력 |
+| 13 | `13_kb_project.sql` | P8011 · 스테이지 7 · 스텝 17 · 참여자 11 · 스텝권한 4 |
+| 14 | `14_kb_blocks.sql` | 블록 121(+삭제 2) · text 57 · checklist 75 · image 19 · 정산 8 · 결재블록 13 |
+| 15 | `15_kb_files.sql` | file 21 · file_version 27 · block_file |
+| 16 | `16_kb_issues.sql` | issue 16 · issue_assign · issue_block |
+| 17 | `17_kb_finance.sql` | cash_flow 14 · tax_invoice 12 — ⚠️ **KB 위탁료는 과세** (KDT 훈련비 면세와 반대) |
+| 18 | `18_kb_approval.sql` | approval 13 · revision · line · document |
+| 19 | `19_kb_bid_review.sql` | bid_review 8011 · summary.project_id = 8011 연결 |
+| 20 | `20_kb_activity.sql` | 활동 로그 27 · 알림 3 — ⛔ **반드시 맨 마지막** |
 
 ### 순서를 어기면 깨지는 곳
 

@@ -53,7 +53,7 @@ INSERT INTO block (block_id, step_id, title, type, type_id, owner, row_index, co
 (9330,9401,'외주 범위','TEXT',9167,'vitawear-VW111',0,1,0,'vitawear-VW111'),
 (9331,9401,'업체별 계약 조건','TEXT',9168,'vitawear-VW111',0,1,1,'vitawear-VW111'),
 (9332,9401,'계약 확인','CHECKLIST',9113,'vitawear-VW111',0,1,2,'vitawear-VW111'),
-(9333,9401,'외주 계약서','FILE',NULL,'vitawear-VW111',1,3,0,'vitawear-VW111'),
+(9333,9401,'외주 계약서','FILE',NULL,'vitawear-VW111',1,2,0,'vitawear-VW111'),
 -- 9402 생산 외주비 지급
 (9334,9402,'지급 기준','TEXT',9169,'vitawear-VW108',0,1,0,'vitawear-VW108'),
 (9335,9402,'지급 현황','TEXT',9170,'vitawear-VW108',0,1,1,'vitawear-VW108'),
@@ -61,7 +61,7 @@ INSERT INTO block (block_id, step_id, title, type, type_id, owner, row_index, co
 (9337,9402,'1차 발주 대금','SETTLEMENT',9007,'vitawear-VW108',1,1,0,'vitawear-VW108'),
 (9338,9402,'2차 발주 대금','SETTLEMENT',9008,'vitawear-VW108',1,1,1,'vitawear-VW108'),
 (9339,9402,'3차 발주 대금','SETTLEMENT',9009,'vitawear-VW108',1,1,2,'vitawear-VW108'),
-(9340,9402,'발주 계산서·이체 확인','FILE',NULL,'vitawear-VW108',2,3,0,'vitawear-VW108'),
+(9340,9402,'발주 계산서·이체 확인','FILE',NULL,'vitawear-VW108',2,2,0,'vitawear-VW108'),
 -- 9403 용역 외주비 지급
 (9341,9403,'용역 외주 목록','TEXT',9171,'vitawear-VW108',0,1,0,'vitawear-VW108'),
 (9342,9403,'단가와 정산 방식','TEXT',9172,'vitawear-VW108',0,1,1,'vitawear-VW108'),
