@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.project.step.infrastructure.adapter.StepAccessQueryMapper">
+
+    <!--
+      판정 재료 5개. ⚠️ 컬럼 순서 = StepAccessRow 필드 순서 (MyBatis 위치 기반 생성자 매핑).
+
+      회사 경계·참여 여부를 WHERE 가 아니라 SELECT 로 내린다 —
+      WHERE 로 거르면 403 이어야 할 것이 404 로 나간다 (ProjectDetailQueryMapper 와 같은 이유).
+    -->
+    <sql id="accessColumns">
+        s.step_id                  AS stepId,
+        s.project_id               AS projectId,
+        (p.project_id IS NOT NULL) AS projectVisible,
+        pm.permission              AS memberPermission,
+        sp.permission              AS overridePermission
+    </sql>
+
+    <!--
+      ⚠️ 세 조건이 전부 ON 에 있고 WHERE 에는 step 조건만 있다. 하나라도 WHERE 로 내려가면
+      "권한 없음(403)" 이 "스텝 없음(404)" 으로 바뀐다 — 컴파일도 되고 예외도 안 난다.
+
+      행 증식 없음: project 는 PK, project_member 는 uk_pm_project_user(project_id,user_id),
+      step_permission 은 uk_sp_step_user(step_id,user_id) 로 각각 최대 1행이다. 1×1×1×1 = 1행.
+
+      목록용 배치 조회가 필요해지면 이 조각을 그대로 쓰고 WHERE 만 IN 으로 바꾼 select 를 추가한다.
+    -->
+    <sql id="accessJoins">
+        FROM step s
+        LEFT JOIN project p
+               ON p.project_id = s.project_id
+              AND p.company_id = #{companyId}
+              AND p.deleted_at IS NULL
+        LEFT JOIN project_member pm
+               ON pm.project_id = s.project_id
+              AND pm.user_id = #{requesterUserId}
+        LEFT JOIN step_permission sp
+               ON sp.step_id = s.step_id
+              AND sp.user_id = #{requesterUserId}
+    </sql>
+
+    <select id="findAccess"
+            resultType="com.group3.vitamins.project.step.infrastructure.adapter.StepAccessRow">
+        SELECT <include refid="accessColumns"/>
+        <include refid="accessJoins"/>
+        WHERE s.step_id = #{stepId}
+          AND s.deleted_at IS NULL
+    </select>
+
+</mapper>

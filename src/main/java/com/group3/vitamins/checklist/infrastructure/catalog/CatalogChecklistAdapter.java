@@ -79,13 +79,11 @@ public class CatalogChecklistAdapter implements ChecklistRepository {
     }
 
     @Override
-    public int countActiveItems(Long chkBlockId) {
-        return (int) springDataChecklistRepository.countByChkBlockIdAndDeletedAtIsNull(chkBlockId);
-    }
-
-    @Override
-    public int countCompletedActiveItems(Long chkBlockId) {
-        return (int) springDataChecklistRepository.countByChkBlockIdAndCompletedTrueAndDeletedAtIsNull(chkBlockId);
+    public CountSummary countSummary(Long chkBlockId) {
+        Object[] row = springDataChecklistRepository.countTotalAndCompleted(chkBlockId).get(0);
+        int total = ((Number) row[0]).intValue();
+        int completed = row[1] == null ? 0 : ((Number) row[1]).intValue();
+        return new CountSummary(total, completed);
     }
 
     private ChecklistItem toDomain(ChecklistJpaEntity entity) {

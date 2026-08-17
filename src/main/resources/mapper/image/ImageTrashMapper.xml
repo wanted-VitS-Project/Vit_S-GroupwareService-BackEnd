@@ -19,7 +19,19 @@
         JOIN step s ON s.step_id = b.step_id
         WHERE s.project_id = #{projectId}
         AND i.deleted_at IS NOT NULL
-        ORDER BY i.deleted_at DESC
+        ORDER BY i.deleted_at DESC, i.img_id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- findTrashedByProjectId와 필터가 완전히 같아야 페이지 개수 계산이 어긋나지 않는다. -->
+    <select id="countTrashedByProjectId" resultType="long">
+        SELECT COUNT(*)
+        FROM image i
+        JOIN image_block ib ON ib.img_block_id = i.img_block_id
+        JOIN block b ON b.block_id = ib.block_id
+        JOIN step s ON s.step_id = b.step_id
+        WHERE s.project_id = #{projectId}
+        AND i.deleted_at IS NOT NULL
     </select>
 
     <select id="findStepIdByImgBlockId" resultType="java.lang.Long">

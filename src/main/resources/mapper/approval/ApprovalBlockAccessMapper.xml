@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.group3.vitamins.approval.infrastructure.persistence.mapper.ApprovalBlockAccessMapper">
+
+    <!-- block → step. 두 리포지토리 조회(블록 1발 + 스텝 1발)를 조인 1발로 대체한다.
+         step 을 거치는 이유는 block.project_id 컬럼이 폐기됐기 때문이다.
+         삭제 필터는 대체 전 동작을 그대로 옮긴 것이다 —
+           BlockRepository.findById  → findByBlockIdAndDeletedAtIsNull
+           StepRepository.findById   → findByStepIdAndDeletedAtIsNull -->
+    <select id="findBlockSummary"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalBlockSummaryRow">
+        SELECT b.block_id   AS blockId,
+               b.type       AS blockType,
+               s.step_id    AS stepId,
+               s.project_id AS projectId,
+               b.created_by AS createdBy
+        FROM block b
+        JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+        WHERE b.block_id = #{blockId}
+          AND b.deleted_at IS NULL
+    </select>
+
+    <!-- 회사(테넌트) 경계 검사. 대체 전에는 블록 조회(2발) 뒤 프로젝트를 회사 조건으로 다시 조회했다(총 3발).
+         프로젝트 조건은 ProjectRepository.findById(projectId, companyId) 와 같다
+         (findByProjectIdAndCompanyIdAndDeletedAtIsNull). -->
+    <select id="existsBlockInCompany" resultType="java.lang.Integer">
+        SELECT 1
+        FROM block b
+        JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+        JOIN project p
+            ON p.project_id = s.project_id
+           AND p.company_id = #{companyId}
+           AND p.deleted_at IS NULL
+        WHERE b.block_id = #{blockId}
+          AND b.deleted_at IS NULL
+    </select>
+
+    <!-- 유효 권한 재료. 대체 전에는 블록 조회(2발) + project_member(1발) + step_permission(1발) = 4발이었다.
+
+         ⚠️ pm·sp 의 user_id 조건을 WHERE 로 내리지 마라. LEFT JOIN 의 ON 에 있어야
+            "블록은 있는데 그 사람 권한 행이 없다"가 NULL 두 개로 돌아온다. WHERE 로 내리면
+            미참여자에게 행이 통째로 사라져 블록 부재와 구분이 안 된다 — 컴파일도 되고 예외도 안 난다.
+
+         permission 판정(NONE 이면 오버라이드 무시 등)은 여기서 하지 않는다. 어댑터가 조합한다. -->
+    <select id="findBlockPermission"
+            resultType="com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalBlockPermissionRow">
+        SELECT pm.permission AS projectPermission,
+               sp.permission AS stepPermission
+        FROM block b
+        JOIN step s
+            ON s.step_id = b.step_id
+           AND s.deleted_at IS NULL
+        LEFT JOIN project_member pm
+            ON pm.project_id = s.project_id
+           AND pm.user_id = #{userId}
+        LEFT JOIN step_permission sp
+            ON sp.step_id = s.step_id
+           AND sp.user_id = #{userId}
+        WHERE b.block_id = #{blockId}
+          AND b.deleted_at IS NULL
+    </select>
+
+</mapper>

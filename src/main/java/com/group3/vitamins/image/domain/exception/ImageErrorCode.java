@@ -20,6 +20,7 @@ public enum ImageErrorCode implements ErrorCode {
     BLOCK_DELETED_CANNOT_RESTORE("IMG-009", "상위 블록이 삭제되어 하위 항목을 복구할 수 없습니다."),
     TOO_MANY_FILES("IMG-010", "한 번에 업로드할 수 있는 파일 개수를 초과했습니다."),
     INVALID_DIRECTION("IMG-011", "direction 값이 올바르지 않습니다."),
+    PAGE_QUERY_INVALID("IMG-012", "페이지 조회 조건이 올바르지 않습니다."),
     // 낙관적 락(CONCURRENCY.md) — 코드명은 문서 §5-3 네이밍 규칙(`{도메인}_VERSION_CONFLICT`)을 그대로 따른다.
     IMAGE_VERSION_REQUIRED("IMAGE_VERSION_REQUIRED", "버전 정보가 없습니다. 화면을 새로고침해 주세요."),
     IMAGE_VERSION_CONFLICT("IMAGE_VERSION_CONFLICT", "다른 사용자가 먼저 수정했습니다.");

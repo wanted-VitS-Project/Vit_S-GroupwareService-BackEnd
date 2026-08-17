@@ -13,4 +13,7 @@ public interface ApprovalLockMapper {
 
     /** 문서의 버전을 참조하는 결재(진행 중·완료 무관)가 하나라도 있으면 true (§7). */
     boolean existsAnyApprovalReference(@Param("fileId") Long fileId);
+
+    /** 이 파일이 걸린 결재의 결재선에 요청자(user_id)가 있으면 true (읽기 접근 fallback). */
+    boolean isApprovalLineParticipant(@Param("fileId") Long fileId, @Param("userId") String userId);
 }

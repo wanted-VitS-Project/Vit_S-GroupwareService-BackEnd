@@ -13,8 +13,9 @@ public interface PasswordResetMailPort {
      * 이를 잡아 명세의 {@code MAIL_SEND_FAILED}(passwordChanged=true)로 집계한다. 이미 비밀번호는 바뀐 상태다.
      *
      * @param toEmail     수신 이메일 (호출부가 존재를 이미 확인했다)
+     * @param userId      로그인 아이디(사번). 메일에 함께 안내해 사용자가 자기 아이디를 알 수 있게 한다
      * @param name        사원 이름 (인사말)
      * @param rawPassword 평문 임시 비밀번호. 로그에 남기지 않는다
      */
-    void sendTempPassword(String toEmail, String name, String rawPassword);
+    void sendTempPassword(String toEmail, String userId, String name, String rawPassword);
 }

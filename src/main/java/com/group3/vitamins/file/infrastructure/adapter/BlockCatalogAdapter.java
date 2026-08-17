@@ -34,4 +34,11 @@ public class BlockCatalogAdapter implements BlockCatalogPort {
                         || block.getType() == BlockType.APPROVAL)
                 .map(Block::getStepId);
     }
+
+    @Override
+    public boolean isApprovalBlock(Long blockId) {
+        return blockRepository.findById(blockId)
+                .filter(block -> block.getType() == BlockType.APPROVAL)
+                .isPresent();
+    }
 }

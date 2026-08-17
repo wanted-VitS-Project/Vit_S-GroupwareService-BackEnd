@@ -36,7 +36,10 @@ public record EmployeeSummaryResponse(
         @Schema(description = "비밀번호 상태", example = "NORMAL")
         String passwordStatus,
         @Schema(description = "퇴사일 yyyy-MM-dd (null = 재직중)", example = "2026-08-01")
-        String resignedAt
+        String resignedAt,
+        @Schema(description = "프로필 사진 서빙 경로. 사진 없으면 null (프론트는 null 이면 이니셜 아바타)",
+                example = "/api/v1/employees/vitas-EMP001/profile-image")
+        String profileImageUrl
 ) {
 
     public static EmployeeSummaryResponse from(EmployeeListRow row) {
@@ -51,7 +54,16 @@ public record EmployeeSummaryResponse(
                 row.role(),
                 row.accountStatus(),
                 passwordStatus(row.mustChangePassword()),
-                formatDate(row.resignedAt()));
+                formatDate(row.resignedAt()),
+                profileImageUrl(row.userId(), row.profileImageKey()));
+    }
+
+    /**
+     * 아바타 서빙 경로. 키가 없으면 null 이라 프론트가 호출 자체를 건너뛴다.
+     * presigned URL 이 아니라 <b>안 만료되는 우리 경로</b>다 — 서명·만료는 서빙 API 가 책임진다 (`employee.md` §10).
+     */
+    public static String profileImageUrl(String userId, String profileImageKey) {
+        return profileImageKey == null ? null : "/api/v1/employees/" + userId + "/profile-image";
     }
 
     /** 이메일이 있고 공백이 아니면 등록된 것으로 본다. */

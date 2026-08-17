@@ -1,5 +1,6 @@
 package com.group3.vitamins.settlement.application.service;
 
+import com.group3.vitamins.settlement.application.port.SettlementProjectLookupPort;
 import com.group3.vitamins.settlement.domain.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,11 +22,24 @@ import java.util.Objects;
 public class SettlementHandlerService {
 
     private final SettlementRepository settlementRepository;
+    private final SettlementProjectLookupPort settlementProjectLookupPort;
 
-    /** 블록 생성 시 내용이 빈 정산 상세 행을 만든다. 내용 채우기는 SettlementCommandService 소관이다. */
+    /**
+     * 블록 생성 시 내용이 빈 정산 상세 행을 만든다. 내용 채우기는 SettlementCommandService 소관이다.
+     *
+     * <p>project_id 를 여기서 찾아 채운다 — 조회 경로(진행률 집계)가 이 값을 조인 없이 읽는다.
+     */
     public Long create(Long blockId) {
-        Long settleId = settlementRepository.create(blockId);
-        log.info("정산 블록 상세 행 생성 - blockId={}, settleId={}", blockId, settleId);
+        Long projectId = settlementProjectLookupPort.findProjectIdByBlockId(blockId);
+        if (projectId == null) {
+            // 방금 만든 블록의 스텝을 못 찾는 상황이라 정상 흐름에서는 나올 수 없다.
+            // 여기서 막지 않으면 NOT NULL 위반으로 INSERT 가 터지는데, 그때는 원인이 안 보인다.
+            throw new IllegalStateException(
+                    "정산 블록의 프로젝트를 찾지 못했다 - blockId=" + blockId);
+        }
+
+        Long settleId = settlementRepository.create(blockId, projectId);
+        log.info("정산 블록 상세 행 생성 - blockId={}, projectId={}, settleId={}", blockId, projectId, settleId);
         return settleId;
     }
 

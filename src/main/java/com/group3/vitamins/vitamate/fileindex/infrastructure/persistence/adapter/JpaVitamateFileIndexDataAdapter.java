@@ -10,6 +10,7 @@ import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndex
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunk;
 import com.group3.vitamins.vitamate.fileindex.application.port.VitamateFileIndexDataPort.SavedDocumentChunks;
 import com.group3.vitamins.vitamate.fileindex.application.result.VitamateFileIndexSourceResult;
+import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.mapper.DocumentChunkBatchMapper;
 import com.group3.vitamins.vitamate.fileindex.infrastructure.persistence.repository.FileIndexJpaRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
     private final SpringDataFileVersionRepository fileVersionRepository;
     private final SpringDataFileRepository fileRepository;
     private final DocumentChunkJpaRepository documentChunkRepository;
+    private final DocumentChunkBatchMapper documentChunkBatchMapper;
     private final FileIndexJpaRepository fileIndexRepository;
     private final FileStoragePort fileStoragePort;
     private final EntityManager entityManager;
@@ -92,6 +94,8 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
                 indexAttemptId,
                 "PENDING",
                 null,
+                now,
+                now.plus(FileIndexLeasePolicy.LEASE_DURATION),
                 null,
                 now
         );
@@ -102,17 +106,7 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
 
         documentChunkRepository.softDeleteMissingChunks(fileVersionId, chunkIndexes, now);
 
-        chunks.forEach(chunk -> documentChunkRepository.upsertChunk(
-                        fileVersionId,
-                        chunk.chunkIndex(),
-                        chunk.pageNumber(),
-                        chunk.sectionTitle(),
-                        chunk.startOffset(),
-                        chunk.endOffset(),
-                        chunk.tokenCount(),
-                        chunk.excerpt(),
-                        now
-                ));
+        documentChunkBatchMapper.upsertChunks(fileVersionId, chunks, now);
 
         List<SavedDocumentChunk> savedChunks = documentChunkRepository.findActiveByFileVersionIdAndChunkIndexIn(fileVersionId, chunkIndexes)
                 .stream()
@@ -152,14 +146,8 @@ public class JpaVitamateFileIndexDataAdapter implements VitamateFileIndexDataPor
             return 0;
         }
 
-        return chunks.stream()
-                .mapToInt(chunk -> documentChunkRepository.updateChunkEmbedding(
-                        fileVersionId,
-                        chunk.documentChunkId(),
-                        chunk.chromaId(),
-                        embeddingModel,
-                        now
-                ))
-                .sum();
+        return documentChunkBatchMapper.updateChunkEmbeddings(
+                fileVersionId, chunks, embeddingModel, now
+        );
     }
 }

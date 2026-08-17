@@ -3,7 +3,9 @@ package com.group3.vitamins.vitamate.analysis.infrastructure.persistence.adapter
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisStorePort;
 import com.group3.vitamins.vitamate.analysis.application.result.CreateVitamateAnalysisResult;
 import com.group3.vitamins.vitamate.analysis.domain.model.AnalysisDocumentRole;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.DocumentChunkEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisDocumentEntity;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.DocumentChunkJpaRepository;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisDocumentJpaRepository;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.repository.VitamateAnalysisJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,10 +54,17 @@ class JpaVitamateAnalysisStoreTest {
     @Autowired
     private VitamateAnalysisDocumentJpaRepository documentRepository;
 
+    @Autowired
+    private DocumentChunkJpaRepository chunkRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @BeforeEach
     void setUp() {
         documentRepository.deleteAll();
         analysisRepository.deleteAll();
+        chunkRepository.deleteAll();
     }
 
     @Test
@@ -101,6 +111,91 @@ class JpaVitamateAnalysisStoreTest {
                 .filteredOn(document -> document.getFileVersionId().equals(201L))
                 .singleElement()
                 .satisfies(document -> assertThat(document.getDocumentRole()).isEqualTo("TARGET"));
+    }
+
+    @Test
+    @DisplayName("existsAllCitationTargets는 선택 문서에 속한 활성 청크를 정확히 참조하면 true를 반환한다")
+    void existsAllCitationTargetsReturnsTrueForValidCitations() {
+        Long analysisId = savePendingAnalysis("idem-key-citation-1");
+        store.saveAnalysisDocuments(analysisId, List.of(
+                new VitamateAnalysisStorePort.NewAnalysisDocument(101L, AnalysisDocumentRole.TARGET.name())
+        ));
+        Long chunkA = saveChunk(101L, 0);
+        Long chunkB = saveChunk(101L, 1);
+
+        boolean result = store.existsAllCitationTargets(analysisId, List.of(
+                citation(chunkA, 101L),
+                citation(chunkB, 101L)
+        ));
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    @DisplayName("existsAllCitationTargets는 소프트삭제된 청크를 참조하면 false를 반환한다")
+    void existsAllCitationTargetsReturnsFalseForDeletedChunk() {
+        Long analysisId = savePendingAnalysis("idem-key-citation-2");
+        store.saveAnalysisDocuments(analysisId, List.of(
+                new VitamateAnalysisStorePort.NewAnalysisDocument(102L, AnalysisDocumentRole.TARGET.name())
+        ));
+        Long chunkId = saveChunk(102L, 0);
+        jdbcTemplate.update(
+                "UPDATE document_chunk SET deleted_at = ? WHERE document_chunk_id = ?",
+                LocalDateTime.now(), chunkId
+        );
+
+        boolean result = store.existsAllCitationTargets(analysisId, List.of(
+                citation(chunkId, 102L)
+        ));
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    @DisplayName("existsAllCitationTargets는 청크가 실제로는 다른 파일버전 소속이면 false를 반환한다")
+    void existsAllCitationTargetsReturnsFalseWhenChunkBelongsToDifferentFileVersion() {
+        Long analysisId = savePendingAnalysis("idem-key-citation-3");
+        store.saveAnalysisDocuments(analysisId, List.of(
+                new VitamateAnalysisStorePort.NewAnalysisDocument(103L, AnalysisDocumentRole.TARGET.name()),
+                new VitamateAnalysisStorePort.NewAnalysisDocument(104L, AnalysisDocumentRole.TARGET.name())
+        ));
+        // 청크는 104번 파일버전 소속인데, citation은 103번 소속이라고 주장한다.
+        Long chunkId = saveChunk(104L, 0);
+
+        boolean result = store.existsAllCitationTargets(analysisId, List.of(
+                citation(chunkId, 103L)
+        ));
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    @DisplayName("existsAllCitationTargets는 선택하지 않은 파일버전을 참조하면 false를 반환한다")
+    void existsAllCitationTargetsReturnsFalseWhenFileVersionNotSelected() {
+        Long analysisId = savePendingAnalysis("idem-key-citation-4");
+        store.saveAnalysisDocuments(analysisId, List.of(
+                new VitamateAnalysisStorePort.NewAnalysisDocument(105L, AnalysisDocumentRole.TARGET.name())
+        ));
+        Long chunkId = saveChunk(999L, 0);
+
+        boolean result = store.existsAllCitationTargets(analysisId, List.of(
+                citation(chunkId, 999L)
+        ));
+
+        assertThat(result).isFalse();
+    }
+
+    private Long saveChunk(Long fileVersionId, int chunkIndex) {
+        DocumentChunkEntity chunk = new DocumentChunkEntity(
+                fileVersionId, chunkIndex, 1, "섹션", 0, 80, 30, "테스트 청크", REQUESTED_AT
+        );
+        return chunkRepository.save(chunk).getId();
+    }
+
+    private VitamateAnalysisStorePort.NewCitation citation(Long documentChunkId, Long fileVersionId) {
+        return new VitamateAnalysisStorePort.NewCitation(
+                documentChunkId, fileVersionId, 1, null, "발췌"
+        );
     }
 
     private Long savePendingAnalysis(String idempotencyKey) {

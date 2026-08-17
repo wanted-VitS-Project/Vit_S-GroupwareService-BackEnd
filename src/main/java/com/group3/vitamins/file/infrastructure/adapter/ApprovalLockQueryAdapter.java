@@ -22,4 +22,9 @@ public class ApprovalLockQueryAdapter implements ApprovalLockQueryPort {
     public boolean existsAnyApprovalReference(Long fileId) {
         return approvalLockMapper.existsAnyApprovalReference(fileId);
     }
+
+    @Override
+    public boolean isApprovalLineParticipant(Long fileId, String userId) {
+        return approvalLockMapper.isApprovalLineParticipant(fileId, userId);
+    }
 }

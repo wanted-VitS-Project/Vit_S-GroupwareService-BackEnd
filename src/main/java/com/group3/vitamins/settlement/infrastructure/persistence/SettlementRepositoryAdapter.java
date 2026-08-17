@@ -26,9 +26,9 @@ public class SettlementRepositoryAdapter implements SettlementRepository {
 
     @Override
     @Transactional
-    public Long create(Long blockId) {
+    public Long create(Long blockId, Long projectId) {
         // IDENTITY 라 save() 시점에 INSERT 가 나가고 PK 가 채워져 돌아온다 — 되찾기 조회가 필요없다.
-        return springDataSettlementRepository.save(new SettlementJpaEntity(blockId)).getSettleId();
+        return springDataSettlementRepository.save(new SettlementJpaEntity(blockId, projectId)).getSettleId();
     }
 
     @Override

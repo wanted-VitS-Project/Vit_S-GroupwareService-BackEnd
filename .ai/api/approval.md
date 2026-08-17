@@ -1,12 +1,33 @@
 # 📝 Approval API — 결재 블록
 
 **상태**: `✅ 확정` — 로컬 정본 확정. 2026-08-11 추가분은 노션·프론트 재동기화 필요 (`../API.md` §0)
+**최종 업데이트**: 2026-08-15 (🔴 결재 조회 권한 확대 — 스텝 열람 권한자 전원 · 상태 무관 조회 · `WAITING` 제외 폐지)
 **최종 업데이트**: 2026-08-12 (`APPROVAL_DELETE_CONFIRM_REQUIRED`(409)·`confirmApprovalCancel` 신설 — 상신 이후 블록 삭제 시 **확인 요구**. 🔴 프론트 공유 필요)
 **최종 업데이트**: 2026-08-11 (참여 불가 전환 실제 알림 2종·대행 전 EDITOR 상세조회 추가)
-**최종 업데이트**: 2026-08-11 (결재 참여 불가 사원 교체·제외 · 대행 기안자 · ADMIN 결재 권한 제외 정책 추가)
 **담당**: 이강욱
 **노션**: 확인 필요 — 노션 링크 채워넣기
 **범위**: 결재 블록 관련 API 7개 + 결재관리·처리 API(목록조회 착수, 나머지 4개는 순서대로 추가 예정). 알림 API는 `notification.md` 참고.
+
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | [결재 회차 상세조회](#1-결재-회차-상세조회) | — | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
+| PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | [결재 제목·내용 수정](#2-결재-제목내용-수정) | — | 기안자/대행 기안자 |
+| POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | [결재 문서 추가](#3-결재-문서-추가) | — | 기안자/대행 기안자 |
+| DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | [결재 문서 제거](#4-결재-문서-제거) | — | 기안자/대행 기안자 |
+| PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | [결재선 등록·수정](#5-결재선-등록수정) | — | 기안자/대행 기안자 |
+| POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | [결재 상신](#6-결재-상신) | — | 기안자/대행 기안자 |
+| POST | `/api/v1/approvals/{approvalId}/revisions` | [재상신 회차 생성](#7-재상신-회차-생성) | — | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
+| GET | `/api/v1/approvals` | [결재관리 목록조회](#8-결재관리-목록조회) | — | 로그인 사용자(scope=all은 MASTER) |
+| GET | `/api/v1/approvals/{approvalId}` | [결재 상세조회](#9-결재-상세조회) | — | 1번과 동일 |
+| GET | `/api/v1/approvals/{approvalId}/revisions` | [결재 이력조회](#10-결재-이력조회) | — | 1번과 동일 |
+| POST | `/api/v1/approval-lines/{lineId}/approve` | [결재 승인](#11-결재-승인) | — | 해당 결재선의 결재자 본인 |
+| POST | `/api/v1/approval-lines/{lineId}/reject` | [결재 반려](#12-결재-반려) | — | 해당 결재선의 결재자 본인 |
+
+⭐ **`userId` 계열은 전부 `String`이다.** `employee.user_id`(사번)가 `VARCHAR(20)`이라, `drafterId`/`approverId` 등을 `long`으로 두면 안 된다.
+⭐ **결재 상세 생성은 REST API가 아니다.** `ApprovalBlockDetailAdapter`(블록팀 `BlockDetailPort` 구현체)가 블록 생성 트랜잭션 안에서 `approval`+`approval_revision`(1회차)을 만든다.
+⭐ **부서·직책은 스냅샷 없이 항상 `employee` 라이브 조회다** (`APR-V1.md` INV-11). `approval_line`에 관련 컬럼 없음.
 
 > ✅ **로컬 명세 확정 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 2026-08-11 추가분은 이 로컬 정본을 기준으로 노션·프론트에 동기화한다.
@@ -57,26 +78,15 @@
 > `ADMIN`은 인사 전용이므로 결재자 지정·결재 조회·`scope=all` 권한이 없다.
 > 블록 카드의 결재 상세에는 `requiresApproverReplacement`(boolean)를 additive로 추가한다.
 
-## 엔드포인트
-
-| # | API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|---|
-| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자·ACTIVE 이상 결재자·MASTER·대행 필요 시 스텝 EDITOR |
-| 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자/대행 기안자 |
-| 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자/대행 기안자 |
-| 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자/대행 기안자 |
-| 5 | 결재선 등록·수정 | PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | 기안자/대행 기안자 |
-| 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자/대행 기안자 |
-| 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
-| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(scope=all은 MASTER) |
-| 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 기안자·ACTIVE 이상 결재자·MASTER·대행 필요 시 스텝 EDITOR |
-| 10 | 결재 이력조회 | GET | `/api/v1/approvals/{approvalId}/revisions` | 기안자·이력 참여 결재자(ACTIVE 이상)·MASTER |
-| 11 | 결재 승인 | POST | `/api/v1/approval-lines/{lineId}/approve` | 해당 결재선의 결재자 본인 |
-| 12 | 결재 반려 | POST | `/api/v1/approval-lines/{lineId}/reject` | 해당 결재선의 결재자 본인 |
-
-⭐ **`userId` 계열은 전부 `String`이다.** `employee.user_id`(사번)가 `VARCHAR(20)`이라, `drafterId`/`approverId` 등을 `long`으로 두면 안 된다.
-⭐ **결재 상세 생성은 REST API가 아니다.** `ApprovalBlockDetailAdapter`(블록팀 `BlockDetailPort` 구현체)가 블록 생성 트랜잭션 안에서 `approval`+`approval_revision`(1회차)을 만든다.
-⭐ **부서·직책은 스냅샷 없이 항상 `employee` 라이브 조회다** (`APR-V1.md` INV-11). `approval_line`에 관련 컬럼 없음.
+> 🔴 **2026-08-15 — 계약 변경 (프론트 공유 필수).** 결재 조회 3종(1·9·10번)의 열람 범위를 넓힌다.
+>
+> | 항목 | 내용 |
+> |---|---|
+> | 확대 | 블록이 속한 **스텝 열람 권한자(VIEWER 이상) 전원**이 상태와 무관하게 결재를 조회할 수 있다. 기존 403이 200으로 바뀐다 |
+> | 폐기 | `WAITING` 결재자 403 규칙. 결재선에 이름이 있으면 상태 무관 열람 |
+> | 포함 | `DRAFT`도 블록 카드와 상세 API에서 동일하게 공개한다. 블록을 볼 수 있는데 내부 내용만 막는 불일치를 두지 않는다 |
+> | 변경 없음 | **쓰기 권한은 그대로 기안자/대행 기안자.** `ADMIN` 차단·회사 경계·에러코드(`APPROVAL_LINE_NOT_VIEWABLE`) 모두 유지 |
+> | 프론트 작업 | 조회 권한 확대만 반영하면 된다. 응답 구조와 필드는 바뀌지 않는다 |
 
 ---
 
@@ -85,7 +95,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals/{approvalId}/revisions/{revisionId}` |
-| 인증 필요 | Y · 기안자·해당 회차 ACTIVE 이상 결재자(과거 이력 포함)·MASTER·대행 필요 시 스텝 EDITOR |
+| 인증 필요 | Y · 해당 블록 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
 | 요구사항 | MGT-005 |
 
 **Request**
@@ -117,9 +127,9 @@
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | 결재 없음 |
 | 404 | Not Found | `APPROVAL_REVISION_NOT_FOUND` | 회차 없음 |
-| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 차례 안 온 결재자(`WAITING`)의 조회 |
+| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 스텝 열람 권한 없음 · 결재선 미참여 · `ADMIN` · 타 회사 |
 
-**비즈니스 규칙**: `WAITING` 결재자는 조회 불가 · `CANCELED`(반려로 절차 종결돼 건너뛴 결재선)는 조회 가능 · `MASTER`는 차례와 무관하게 전부 조회 가능(`MGT-005`). 현재 기안자가 참여 불가인 `IN_PROGRESS`·`REJECTED` 결재는 대행 선점 전에도 유효 스텝 EDITOR가 알림을 통해 상세에 진입할 수 있다. 정상 기안자 결재와 `COMPLETED`·`CANCELED` 이력은 이 예외로 열지 않는다.
+**비즈니스 규칙**: 열람 판정은 **블록이 속한 스텝의 유효 권한**을 따른다 — 프로젝트 권한을 스텝 오버라이드로 덮은 최종값이 `NONE`이 아니면 회차 상태와 무관하게 열람 가능(블록 목록조회와 동일 기준). 따라서 `DRAFT`도 블록 카드와 상세 API 모두에서 조회할 수 있다. 결재선에 이름이 오른 사람도 **상태 무관** 열람 가능(`WAITING` 제외 규칙 폐지) — 프로젝트 멤버십 검사가 면제되는 대표 직책 결재자를 위해서다. `ADMIN`은 결재 권한이 없어 계속 차단하고, 회사 경계 검사는 role 검사보다 먼저 수행한다. 기안자 참여 불가 시 스텝 EDITOR 예외 조항은 열람 범위가 넓어져 불필요해졌으나, **대행 선점(7번)의 진입 조건으로는 그대로 유지**한다. 조회 권한 확대는 수정·문서 연결·결재선 설정·상신 권한을 넓히지 않는다.
 
 **참여 불가 실제 알림**: 미처리(`ACTIVE`·`WAITING`) 결재자가 참여 불가로 전환되면 현재 유효한 기안자에게 `APPROVAL_APPROVER_UNAVAILABLE`, 현재 기안자 또는 대행 기안자가 참여 불가로 전환되면 유효 스텝 EDITOR 전원에게 `APPROVAL_DRAFTER_UNAVAILABLE`을 발행한다. 둘 다 `targetType=APPROVAL`, `targetId=approvalId`, `targetContext.revisionId=현재 회차`다. 알림 REST API는 변경하지 않는다.
 
@@ -386,7 +396,7 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals/{approvalId}` |
-| 인증 필요 | Y · 기안자·현재 회차 ACTIVE 이상 결재자(과거 이력 포함)·MASTER(`ApprovalViewPolicy`, 1번과 동일 규칙) |
+| 인증 필요 | Y · 1번과 동일 규칙(`ApprovalViewPolicy`) |
 | 요구사항 | MGT-005~006 |
 
 > ⚠️ **2026-08-06 정정** — `drafterId`는 원 명세(전달분) `long` → **String(사번)으로 정정**(8번과 동일 사유).
@@ -426,9 +436,9 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 200 | OK | – | 조회 성공 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | 결재 없음 |
-| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 차례 안 온 결재자(`WAITING`)의 조회 |
+| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 스텝 열람 권한 없음 · 결재선 미참여 · `ADMIN` · 타 회사 |
 
-**비즈니스 규칙**: 조회 권한은 1번(회차 상세조회)과 동일 · 항상 **현재 회차**(`approval.current_revision_no`)를 보여준다(회차 지정 불가 — 지정 조회는 1번 API) · `blockOrigin`으로 원본 블록·스텝·프로젝트 이동 정보 제공(MGT-006).
+**비즈니스 규칙**: 조회 권한은 1번(회차 상세조회)과 동일 · 열람 권한자는 상태와 무관하게 항상 **현재 회차**(`approval.current_revision_no`)를 본다 · 회차 지정 불가(지정 조회는 1번 API) · `blockOrigin`으로 원본 블록·스텝·프로젝트 이동 정보 제공(MGT-006).
 
 ---
 
@@ -437,13 +447,11 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals/{approvalId}/revisions` |
-| 인증 필요 | Y · 기안자·이력에 참여한 결재자·MASTER(아래 참고) |
+| 인증 필요 | Y · 1번과 동일 규칙(`ApprovalViewPolicy`) |
 | 요구사항 | MGT-007 |
 
-> ⚠️ **2026-08-06 판단** — 전달받은 문구는 "기안자, 해당 결재 이력에 참여한 결재자, master"로 `WAITING` 제외 여부가
-> 명시돼 있지 않았다. `APR-V1.md`엔 MGT-007 전용 권한 규칙이 따로 없고 MGT-005("`WAITING` 결재자는 403")만 있어,
-> **1번(회차 상세조회)과 동일한 기준(전체 회차 통틀어 `ACTIVE`/`APPROVED`/`REJECTED`/`CANCELED`로 한 번이라도 도달한
-> 결재자만 허용, 순수 `WAITING`만 있는 사람은 403)을 그대로 적용**했다. 실제 의도와 다르면 알려달라.
+> ✅ **2026-08-15 해소** — `WAITING` 제외 여부가 쟁점이었으나, 열람 범위를 스텝 권한 기준으로 넓히면서
+> 제외 규칙 자체가 폐지됐다. 1번과 동일 규칙을 그대로 따른다.
 
 **Request**
 
@@ -468,7 +476,7 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | 결재 없음 |
 | 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 이력 조회 권한 없음 |
 
-**비즈니스 규칙**: 전체 회차를 `revisionNo` 오름차순으로 반환 · `isCurrent`로 진행 중/종료된 회차 구분 · 페이징 없음(회차 수가 적어 전량 반환).
+**비즈니스 규칙**: 전체 회차를 상태와 무관하게 `revisionNo` 오름차순으로 반환 · `isCurrent`로 진행 중/종료된 회차 구분 · 페이징 없음(회차 수가 적어 전량 반환).
 
 ---
 

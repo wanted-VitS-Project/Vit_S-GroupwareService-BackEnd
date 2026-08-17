@@ -85,7 +85,7 @@ public class AccountPasswordResetService implements AccountPasswordResetUseCase 
         int successCount = 0;
         for (AccountTargetRow target : withEmail) {
             try {
-                mailSender.sendTempPassword(target.email(), target.name(), rawByUserId.get(target.userId()));
+                mailSender.sendTempPassword(target.email(), target.userId(), target.name(), rawByUserId.get(target.userId()));
                 successCount++;
             } catch (MailDeliveryException e) {
                 // 비밀번호는 이미 바뀌었다 → passwordChanged=true. 반드시 재시도해야 한다.

@@ -52,6 +52,16 @@ public enum BiddingErrorCode implements ErrorCode {
             "입찰 공고 수집 실행을 찾을 수 없습니다."
     ),
 
+    BIDDING_COLLECTION_RUN_RANGE_INVALID(
+            "BIDDING_COLLECTION_RUN_RANGE_INVALID",
+            "조회 시작·종료 시각은 함께 지정해야 하며, 시작 시각은 종료 시각보다 빨라야 합니다."
+    ),
+
+    BIDDING_COLLECTION_RUN_RANGE_TOO_WIDE(
+            "BIDDING_COLLECTION_RUN_RANGE_TOO_WIDE",
+            "수동 조회 기간은 최대 31일까지 지정할 수 있습니다."
+    ),
+
     BIDDING_INVALID_COLLECTION_SCHEDULE(
             "BIDDING_INVALID_COLLECTION_SCHEDULE",
             "자동 수집 일정이 올바르지 않습니다."

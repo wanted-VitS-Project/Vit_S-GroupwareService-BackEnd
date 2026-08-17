@@ -40,6 +40,11 @@ public class SettlementJpaEntity {
     @Column(name = "block_id", nullable = false)
     private Long blockId;
 
+    // block->step 을 타야 알 수 있는 소속 프로젝트를 생성 시점에 스탬핑해 둔 값(V20260816170100).
+    // 프로젝트 간 블록 이동이 막혀 있어 생성 후 바뀌지 않는다 — updatable=false 로 못 박는다.
+    @Column(name = "project_id", nullable = false, updatable = false)
+    private Long projectId;
+
     @Column(name = "round_no")
     private Integer roundNo;
 
@@ -108,8 +113,9 @@ public class SettlementJpaEntity {
      * ⚠️ version을 명시적으로 1로 채운다 — Java int 필드 기본값 0을 그대로 두면 컬럼의
      * {@code DEFAULT 1}과 무관하게 INSERT 문에 0이 실린다(CONCURRENCY.md §3-1).
      */
-    public SettlementJpaEntity(Long blockId) {
+    public SettlementJpaEntity(Long blockId, Long projectId) {
         this.blockId = blockId;
+        this.projectId = projectId;
         this.status = SettlementStatus.PENDING;
         this.version = 1;
     }

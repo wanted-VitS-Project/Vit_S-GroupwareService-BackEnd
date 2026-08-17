@@ -31,4 +31,17 @@ public interface BlockCatalogPort {
      * 조회는 FILE 블록과 동일한 `블록→스텝` 경로를 그대로 탄다.
      */
     Optional<Long> resolveAttachableBlockStepId(Long blockId);
+
+    /**
+     * 결재({@code APPROVAL}) 블록이면 true. 블록이 없거나 soft delete 됐으면 false.
+     *
+     * <p>동명 문서 검사를 면제할지 판정하는 데만 쓴다(`file.md §1`, 2026-08-16 확정). 결재 문서
+     * 제거는 {@code approval_document} 링크만 끊고 파일은 블록에 남는데, 그 파일은 블록 파일
+     * 목록(§3)에서 제외돼 사용자가 발견·삭제할 경로가 없다 — 검사를 그대로 두면 "제거 후 같은
+     * 파일 재첨부"가 영구히 409 로 막힌다.
+     *
+     * <p>존재·타입 판정은 {@link #resolveAttachableBlockStepId(Long)} 가 이미 끝낸 뒤 호출되므로
+     * 여기서는 예외를 던지지 않고 boolean 만 돌려준다.
+     */
+    boolean isApprovalBlock(Long blockId);
 }

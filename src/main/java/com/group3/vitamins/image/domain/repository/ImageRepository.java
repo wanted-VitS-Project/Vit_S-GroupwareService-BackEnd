@@ -91,10 +91,10 @@ public interface ImageRepository {
     int restore(Long imgId, Long imgBlockId, int orderIndex);
 
     /**
-     * 완전 삭제(하드 삭제) — 행 자체를 지운다. 되돌릴 수 없다. 소프트 삭제된(휴지통) 항목만 대상으로
-     * 조건부 DELETE로 원자 처리한다 — 대상이 활성 상태거나 존재하지 않으면 0건.
+     * 완전 삭제(하드 삭제) — 행들을 한 번에 지운다. 되돌릴 수 없다. 소프트 삭제된(휴지통) 항목만
+     * 대상으로 조건부 DELETE로 원자 처리한다(2026-08-16 — 건당 반복 호출하던 걸 배치로 통합).
      *
-     * @return 실제로 삭제된 행 수(0 또는 1)
+     * @return 실제로 삭제된 행 수 — imgIds 개수보다 적으면 그 사이 레이스가 있었다는 뜻
      */
-    int hardDelete(Long imgId);
+    int hardDeleteAll(List<Long> imgIds);
 }

@@ -2,6 +2,7 @@ package com.group3.vitamins.bidding.collectioncondition.infrastructure.persisten
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionConditionJpaEntity;
 import com.group3.vitamins.bidding.collectioncondition.infrastructure.persistence.entity.CollectionSourceJpaEntity;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class CollectionConditionPersistenceMapper {
                 entity.getConditionName(),
                 parsedParams.noticeTypes(),
                 parsedParams.filters(),
+                CollectionLookbackPeriod.valueOf(entity.getLookbackPeriod()),
                 entity.isEnabled(),
                 entity.isAutoCollectionEnabled(),
                 entity.getScheduleType() == null
@@ -62,6 +64,7 @@ public class CollectionConditionPersistenceMapper {
                 condition.getConditionName(),
                 params,
                 condition.isActive(),
+                condition.getLookbackPeriod().name(),
                 condition.isAutoCollectionEnabled(),
                 condition.getScheduleType() == null
                         ? null : condition.getScheduleType().name(),

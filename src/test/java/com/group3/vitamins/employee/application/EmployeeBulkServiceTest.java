@@ -334,7 +334,7 @@ class EmployeeBulkServiceTest {
         @DisplayName("메일 발송이 실패해도 등록은 성공으로 유지하고 emailSentCount 만 줄인다")
         void mailFailureDoesNotFailRegistration() {
             Mockito.doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
-                    .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString());
+                    .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString(), anyString());
             List<ParsedEmployeeRow> rows = List.of(valid(2, "EMP100", "a@b.com"));
 
             BulkRegisterResult r = service.register(registerCmd(rows, false));
@@ -442,6 +442,32 @@ class EmployeeBulkServiceTest {
             ArgumentCaptor<List<EmployeeEducation>> eduCap = ArgumentCaptor.forClass(List.class);
             verify(registrationWriter).register(any(), anyString(), anyString(), eduCap.capture(), any());
             assertThat(eduCap.getValue()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("항목 구분자로 쉼표·셀 내 줄바꿈도 인식하고 구분자 뒤 공백은 무시한다(2026-08-17 확대)")
+        void acceptsCommaAndNewlineSeparators() {
+            when(referencePort.resolveMajorIdsByName(any(), any()))
+                    .thenReturn(Map.of("컴퓨터공학", 3L, "소프트웨어공학", 4L));
+            when(referencePort.resolveCertificateIdsByName(any(), any()))
+                    .thenReturn(Map.of("정보처리기사", 7L, "SQLD", 8L));
+            // 학력: 쉼표+공백 구분 · 자격증: 셀 내 줄바꿈(Alt+Enter) 구분
+            List<ParsedEmployeeRow> rows = List.of(
+                    rowQ(2, "EMP100", "컴퓨터공학:학사, 소프트웨어공학:석사", "정보처리기사\nSQLD"));
+
+            BulkRegisterResult r = service.register(registerCmd(rows, false));
+
+            assertThat(r.registeredCount()).isEqualTo(1);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeEducation>> eduCap = ArgumentCaptor.forClass(List.class);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeCertificate>> certCap = ArgumentCaptor.forClass(List.class);
+            verify(registrationWriter).register(any(), anyString(), anyString(), eduCap.capture(), certCap.capture());
+            assertThat(eduCap.getValue()).extracting(EmployeeEducation::degree)
+                    .containsExactly(Degree.BACHELOR, Degree.MASTER);   // 쉼표 구분·공백 흡수·순서 유지
+            assertThat(eduCap.getValue().get(0).majorId()).isEqualTo(3L);
+            assertThat(certCap.getValue()).extracting(EmployeeCertificate::certificateId)
+                    .containsExactly(7L, 8L);                            // 줄바꿈 구분
         }
     }
 }

@@ -3,6 +3,7 @@ package com.group3.vitamins.vitamate.analysis.infrastructure.persistence.adapter
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateAnalysisStorePort;
 import com.group3.vitamins.vitamate.analysis.application.result.CreateVitamateAnalysisResult;
 import com.group3.vitamins.vitamate.analysis.domain.model.AnalysisStatus;
+import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.DocumentChunkEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisCitationEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisDocumentEntity;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.entity.VitamateAnalysisEntity;
@@ -204,11 +205,27 @@ public class JpaVitamateAnalysisStore implements VitamateAnalysisStorePort {
             return false;
         }
 
+        Map<Long, Long> activeChunkFileVersionById = findActiveChunkFileVersionsByChunkId(citations);
+
         return citations.stream()
                 .allMatch(citation -> documentMap.containsKey(citation.fileVersionId())
-                        && chunkRepository.existsByIdAndFileVersionIdAndDeletedAtIsNull(
-                        citation.documentChunkId(),
-                        citation.fileVersionId()
+                        && citation.fileVersionId().equals(
+                                activeChunkFileVersionById.get(citation.documentChunkId())
+                        ));
+    }
+
+    // citation이 가리키는 청크들을 한 번에 조회해 청크ID → 소속 파일버전ID 맵으로 만든다.
+    private Map<Long, Long> findActiveChunkFileVersionsByChunkId(List<NewCitation> citations) {
+        List<Long> chunkIds = citations.stream()
+                .map(NewCitation::documentChunkId)
+                .distinct()
+                .toList();
+
+        return chunkRepository.findAllByIdInAndDeletedAtIsNull(chunkIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        DocumentChunkEntity::getId,
+                        DocumentChunkEntity::getFileVersionId
                 ));
     }
 

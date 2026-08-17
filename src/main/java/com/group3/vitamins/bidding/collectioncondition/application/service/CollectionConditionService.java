@@ -8,6 +8,7 @@ import com.group3.vitamins.bidding.collectioncondition.application.usecase.Colle
 import com.group3.vitamins.bidding.collectioncondition.domain.exception.BiddingErrorCode;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionCondition;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionConditionFilter;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionSource;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionConditionRepository;
 import com.group3.vitamins.bidding.collectioncondition.domain.repository.CollectionSourceRepository;
@@ -117,6 +118,7 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                 command.conditionName().trim(),
                 command.noticeTypes(),
                 command.filters(),
+                resolveLookbackPeriod(command.lookbackPeriod()),
                 command.active(),
                 command.autoCollectionEnabled(),
                 command.scheduleType(),
@@ -153,6 +155,7 @@ public class CollectionConditionService implements CollectionConditionUseCase {
                 command.conditionName().trim(),
                 command.noticeTypes(),
                 command.filters(),
+                resolveLookbackPeriod(command.lookbackPeriod()),
                 command.active(),
                 command.autoCollectionEnabled(),
                 command.scheduleType(),
@@ -258,6 +261,13 @@ public class CollectionConditionService implements CollectionConditionUseCase {
             }
         }
         return candidate;
+    }
+
+    // 조회 기간을 지정하지 않으면 1주를 기본값으로 적용합니다.
+    private CollectionLookbackPeriod resolveLookbackPeriod(
+            CollectionLookbackPeriod requested
+    ) {
+        return requested == null ? CollectionLookbackPeriod.ONE_WEEK : requested;
     }
 
     private ValidationException invalidSchedule() {

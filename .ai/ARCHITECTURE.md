@@ -1,13 +1,33 @@
 # 🏗️ 아키텍처 컨벤션
 
+**최종 업데이트**: 2026-08-16 (§0 TL;DR 신설 · §2-1 에 `bidding` 반영 · **§2-3 본문 작성**(2026-08-05 예고분, 실제 코드 기준) · §4 죽은 참조 정리)
 **최종 업데이트**: 2026-08-09 (§4 **검증 책임 분리 신설** — 형식은 Request 애노테이션 · 관계/불변식은 서비스. `GlobalExceptionHandler` 가 `"CODE|문구"` 를 응답 `code` 로 승격하도록 고쳐 **애노테이션 금지 규칙을 폐기**했다)
 **최종 업데이트**: 2026-08-09 (§4 PATCH 요청 파싱 2건 — 파싱은 `XxxRequest` 소유, `JsonNode` 는 명세가 "생략 vs null" 을 구분한 API 한정)
-**최종 업데이트**: 2026-08-05 (§2-3 신설 — 이벤트 기반 **N:1 cross-cutting 도메인** 규칙. 공용 이벤트 계약 + `presentation/event` 진입점, 근거: `activitylog`)
 **담당**: 김동현 (DevOps)
 **근거**: `businesscategory` 도메인 구현 (#96~#99) — 4계층 + `command/query/result/usecase/service/policy/port` 전체를 갖춘 첫 완성 사례
 
 > ✅ **헥사고날(포트&어댑터) 구조로 확정이다.** `.ai/PIPELINE.md` §5, `.coderabbit.yaml` 의 계층별 리뷰 규칙은 이 문서를 근거로 동작한다.
 > 새 도메인을 만들 때는 이 문서의 패키지 구조·네이밍을 그대로 따른다.
+
+---
+
+## §0 TL;DR
+
+- **이 문서가 정하는 것**: 헥사고날 4계층의 패키지·네이밍, 도메인·애그리게이트 경계를 넘는 참조 방식, 인가와 검증을 어느 계층에 두는지.
+- **기준 예시**: `businesscategory`(단일 애그리게이트) · `project`·`bidding`(다중 애그리게이트 서브패키지).
+- ⚠️ **조용히 깨지는 함정**
+  - 컨트롤러 파라미터에 `@Valid` 를 빠뜨리면 Bean Validation 이 통째로 무시된다 — 400 이 아니라 **DB 제약 위반 500** 이 나고 컴파일·테스트가 못 잡는다 (§4).
+  - 경계를 넘는 쓰기를 이벤트로 흘리면, 회수 주체가 없을 때 결과적 일관성이 아니라 **유실**이 된다 (§2-2 · §2-3).
+
+| 섹션 | 내용 |
+|---|---|
+| §1 · §2 | 4계층(`presentation`/`application`/`domain`/`infrastructure`) 패키지 구조와 참고 트리 |
+| §2-1 | 애그리게이트가 여러 개인 도메인은 애그리게이트별 서브패키지 (`project` · `bidding`) |
+| §2-2 | 쓰기 포트도 소비자 소유 · 경계 넘는 쓰기는 한 트랜잭션 / 타입별 확장은 SPI |
+| §2-3 | cross-cutting 이벤트 — `{도메인}/contract` 계약 + `presentation/event` 리스너 |
+| §3 | 의존 방향 `presentation → application → domain`, `infrastructure` 는 포트 구현(역전) |
+| §4 | 네이밍 · `@PreAuthorize` 금지(인가는 `application/policy`) · 검증 3층 분리 · PATCH 파싱 |
+| §5 | `department`·`account`·`auth` 레거시 이관 완료 상태와 잔여 |
 
 ---
 
@@ -73,7 +93,20 @@ businesscategory/
 
 `businesscategory` 는 애그리게이트가 하나라 §2 의 평면 구조로 충분하다.
 **애그리게이트가 여러 개고 파일이 수십 개로 불어나는 도메인은 애그리게이트별 서브패키지로 나눈다.**
-현재 해당하는 건 `project` 뿐이다 (프로젝트~블록 계층 · 엔드포인트 38개).
+현재 해당하는 건 `project` 와 `bidding` 두 개다.
+
+| 도메인 | 애그리게이트 서브패키지 | 도메인 루트 |
+|---|---|---|
+| `project` | `stage` · `step` · `block` | **루트 애그리게이트 있음** — `project/{domain,application,infrastructure,presentation}` 이 곧 Project |
+| `bidding` | `bidnotice` · `bidreview` · `bidsummary` · `collectioncondition` · `collectionrun` · `projectconversion` | **루트 애그리게이트 없음** — 도메인 루트에는 계층 패키지를 두지 않고 전부 서브패키지에 있다 |
+
+> 📌 **대표 애그리게이트가 없으면 루트를 비워도 된다.** `bidding` 이 그 형태다. 반대로 `project` 처럼
+> 도메인 이름과 같은 애그리게이트가 있으면 그것만 루트에 남기고 나머지를 내린다(아래 트리).
+>
+> - `bidding/projectconversion` 은 자기 테이블이 없는 **오케스트레이션 서브패키지**라 `domain/` 이 없다(§5 의 `auth` 와 같은 사유).
+> - `bidding/legacy/presentation` 에는 `collectioncondition`·`collectionrun` 의 유스케이스를 호출하는 컨트롤러 2개가
+>   서브패키지 밖에 남아 있다. 이름 그대로 이전 구조의 잔재이며 **새 컨트롤러를 여기에 추가하지 않는다** —
+>   신규는 각 애그리게이트의 `presentation/api` 에 둔다.
 
 ### 용어 — "바운디드 컨텍스트" 가 아니다
 
@@ -82,10 +115,11 @@ businesscategory/
 (스텝 완료 → 프로젝트 진척률 · 스텝 삭제 → 이슈 처리). 컨텍스트라고 부르면 "직접 조인 금지" 같은
 과한 제약을 스스로 짊어지게 된다.
 
-### 트리
+### 트리 (`project` — 루트 애그리게이트가 있는 경우)
 
 **루트 애그리게이트는 도메인 루트에 그대로 두고, 나머지만 서브패키지로 뺀다.**
 `project/project/domain/model/Project` 처럼 이름이 겹치는 걸 피하고 기존 파일 이동도 없다.
+(`bidding` 처럼 루트 애그리게이트가 없으면 도메인 루트를 비우고 전부 서브패키지에 둔다.)
 
 ```
 project/
@@ -168,6 +202,47 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 ---
 
+## 2-3. cross-cutting 도메인 — 공용 이벤트 계약 (2026-08-05 결정 · 2026-08-16 본문 작성)
+
+§2-2 는 "경계를 넘는 쓰기는 이벤트가 아니라 한 트랜잭션" 이라고 못박았다. **그 예외가 여기다.**
+여러 도메인이 같은 사건을 알려야 하는데 받는 쪽이 **독립 생명주기**를 갖는 경우 — 활동 로그·알림처럼
+발신 도메인의 행이 없어도 받은 쪽 데이터가 혼자 존재하고, 삭제 판정 권한도 받은 쪽에 있는 경우 —
+포트를 N개 만들지 않고 **이벤트 하나로 받는다.**
+
+### 구조
+
+| 요소 | 위치 | 실제 예 |
+|---|---|---|
+| 이벤트 계약 (record) | `{계약 소유 도메인}/contract` | `activitylog/contract/ActivityOccurredEvent`, `employee/contract/EmployeeParticipationUnavailableEvent` |
+| 마커 인터페이스 | `global/domain/event/DomainEvent` | 계약 record 가 구현한다 |
+| 발행 포트 / 구현 | `global/application/event/DomainEventPublisher` / `global/infrastructure/event/SpringDomainEventPublisher` | 발행 측은 Spring `ApplicationEventPublisher` 를 직접 주입하지 않는다 |
+| 수신 진입점 | `{소비 도메인}/presentation/event/XxxEventListener` | `activitylog/…/ActivityLogEventListener`, `approval/…/EmployeeParticipationUnavailableEventListener` |
+
+- **`contract` 는 도메인 안이지만 계층 패키지가 아니다.** 다른 도메인이 `import` 해도 되는 **유일한 공개 표면**이며,
+  여기 말고 `domain/model`·`application/result` 를 남이 가져다 쓰면 안 된다.
+- **리스너는 `presentation/event` 다.** 외부(이벤트 버스)에서 들어오는 진입점이라 컨트롤러와 같은 계층에 둔다.
+  컨트롤러처럼 **변환 + 유스케이스/서비스 호출 한 줄**만 하고 로직을 담지 않는다.
+- 계약 record 는 생성자에서 `Objects.requireNonNull`·빈 값 검사로 **스스로를 검증**한다. 리스너에서 방어 코드를 다시 쓰지 않는다.
+
+### ⚠️ phase 선택이 트랜잭션 결과를 바꾼다
+
+`@TransactionalEventListener` 의 `phase` 를 잘못 고르면 컴파일도 되고 예외도 안 나는데 **기록만 조용히 사라진다.**
+
+| phase | 트랜잭션 | 언제 | 실제 예 |
+|---|---|---|---|
+| `BEFORE_COMMIT` | 발행자 트랜잭션에 그대로 참여 | 원 작업과 **같이 커밋/같이 롤백**돼야 할 때 (로그가 사실과 어긋나면 안 된다) | `ActivityLogEventListener` |
+| `AFTER_COMMIT` + `@Transactional(REQUIRES_NEW)` | 새 트랜잭션 | 원 작업 성공이 **확정된 뒤**에만 해야 할 후속 처리 (알림 발송 등) | `EmployeeParticipationUnavailableEventListener` |
+
+⚠️ `AFTER_COMMIT` 리스너에 `REQUIRES_NEW` 를 빼면 **커밋된 트랜잭션에 얹혀 쓰기가 반영되지 않는다.** 둘은 세트다.
+
+### 적용 범위 — 도메인 내부 이벤트는 여기가 아니다
+
+`notification/domain/event`·`bidding/bidnotice/domain/event` 처럼 **한 도메인 안에서만 도는 이벤트**는
+`contract` 로 올리지 않고 `domain/event` 에 두며, 리스너도 그 도메인의 `application`/`infrastructure` 안에 둔다
+(예: 캐시 무효화 `BidNoticeCacheInvalidationListener`). §2-3 은 **도메인 경계를 넘는 계약**에만 적용된다.
+
+---
+
 ## 3. 계층 간 의존 방향
 
 `.coderabbit.yaml` 의 계층별 리뷰 규칙이 강제하는 원칙과 동일하다 (내용 재작성 없이 그대로 옮김):
@@ -198,7 +273,7 @@ URL 은 프론트와의 계약이라 패키지 구조를 따라 바꿀 수 없�
 
 ### 권한 처리
 
-`@PreAuthorize` 는 쓰지 않는다 ([`.ai/docs/domain/관리자/BCT-V1-API.md`](docs/domain/관리자/BCT-V1-API.md) §3-5 참고 — `COMMON_FORBIDDEN` 으로 새어나가 명세 에러코드가 안 나간다).
+`@PreAuthorize` 는 쓰지 않는다 — 거부가 `COMMON_FORBIDDEN` 으로 새어나가 **명세가 정한 도메인 에러코드가 안 나가기 때문**이다.
 인가는 `application/policy` 에서 판정하고 도메인 전용 `ErrorCode` 를 던진다.
 
 ### 검증 책임 분리 (2026-08-09) ⭐
@@ -272,3 +347,4 @@ String name
 | 2026-08-09 | §4 권한 처리에 **PATCH 요청 파싱 컨벤션 2건** 추가 — 파싱은 `XxxRequest` 소유(컨트롤러 한 줄), `JsonNode` 는 "생략 vs `null` 명시" 를 명세가 구분한 API 한정 | 동훈 |
 | 2026-08-09 | §4 **검증 책임 분리** 신설 — 형식(Request 애노테이션) / 도메인 불변식·API 규칙(service) 3층 분리. `GlobalExceptionHandler` 에 `"ERROR_CODE\|문구"` 코드 승격을 추가해 **기존 "애노테이션 금지, 서비스 수동 검증" 규칙을 폐기**. 구분자 없는 메시지는 종전대로 `COMMON_INVALID_REQUEST` (옵트인). `project`·`stage`·`step` 요청 DTO 4개 적용 완료 | 동훈 |
 | 2026-08-05 | §2-2 신설 — 쓰기 방향 포트(경계 넘는 쓰기는 한 트랜잭션, 이벤트 아님) · 타입별 확장 SPI(`List<Port>` + `supportedType()`, 공용 파일 동시 편집 금지, `sealed` 금지). 근거: `project/block` 타입 10종을 5명이 나눠 갖는다 | 동훈 |
+| 2026-08-16 | §0 TL;DR 신설 · §2-1 에 `bidding`(루트 애그리게이트 없는 형태) 반영 · **§2-3 본문 작성** — 2026-08-05 에 예고만 되고 비어 있던 섹션을 실제 코드(`contract` + `DomainEventPublisher` + `presentation/event`, phase 2종)를 근거로 채움 · §4 권한 처리의 죽은 문서 링크 제거 | 김동현 |

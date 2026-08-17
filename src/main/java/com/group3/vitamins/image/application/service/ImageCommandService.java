@@ -449,18 +449,20 @@ public class ImageCommandService implements ImageCommandUseCase {
         Map<Long, Long> blockIdByImgBlockId = new HashMap<>();
         List<String> storageKeysToDelete = new ArrayList<>(uniqueIds.size());
 
-        // DB 행을 먼저 전부 지운다 — S3는 아직 안 건드린다. 배치 중간에 어떤 imgId가 레이스로 실패하면
-        // 여기서 예외가 나서 트랜잭션이 롤백되는데, 이 시점까진 S3에 손도 안 댔으니 되돌릴 것도 없다.
+        // DB 행을 먼저 전부 지운다 — S3는 아직 안 건드린다. IN절 배치 하나로 처리한다(2026-08-16 —
+        // 건마다 DELETE를 반복 호출하던 걸 통합). 삭제된 행 수가 요청 건수보다 적으면 그 사이 레이스로
+        // 일부가 실패한 것이라, 여기서 예외를 던져 트랜잭션 전체를 롤백한다 — 이 시점까진 S3에 손도
+        // 안 댔으니 되돌릴 것도 없다(기존 건별 처리와 동일한 원자성).
+        List<Long> imgIdList = new ArrayList<>(uniqueIds);
+        int deletedCount = imageRepository.hardDeleteAll(imgIdList);
+        if (deletedCount != imgIdList.size()) {
+            log.warn("이미지 항목 완전 삭제 경합 발생 - 요청 {}건 중 {}건만 삭제됨", imgIdList.size(), deletedCount);
+            throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
+        }
+
         for (Long imgId : uniqueIds) {
             ImageItem item = foundByImgId.get(imgId);
             Long imgBlockId = item.getImgBlockId();
-
-            int deleted = imageRepository.hardDelete(imgId);
-            if (deleted == 0) {
-                // 검증~삭제 사이에 동시에 복구되거나 이미 삭제된 경우(레이스).
-                log.warn("이미지 항목 완전 삭제 경합 발생 - imgId={}", imgId);
-                throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
-            }
             storageKeysToDelete.add(item.getImageUrl());
 
             Long blockId = blockIdByImgBlockId.computeIfAbsent(imgBlockId, imageBlockRepository::getBlockId);

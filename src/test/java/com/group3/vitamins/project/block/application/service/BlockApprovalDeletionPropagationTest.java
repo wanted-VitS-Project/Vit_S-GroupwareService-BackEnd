@@ -6,6 +6,7 @@ import com.group3.vitamins.global.domain.common.error.exception.ConflictExceptio
 import com.group3.vitamins.project.application.port.EmployeeLookupPort;
 import com.group3.vitamins.project.block.application.command.DeleteBlockCommand;
 import com.group3.vitamins.project.block.application.port.BlockDetailPort;
+import com.group3.vitamins.project.block.application.port.BlockFileTrashPort;
 import com.group3.vitamins.project.block.application.port.IssueBlockUnlinkPort;
 import com.group3.vitamins.project.block.domain.model.Block;
 import com.group3.vitamins.project.block.domain.model.BlockType;
@@ -42,6 +43,7 @@ class BlockApprovalDeletionPropagationTest {
     @Mock private EmployeeLookupPort employeeLookupPort;
     @Mock private BlockDetailPort approvalDetailPort;
     @Mock private IssueBlockUnlinkPort issueBlockUnlinkPort;
+    @Mock private BlockFileTrashPort blockFileTrashPort;
     @Mock private StepAccessUseCase stepAccessUseCase;
     @Mock private DomainEventPublisher domainEventPublisher;
 
@@ -55,6 +57,7 @@ class BlockApprovalDeletionPropagationTest {
                 employeeLookupPort,
                 new BlockDetailRegistry(List.of(approvalDetailPort)),
                 issueBlockUnlinkPort,
+                blockFileTrashPort,
                 stepAccessUseCase,
                 domainEventPublisher);
     }
@@ -136,6 +139,50 @@ class BlockApprovalDeletionPropagationTest {
         verify(approvalDetailPort, never()).assertDeletable(any(), any(), anyBoolean());
         verify(approvalDetailPort).deleteDetail(eq(100L), eq("EMP001"), eq("구매 품의"), any());
         assertThat(block.getDeletedAt()).isNotNull();
+    }
+
+    /** D안 — 직접 삭제는 블록의 파일을 휴지통으로 옮기라고 BlockFileTrashPort 를 호출한다. */
+    @Test
+    @DisplayName("직접 삭제는 블록의 파일을 휴지통으로 이동시킨다")
+    void directDeletionTrashesBlockFiles() {
+        Block block = approvalBlock();
+        when(blockRepository.findById(10L)).thenReturn(Optional.of(block));
+        when(stepAccessUseCase.requireEditable(20L, "EMP001", "USER"))
+                .thenReturn(new StepAccessUseCase.StepAccessView(20L, 30L, MemberPermission.EDITOR));
+        when(blockRepository.save(any(Block.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER", false));
+
+        verify(blockFileTrashPort).trashByBlockId(10L, "EMP001");
+    }
+
+    /** D안 — 스텝/스테이지 삭제 cascade 도 각 블록의 파일을 휴지통으로 옮긴다(공용 삭제 본체 공유). */
+    @Test
+    @DisplayName("스텝 삭제 cascade 도 각 블록의 파일을 휴지통으로 이동시킨다")
+    void cascadeDeletionTrashesBlockFiles() {
+        Block block = approvalBlock();
+        when(blockRepository.findAllByIds(List.of(10L))).thenReturn(List.of(block));
+        when(blockRepository.save(any(Block.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.deleteBlocks(List.of(10L), "EMP001");
+
+        verify(blockFileTrashPort).trashByBlockId(10L, "EMP001");
+    }
+
+    /** D안 — 결재-잠금 파일이 있어 파일 트래시가 409 로 막히면 블록 삭제도 함께 실패(같은 트랜잭션 롤백)한다. */
+    @Test
+    @DisplayName("파일 트래시가 결재-잠금으로 막히면 블록 삭제도 함께 실패한다")
+    void deletionFailsWhenFileTrashRejects() {
+        Block block = approvalBlock();
+        when(blockRepository.findById(10L)).thenReturn(Optional.of(block));
+        when(stepAccessUseCase.requireEditable(20L, "EMP001", "USER"))
+                .thenReturn(new StepAccessUseCase.StepAccessView(20L, 30L, MemberPermission.EDITOR));
+        when(blockRepository.save(any(Block.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new ConflictException(TestErrorCode.LOCKED))
+                .when(blockFileTrashPort).trashByBlockId(10L, "EMP001");
+
+        assertThatThrownBy(() -> service.deleteBlock(new DeleteBlockCommand(10L, "EMP001", "USER", false)))
+                .isInstanceOf(ConflictException.class);
     }
 
     private Block approvalBlock() {

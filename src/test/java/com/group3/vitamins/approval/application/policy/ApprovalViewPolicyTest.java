@@ -26,17 +26,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 /**
- * 결재 조회 권한의 <b>회사(테넌트) 경계</b> 검증.
+ * 결재 조회 권한 검증 — <b>회사(테넌트) 경계</b>와 <b>스텝 열람 권한 기준</b>(2026-08-15 계약 변경).
  *
  * <p>결재의 회사는 원기안자 라이브 행이 아니라 연결된 블록의 프로젝트로 정한다. 핵심은 회사 검사가
  * role 검사보다 <b>앞</b>이라는 것 — 순서가 뒤집히면 타 회사 {@code MASTER}·{@code ADMIN} 이 통과한다.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("ApprovalViewPolicy — 회사 경계")
+@DisplayName("ApprovalViewPolicy — 회사 경계 · 스텝 열람 권한")
 class ApprovalViewPolicyTest {
 
     private static final Long MY_COMPANY = 1L;
     private static final Long APPROVAL_ID = 100L;
+    private static final Long BLOCK_ID = 10L;
     private static final String DRAFTER = "vitas-1234567";
     private static final String APPROVER = "vitas-7654321";
     private static final String OTHER_COMPANY_MASTER = "acme-1234567";
@@ -55,7 +56,7 @@ class ApprovalViewPolicyTest {
     @DisplayName("타 회사 MASTER 는 approvalId 를 알아도 403 — 회사 검사가 role 검사보다 먼저다")
     void otherCompanyMasterIsRejected() {
         givenCurrentCompany(MY_COMPANY);
-        when(blockCatalogPort.isBlockInCompany(10L, MY_COMPANY)).thenReturn(false);
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, MY_COMPANY)).thenReturn(false);
 
         assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), OTHER_COMPANY_MASTER))
                 .isInstanceOf(ForbiddenException.class)
@@ -64,7 +65,7 @@ class ApprovalViewPolicyTest {
     }
 
     @Test
-    @DisplayName("같은 회사 MASTER 는 차례와 무관하게 통과한다 (기존 동작 유지)")
+    @DisplayName("같은 회사 MASTER 는 스텝 참여와 무관하게 통과한다")
     void sameCompanyMasterPasses() {
         givenCurrentCompany(MY_COMPANY);
         givenEmployee(APPROVER, "MASTER", MY_COMPANY);
@@ -96,26 +97,48 @@ class ApprovalViewPolicyTest {
     }
 
     @Test
-    @DisplayName("같은 회사의 ACTIVE 결재자는 통과한다 (기존 동작 유지)")
-    void sameCompanyActiveApproverPasses() {
+    @DisplayName("결재선에 없어도 스텝 열람 권한(VIEWER 이상)이 있으면 통과한다 — 2026-08-15 확대")
+    void stepViewerPasses() {
         givenCurrentCompany(MY_COMPANY);
-        givenEmployee(DRAFTER, "MEMBER", MY_COMPANY);
         givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+        when(blockCatalogPort.canViewBlock(BLOCK_ID, APPROVER, "MEMBER")).thenReturn(true);
 
-        assertThatCode(() -> policy.assertViewable(
-                approval(), List.of(line(APPROVER, ApprovalLineStatus.ACTIVE)), APPROVER))
+        assertThatCode(() -> policy.assertViewable(approval(), List.of(), APPROVER))
                 .doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("같은 회사여도 WAITING 결재자는 403 (기존 동작 유지)")
-    void sameCompanyWaitingApproverIsRejected() {
+    @DisplayName("WAITING 결재자도 통과한다 — WAITING 403 규칙 폐기")
+    void waitingApproverPasses() {
         givenCurrentCompany(MY_COMPANY);
-        givenEmployee(DRAFTER, "MEMBER", MY_COMPANY);
         givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+        when(blockCatalogPort.canViewBlock(BLOCK_ID, APPROVER, "MEMBER")).thenReturn(true);
 
-        assertThatThrownBy(() -> policy.assertViewable(
+        assertThatCode(() -> policy.assertViewable(
                 approval(), List.of(line(APPROVER, ApprovalLineStatus.WAITING)), APPROVER))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("스텝 권한이 없어도 결재선에 이름이 있으면 통과한다 — 멤버십 면제 대표 직책 결재자용")
+    void nonMemberApproverOnLinePasses() {
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+        when(blockCatalogPort.canViewBlock(BLOCK_ID, APPROVER, "MEMBER")).thenReturn(false);
+
+        assertThatCode(() -> policy.assertViewable(
+                approval(), List.of(line(APPROVER, ApprovalLineStatus.WAITING)), APPROVER))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("스텝 권한도 없고 결재선에도 없으면 403 — 스텝 오버라이드 NONE 포함")
+    void outsiderIsRejected() {
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
+        when(blockCatalogPort.canViewBlock(BLOCK_ID, APPROVER, "MEMBER")).thenReturn(false);
+
+        assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("errorCode")
                 .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
@@ -123,7 +146,7 @@ class ApprovalViewPolicyTest {
 
     @Test
     @DisplayName("요청자를 찾을 수 없으면 같은 회사 결재여도 403")
-    void unknownDrafterIsRejected() {
+    void unknownRequesterIsRejected() {
         givenCurrentCompany(MY_COMPANY);
         when(employeeCatalogPort.findEmployee(DRAFTER)).thenReturn(Optional.empty());
 
@@ -137,7 +160,7 @@ class ApprovalViewPolicyTest {
     @DisplayName("결재 블록이 타 회사 프로젝트 소속이면 요청자가 누구든 403")
     void approvalOfOtherCompanyIsRejected() {
         givenCurrentCompany(MY_COMPANY);
-        when(blockCatalogPort.isBlockInCompany(10L, MY_COMPANY)).thenReturn(false);
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, MY_COMPANY)).thenReturn(false);
 
         assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), DRAFTER))
                 .isInstanceOf(ForbiddenException.class)
@@ -146,67 +169,12 @@ class ApprovalViewPolicyTest {
     }
 
     @Test
-    @DisplayName("기안자 참여 불가 시 같은 스텝 EDITOR는 알림 대상 결재를 조회할 수 있다")
-    void stepEditorPassesWhenDrafterUnavailable() {
-        givenCurrentCompany(MY_COMPANY);
-        when(employeeCatalogPort.findEmployee(DRAFTER))
-                .thenReturn(Optional.of(new EmployeeSummary(
-                        DRAFTER, "퇴사자", null, null, "MEMBER", MY_COMPANY,
-                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
-        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
-        when(blockCatalogPort.isStepEditor(10L, APPROVER, "MEMBER")).thenReturn(true);
-
-        assertThatCode(() -> policy.assertViewable(approval(), List.of(), APPROVER))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    @DisplayName("원기안자 행이 삭제돼도 같은 회사 스텝 EDITOR는 대행 처리 화면에 진입할 수 있다")
-    void stepEditorPassesWhenDrafterWasDeleted() {
-        givenCurrentCompany(MY_COMPANY);
-        when(employeeCatalogPort.findEmployee(DRAFTER)).thenReturn(Optional.empty());
-        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
-        when(blockCatalogPort.isStepEditor(10L, APPROVER, "MEMBER")).thenReturn(true);
-
-        assertThatCode(() -> policy.assertViewable(approval(), List.of(), APPROVER))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    @DisplayName("기안자가 유효하면 스텝 EDITOR여도 기존 조회 범위를 넓히지 않는다")
-    void stepEditorRejectedWhenDrafterAvailable() {
-        givenCurrentCompany(MY_COMPANY);
-        givenEmployee(DRAFTER, "MEMBER", MY_COMPANY);
-        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
-
-        assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
-                .isInstanceOf(ForbiddenException.class)
-                .extracting("errorCode")
-                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
-    }
-
-    @Test
-    @DisplayName("기안자가 이탈해도 완료 결재는 스텝 EDITOR에게 새로 공개하지 않는다")
-    void completedApprovalRemainsHiddenFromStepEditor() {
-        givenCurrentCompany(MY_COMPANY);
-        givenEmployee(APPROVER, "MEMBER", MY_COMPANY);
-        Approval completed = Approval.reconstruct(
-                APPROVAL_ID, 10L, DRAFTER, null, ApprovalStatus.COMPLETED,
-                1, null, null, null, null);
-
-        assertThatThrownBy(() -> policy.assertViewable(completed, List.of(), APPROVER))
-                .isInstanceOf(ForbiddenException.class)
-                .extracting("errorCode")
-                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
-    }
-
-    @Test
-    @DisplayName("기안자와 EDITOR가 모두 참여 불가면 EDITOR 예외 조회를 허용하지 않는다")
-    void unavailableStepEditorIsRejected() {
+    @DisplayName("참여 불가(퇴사·비활성) 사원은 스텝 권한이 있어도 403")
+    void unavailableEmployeeIsRejected() {
         givenCurrentCompany(MY_COMPANY);
         when(employeeCatalogPort.findEmployee(APPROVER))
                 .thenReturn(Optional.of(new EmployeeSummary(
-                        APPROVER, "퇴사 편집자", null, null, "MEMBER", MY_COMPANY,
+                        APPROVER, "퇴사자", null, null, "MEMBER", MY_COMPANY,
                         "INACTIVE", LocalDate.of(2026, 8, 11), null)));
 
         assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
@@ -217,7 +185,7 @@ class ApprovalViewPolicyTest {
 
     private void givenCurrentCompany(Long companyId) {
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(companyId);
-        when(blockCatalogPort.isBlockInCompany(10L, companyId)).thenReturn(true);
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, companyId)).thenReturn(true);
     }
 
     private void givenEmployee(String userId, String role, Long companyId) {
@@ -227,7 +195,7 @@ class ApprovalViewPolicyTest {
     }
 
     private Approval approval() {
-        return Approval.reconstruct(APPROVAL_ID, 10L, DRAFTER, null, ApprovalStatus.IN_PROGRESS,
+        return Approval.reconstruct(APPROVAL_ID, BLOCK_ID, DRAFTER, null, ApprovalStatus.IN_PROGRESS,
                 1, null, null, null, null);
     }
 

@@ -3,6 +3,7 @@ package com.group3.vitamins.bidding.collectioncondition.presentation.api.respons
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.group3.vitamins.bidding.collectioncondition.application.result.CollectionConditionResult;
 import com.group3.vitamins.bidding.collectioncondition.domain.model.BidNoticeType;
+import com.group3.vitamins.bidding.collectioncondition.domain.model.CollectionLookbackPeriod;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -29,6 +30,9 @@ public record CollectionConditionResponse(
 
         @Schema(description = "공고 필터 설정")
         CollectionConditionFilterResponse filters,
+
+        @Schema(description = "자동·수동 수집이 매 실행마다 되돌아가 검색할 기간")
+        CollectionLookbackPeriod lookbackPeriod,
 
         @JsonProperty("isActive")
         @Schema(description = "수집 조건 활성화 여부")
@@ -76,6 +80,7 @@ public record CollectionConditionResponse(
                 result.conditionName(),
                 result.noticeTypes(),
                 CollectionConditionFilterResponse.from(result.filters()),
+                result.lookbackPeriod(),
                 result.active(),
                 result.autoCollectionEnabled(),
                 result.scheduleType(),

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface SpringDataChecklistRepository extends JpaRepository<ChecklistJpaEntity, Long> {
 
@@ -39,7 +40,17 @@ public interface SpringDataChecklistRepository extends JpaRepository<ChecklistJp
             + "WHERE c.chkBlockId = :chkBlockId AND c.deletedAt IS NULL")
     int markAllDeletedByBlockIfActive(@Param("chkBlockId") Long chkBlockId, @Param("deletedAt") LocalDateTime deletedAt);
 
-    long countByChkBlockIdAndDeletedAtIsNull(Long chkBlockId);
-
-    long countByChkBlockIdAndCompletedTrueAndDeletedAtIsNull(Long chkBlockId);
+    /**
+     * 전체 개수·완료 개수를 쿼리 1번으로 함께 집계한다 (2026-08-16 — 기존엔 두 카운트를 쿼리 2번으로
+     * 따로 호출했다). 집계 쿼리(GROUP BY 없음)라 결과는 항상 정확히 1행이지만, 다중 컬럼 프로젝션을
+     * Object[]로 직접 받으면 Spring Data가 "행 목록"으로 감싸서 돌려주므로 List&lt;Object[]&gt;로 받아
+     * 그 1행(get(0))을 꺼내 써야 한다 — Object[]로 바로 선언하면 배열 안에 배열이 들어있는 형태가 되어
+     * ClassCastException이 난다(2026-08-16, 실제 통합 테스트로 발견).
+     *
+     * <p>행의 [0]=전체 개수(Long), [1]=완료 개수(Long) — 항목이 0건이면 COUNT(c)는 0, SUM(...)은
+     * SQL 표준상 NULL이 나오므로 호출부에서 null 방어가 필요하다.
+     */
+    @Query("SELECT COUNT(c), SUM(CASE WHEN c.completed = true THEN 1L ELSE 0L END) "
+            + "FROM ChecklistJpaEntity c WHERE c.chkBlockId = :chkBlockId AND c.deletedAt IS NULL")
+    List<Object[]> countTotalAndCompleted(@Param("chkBlockId") Long chkBlockId);
 }

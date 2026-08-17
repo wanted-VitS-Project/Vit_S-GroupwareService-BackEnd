@@ -5,20 +5,20 @@
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 사원 목록 조회 | GET | `/api/v1/employees` | ADMIN |
-| 사원 이름 검색 (결재선 지정용) | GET | `/api/v1/employees/search` | 로그인 사용자 |
-| 사원 상세 조회 | GET | `/api/v1/employees/{userId}` | ADMIN |
-| 사원 등록 | POST | `/api/v1/employees` | ADMIN |
-| 사원 정보 수정 | PATCH | `/api/v1/employees/{userId}` | ADMIN |
-| 퇴사 처리 | PATCH | `/api/v1/employees/{userId}/resignation` | ADMIN |
-| 엑셀 템플릿 내려받기 | GET | `/api/v1/employees/bulk-template` | ADMIN |
-| 엑셀 일괄 등록 **검증** | POST | `/api/v1/employees/bulk/validate` | ADMIN |
-| 엑셀 일괄 등록 | POST | `/api/v1/employees/bulk` | ADMIN |
-| 프로필 사진 조회(아바타 서빙) | GET | `/api/v1/employees/{userId}/profile-image` | **로그인 사용자 누구나** |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/employees` | [사원 목록 조회](#1-사원-목록-조회) | — | ADMIN |
+| GET | `/api/v1/employees/search` | [사원 이름 검색 (결재선 지정용)](#9-사원-이름-검색-결재선-지정용) | — | 로그인 사용자 |
+| GET | `/api/v1/employees/{userId}` | [사원 상세 조회](#2-사원-상세-조회) | — | ADMIN |
+| POST | `/api/v1/employees` | [사원 등록](#3-사원-등록) | — | ADMIN |
+| PATCH | `/api/v1/employees/{userId}` | [사원 정보 수정](#4-사원-정보-수정) | — | ADMIN |
+| PATCH | `/api/v1/employees/{userId}/resignation` | [퇴사 처리](#5-퇴사-처리) | — | ADMIN |
+| GET | `/api/v1/employees/bulk-template` | [엑셀 템플릿 내려받기](#6-엑셀-템플릿-내려받기) | — | ADMIN |
+| POST | `/api/v1/employees/bulk/validate` | [엑셀 일괄 등록 검증](#7-엑셀-일괄-등록-검증) | — | ADMIN |
+| POST | `/api/v1/employees/bulk` | [엑셀 일괄 등록](#8-엑셀-일괄-등록) | — | ADMIN |
+| GET | `/api/v1/employees/{userId}/profile-image` | [프로필 사진 조회(아바타 서빙)](#10-프로필-사진-조회-아바타-서빙) | — | **로그인 사용자 누구나** |
 
 > ⚠️ **이 목록은 대부분 ADMIN 전용이지만 프로필 사진 조회만 로그인 사용자 전체다** (§9 이름 검색과 같은 예외). 좌상단·프로젝트 멤버·결재선 아바타가 남의 사진을 그려야 하기 때문. `SecurityConfig` 에서 이 경로의 권한을 분리한다. 업로드/삭제(본인만)는 auth 도메인(`auth.md` §5-1·§5-2)에 있다.
 
@@ -58,7 +58,7 @@
 ⛔ **기본은 재직자만이다.** 화면에 퇴사 필터가 없다.
 
 > ⭐ **`is_system` 의 범위** (2026-08-03 통합) — **사람이 아닌 계정 전부**다.
-> `global/PERMISSION.md` §2-2 는 *"배치·크롤러가 쓰는 시스템 사원"* 으로, 제 설계는 *"ADMIN 공용 계정용 가상 사원"* 으로 썼다.
+> `../docs/global/PERMISSION.md` §2-2 는 *"배치·크롤러가 쓰는 시스템 사원"* 으로, 제 설계는 *"ADMIN 공용 계정용 가상 사원"* 으로 썼다.
 > 둘 다 같은 성격이라 정의를 **`ADMIN` · 배치 · 크롤러**로 넓혀 하나로 쓴다.
 
 **Response**
@@ -76,6 +76,7 @@
 | `data.content[].accountStatus` | String | `ACTIVE` · `INACTIVE` |
 | `data.content[].passwordStatus` | String | `NORMAL` · `RESET_REQUIRED` |
 | `data.content[].resignedAt` | String | 퇴사일 (`null` = 재직중) |
+| `data.content[].profileImageUrl` | String | 아바타 서빙 경로(§10). 사진 없으면 `null` — presigned 아님, 프론트가 `null` 이면 이니셜 아바타 |
 | `data.page` / `size` / `totalElements` / `totalPages` | | 페이징 |
 
 | 코드 | code | 설명 |
@@ -135,7 +136,7 @@
 | 요구사항 | EMP-004 · EMP-018 · ACC-002~004 · ACC-010 · ACC-021 · ACC-022 · USC-EMP-003 · USC-ACC-002 · USC-ACC-017 · USC-ACC-018 |
 
 ⛔ **계정이 항상 함께 발급된다** (`ACC-002`). 사원만 등록하는 경로는 없다. **화면의 체크박스는 삭제 대상**이다.
-⛔ **로그인 아이디는 사번이다.** 별도로 받지 않는다 (`ACC-003`).
+⛔ **로그인 아이디는 사번이다.** 별도로 받지 않는다 (`ACC-003`). 초기 비밀번호 메일에 **로그인 아이디(사번)를 임시 비밀번호와 함께** 안내한다 (2026-08-17 추가 — 재설정 메일도 동일). 사용자가 아이디를 몰라 로그인 못 하는 구멍을 막는다.
 ⛔ **`ADMIN` 은 `role` 로 지정할 수 없다** (`ACC-001`).
 ⛔ **이메일이 없어도 등록된다.** 다만 초기 비밀번호를 전달할 수 없어 로그인하지 못한다 (`EMP-018` · `ACC-022`).
 
@@ -249,10 +250,14 @@
 > ⭐ **권한 컬럼이 템플릿에 있다** (2026-08-03 수정). 검증 오류에 "엑셀로는 관리자 권한을 부여할 수 없습니다" 가 있으므로 컬럼 자체는 존재하고 **`ADMIN` 값만 거부**한다 (`EMP-010`).
 >
 > 🆕 **학력·자격증 컬럼** (2026-08-13, HR-V1 `QUAL-005`) — 기존 8열 뒤에 붙는 **선택 컬럼 2개**:
+>
 > | 컬럼 | 형식 | 예 |
 > |---|---|---|
-> | 학력 | `전공:학위` · 여러 개는 세미콜론(`;`) | `컴퓨터공학:학사; 소프트웨어공학:석사` |
-> | 자격증 | `자격증명` · 여러 개는 세미콜론(`;`) | `정보처리기사; SQLD` |
+> | 학력 | `전공:학위` · 여러 개는 `;` · `,` · 셀 내 줄바꿈 | `컴퓨터공학:학사, 소프트웨어공학:석사` |
+> | 자격증 | `자격증명` · 여러 개는 `;` · `,` · 셀 내 줄바꿈 | `정보처리기사; SQLD` |
+>
+> - 여러 항목 구분자는 **세미콜론(`;`)·쉼표(`,`)·셀 안 줄바꿈(Alt+Enter)** 을 모두 허용하며, 구분자 뒤 공백은 무시한다 (2026-08-17 확대).
+>   ⚠️ 쉼표가 든 전공/자격증 마스터 이름은 쪼개지므로 마스터 이름에 쉼표를 넣지 않는다.
 > - 학위는 엑셀에선 한글(`학사`·`석사`·`박사`)로 쓰고 파서가 enum(`BACHELOR`·`MASTER`·`DOCTOR`)으로 변환한다.
 > - 전공·자격증명은 **마스터에 등록된 이름과 정확히 일치**해야 한다(목록 밖은 행 오류).
 
@@ -349,23 +354,26 @@
 
 ---
 
-## 9. 사원 이름 검색 (결재선 지정용)
+## 9. 사원 후보 검색 (결재선·참여자 지정용)
 
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/employees/search` |
 | 인증 필요 | Y · **로그인 사용자 누구나** (ADMIN 전용 아님) |
 | 요구사항 | EMP-020 · USC-EMP-015 |
-| 요청 출처 | 결재 도메인 — 결재선 등록 화면에서 기안자가 결재자를 이름으로 검색 → 후보에서 선택 |
+| 요청 출처 | 결재선·참여자 지정 화면 — 이름으로 검색하거나, **이름을 모를 때 부서로 후보를 펼친다** |
 
 > ⚠️ **인사관리용 목록(`GET /api/v1/employees`, ADMIN)과 권한·용도가 다르다.**
-> 이건 결재자 자동완성이라 **로그인한 사용자 누구나** 호출한다. `SecurityConfig` 에서 두 경로의 권한을 분리한다.
+> 이건 후보 조회라 **로그인한 사용자 누구나** 호출한다. `SecurityConfig` 에서 두 경로의 권한을 분리한다.
 
-**Request Parameter**
+**Request Parameter** — `name` · `departmentId` 중 **하나 이상 필수** (둘 다 없으면 400). 둘 다 주면 AND.
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
-| `name` | String | Y | 이름 부분 일치 검색어 |
+| `name` | String | N\* | 이름 부분 일치 검색어. 공백뿐이면 없는 것으로 본다 |
+| `departmentId` | Long | N\* | 부서 필터. 이름을 모를 때 이 부서 재직자를 후보로 펼친다 |
+
+> \* **name·departmentId 중 최소 하나는 있어야 한다** (2026-08-17, A안 — 이름 없이도 부서로 후보를 펼치기 위해 name 을 선택값으로 열었다).
 
 **Response**
 
@@ -375,14 +383,15 @@
 | `data[].name` | String | 이름 |
 | `data[].department` | String | 부서명 (동명이인 구분용, `null` 허용) |
 | `data[].position` | String | 직급명 (동명이인 구분용, `null` 허용) |
+| `data[].profileImageUrl` | String | 아바타 서빙 경로(§10). 사진 없으면 `null` — presigned 아님, 결재선 후보 아바타용 |
 
-> 배열(후보 목록)로 내려준다. **급여 등 민감 정보는 포함하지 않는다** — 위 4개 필드만.
-> ⛔ **시스템 계정(`is_system=1`)과 퇴사자는 결재자 후보에 나오지 않는다** — `is_system=0` · 재직자만 (`EMP-003`).
+> 배열(후보 목록)로 내려준다. **급여 등 민감 정보는 포함하지 않는다** — 위 필드는 후보 식별·아바타 표시에 필요한 최소치다.
+> ⛔ **시스템 계정(`is_system=1`)과 퇴사자는 후보에 나오지 않는다** — `is_system=0` · 재직자만 (`EMP-003`).
 
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 조회 성공 (결과 없으면 빈 배열) |
-| 400 | `EMP_INVALID_PARAMETER` | `name` 누락 등 |
+| 400 | `EMP_INVALID_PARAMETER` | `name`·`departmentId` 둘 다 누락 |
 | 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
 
 ---
@@ -407,11 +416,11 @@
 ```text
 HTTP/1.1 302 Found
 Location: <presigned S3 URL>
-Cache-Control: no-store, private
+Cache-Control: max-age=300, private
 ```
 
 > ⚠️ **`profileImageUrl` 은 이 경로이지 presigned URL 이 아니다.** 이미지 블록(`image.md`)은 presigned URL 을 JSON 에 직접 담지만, 아바타는 목록마다 수십 개가 반복 노출되고 거의 안 바뀌므로 그 방식이 맞지 않는다. 대신 **안 만료되는 우리 경로**를 내려주고, 만료·재서명은 이 서빙 API 가 내부에서 책임진다.
-> **캐시 전략** — presigned 는 1시간이면 만료되므로 **redirect 응답을 캐시하면 안 된다(`no-store`)** — 매 조회가 이 엔드포인트를 거쳐 항상 새 presigned 를 받는다. 사진을 교체하면 다음 조회부터 새 키로 서명돼 즉시 반영된다.
+> **캐시 전략 (2026-08-17 변경)** — 302 redirect 를 **`max-age=300`(5분)** 로만 캐시한다. 목록에 아바타가 반복 노출돼 매 새로고침마다 왕복이 겹치던 깜빡임을 줄이되, presigned 만료(1시간)보다 짧아 만료된 URL 이 캐시에 남지 않는다. 사진 교체는 **최대 5분 뒤** 반영된다(즉시 아님 — 이전엔 `no-store` 라 즉시였다). private 라 공유 캐시(프록시/CDN)엔 저장되지 않는다.
 
 **Status Code**
 

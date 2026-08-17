@@ -26,6 +26,7 @@ public class VitamateFileIndexFailureRecorder {
                 null,
                 FileIndexStatus.FAILED,
                 errorMessage,
+                false,
                 LocalDateTime.now()
         );
     }
