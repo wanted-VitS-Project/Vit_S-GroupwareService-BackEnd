@@ -12,12 +12,13 @@ import java.util.List;
 public interface EmployeeSearchQueryPort {
 
     /**
-     * 이름 부분 일치로 결재자 후보를 찾는다.
+     * 이름 부분 일치 <b>또는</b> 부서로 후보를 찾는다.
      * <b>시스템 계정·퇴사자·삭제 사원은 제외</b>한다 ({@code is_system=0} · 재직 · 미삭제 — `employee.md` §9).
      *
-     * @param name 이름 부분 일치 검색어 (호출 전 null/공백 검증 완료 전제)
+     * @param name 이름 부분 일치 검색어. null 이면 이름 조건을 걸지 않는다(부서로만 조회)
+     * @param departmentId 부서 필터. null 이면 부서 조건을 걸지 않는다. (name·departmentId 둘 다 null 은 서비스가 미리 막는다)
      * @param companyId 현재 회사 — 이 회사 사원만 검색한다(타사 사원 노출 차단)
      * @return 후보 목록. 없으면 빈 리스트
      */
-    List<EmployeeSearchRow> searchByName(String name, Long companyId);
+    List<EmployeeSearchRow> search(String name, Long departmentId, Long companyId);
 }

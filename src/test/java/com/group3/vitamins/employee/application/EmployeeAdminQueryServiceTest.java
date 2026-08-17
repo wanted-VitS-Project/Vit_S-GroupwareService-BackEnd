@@ -220,7 +220,7 @@ class EmployeeAdminQueryServiceTest {
 
     private EmployeeListRow listRow(String userId) {
         return new EmployeeListRow(userId, "홍길동", "hong@vitamins.com",
-                "개발팀", "기술본부", "선임", "MEMBER", "ACTIVE", false, null);
+                "개발팀", "기술본부", "선임", "MEMBER", "ACTIVE", false, null, null);
     }
 
     private EmployeeDetailRow detailRow(String userId, boolean isSystem) {

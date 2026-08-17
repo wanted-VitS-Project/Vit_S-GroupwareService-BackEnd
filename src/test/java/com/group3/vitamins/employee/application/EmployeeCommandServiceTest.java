@@ -247,7 +247,7 @@ class EmployeeCommandServiceTest {
         assertThat(employeeCaptor.getValue().getUserId()).isEqualTo("vitas-EMP021");
         assertThat(employeeCaptor.getValue().isSystem()).isFalse();
         // 원문 비밀번호로 메일 발송
-        verify(mailPort).sendInitialPassword("hong@vitamins.com", "홍길동", "RAW-PW");
+        verify(mailPort).sendInitialPassword("hong@vitamins.com", "vitas-EMP021", "홍길동", "RAW-PW");
         assertThat(result.emailRegistered()).isTrue();
         assertThat(result.emailSent()).isTrue();
     }
@@ -270,7 +270,7 @@ class EmployeeCommandServiceTest {
     void mailFailureStillSucceeds() {
         stubHappyPath();
         doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
-                .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString());
+                .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString(), anyString());
 
         EmployeeRegisterResult result = service.register(cmd("MEMBER", "2026-08-05", "hong@vitamins.com"));
 

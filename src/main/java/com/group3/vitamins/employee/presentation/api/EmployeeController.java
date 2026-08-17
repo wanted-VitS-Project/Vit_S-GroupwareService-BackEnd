@@ -122,26 +122,29 @@ public class EmployeeController {
         return ApiResponse.created(EmployeeResponseMessage.REGISTERED, data);
     }
 
-    @Operation(summary = "사원 이름 검색 (결재선 지정용)",
-            description = "이름 부분 일치로 결재자 후보를 찾는다. 결재선 등록 화면의 자동완성이라 "
+    @Operation(summary = "사원 후보 검색 (결재선·참여자 지정용)",
+            description = "이름 부분 일치 또는 부서로 후보를 찾는다. 이름을 모를 때 부서로 후보를 펼칠 수 있도록 "
+                    + "name·departmentId 중 하나만 있으면 된다(둘 다 없으면 400). 결재선·참여자 지정 화면용이라 "
                     + "ADMIN 이 아닌 로그인 사용자 누구나 호출한다. 시스템 계정·퇴사자는 후보에 나오지 않으며, "
-                    + "급여 등 민감 정보는 응답에 포함하지 않는다(userId·name·department·position 4개 필드만).")
+                    + "급여 등 민감 정보는 응답에 포함하지 않는다(userId·name·department·position·profileImageUrl).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "조회 성공 (결과 없으면 빈 배열)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "EMP_INVALID_PARAMETER — name 누락"),
+                    description = "EMP_INVALID_PARAMETER — name·departmentId 둘 다 누락"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 세션 없음/만료")
     })
     @GetMapping("/search")
     public ApiResponse<List<EmployeeSearchResponse>> searchEmployees(
-            @Parameter(description = "이름 부분 일치 검색어 (필수)")
-            @RequestParam(required = false) String name) {
+            @Parameter(description = "이름 부분 일치 검색어 (name·departmentId 중 하나 필수)")
+            @RequestParam(required = false) String name,
+            @Parameter(description = "부서 필터 (name·departmentId 중 하나 필수)")
+            @RequestParam(required = false) Long departmentId) {
 
-        // name 은 required=false 로 받고 서비스에서 검증한다 — @RequestParam 기본 검증에 맡기면
-        // 명세 코드(EMP_INVALID_PARAMETER)가 아니라 전역 COMMON_* 이 새어 나간다 (`.ai/API.md` §0).
-        List<EmployeeSearchResponse> data = employeeQueryUseCase.searchByName(new EmployeeSearchQuery(name))
+        // name·departmentId 는 required=false 로 받고 서비스에서 "둘 다 없음"을 검증한다 —
+        // @RequestParam 기본 검증에 맡기면 명세 코드(EMP_INVALID_PARAMETER)가 아니라 전역 COMMON_* 이 새어 나간다.
+        List<EmployeeSearchResponse> data = employeeQueryUseCase.search(new EmployeeSearchQuery(name, departmentId))
                 .stream()
                 .map(EmployeeSearchResponse::from)
                 .toList();

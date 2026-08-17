@@ -18,6 +18,7 @@ import java.time.LocalDate;
  * @param accountStatus        계정 상태 (ACTIVE · INACTIVE)
  * @param mustChangePassword   초기 비밀번호 변경 필요 여부
  * @param resignedAt           퇴사일 (null = 재직중)
+ * @param profileImageKey      프로필 사진 S3 키 (null = 사진 없음). 아바타 URL 노출 판정용 — 키 자체는 응답에 안 나간다
  */
 public record EmployeeListRow(
         String userId,
@@ -29,6 +30,7 @@ public record EmployeeListRow(
         String role,
         String accountStatus,
         boolean mustChangePassword,
-        LocalDate resignedAt
+        LocalDate resignedAt,
+        String profileImageKey
 ) {
 }

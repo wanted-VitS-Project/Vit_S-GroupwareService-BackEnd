@@ -14,8 +14,9 @@ public interface InitialPasswordMailPort {
      * 초기 비밀번호를 발송한다.
      *
      * @param toEmail     수신 이메일 (호출부가 존재를 이미 확인했다)
+     * @param userId      로그인 아이디(사번). 메일에 함께 안내한다 — 로그인 아이디가 사번이라 사용자가 이걸 알아야 로그인한다
      * @param name        사원 이름 (인사말)
      * @param rawPassword 평문 초기 비밀번호. 로그에 남기지 않는다
      */
-    void sendInitialPassword(String toEmail, String name, String rawPassword);
+    void sendInitialPassword(String toEmail, String userId, String name, String rawPassword);
 }

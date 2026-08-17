@@ -16,7 +16,7 @@ public class InitialPasswordMailAdapter implements InitialPasswordMailPort {
     private final PasswordResetMailPort passwordResetMailPort;
 
     @Override
-    public void sendInitialPassword(String toEmail, String name, String rawPassword) {
-        passwordResetMailPort.sendTempPassword(toEmail, name, rawPassword);
+    public void sendInitialPassword(String toEmail, String userId, String name, String rawPassword) {
+        passwordResetMailPort.sendTempPassword(toEmail, userId, name, rawPassword);
     }
 }
