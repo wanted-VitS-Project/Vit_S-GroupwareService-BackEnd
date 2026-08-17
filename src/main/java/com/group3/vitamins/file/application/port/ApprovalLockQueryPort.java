@@ -25,6 +25,16 @@ public interface ApprovalLockQueryPort {
      */
     boolean existsAnyApprovalReference(Long fileId);
 
+    /**
+     * 이 파일이 걸린 결재의 <b>결재선에 요청자가 있으면</b> {@code true} (2026-08-17, 읽기 접근 fallback).
+     *
+     * <p>프로젝트 미소속 결재자(대표 직급·MASTER)는 스텝 권한으로는 첨부를 못 여는데, 결재 상세는
+     * 결재선 참여로 열린다({@code ApprovalViewPolicy}). 그 비대칭을 파일 읽기에도 맞춘다 —
+     * <b>읽기(다운로드·미리보기·버전조회) 판정 전용</b>이며, 그 파일이 걸린 결재로 한정한다(쓰기 없음).
+     * 계약: `file.md` §? · `PERMISSION.md`(결재 권한 = 결재선에 있으면 ✅).
+     */
+    boolean isApprovalLineParticipant(Long fileId, String userId);
+
     /** 진행 중 결재 스냅샷. 409 응답 메시지에 담을 최소 정보(결재 id·제목). */
     record InProgressApproval(Long approvalId, String title) {
     }

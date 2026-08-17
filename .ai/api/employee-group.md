@@ -5,17 +5,17 @@
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 그룹 목록 조회 | GET | `/api/v1/employee-groups` | 전체 사용자 |
-| 그룹 생성 | POST | `/api/v1/employee-groups` | ADMIN |
-| 그룹 이름 수정 | PATCH | `/api/v1/employee-groups/{groupId}` | ADMIN |
-| 그룹 삭제 | DELETE | `/api/v1/employee-groups/{groupId}` | ADMIN |
-| 구성원 목록 조회 | GET | `/api/v1/employee-groups/{groupId}/members` | 전체 사용자 |
-| 구성원 추가 | POST | `/api/v1/employee-groups/{groupId}/members` | ADMIN |
-| 구성원 제거 | DELETE | `/api/v1/employee-groups/{groupId}/members/{userId}` | ADMIN |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/employee-groups` | [그룹 목록 조회](#1-그룹-목록-조회) | — | 전체 사용자 |
+| POST | `/api/v1/employee-groups` | [그룹 생성](#2-그룹-생성) | — | ADMIN |
+| PATCH | `/api/v1/employee-groups/{groupId}` | [그룹 이름 수정](#3-그룹-이름-수정) | — | ADMIN |
+| DELETE | `/api/v1/employee-groups/{groupId}` | [그룹 삭제](#4-그룹-삭제) | — | ADMIN |
+| GET | `/api/v1/employee-groups/{groupId}/members` | [구성원 목록 조회](#5-구성원-목록-조회) | — | 전체 사용자 |
+| POST | `/api/v1/employee-groups/{groupId}/members` | [구성원 추가](#6-구성원-추가) | — | ADMIN |
+| DELETE | `/api/v1/employee-groups/{groupId}/members/{userId}` | [구성원 제거](#7-구성원-제거) | — | ADMIN |
 
 **조회 2개만 `전체 사용자`다.** 그룹은 프로젝트 멤버 선택·페이지 권한 부여에서 "한 번에 고르는 도구"로 쓰이므로 일반 사용자도 목록과 구성원을 봐야 한다 (`GRP-001` · `GRP-008`).
 

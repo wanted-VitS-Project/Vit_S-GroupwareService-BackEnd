@@ -148,7 +148,7 @@ public class EmployeeCommandService implements EmployeeCommandUseCase {
         boolean emailSent = false;
         if (emailRegistered) {
             try {
-                initialPasswordMailPort.sendInitialPassword(email, name, rawPassword);
+                initialPasswordMailPort.sendInitialPassword(email, userId, name, rawPassword);
                 emailSent = true;
             } catch (MailDeliveryException e) {
                 // 사원·계정은 이미 만들어졌다. 비밀번호만 다시 보내면 되므로 등록은 성공으로 둔다.

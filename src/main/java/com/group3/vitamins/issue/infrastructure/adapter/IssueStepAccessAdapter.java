@@ -52,13 +52,19 @@ public class IssueStepAccessAdapter implements IssueStepAccessPort {
         return permission == null || permission == MemberPermission.NONE;
     }
 
-    /** 수정·생성·삭제는 여전히 해당 스텝의 EDITOR 권한이 필요하다 — 스텝 오버라이드 경로를 그대로 쓴다. */
+    /**
+     * 수정·생성·삭제는 여전히 해당 스텝의 EDITOR 권한이 필요하다 — 스텝 오버라이드 경로를 그대로 쓴다.
+     *
+     * <p>projectId 를 따로 조회하지 않는다 — 스텝 판정이 이미 그 값을 돌려주기 때문이다.
+     * 스텝이 없을 때 나가는 에러코드는 아래 {@code catch} 가 {@code ISS_STEP_NOT_FOUND} 로 바꿔주므로
+     * 선조회를 없애도 응답은 같다.
+     */
     @Override
     public StepAccessView requireEditable(Long stepId, String requesterUserId, String role) {
-        Long projectId = findProjectId(stepId, IssueErrorCode.ISS_STEP_NOT_FOUND);
         try {
-            stepAccessUseCase.requireEditable(stepId, requesterUserId, role);
-            return new StepAccessView(stepId, projectId);
+            StepAccessUseCase.StepAccessView step =
+                    stepAccessUseCase.requireEditable(stepId, requesterUserId, role);
+            return new StepAccessView(stepId, step.projectId());
         } catch (NotFoundException e) {
             throw new NotFoundException(IssueErrorCode.ISS_STEP_NOT_FOUND, e);
         } catch (ForbiddenException e) {

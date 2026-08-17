@@ -24,13 +24,17 @@
   `SettlementDetail`(이 API 응답과 동일한 필드)을 채운다. 계좌번호는 항상 마스킹된 값만 담긴다(원문 복호화 결과를
   그대로 내보내지 않는다).
 
-| 상태 | 기능 | METHOD | URL | 권한 |
-|------|------|--------|-----|------|
-| ✅ 확정 (구현 완료) | 정산 항목 수정 시 조회 | GET | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
-| ✅ 확정 (구현 완료) | 정산 항목 작성/수정 | PATCH | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | 편집 권한 보유자 |
-| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산현황 필터 옵션 조회 | GET | `/api/v1/projects/settlements/filters` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 프로젝트 조회 | GET | `/api/v1/projects/settlements` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 (구현 완료, 임시 권한 어댑터) | 정산 현황 블록 조회 | GET | `/api/v1/projects/{projectId}/settlements` | 접근 권한 보유자(재무 관리 페이지) |
+---
+
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| GET | `/api/v1/projects/settlements/filters` | [정산현황 필터 옵션 조회](#정산현황-필터-옵션-조회-get-apiv1projectssettlementsfilters) | ✅ 확정 (구현 완료, 임시 권한 어댑터) |
+| GET | `/api/v1/projects/settlements` | [정산 현황 프로젝트 조회](#정산-현황-프로젝트-조회-get-apiv1projectssettlements) | ✅ 확정 (구현 완료, 임시 권한 어댑터) |
+| GET | `/api/v1/projects/{projectId}/settlements` | [정산 현황 블록 조회](#정산-현황-블록-조회-get-apiv1projectsprojectidsettlements) | ✅ 확정 (구현 완료, 임시 권한 어댑터) |
+| GET | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | [정산 항목 수정 시 조회](#정산-항목-수정-시-조회-get-apiv1blockssettlementssettleiditemstypeincomeoutcome) | ✅ 확정 (구현 완료) |
+| PATCH | `/api/v1/blocks/settlements/{settleId}/items?type={INCOME\|OUTCOME}` | [정산 항목 작성/수정](#정산-항목-작성수정-patch-apiv1blockssettlementssettleiditemstypeincomeoutcome) | ✅ 확정 (구현 완료) |
 
 ---
 

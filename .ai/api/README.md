@@ -28,31 +28,45 @@
 
 ---
 
-## 📂 현재 파일 (2026-08-03)
+## 📂 현재 파일 (2026-08-16)
 
-**김동현 담당 — 47개 엔드포인트 · 명세 전부 확정 → 구현 가능**
+**21개 파일 · 191개 엔드포인트 · 담당자는 아래 표 참고**
 
-| 파일 | SUB-Domain | 개수 | 내용 |
-|------|----------------|:----:|------|
-| [auth.md](auth.md) | `AUTH` | 4 | 로그인 · 로그아웃 · 내 정보 · 비밀번호 변경 |
-| [account.md](account.md) | `Account` | 3 | 전역 권한 · 계정 상태 · 비밀번호 재설정 |
-| [employee.md](employee.md) | `Employee` | 8 | 목록 · 상세 · 등록 · 수정 · 퇴사 · 엑셀 3종 |
-| [department.md](department.md) | `Department` | 4 | 목록(트리) · 생성 · 수정 · 삭제 |
-| [job-position.md](job-position.md) | `JobPosition` | 4 | 목록 · 생성 · 수정 · 삭제 |
-| [employee-group.md](employee-group.md) | `EmployeeGroup` | 7 | 그룹 4종 + 구성원 3종 |
-| [page-permission.md](page-permission.md) | `PagePermission` | 5 | 내 페이지 · 페이지 목록 · 접근자 · 부여 · 회수 |
-| [file.md](file.md) | `File` · `FileVersion` | 12 | File 7종 · FileVersion 5종 |
+| 파일 | 담당 | SUB-Domain | 개수 | 내용 |
+|------|------|----------------|:----:|------|
+| [auth.md](auth.md) | 김동현 | `AUTH` | 7 | 로그인 · 로그아웃 · 내 정보 · 비밀번호 변경 |
+| [account.md](account.md) | 김동현 | `Account` | 3 | 전역 권한 · 계정 상태 · 비밀번호 재설정 |
+| [employee.md](employee.md) | 김동현 | `Employee` | 10 | 목록 · 상세 · 등록 · 수정 · 퇴사 · 엑셀 3종 |
+| [department.md](department.md) | 김동현 | `Department` | 4 | 목록(트리) · 생성 · 수정 · 삭제 |
+| [job-position.md](job-position.md) | 김동현 | `JobPosition` | 5 | 목록 · 생성 · 수정 · 삭제 |
+| [employee-group.md](employee-group.md) | 김동현 | `EmployeeGroup` | 7 | 그룹 4종 + 구성원 3종 |
+| [page-permission.md](page-permission.md) | 김동현 | `PagePermission` | 5 | 내 페이지 · 페이지 목록 · 접근자 · 부여 · 회수 |
+| [file.md](file.md) | 김동현 | `File` · `FileVersion` | 18 | File 9종 · FileVersion 5종 · 전사 파일 트리 4종(§14) |
+| [company-document.md](company-document.md) | 김동현 | `CompanyDocument` | 9 | 사내 문서함 CRUD · 버전 · 업로드 |
+| [qualification.md](qualification.md) | 김동현 | `Qualification` | 8 | 전공 · 자격증 마스터 CRUD (참조 차단 삭제) |
+| [activity-log.md](activity-log.md) | 김용준 | `ActivityLog` | 1 | 스텝별 활동 기록 조회 (+ 전사 공통 수집 컨벤션 가이드) |
+| [issue.md](issue.md) | 김용준 | `Issue` | 8 | 이슈 목록 · 상세 · 생성 · 수정 · 상태변경 · 삭제 · 캘린더 |
+| [approval.md](approval.md) | 이강욱 | `Approval` | 12 | 결재 블록 CRUD · 결재선 · 상신 · 승인/반려 |
+| [notification.md](notification.md) | 이강욱 | `Notification` | 5 | 알림 목록 · 삭제 · 이동 대상 · 읽음 처리 · SSE 실시간 수신 |
+| [bid.md](bid.md) | 정현 | `Bid` | 35 | 입찰 공고 수집·CRUD · AI 요약 · 문서 검토 · 프로젝트 전환 (4개 폐기 포함) |
+| [vitamate.md](vitamate.md) | 정현 | `Vitamate` | 13 | AI 문서 분석 요청·결과 조회 · 파이썬 서버 콜백 6종 · 관리자 정리 작업 |
+| [checklist.md](checklist.md) | 정림 | `Checklist` | 3 | 체크리스트 항목 생성 · 수정 · 삭제 |
+| [text.md](text.md) | 정림 | `Text` | 1 | 텍스트 본문 수정 |
+| [image.md](image.md) | 서정림 | `Image` | 10 | 이미지 항목 조회·생성·수정·삭제·복구·다운로드·모아보기 |
+| [finance.md](finance.md) | — | `Finance` | 22 | 재무 관리 요약 · 입출금/세금계산서 조회·CSV 업로드·매칭·연결 제외 |
+| [settlement.md](settlement.md) | — | `Settlement` | 5 | 정산현황 조회(프로젝트/블록) · 필터 · 정산 항목 조회·수정 |
 
-Domain 은 `인사`(35개) · `프로젝트`(파일 12개) — **총 47개** (`file.md` 에 버전 단건 조회 · 파일 버전 목록 조회가 추가됐다).
+김동현 담당분은 Domain `인사`(49개 — 인증 7 · 계정 3 · 사원 10 · 부서 4 · 직급 5 · 그룹 7 · 페이지권한 5 · 전공·자격증 8) · `프로젝트`(파일 18개 · 사내 문서함 9개) — **76개**. 나머지 115개는 담당자별 표 참고.
 `department.md` · `job-position.md` 에는 요구사항·유스케이스 명세도 함께 들어 있다 (다른 문서에 없어서).
+`finance.md` · `settlement.md` 는 담당자 표기가 비어 있다 — 실제 작업자가 채워야 한다.
 
 ## 🔴 `.ai/docs/global/` 과의 충돌 (2026-08-03 정리)
 
-`global/PERMISSION.md` · `PAGE.md` · `BLOCK.md` 를 대조해 **6곳 충돌**을 찾았다. 결론은 아래와 같고, **팀 문서 쪽을 고쳐야 하는 3건은 동훈에게 요청 중**이다.
+`../docs/global/PERMISSION.md` · `PAGE.md` · `BLOCK.md` 를 대조해 **6곳 충돌**을 찾았다. 결론은 아래와 같고, **팀 문서 쪽을 고쳐야 하는 2건은 동훈에게 요청 중**이다.
 
 | # | 항목 | 채택 | 조치 |
 |---|------|------|------|
-| 1 | `page_code` 개수 | **5개** (와이어프레임) | 🔴 `global/` 문서 수정 요청 |
+| 1 | `page_code` 개수 | **카탈로그 6개 · 부여 대상 2개**(`BIDDING`·`FINANCE`) — 와이어프레임 5개안은 폐기 (`PERMISSION.md` §3-1 정본) | ✅ 정정 완료 |
 | 2 | `ADMIN` 이 프로젝트·페이지를 뚫나 | **뚫는다** (팀 문서) | ✅ 이 폴더 수정 완료 |
 | 3 | 전역 role 서열 | **`ADMIN` > `MASTER` > `MEMBER`** (팀 문서) | ✅ 수정 완료 |
 | 4 | `ADMIN` 겸직 | **불가 · 시스템 계정** | 🔴 `global/` 문서 수정 요청 |
@@ -71,7 +85,7 @@ Domain 은 `인사`(35개) · `프로젝트`(파일 12개) — **총 47개** (`f
 | 자기 role 행 수정 차단 (`ACC_SELF_MODIFICATION_NOT_ALLOWED`) | `account.md` §1 |
 | `is_system` 정의 통합 (ADMIN · 배치 · 크롤러) | `employee.md` §1 |
 
-> ⚠️ **읽는 순서** — `global/PERMISSION.md` 를 먼저 읽되, 위 표의 1·4·5번은 **이 폴더가 최신**이다.
+> ⚠️ **읽는 순서** — `../docs/global/PERMISSION.md` 를 먼저 읽되, 위 표의 1·4·5번은 **이 폴더가 최신**이다.
 
 ## 📐 공통 규칙 (실제 응답 형식)
 
@@ -97,15 +111,6 @@ Domain 은 `인사`(35개) · `프로젝트`(파일 12개) — **총 47개** (`f
   - 이전 모듈에서 1:1 미러한 명세가 2,025줄 / 72KB 까지 커져 "작업 전 반드시 읽어라" 규칙이 지켜질 수 없게 됐다.
 - 명세와 코드가 다르면 → **md 명세가 맞다** (md 자체가 틀렸다면 md 를 먼저 고친다)
 - API 를 건드린 PR 은 **"명세(md)를 함께 갱신했다"** 체크 항목을 확인한다
-
----
-
-## 현재 파일
-
-| 파일 | 도메인 | 상태 |
-|------|--------|------|
-| [bid.md](bid.md) | 입찰관리 | 📝 초안 |
-| [vitamate.md](vitamate.md) | 비타메이트 AI | ✅ 확정 |
 
 ---
 

@@ -1,11 +1,32 @@
 # 🧩 블록 정보 — 카탈로그 (**enum 10값 / 실사용 8종**)
 
 **최종 업데이트**
+- 2026-08-16 — 🚨 **정산 재설계(`V20260809130000`) 반영.** §4-5·§4-6 을 **폐기 표기**하고 현행 **§4-10 `SETTLEMENT`** 를 신설 · §1(43행)·§5·§8·§8-1 의 `block_payment_confirm`·`tax_invoice_confirm`·`payment`·구 `tax_invoice` 서술을 **`settlement_block`(soft) 기준**으로 갱신 · `type_id` NULL 사유표 재작성
+- 2026-08-16 — §0 TL;DR·섹션 맵 신설 (본문 규칙 변경 없음)
 - 2026-08-13 — 🚨 **§9 정정 2건.** ⛔ **결재선은 복사할 수 없다**(`ApprovalLineEligibilityPolicy` 가 결재자에게 `project_member` 를 요구 ↔ 복제는 참여자 미복사 · §9-1) · **`template` 테이블 없이 성립**한다는 근거 정정 + v1/v2 분리와 `copyDetail` 확장 방식 등재(§9-2) · 표에 `SETTLEMENT` 누락분 보강
-- 2026-08-12 — §8 예외 1건 등재: 결재 상신 이후 직접 삭제 시 **확인 요구**(`DEL-016`) — 막지 않는다. 스텝 삭제 cascade 는 현행 유지
-- 2026-08-10 — 결재 삭제 경계 정합화·1차 구현: 상태 무관 동기 전파 후 미종결 상태 `CANCELED`, 결재 4테이블 soft delete, 삭제분 명령/조회 차단
 
 > 🔴 **DDL 정본은 [`../domain/ERD.md`](../domain/ERD.md) §3 이다.** 어긋나면 그쪽이 이긴다.
+
+## §0 TL;DR
+
+- **이 문서가 정하는 것**: 블록은 소유자가 전부 스텝인 **닫힌 enum 10종**이며, `block` 공통 테이블 + 타입별 상세 테이블을 **양방향 ID 다형성**으로 잇는다 — `block.type`(판별자) + `block.type_id` ↔ `{상세}.block_id`, **양쪽 다 FK 없음**, 상세 쪽 **`UNIQUE(block_id)` 필수**, 생성은 **3단계 한 트랜잭션**(`block` INSERT → `{상세}` INSERT → `type_id` UPDATE)이다 (§1).
+- 타입별 상세는 **어댑터 파일 4개 + 요청 1건**으로 붙이며 Block 도메인 공용 파일은 고치지 않는다. **생성·삭제는 JPA 위임, 조회만 MyBatis `IN` 배치**(§2). 개별 타입 정의는 §4 카탈로그, 삭제 전파는 §8.
+- ⚠️ **조용히 깨지는 함정 2건**
+  1. **§8 「삭제 잠금 폐기(2026-08-09)」를 "지금도 잠금이 있다"로 읽지 마라 — 반대다.** 잠금 4종은 전부 철거됐고(`BlockDeleteLockPort`·`Registry` 포함, **되살리지 마라**) 대신 **「확인 요구 후 삭제」**만 남았다. 결재는 **직접 삭제만** 상신 이후 409(`DEL-016`), **스텝 삭제 cascade 는 확인 없이 항상 진행**된다. 판정을 `BlockCommandService` 의 private 공유 본체에 넣으면 cascade 까지 409 로 막혀 **스텝 삭제가 죽는다** (§8·§2-5).
+  2. **FK 가 없어 DB 가 아무것도 막지 않는다** — 정합성은 전적으로 앱 책임이다. 생성 순서는 뒤집을 수 없고(상세는 `block_id NOT NULL`), 삭제도 **같은 트랜잭션**이어야 한다(이벤트 금지 · `REQUIRES_NEW` 금지). 어기면 고아 상세 행·죽은 `type_id` 가 조용히 남는다 (§1 규약 5 보강 · §2-5).
+- 📌 카탈로그 개별 절은 §4-1~4-10 **10개**다. 이 중 **`PAYMENT_CONFIRM`(§4-5)·`TAX_INVOICE_VIEW`(§4-6) 는 폐기된 절**이다 — 두 타입의 상세 테이블 4개가 정산 재설계(`V20260809130000`)에서 통째로 `DROP` 됐고 현행 모델은 **§4-10 `SETTLEMENT`**(`settlement_block`) 하나다. 두 절은 역사적 사실 보존용으로만 남아 있다.
+
+| 섹션 | 내용 |
+|---|---|
+| §1 기본 규칙 | 소유자=스텝 · 닫힌 enum 10종 · **다형성 규약 5줄** · `block.status`/`block.project_id` 없음 |
+| §2 상세 확장 가이드 | 소유 경계 · JPA 쓰기/MyBatis 조회 · 만들 파일 4개 · 계약 10건 · 스켈레톤 · 타입별 등록 현황(§2-8) |
+| §3 배치 | 3열 그리드 — `row_index`·`sort_order`·`col_span`, UNIQUE 금지 |
+| §4 카탈로그 | 타입별 상세 테이블·역할·권한·삭제·템플릿·담당 (§4-1~4-10 · **§4-5·§4-6 은 폐기**) |
+| §5 한눈에 보는 요약 | 전 타입 1행 요약표 + `type_id` 가 NULL 로 남는 **4종**(`FILE`·`PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW`·`BID_NOTICE`)과 각각의 사유 |
+| §6 체크리스트 vs 이슈 | 담당자·기한이 붙으면 이슈, 안 붙으면 체크리스트 |
+| §7 이슈 ↔ 블록 연결 | `issue_block`(N:M) · 같은 스텝 제약은 앱이 검증 · 연결 해제는 하드 `DELETE` |
+| §8 삭제 | **잠금 폐기 → 확인 요구** · 결재 예외(`DEL-016`) · 🚨 **정산 블록은 확인도 안 묻는다**(BLK-013 미구현) · §8-1 soft/hard 테이블 구분 |
+| §9 템플릿 | 구조·설정은 담고 실적은 안 담는다 · §9-1 결재선 복사 불가 · §9-2 `template` 테이블 없이 성립 |
 
 ## 1. 기본 규칙 <sub>(구 DOMAIN §3-1)</sub>
 
@@ -19,7 +40,9 @@
 | **블록 상태** | **없다.** `block.status` 를 만들지 마라 — 진행 상태는 연결된 이슈가 표현한다 (§6) |
 
 ⛔ **`block.project_id` 는 없다** (2026-08-03 폐기). 프로젝트를 알아야 하면 **`step` 을 조인한다** —
-`idx_step_project` + `idx_block_step` 으로 커버된다. 정산 회차 집계는 `block_payment_confirm.project_id` 를 그대로 쓴다.
+`idx_step_project` + `idx_block_step` 으로 커버된다.
+정산 회차 집계는 **`settlement_block.project_id`** 를 그대로 쓴다 — 옛 `block_payment_confirm.project_id` 는 테이블째 사라졌고(`V20260809130000`),
+같은 목적의 컬럼이 `V20260816170100` 에서 `settlement_block` 에 다시 비정규화됐다 (`NOT NULL` · 생성 시점 스탬핑 · 불변 · `idx_settlement_block_project_type(project_id, type, deleted_at)`).
 
 ### ⭐ 다형성 규약 5줄
 
@@ -228,9 +251,9 @@ public Long create(Long blockId) {
 | `AI` | ✅ `vitamate/infrastructure/blockdetail/` | 값 | 비타메이트 상세 빈 행 생성·삭제 로그 + `VitamateDetail(welcomeMessage)` 조회. 내부 `vitamate_block_id`는 응답에 노출하지 않음 |
 | `IMAGE` | ✅ `image/infrastructure/blockdetail/` | 값 | 1:N (`image_block` → `image`) |
 | `APPROVAL` | ✅ `approval/infrastructure/blockdetail/` | 값 | **cascade(스텝 삭제)** 는 `IN_PROGRESS` 포함 상태 무관하게 `deleteDetail`을 동기 호출한다. 미종결 상태는 `CANCELED`, 결재 4테이블은 soft delete하며 기존 API에서 삭제분을 차단한다. ⚠️ **직접 삭제는 `assertDeletable`이 상신 이후에 확인을 요구한다**(확인하면 삭제) (2026-08-12 · `DEL-016` · §4-7·§8) |
-| ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block` |
+| ⭐ `SETTLEMENT` | ✅ `settlement/infrastructure/blockdetail/` | 값 | 2026-08-09 신설. `settlement_block`(soft) — **`PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 를 대체한다.** 정의는 **§4-10** |
 | `FILE` | ❌ | **NULL** | 복합 PK — `createDetail` 이 `null` 반환. 🚨 **조회 `detail` 도 안 채워진다** (명세는 `{fileCount}`) |
-| ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | ❌ | **NULL** | ⛔ **상세 테이블이 DROP 됐다** (`V20260809130000`) — `SETTLEMENT` 로 통합. enum 값만 남은 빈 껍데기이며 **정리는 Block 도메인 소관** |
+| ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | ❌ | **NULL** | ⛔ **상세 테이블이 DROP 됐다** (`V20260809130000`) — `SETTLEMENT` 로 통합. enum 값만 남은 빈 껍데기이며 **정리는 Block 도메인 소관**. ⚠️ `userCreatable()` 이 `BID_NOTICE` 만 막으므로 **사용자가 지금도 이 두 타입을 만들 수 있다** (§4-5) |
 | `BID_NOTICE` | — | — | 사용자 생성 금지 (`POST` 에서 400). `bid_notice_block` 테이블 아직 없음 |
 
 > 어댑터가 없어도 **`POST` 는 정상 동작한다** — `type_id` 가 NULL 로 남고 조회에서 `detail: null` 이 된다.
@@ -257,6 +280,9 @@ public Long create(Long blockId) {
 ## 4. ⭐ 10종 카탈로그 <sub>(구 DOMAIN §3-2 확장)</sub>
 
 > 계열은 **설명을 위한 구분**이지 상속 계층이 아니다. 소유자는 전부 스텝으로 동일하다.
+>
+> ⛔ **§4-5(`PAYMENT_CONFIRM`)·§4-6(`TAX_INVOICE_VIEW`) 은 폐기된 절이다** — 상세 테이블이 `V20260809130000` 에서 `DROP` 됐다.
+> **현행 정산 블록은 §4-10 `SETTLEMENT`** 하나다. 실사용은 8종(enum 은 10값).
 
 ### 4-1. `TEXT` — 텍스트
 
@@ -321,12 +347,29 @@ public Long create(Long blockId) {
 
 ⛔ **템플릿에 파일을 담지 마라.** 프로젝트 100개에 같은 파일이 100벌 생긴다.
 
-### 4-5. `PAYMENT_CONFIRM` — 입금확인
+### 4-5. ⛔ ~~`PAYMENT_CONFIRM` — 입금확인~~ **(폐기 · 2026-08-09)**
+
+> ⛔ **이 절은 현행이 아니다. 구현 근거로 쓰지 마라.**
+> `V20260809130000` 이 `block_payment_confirm` · `payment` 를 **`DROP`** 했고, 입금확인 모델은 **§4-10 `SETTLEMENT`**(`settlement_block` · `cash_flow`)로 통합됐다.
+> `block.type` enum 의 `PAYMENT_CONFIRM` 값만 남아 있고(`BlockType.java`) **상세 테이블도 어댑터도 없다** (§2-8).
+> 상세 문서로 링크돼 있던 `PAY-V1.md` 는 `.ai/` 어디에도 존재하지 않는다 — 현행 명세는 [`settlement.md`](../../api/settlement.md) 다.
+>
+> **남길 역사적 사실 3줄**
+> - 「블록 = 정산 회차 그 자체」 (별도 회차 레코드를 두지 않고 **블록 제목이 회차명**) 라는 결론은 `SETTLEMENT` 가 그대로 이어받았다.
+> - 「한 스텝에 하나만」 제약(`PCB-001B`)은 **`SETTLEMENT` 에 상속되지 않았다** — 아래 ⚠️ 참고.
+> - 「돈은 블록보다 먼저 들어올 수 있다」(2단 매칭: 프로젝트 매칭 필수 + 블록 연결 선택 · `DOMAIN §7-4`) 도 `SETTLEMENT` 에 유지된다 — `cash_flow.settle_block_id` 가 `NULL` 허용인 이유다.
+>
+> ⚠️ **조용히 깨지는 지점** — `BlockType.singlePerStep()` 은 **아직도 `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 에만 `true`** 를 돌려주고 `SETTLEMENT` 에는 `false` 다.
+> 그리고 `userCreatable()` 은 `BID_NOTICE` 만 막으므로, **사용자가 지금도 `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 블록을 만들 수 있다** — 상세가 없어 영원히 `type_id: NULL` · `detail: null` 인 빈 껍데기가 생긴다.
+> 두 값의 정리(enum 제거 또는 생성 차단)는 **Block 도메인 소관**이며 아직 안 됐다 (§2-8).
+
+<details>
+<summary>폐기 전 정의 (역사 보존용 — 클릭)</summary>
 
 | 항목 | 값 |
 |------|-----|
 | 계열 | 도메인 |
-| 상세 테이블 | `block_payment_confirm` — PK `payment_block_id` · `block_id` UNIQUE(FK없음) · `project_id` · `round_no` ⚠️ 입금 연결은 **1:N** 이라 `payment.block_id` 가 갖는다 → [`PAY-V1.md`](PAY-V1.md) §5-4 |
+| 상세 테이블 | `block_payment_confirm` — PK `payment_block_id` · `block_id` UNIQUE(FK없음) · `project_id` · `round_no` ⚠️ 입금 연결은 **1:N** 이라 `payment.block_id` 가 갖는다 → ~~`PAY-V1.md` §5-4~~ (파일 없음) |
 | **역할** | **정산 회차 그 자체다.** 별도 회차 레코드를 두지 않는다. **블록 제목이 회차명**(`1차 정산(선급 60%)`) |
 | **카디널리티** | **블록 1 : 입금 N** (분할 입금). 반대로 **입금 1 : 블록 1** — 같은 돈이 두 회차에 잡히면 안 된다 |
 | **⚠️ 스텝당 1개** | 한 스텝에 이 블록은 **하나만.** 둘이면 같은 스텝의 세금계산서 블록이 어느 회차 것인지 알 수 없다 |
@@ -335,11 +378,26 @@ public Long create(Long blockId) {
 | **삭제 잠금** | **없음(폐기).** `PAYMENT_CONFIRM` 상세 모델은 `SETTLEMENT`로 통합됐다 |
 | 템플릿 | 담김: 블록 + **제목**(`2차 정산`) / 안 담김: **연결된 입금** |
 | 담당 | **동훈** (2026-08-01 정현 → 동훈) |
-| 상세 문서 | [`PAY-V1.md`](PAY-V1.md) |
+| 상세 문서 | ~~`PAY-V1.md`~~ — **파일 없음** |
 
 **매칭은 2단이다** — ① 프로젝트 매칭(필수, 블록 없어도 됨) ② 블록 연결(선택). **돈은 블록보다 먼저 들어올 수 있다** (`DOMAIN §7-4`).
 
-### 4-6. `TAX_INVOICE_VIEW` — 세금계산서 조회
+</details>
+
+### 4-6. ⛔ ~~`TAX_INVOICE_VIEW` — 세금계산서 조회~~ **(폐기 · 2026-08-09)**
+
+> ⛔ **이 절은 현행이 아니다. 구현 근거로 쓰지 마라.**
+> `V20260809130000` 이 `tax_invoice_confirm` 과 **구 `tax_invoice`** 를 `DROP` 하고, 같은 이름의 **새 `tax_invoice`**(PK `tax_id` · `settle_block_id` **FK 있음** · `approval_no` UNIQUE · `deleted_at` 있음)를 만들었다.
+> ⚠️ **이름이 같지만 다른 테이블이다** — 옛 `tax_invoice` 를 설명하는 문서·쿼리를 그대로 믿으면 컬럼이 통째로 다르다.
+> 계산서는 이제 **블록 타입이 아니라 `settlement_block` 에 붙는 데이터**다 (§4-10).
+> 상세 문서로 링크돼 있던 `TAX-V1.md` 는 `.ai/` 어디에도 존재하지 않는다 — 현행 명세는 [`settlement.md`](../../api/settlement.md) 다.
+>
+> **남길 역사적 사실 2줄**
+> - ⛔ **어디에도 발행 기능을 넣지 않는다.** 타입 이름이 `VIEW` 였던 이유다 — 발행은 홈택스에서 하고 이 시스템은 CSV·API 로 **수집해 조회만** 한다. 이 원칙은 새 `tax_invoice.source_type ENUM('CSV','HOMETAX_API')` 로 그대로 살아 있다.
+> - *"행이 없으면 `WAITING`"*(TXL-008) 처럼 **행 존재 자체를 연결 신호로 쓰던 방식은 폐기**됐다. 현행은 `settlement_block.status` 와 **별개로** `tax_invoice.settle_block_id` 를 직접 조회해 판정한다 (§4-10 `taxInvoiceLinked`).
+
+<details>
+<summary>폐기 전 정의 (역사 보존용 — 클릭)</summary>
 
 | 항목 | 값 |
 |------|-----|
@@ -350,9 +408,11 @@ public Long create(Long blockId) {
 | **삭제 잠금** | **없음(폐기).** `TAX_INVOICE_VIEW` 상세 모델은 `SETTLEMENT`로 통합됐다 |
 | 템플릿 | 담김: 블록 껍데기만 |
 | 담당 | 동훈 |
-| 상세 문서 | [`TAX-V1.md`](TAX-V1.md) |
+| 상세 문서 | ~~`TAX-V1.md`~~ — **파일 없음** |
 
 ⛔ **어디에도 발행 기능을 넣지 마라.** 타입 이름이 `VIEW` 인 이유다. **발행은 홈택스에서 하고** 이 시스템은 CSV·API 로 수집해 조회만 한다.
+
+</details>
 
 ### 4-7. `APPROVAL` — 결재 상신
 
@@ -416,6 +476,40 @@ public Long create(Long blockId) {
 `V202608041109` 는 `block.type` enum 에 `BID_NOTICE` 값만 추가했다. 테이블이 생기기 전까지 이 타입은
 `type_id` 가 NULL 로 남고 조회 응답의 `detail` 도 `null` 이다 (§2-8).
 
+### 4-10. `SETTLEMENT` — 정산 ⭐ **신설 (2026-08-09)**
+
+> ⭐ **§4-5·§4-6 을 대체하는 현행 정산 블록이다.** 아래는 전부 실코드·마이그레이션 근거만 적었다.
+> 근거: `V20260809130000`(교체) · `V20260809132000`(enum) · `V20260812150000`(`version`) · `V20260814234500`(`tax_invoice_due_date`) · `V20260816170100`(`project_id`) ·
+> `settlement/**` 도메인 · `project/block/application/result/SettlementDetail.java`
+
+| 항목 | 값 |
+|------|-----|
+| 계열 | 도메인 |
+| 상세 테이블 | `settlement_block` — PK `settle_id` · `block_id` UNIQUE(⛔ FK없음) · **`deleted_at` 있음(soft)** · `version INT NOT NULL DEFAULT 1` · `project_id` **FK 있음**(`fk_settlement_block_project` · 비정규화 · 불변) |
+| 연결 원장 ⚠️ | `cash_flow`(입출금 내역) · `tax_invoice`(세금계산서, **신규 스키마**) 가 각각 `settle_block_id` **실제 FK** 로 이 블록을 가리킨다. **자식 테이블이 아니라 독립 원장**이다 — `settle_block_id NULL` = 미연결이고, 블록보다 먼저 존재할 수 있다 |
+| **역할** | **정산 회차 그 자체다** (구 `PAYMENT_CONFIRM` 의 결론을 그대로 이어받음). 회차 예정치(금액·세액·기한)를 들고, 실제 입출금·계산서가 여기에 연결된다 |
+| 주요 컬럼 | `round_no` · `type ENUM('INCOME','OUTCOME')` · `status ENUM('PENDING','WAITING','PARTIAL','COMPLETED')`(NOT NULL·기본 `PENDING`) · `total_amount`·`planned_amount`·`planned_tax_amount`·`planned_date` · `tax_invoice_due_date`(NULL=면세 등 계산서를 안 받는 회차) · `actual_amount`·`actual_date` · `trader_name` · `bank_name`·`account_number`·`account_holder` |
+| **⚠️ 계좌번호** | `account_number` 는 **암호문으로 저장**된다. 블록 조회 응답(`SettlementDetail.accountNumber`)에는 `AccountNumberCipher.decryptAndMask()` 를 거친 **마스킹 값만** 담긴다 — 원문이 담기는 경로는 없다 |
+| **스텝당 개수** ⚠️ | **제한 없다.** `BlockType.singlePerStep()` 이 `SETTLEMENT` 에 `false` 를 돌려준다 — 구 `PAYMENT_CONFIRM` 의 「스텝당 1개」(`PCB-001B`)는 **상속되지 않았다** |
+| **권한** ⚠️ | **판정이 두 갈래다.** ① 블록 안의 **정산 항목 작성/수정은 스텝 편집 권한**이다 (`SettlementEligibilityPolicy.assertEditPermission` → `BlockCatalogPort.hasEditPermission` → `StepAccessUseCase`). ② **재무팀 「정산현황」 조회 3종만** `page_code='FINANCE'` 권한이다 (`SettlementQueryService` · 없으면 403 `SETL-009`). 구 §4-5 의 *"프로젝트 쪽은 전원 읽기 전용"* 은 **현행이 아니다** |
+| 삭제 | **soft delete** (`settlement_block.deleted_at`). 판정 주인은 여전히 `block.deleted_at`(BLK-007) — 상세의 값은 그 **미러**다 (`SettlementHandlerService.delete` 는 0행 UPDATE 를 멱등 무시) |
+| **삭제 잠금** | **없음.** `assertDeletable` 도 **오버라이드하지 않는다** — 확인조차 묻지 않고 그냥 지워진다. ⚠️ 아래 경고 |
+| 낙관적 락 ⚠️ | `version` 은 **JPA `@Version` 이 아니다.** `SettlementRepositoryAdapter` 가 매번 detached 객체를 만들어 merge 하므로 JPA 락은 최신값을 다시 읽어 **항상 통과해버린다** → `WHERE version = ?` **조건부 UPDATE** 로 직접 검사한다 ([`CONCURRENCY.md`](CONCURRENCY.md) §3·§6-1) |
+| 템플릿 | 담김: 블록 껍데기만 / 안 담김: **금액 · 계좌 · 연결된 입출금·계산서** (§9) |
+| 담당 | ⚠️ **확인 필요** — [`settlement.md`](../../api/settlement.md) 의 「도메인 담당」이 미기재이고 [`CONCURRENCY.md`](CONCURRENCY.md) §7-1 도 「정산 담당」으로만 적는다 |
+| 상세 문서 | [`settlement.md`](../../api/settlement.md) |
+
+⚠️ **`taxInvoiceLinked` 를 `status` 로 유추하지 마라.** `PARTIAL`·`COMPLETED` 는 *"입출금이 붙었다"* 만 말해준다.
+계산서 연결 여부는 `SettlementDetailMapper` 가 `EXISTS(SELECT 1 FROM tax_invoice WHERE settle_block_id = … AND deleted_at IS NULL)` 로 **직접 확인**해서 내려준다.
+
+⚠️ **`paidAmountRatio` 는 이 블록 하나의 진행률이 아니다.** **같은 프로젝트·같은 `type`(INCOME/OUTCOME) 정산 블록 전체**의
+`actual_amount` 합계를 그 타입의 `total_amount` 로 나눈 값이다. `type` 이 NULL 인 빈 상세 행은 집계에 매칭되지 않아 `0.0` 으로 내려간다.
+
+🚨 **삭제하면 FK 가 죽은 블록을 계속 가리킨다 (BLK-013 미구현).**
+`cash_flow.settle_block_id` · `tax_invoice.settle_block_id` 가 **실제 FK** 인데 블록 삭제는 soft 라 연결을 끊지 않는다.
+구 §8 이 처방한 「재무 연결 해제 확인 요구(`detachFinanceLinks`)」는 **코드에 존재하지 않는다** (근거: `StepCommandService.deleteStep` javadoc).
+보존기간 만료 하드 삭제([`CLEANUP.md`](CLEANUP.md))가 붙으면 **연결을 먼저 끊기 전까지 정리 자체가 FK 위반으로 실패한다.**
+
 ---
 
 ## 5. 한눈에 보는 요약
@@ -426,20 +520,26 @@ public Long create(Long blockId) {
 | `IMAGE` | 이미지 | 콘텐츠 | `image_block` (`img_block_id`) | `image` | — | 정림 | — |
 | `CHECKLIST` | 체크리스트 | 콘텐츠 | `checklist_block` (`chk_block_id`) | `checklist` | — | 정림 | — |
 | `FILE` | 문서 업로드 | 콘텐츠 | `block_file` (⛔ **NULL** · 복합 PK) | — | — | 김동현 | — |
-| `PAYMENT_CONFIRM` | **입금확인** | 도메인 | `block_payment_confirm` (`payment_block_id`) | `payment` (N:1) | — (폐기) | **동훈** | [`PAY-V1.md`](PAY-V1.md) |
-| `TAX_INVOICE_VIEW` | **세금계산서 조회** | 도메인 | `tax_invoice_confirm` (`tax_invoice_block_id`) — ⭐ **연결 전에는 행이 없어 `type_id` NULL** | — | — (폐기) | **동훈** | [`TAX-V1.md`](TAX-V1.md) |
+| ⛔ ~~`PAYMENT_CONFIRM`~~ | ~~입금확인~~ | 도메인 | ⛔ **테이블 없음** — `block_payment_confirm`·`payment` 는 `V20260809130000` 에서 `DROP` | — | — | — | 폐기 (§4-5) |
+| ⛔ ~~`TAX_INVOICE_VIEW`~~ | ~~세금계산서 조회~~ | 도메인 | ⛔ **테이블 없음** — `tax_invoice_confirm`·구 `tax_invoice` 는 `V20260809130000` 에서 `DROP` | — | — | — | 폐기 (§4-6) |
+| **`SETTLEMENT`** ⭐ | **정산** | 도메인 | **`settlement_block`** (`settle_id`) | ⚠️ 자식 아님 — `cash_flow`·`tax_invoice` 가 **FK 로 참조** | — | ⚠️ 확인 필요 | [`settlement.md`](../../api/settlement.md) |
 | `APPROVAL` | **결재 상신** | 프로세스 | `approval` (`approval_id`) | `approval_revision` → … | ⚠️ **확인 요구** (§4-7) | 이강욱 | [`APR-V1.md`](../domain/결재·알림/APR-V1.md) |
 | `AI` | AI 검토 | 외부 | `vitamate_block` (`vitamate_block_id`) | `vitamate_analysis` → … | — | 정현 | 정현 소관 (문서 별도 관리) |
 | **`BID_NOTICE`** ⭐ | **입찰 공고** | 도메인 | **`bid_notice_block`** (`bid_notice_block_id`) | — | — | 정현 | 정현 소관 (문서 별도 관리) |
 
 **도메인 계열은 재무·공고 영역 데이터를 읽기만 한다** ([`PERMISSION.md`](PERMISSION.md) §5).
 
-⭐ **`type_id` 가 `NULL` 인 타입은 2종이다**
+⭐ **`type_id` 가 `NULL` 로 남는 타입은 4종이고, 사유가 셋 다 다르다** (2026-08-16 재확인)
 
-| 타입 | NULL 인 이유 |
-|------|------------|
-| `FILE` | `block_file` 이 복합 PK(`block_id`+`file_id`) 라 가리킬 단일 PK 가 없다 |
-| **`TAX_INVOICE_VIEW`** ⭐ | `tax_invoice_confirm.tax_invoice_id` 가 **NOT NULL** 이라 **계산서가 연결되기 전에는 행을 만들 수 없다.** TXL-008 의 *"행이 없으면 `WAITING`"* 이 정확히 이 의미다 — **행 존재 자체가 "연결됨" 신호**이므로 컬럼을 nullable 로 바꾸면 그 의미가 깨진다 |
+| 타입 | NULL 인 이유 | 사유 종류 |
+|------|------------|---|
+| `FILE` | `block_file` 이 복합 PK(`block_id`+`file_id`) 라 **가리킬 단일 PK 가 없다** — 어댑터가 `null` 을 반환하는 정상 경로다 (§2-4·계약 4) | 스키마 구조 |
+| ⛔ ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | **상세 테이블 자체가 없다** — `V20260809130000` 이 4개를 `DROP` 하고 `SETTLEMENT` 로 통합했다. enum 값만 남은 빈 껍데기이며 어댑터도 없다 | 폐기 잔재 |
+| `BID_NOTICE` | `bid_notice_block` **테이블이 아직 안 만들어졌다** (§4-9) | 미구현 |
+
+⚠️ 옛 판이 여기 적던 *"`tax_invoice_confirm.tax_invoice_id` 가 NOT NULL 이라 연결 전에는 행을 만들 수 없다 / 행 존재 자체가 연결 신호"*(TXL-008) 는
+**현행이 아니다.** 그 테이블은 사라졌고, 현행 `SETTLEMENT` 는 상세 행을 **블록 생성 시 항상 만들며**(`type_id` 는 값이 있다)
+계산서 연결 여부는 `tax_invoice.settle_block_id` 를 직접 조회해 판정한다 (§4-10 `taxInvoiceLinked`).
 
 ---
 
@@ -478,7 +578,7 @@ public Long create(Long blockId) {
 | 블록 삭제 시 | `issue_block` 행은 **유지**. 조회에서 `block.deleted_at IS NULL` 로 거른다 |
 | ⛔ **연결 해제 시** | **하드 `DELETE`** — `issue_block` 에 `deleted_at` 이 없다. soft 로 두면 `uk_ib` 를 시체가 점유해 재연결이 막힌다 (§8-1) |
 
-**같은 스텝 제약이 없으면**, 스텝 A 의 블록 카드에는 `2/5` 가 뜨는데 스텝 A 진척률([`PROJECT.md`](PROJECT.md) §6-1)에는 그 5개가 안 들어간다. 사용자 눈에는 그냥 버그다.
+**같은 스텝 제약이 없으면**, 스텝 A 의 블록 카드에는 `2/5` 가 뜨는데 스텝 A 진척률(프로젝트 도메인 계약 `PRJ-V1.md` §6-1 — `.ai/docs/domain/` 로컬 전용)에는 그 5개가 안 들어간다. 사용자 눈에는 그냥 버그다.
 **DB 제약으로는 못 걸어서**(두 테이블을 타야 한다) **애플리케이션이 막아야 한다.**
 
 ---
@@ -496,8 +596,9 @@ public Long create(Long blockId) {
 
 | 대상 | 삭제하면 |
 |------|------|
-| 입금이 연결된 입금확인 블록 | `detachFinanceLinks=true` 를 요구한다. 없으면 400 `FINANCE_LINK_DETACH_REQUIRED` + 연결 건수. 확인하면 `payment.block_id = NULL` 로 끊고 삭제. **입금 행은 남는다** |
-| 계산서가 연결된 조회 블록 | 같은 확인 요구. 확인하면 `tax_invoice_confirm` 행을 **하드 삭제**하고 블록 삭제. 계산서는 재연결 가능해진다 |
+| 🚨 **입출금·계산서가 연결된 정산 블록**<br/>(`SETTLEMENT` · 2026-08-16 정정) | **아무것도 안 묻고 그냥 soft 삭제된다.** `SettlementBlockDetailAdapter` 는 `assertDeletable` 을 오버라이드하지 않는다. `cash_flow.settle_block_id`·`tax_invoice.settle_block_id` 는 **실제 FK 인 채로 죽은 블록을 계속 가리킨다** (BLK-013 미구현 · §4-10) |
+| ⛔ ~~입금이 연결된 입금확인 블록~~ | ~~`detachFinanceLinks=true` 를 요구한다. 없으면 400 `FINANCE_LINK_DETACH_REQUIRED` + 연결 건수. 확인하면 `payment.block_id = NULL` 로 끊고 삭제~~ → **구현된 적 없고 `payment` 테이블도 `DROP` 됐다** (`V20260809130000`). 위 정산 블록 행이 현행이다 |
+| ⛔ ~~계산서가 연결된 조회 블록~~ | ~~같은 확인 요구. 확인하면 `tax_invoice_confirm` 행을 하드 삭제하고 블록 삭제~~ → **`tax_invoice_confirm` 테이블이 없다** (`V20260809130000`). 위 정산 블록 행이 현행이다 |
 | 진행 중인 결재 블록 | **스텝 삭제 cascade** 는 같은 트랜잭션에서 `ApprovalBlockDetailAdapter.deleteDetail()`을 호출한다. 미종결 결재는 `CANCELED`로 종결하고 문서 연결을 포함한 하위 행을 논리 삭제한다. ⚠️ **직접 삭제는 2026-08-12 부터 확인을 요구한다**(409 → 확인 후 삭제) — 아래 「예외 1건」 참고 |
 | 결재 대상 파일 블록 | 그냥 삭제한다 |
 
@@ -530,11 +631,17 @@ public Long create(Long blockId) {
 
 | 방식 | 테이블 |
 |---|---|
-| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · `block_payment_confirm` · **`bid_notice_block`** |
-| ⛔ **hard `DELETE`** (`deleted_at` 없음) | `block_file` · `tax_invoice_confirm` · `issue_block` |
+| ✅ **soft** (`deleted_at` 있음) | `block` · `text` · `image_block` · `checklist_block` · `vitamate_block` · ⭐ **`settlement_block`** · **`bid_notice_block`** |
+| ⛔ **hard `DELETE`** (`deleted_at` 없음) | `block_file` · `issue_block` |
 
-**hard 3개의 공통점** — 담긴 정보가 없는 **순수 연결 행**이다. `deleted_at` 을 달면 UNIQUE·복합 PK 를 시체가 점유해
-**재연결이 `1062` 로 죽는다.** `tax_invoice_confirm` 은 원래 *"행이 없으면 `WAITING`"* (TXL-008) 이라 이 의미였다.
+> ⭐ **2026-08-16 정정.** 옛 판은 soft 에 `block_payment_confirm`, hard 에 `tax_invoice_confirm` 을 올려두고 있었으나
+> **둘 다 `V20260809130000` 에서 `DROP` 된 테이블**이다. 현행 정산 블록 상세는 `settlement_block` 이고 **soft** 다
+> (`deleted_at` 있음 · 컬럼 주석도 *"삭제 판정은 `block.deleted_at` 이 우선(BLK-007)"* 이라고 못 박는다).
+> 함께 만들어진 `cash_flow`·`tax_invoice` 도 `deleted_at` 을 갖는 **soft** 지만, 블록 상세가 아니라 **독립 원장**이라 이 표의 대상이 아니다.
+> [`DELETE.md`](DELETE.md) §2-1 의 하드 7종 목록에 `tax_invoice_confirm` 이 없는 이유가 이것이며, **그 목록이 맞고 갱신 대상은 이 표였다.**
+
+**hard 2개의 공통점** — 담긴 정보가 없는 **순수 연결 행**이다. `deleted_at` 을 달면 UNIQUE·복합 PK 를 시체가 점유해
+**재연결이 `1062` 로 죽는다.** (~~`tax_invoice_confirm` 은 원래 *"행이 없으면 `WAITING`"*(TXL-008) 이라 이 의미였다~~ — 폐기된 테이블이다.)
 삭제 사실은 `activity_log` 가 갖는다 → [`../domain/ERD.md`](../domain/ERD.md) §0-5.
 
 `approval` 계열은 단순 블록 상세와 다르다. 회차·결재선·첨부 이력이 감사 근거이고,
@@ -553,9 +660,8 @@ public Long create(Long blockId) {
 | `FILE` | 블록 껍데기만 | **업로드된 파일** |
 | `IMAGE` | 블록 껍데기만 | 내용 |
 | **`APPROVAL`** | ⛔ **결재선은 담기지 않는다** (2026-08-13 정정 · 아래 §9-1) · `DRAFT` 상신의 **제목·본문만** | **결재선(사람)** · 진행 상태 · 대상 지목 |
-| `PAYMENT_CONFIRM` | 블록 + 제목(`2차 정산`) | **연결된 입금** |
-| `TAX_INVOICE_VIEW` | 블록 껍데기만 | — |
-| `SETTLEMENT` | 블록 껍데기만 | **금액 · 계좌 · 연결된 입출금/계산서** |
+| ⛔ ~~`PAYMENT_CONFIRM`~~ · ~~`TAX_INVOICE_VIEW`~~ | — | — (폐기 타입 · §4-5·§4-6. 아래 `SETTLEMENT` 가 대체한다) |
+| **`SETTLEMENT`** | 블록 + **제목**(`2차 정산` — 회차명이 곧 블록 제목이다) | **금액 · 계좌 · 연결된 입출금/계산서** |
 | `AI` | 프롬프트 설정 | 실행 결과 |
 
 **체크리스트 항목과 TEXT 본문이 템플릿의 진짜 값어치다.** 껍데기만 복사하면 스텝 이름만 깔리는 셈이다.

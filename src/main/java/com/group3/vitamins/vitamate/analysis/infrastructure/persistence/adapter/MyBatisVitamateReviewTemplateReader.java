@@ -1,10 +1,12 @@
 package com.group3.vitamins.vitamate.analysis.infrastructure.persistence.adapter;
 
 import com.group3.vitamins.vitamate.analysis.application.port.VitamateReviewTemplateReaderPort;
+import com.group3.vitamins.vitamate.analysis.infrastructure.config.VitamateReviewTemplateCacheConfig;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.mapper.VitamateReviewTemplateMapper;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateReviewTemplateGroupRow;
 import com.group3.vitamins.vitamate.analysis.infrastructure.persistence.row.VitamateReviewTemplateRow;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -12,6 +14,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 // 비타메이트 검토 템플릿 조회 포트를 MyBatis로 구현합니다.
+// vitamate_review_type/vitamate_review_template은 Flyway 배포로만 바뀌는 전역 참조 데이터라
+// findActiveReviewTemplateGroups/findActiveTemplates만 캐시한다 — findAnalysisTemplateSnapshots는
+// 분석 건별 스냅샷 조회라 캐시 대상이 아니다(재사용되는 공용 데이터가 아님).
 @Component
 @RequiredArgsConstructor
 public class MyBatisVitamateReviewTemplateReader implements VitamateReviewTemplateReaderPort {
@@ -20,6 +25,7 @@ public class MyBatisVitamateReviewTemplateReader implements VitamateReviewTempla
 
     // 활성 검토 유형과 하위 카테고리 템플릿을 그룹으로 묶어 반환합니다.
     @Override
+    @Cacheable(VitamateReviewTemplateCacheConfig.REVIEW_TEMPLATE_GROUPS_CACHE)
     public List<ReviewTemplateGroup> findActiveReviewTemplateGroups() {
         List<VitamateReviewTemplateGroupRow> typeRows = mapper.findActiveReviewTypes();
         Map<String, List<ReviewTemplate>> templatesByType = mapper.findActiveReviewTemplates().stream()
@@ -38,6 +44,7 @@ public class MyBatisVitamateReviewTemplateReader implements VitamateReviewTempla
 
     // 요청에서 선택한 활성 템플릿만 조회합니다.
     @Override
+    @Cacheable(value = VitamateReviewTemplateCacheConfig.ACTIVE_TEMPLATES_CACHE, key = "#reviewType + ':' + #categoryCodes")
     public List<ReviewTemplate> findActiveTemplates(String reviewType, List<String> categoryCodes) {
         if (categoryCodes == null || categoryCodes.isEmpty()) {
             return List.of();

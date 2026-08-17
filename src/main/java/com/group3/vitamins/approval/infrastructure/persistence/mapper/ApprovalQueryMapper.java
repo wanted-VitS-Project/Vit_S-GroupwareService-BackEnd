@@ -1,10 +1,12 @@
 package com.group3.vitamins.approval.infrastructure.persistence.mapper;
 
+import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalFileVersionRow;
 import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalLineDetailRow;
 import com.group3.vitamins.approval.infrastructure.persistence.row.ApprovalEmployeeRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,4 +22,13 @@ public interface ApprovalQueryMapper {
     Optional<ApprovalEmployeeRow> findEmployee(@Param("userId") String userId);
 
     List<ApprovalLineDetailRow> findLineDetailsByRevisionId(@Param("revisionId") Long revisionId);
+
+    /**
+     * 결재 첨부 배치 조회 — 첨부 수와 무관하게 쿼리 1발.
+     *
+     * <p>⚠️ 빈 컬렉션으로 부르지 마라. {@code <foreach>} 가 {@code IN ()} 을 만들어 문법 오류가 난다.
+     * 호출자({@code ApprovalFileCatalogAdapter})가 먼저 걸러낸다.
+     */
+    List<ApprovalFileVersionRow> findFileVersionsByIds(
+            @Param("fileVersionIds") Collection<Long> fileVersionIds);
 }

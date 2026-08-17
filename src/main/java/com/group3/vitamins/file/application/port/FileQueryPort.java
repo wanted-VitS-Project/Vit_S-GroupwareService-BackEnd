@@ -2,6 +2,9 @@ package com.group3.vitamins.file.application.port;
 
 import com.group3.vitamins.file.application.query.CompanyFileCriteria;
 import com.group3.vitamins.file.application.query.MyProjectFileCriteria;
+import com.group3.vitamins.file.application.result.AdminTreeProjectProjection;
+import com.group3.vitamins.file.application.result.AdminTreeStageProjection;
+import com.group3.vitamins.file.application.result.AdminTreeStepProjection;
 import com.group3.vitamins.file.application.result.BlockFileProjection;
 import com.group3.vitamins.file.application.result.FileVersionProjection;
 import com.group3.vitamins.file.application.result.FileViewProjection;
@@ -27,6 +30,12 @@ public interface FileQueryPort {
 
     /** 문서가 연결된 블록 ID(권한 판정 경로 fileId→block→step). 파일 1 : 블록 1. 링크 없으면 empty. */
     Optional<Long> findBlockIdByFileId(Long fileId);
+
+    /**
+     * 블록에 매달린 <b>활성</b> 파일(file.deleted_at IS NULL)의 file_id 목록 — 블록 삭제 시 휴지통 이동 대상(D안).
+     * 이미 휴지통인 파일은 제외한다(멱등). 링크가 없으면 빈 리스트.
+     */
+    List<Long> findActiveFileIdsByBlockId(Long blockId);
 
     /**
      * 문서가 매달린 블록의 스텝 ID — <b>블록이 soft delete 됐어도</b> 돌려준다(§6 복구용).
@@ -80,4 +89,33 @@ public interface FileQueryPort {
      * adminAll 이면 스텝 권한 필터를 스킵한다(멤버십은 유지). 프로젝트 → 스텝 → 블록 순 정렬.
      */
     List<FileViewProjection> findMyProjectFiles(MyProjectFileCriteria criteria);
+
+    // ─── 전사 파일 트리 탐색(§14 · ADMIN) ─── 회사 스코프는 project.company_id 로 건다.
+
+    /** §14.1 회사 프로젝트 한 페이지(이름 오름차순). */
+    List<AdminTreeProjectProjection> findAdminTreeProjects(long companyId, int limit, long offset);
+
+    /** §14.1 회사 프로젝트 총 건수. */
+    long countAdminTreeProjects(long companyId);
+
+    /** §14.2/14.3 프로젝트가 회사에 존재하는지(활성). 없으면 PROJECT_NOT_FOUND(404) 판정용. */
+    boolean existsProjectInCompany(long companyId, Long projectId);
+
+    /** §14.2 프로젝트의 활성 스테이지(sortOrder 오름차순). */
+    List<AdminTreeStageProjection> findAdminTreeStages(long companyId, Long projectId);
+
+    /** §14.2 미분류 버킷 노출 판정 — 프로젝트에 stage 미소속(stage_id IS NULL) 활성 스텝이 있는지. */
+    boolean existsUnassignedStep(long companyId, Long projectId);
+
+    /** §14.3 프로젝트의 스텝(sortOrder 오름차순). stageId 가 null 이면 미분류(stage_id IS NULL). */
+    List<AdminTreeStepProjection> findAdminTreeSteps(long companyId, Long projectId, Long stageId);
+
+    /** §14.4 스텝이 회사에 존재하는지(활성). 없으면 FILE_STEP_NOT_FOUND(404) 판정용. */
+    boolean existsStepInCompany(long companyId, Long stepId);
+
+    /** §14.4 스텝의 파일 한 페이지(문서 단위 최신 완료 버전). fileView* 조각 재사용 + 스텝 필터. */
+    List<FileViewProjection> findAdminTreeStepFiles(long companyId, Long stepId, int limit, long offset);
+
+    /** §14.4 스텝의 파일 총 건수. */
+    long countAdminTreeStepFiles(long companyId, Long stepId);
 }

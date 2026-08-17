@@ -36,7 +36,7 @@ public class VitamateFileIndexDispatchService implements DispatchVitamateFileInd
         Long fileVersionId = command.fileVersionId();
         LocalDateTime now = LocalDateTime.now();
 
-        fileIndexStorePort.upsertStatus(fileVersionId, null, FileIndexStatus.PENDING, null, now);
+        fileIndexStorePort.upsertStatus(fileVersionId, null, FileIndexStatus.PENDING, null, false, now);
 
         registerAfterCommitPublish(fileVersionId, now);
     }

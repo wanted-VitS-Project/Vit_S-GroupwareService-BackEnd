@@ -28,18 +28,18 @@
 
 ---
 
-## 엔드포인트 (8)
+## §0 엔드포인트 요약
 
-| # | Method · URL | 설명 |
-|---|---|---|
-| 1 | `GET /api/v1/majors` | 전공 마스터 목록 |
-| 2 | `POST /api/v1/majors` | 전공 생성 |
-| 3 | `PATCH /api/v1/majors/{majorId}` | 전공 수정 |
-| 4 | `DELETE /api/v1/majors/{majorId}` | 전공 삭제(참조 차단) |
-| 5 | `GET /api/v1/certificates` | 자격증 마스터 목록 |
-| 6 | `POST /api/v1/certificates` | 자격증 생성 |
-| 7 | `PATCH /api/v1/certificates/{certificateId}` | 자격증 수정 |
-| 8 | `DELETE /api/v1/certificates/{certificateId}` | 자격증 삭제(참조 차단) |
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| GET | `/api/v1/majors` | [전공 마스터 목록](#1-전공-마스터-목록) | — |
+| POST | `/api/v1/majors` | [전공 생성](#2-전공-생성) | — |
+| PATCH | `/api/v1/majors/{majorId}` | [전공 수정](#3-전공-수정) | — |
+| DELETE | `/api/v1/majors/{majorId}` | [전공 삭제(참조 차단)](#4-전공-삭제) | — |
+| GET | `/api/v1/certificates` | [자격증 마스터 목록](#5-자격증-마스터-목록) | — |
+| POST | `/api/v1/certificates` | [자격증 생성](#6-자격증-생성) | — |
+| PATCH | `/api/v1/certificates/{certificateId}` | [자격증 수정](#7-자격증-수정) | — |
+| DELETE | `/api/v1/certificates/{certificateId}` | [자격증 삭제(참조 차단)](#8-자격증-삭제) | — |
 
 ---
 

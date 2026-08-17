@@ -6,15 +6,15 @@
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 > 🔴 **화면이 없다.** 직급 관리 화면이 와이어프레임에 없어 프론트에 요청한 상태다 (`ADD-01`). 사원 등록의 직급 드롭다운 값이 여기서 나오므로 **화면이 없으면 사원 등록이 막힌다.**
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
+| 메서드 | 경로 | 무엇 | 상태 |
 |---|---|---|---|
-| 직급 목록 조회 | GET | `/api/v1/job-positions` | ADMIN |
-| **직급별 사원 목록 조회** | GET | `/api/v1/job-positions/{jobPositionId}/employees` | ADMIN |
-| 직급 생성 | POST | `/api/v1/job-positions` | ADMIN |
-| 직급 수정 | PATCH | `/api/v1/job-positions/{jobPositionId}` | ADMIN |
-| 직급 삭제 | DELETE | `/api/v1/job-positions/{jobPositionId}` | ADMIN |
+| GET | `/api/v1/job-positions` | [직급 목록 조회](#1-직급-목록-조회) | — |
+| GET | `/api/v1/job-positions/{jobPositionId}/employees` | [직급별 사원 목록 조회](#5-직급별-사원-목록-조회-확정) | ✅ 확정 |
+| POST | `/api/v1/job-positions` | [직급 생성](#2-직급-생성) | — |
+| PATCH | `/api/v1/job-positions/{jobPositionId}` | [직급 수정](#3-직급-수정) | — |
+| DELETE | `/api/v1/job-positions/{jobPositionId}` | [직급 삭제](#4-직급-삭제) | — |
 
 > 목록 조회도 `ADMIN` 이다. 직급 목록이 필요한 화면(사원 등록·수정·직급 관리)이 전부 ADMIN 전용이라 굳이 열어둘 이유가 없다.
 

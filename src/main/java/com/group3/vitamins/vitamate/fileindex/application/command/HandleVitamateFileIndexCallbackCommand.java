@@ -5,6 +5,7 @@ public record HandleVitamateFileIndexCallbackCommand(
         Long fileVersionId,
         String indexAttemptId,
         String indexStatus,
-        String errorMessage
+        String errorMessage,
+        boolean retryable
 ) {
 }

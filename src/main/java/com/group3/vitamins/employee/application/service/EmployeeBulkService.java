@@ -139,7 +139,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             // 메일은 커밋 후. 이메일이 없으면 발송하지 않고 emailNotRegistered 로 남긴다(EMP-019).
             if (row.hasEmail()) {
                 try {
-                    initialPasswordMailPort.sendInitialPassword(row.email(), row.name(), rawPassword);
+                    initialPasswordMailPort.sendInitialPassword(row.email(), row.userId(), row.name(), rawPassword);
                     emailSent++;
                 } catch (MailDeliveryException e) {
                     // 사원·계정은 이미 만들어졌다. 비밀번호만 다시 보내면 되므로 등록은 성공으로 둔다.
@@ -337,13 +337,20 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
                 .collect(Collectors.toSet());
     }
 
-    /** 학력 셀 "전공:학위; 전공:학위" → 세그먼트 목록. 빈 세그먼트는 건너뛰고, 형식 불량(콜론 없음·빈 값)은 null 필드로 표시한다. */
+    /**
+     * 항목 구분자 — 세미콜론(;)·쉼표(,)·셀 내 줄바꿈(Alt+Enter=\n, \r 포함). 연속 구분자는 하나로 본다.
+     * 각 항목은 뒤에서 {@code trim()} 하므로 "구분자 뒤 공백"({@code 컴퓨터공학:학사, 소프트웨어공학:석사})도 흡수된다.
+     * ⚠️ 쉼표가 든 전공/자격증 마스터 이름은 두 조각으로 쪼개진다 — 마스터 이름에 쉼표를 넣지 않는 전제다(백로그: 이름 검증에 쉼표 금지).
+     */
+    private static final String ITEM_SEPARATORS = "[;,\\r\\n]+";
+
+    /** 학력 셀 "전공:학위" 여러 개 → 세그먼트 목록. 빈 세그먼트는 건너뛰고, 형식 불량(콜론 없음·빈 값)은 null 필드로 표시한다. */
     private List<EducationSegment> parseEducationSegments(String cell) {
         if (cell == null) {
             return List.of();
         }
         List<EducationSegment> segments = new ArrayList<>();
-        for (String part : cell.split(";")) {
+        for (String part : cell.split(ITEM_SEPARATORS)) {
             String seg = part.trim();
             if (seg.isEmpty()) {
                 continue;
@@ -360,13 +367,13 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
         return segments;
     }
 
-    /** 자격증 셀 "자격증명; 자격증명" → 이름 목록. 빈 항목은 건너뛴다. */
+    /** 자격증 셀 "자격증명" 여러 개 → 이름 목록. 구분자는 {@link #ITEM_SEPARATORS}. 빈 항목은 건너뛴다. */
     private List<String> parseCertificateNames(String cell) {
         if (cell == null) {
             return List.of();
         }
         List<String> names = new ArrayList<>();
-        for (String part : cell.split(";")) {
+        for (String part : cell.split(ITEM_SEPARATORS)) {
             String name = part.trim();
             if (!name.isEmpty()) {
                 names.add(name);
