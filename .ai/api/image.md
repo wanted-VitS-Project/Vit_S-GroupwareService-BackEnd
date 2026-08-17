@@ -9,23 +9,25 @@
 
 ---
 
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| GET | `/api/v1/blocks/images/{imgBlockId}/items/{currentOrderIndex}?direction={prev\|next}` | [이미지 항목 조회(다음/이전)](#이미지-항목-조회-get-apiv1blocksimagesimgblockiditemscurrentorderindexdirectionprevnext) | ✅ 확정 |
+| GET | `/api/v1/blocks/images/{imgBlockId}/items` | [이미지 항목 전체 조회](#이미지-항목-전체-조회-get-apiv1blocksimagesimgblockiditems) | ✅ 확정 |
+| GET | `/api/v1/blocks/images/{imgBlockId}/download?imgId={imgId}` | [이미지 다운로드](#이미지-다운로드-get-apiv1blocksimagesimgblockiddownloadimgidimgid) | ✅ 확정 |
+| GET | `/api/v1/projects/{projectId}/images/trash` | [이미지 휴지통 조회](#이미지-휴지통-조회-get-apiv1projectsprojectidimagestrash) | ✅ 확정 |
+| POST | `/api/v1/blocks/images/{imgBlockId}/items` | [이미지 항목 생성](#이미지-항목-생성-post-apiv1blocksimagesimgblockiditems) | ✅ 확정 |
+| PATCH | `/api/v1/blocks/images/items/{imgBlockId}` | [이미지 항목 수정](#이미지-항목-수정-patch-apiv1blocksimagesitemsimgblockid) | ✅ 확정 |
+| DELETE | `/api/v1/blocks/images/items/{imgId}` | [이미지 항목 삭제](#이미지-항목-삭제-delete-apiv1blocksimagesitemsimgid) | ✅ 확정 |
+| PATCH | `/api/v1/blocks/images/items/restore` | [이미지 복구](#이미지-복구-patch-apiv1blocksimagesitemsrestore) | ✅ 확정 |
+| DELETE | `/api/v1/blocks/images/items/hard` | [이미지 영구 삭제](#이미지-영구-삭제-delete-apiv1blocksimagesitemshard) | ✅ 확정 |
+| GET | `/api/v1/projects/{projectId}/images` | [프로젝트 이미지 모아보기](#프로젝트-이미지-모아보기-get-apiv1projectsprojectidimages) | ✅ 확정 |
+
 ## 개요
 
 블록 생성은 공용 블록 담당자(동훈님)가 처리한다. 블록 삭제는 텍스트·체크리스트와 동일하게 이벤트로 처리될 예정이며,
 이 문서는 **이미지 항목 생성·수정·삭제** 3건을 다룬다.
-
-| 상태 | 기능 | METHOD | URL | 권한 |
-|------|------|--------|-----|------|
-| ✅ 확정 | 이미지 항목 조회(다음/이전) | GET | `/api/v1/blocks/images/{imgBlockId}/items/{currentOrderIndex}?direction={prev\|next}` | 접근 권한 보유자 |
-| ✅ 확정 | 이미지 항목 전체 조회 | GET | `/api/v1/blocks/images/{imgBlockId}/items` | 편집 권한 보유자 |
-| ✅ 확정 | 이미지 다운로드 | GET | `/api/v1/blocks/images/{imgBlockId}/download?imgId={imgId}` | 접근 권한 보유자 |
-| ✅ 확정 | 이미지 휴지통 조회 | GET | `/api/v1/projects/{projectId}/images/trash` | 프로젝트 접근 권한 보유자 |
-| ✅ 확정 | 이미지 항목 생성 | POST | `/api/v1/blocks/images/{imgBlockId}/items` | 편집 권한 보유자 |
-| ✅ 확정 | 이미지 항목 수정 | PATCH | `/api/v1/blocks/images/items/{imgBlockId}` | 편집 권한 보유자 |
-| ✅ 확정 | 이미지 항목 삭제 | DELETE | `/api/v1/blocks/images/items/{imgId}` | 편집 권한 보유자 |
-| ✅ 확정 | 이미지 복구 | PATCH | `/api/v1/blocks/images/items/restore` | 편집 권한 보유자(이미지별 소속 블록 기준) |
-| ✅ 확정 | 이미지 영구 삭제 | DELETE | `/api/v1/blocks/images/items/hard` | 편집 권한 보유자(이미지별 소속 블록 기준) |
-| ✅ 확정 | 프로젝트 이미지 모아보기 | GET | `/api/v1/projects/{projectId}/images` | 프로젝트 접근 권한 보유자 |
 
 > ⚠️ 이미지는 **두 가지 방법으로 삭제**된다 — 수정 API에서 배열 누락(§수정 API) 또는 이 단건 삭제 API. 둘 다 소프트 삭제만 하고 S3는 지우지 않는 동일한 원칙을 따른다 (아래 삭제 API 참고).
 

@@ -2,21 +2,21 @@
 
 **최종 업데이트**: 2026-08-03 · **담당**: 김동현 · Domain `인사` · SUB-Domain `Account`
 
-> 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
-> 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
+## §0 엔드포인트 요약
 
-## 엔드포인트
-
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 전역 권한 변경 | PATCH | `/api/v1/accounts/{userId}/role` | ADMIN |
-| 계정 상태 변경 | PATCH | `/api/v1/accounts/{userId}/status` | ADMIN |
-| 비밀번호 재설정 | POST | `/api/v1/accounts/password-resets` | ADMIN |
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| PATCH | `/api/v1/accounts/{userId}/role` | [전역 권한 변경](#1-전역-권한-변경) | — | ADMIN |
+| PATCH | `/api/v1/accounts/{userId}/status` | [계정 상태 변경](#2-계정-상태-변경) | — | ADMIN |
+| POST | `/api/v1/accounts/password-resets` | [비밀번호 재설정](#3-비밀번호-재설정) | — | ADMIN |
 
 > ⭐ **"재발송" API 를 만들지 않았다.** Argon2id 해시만 저장하므로 이전 임시 비밀번호의 원문이 없다.
 > 재발송은 필연적으로 새 난수 발급 = 재설정이다. 화면의 `재발송` 버튼도 **재설정 API 를 다시 호출**한다 (`ACC-019`).
+>
+> 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
+> 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
-## 🔑 전역 role — 서열형 3종 (`global/PERMISSION.md` §2)
+## 🔑 전역 role — 서열형 3종 (`../docs/global/PERMISSION.md` §2)
 
 | role | 성격 | 프로젝트·페이지 |
 |---|---|---|
@@ -28,7 +28,7 @@
 
 ⭐ **`ADMIN` 은 겸직하지 않는다 — 시스템 계정이다.** 실제 사원에게 부여하지 않으며 `employee.is_system = 1` 인 가상 사원에 붙는다. 계정 수는 **복수 허용**이다 (회사당 1개 제한 없음).
 
-> 🔴 `global/PERMISSION.md` §2-2 는 *"겸직은 표현하지 않는다. CEO 이면서 조직관리자가 필요하면 `ADMIN` 을 준다"* 고 적혀 있다. **이건 겸직을 ADMIN 부여로 푸는 방식이고 위 확정과 다르다.** 동훈에게 수정 요청 중이다.
+> 🔴 `../docs/global/PERMISSION.md` §2-2 는 *"겸직은 표현하지 않는다. CEO 이면서 조직관리자가 필요하면 `ADMIN` 을 준다"* 고 적혀 있다. **이건 겸직을 ADMIN 부여로 푸는 방식이고 위 확정과 다르다.** 동훈에게 수정 요청 중이다.
 
 ⚠️ **`ADMIN`·`MASTER` 가 남의 프로젝트 데이터를 고치면 로그에 `privileged_override = 1` 을 표기한다** (`PERMISSION.md` §2-1).
 

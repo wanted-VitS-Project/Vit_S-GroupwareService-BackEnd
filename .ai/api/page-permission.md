@@ -5,15 +5,15 @@
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
+| 메서드 | 경로 | 무엇 | 상태 |
 |---|---|---|---|
-| 내 페이지 목록 조회 | GET | `/api/v1/my/pages` | 전체 사용자 |
-| 페이지 목록 조회 | GET | `/api/v1/pages` | ADMIN |
-| 페이지 접근 가능자 목록 | GET | `/api/v1/pages/{pageCode}/permissions` | ADMIN |
-| 페이지 권한 부여 | POST | `/api/v1/pages/{pageCode}/permissions` | ADMIN |
-| 페이지 권한 회수 | DELETE | `/api/v1/pages/{pageCode}/permissions/{userId}` | ADMIN |
+| GET | `/api/v1/my/pages` | [내 페이지 목록 조회](#1-내-페이지-목록-조회) | — |
+| GET | `/api/v1/pages` | [페이지 목록 조회](#2-페이지-목록-조회) | — |
+| GET | `/api/v1/pages/{pageCode}/permissions` | [페이지 접근 가능자 목록](#3-페이지-접근-가능자-목록) | — |
+| POST | `/api/v1/pages/{pageCode}/permissions` | [페이지 권한 부여](#4-페이지-권한-부여) | — |
+| DELETE | `/api/v1/pages/{pageCode}/permissions/{userId}` | [페이지 권한 회수](#5-페이지-권한-회수) | — |
 
 ## 🔑 페이지는 고정 카탈로그다
 

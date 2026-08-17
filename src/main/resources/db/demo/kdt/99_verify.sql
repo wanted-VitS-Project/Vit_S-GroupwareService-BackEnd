@@ -206,3 +206,38 @@ FROM `text` WHERE txt_id BETWEEN 8001 AND 8144
 --    GET /api/v1/approvals?scope=pending&size=1
 --    GET /api/v1/bidding/notices
 --    GET /api/v1/finance/settlements
+
+
+-- =====================================================================
+-- KB 프로젝트(P8011) 검증 — 전부 0이어야 정상 (2026-08-17 throwaway MySQL 8 에서 통과 확인)
+-- =====================================================================
+SELECT 'KB col_span 규칙위반' k, COUNT(*) v FROM block
+  WHERE block_id BETWEEN 8300 AND 8422
+    AND ((type IN ('FILE','BID_NOTICE') AND col_span<>2) OR (type NOT IN ('FILE','BID_NOTICE') AND col_span<>1))
+UNION ALL SELECT 'KB 정산 실지급≠연결합계', COUNT(*) FROM settlement_block s WHERE s.settle_id BETWEEN 8012 AND 8019
+  AND IFNULL(s.actual_amount,0) <> IFNULL((SELECT SUM(c.amount) FROM cash_flow c WHERE c.settle_block_id=s.settle_id),0)
+UNION ALL SELECT 'KB INCOME 과세 tax≠공급가10%', COUNT(*) FROM tax_invoice
+  WHERE tax_id BETWEEN 8021 AND 8032 AND total_amount>0 AND tax_amount <> ROUND(supply_amount*0.1)
+UNION ALL SELECT 'KB version_no 불연속', COUNT(*) FROM (
+  SELECT file_id FROM file_version WHERE file_version_id BETWEEN 8041 AND 8067
+  GROUP BY file_id HAVING COUNT(*)<>MAX(version_no) OR MIN(version_no)<>1) t
+UNION ALL SELECT 'KB order_index 중복', COUNT(*) FROM (
+  SELECT img_block_id,order_index FROM image WHERE img_id BETWEEN 8300 AND 8320 GROUP BY 1,2 HAVING COUNT(*)>1) t
+UNION ALL SELECT 'KB issue_block 다른스텝', COUNT(*) FROM issue_block ib
+  JOIN issue i USING(issue_id) JOIN block b ON b.block_id=ib.block_id
+  WHERE ib.issue_block_id BETWEEN 8068 AND 8090 AND i.step_id<>b.step_id
+UNION ALL SELECT 'KB 블록없는 결재', COUNT(*) FROM approval a
+  LEFT JOIN block b ON b.block_id=a.block_id WHERE a.approval_id BETWEEN 8044 AND 8056 AND b.block_id IS NULL
+UNION ALL SELECT 'KB 기안자가 자기결재선에', COUNT(*) FROM approval ap
+  JOIN approval_revision r ON r.approval_id=ap.approval_id AND r.revision_no=ap.current_revision_no
+  JOIN approval_line l ON l.approval_revision_id=r.approval_revision_id AND l.user_id=ap.user_id
+  WHERE ap.approval_id BETWEEN 8044 AND 8056
+UNION ALL SELECT 'KB ACTIVE없는 IN_PROGRESS결재', COUNT(*) FROM approval ap
+  JOIN approval_revision r ON r.approval_id=ap.approval_id AND r.revision_no=ap.current_revision_no
+  WHERE ap.approval_id BETWEEN 8044 AND 8056 AND ap.status='IN_PROGRESS'
+    AND NOT EXISTS(SELECT 1 FROM approval_line l WHERE l.approval_revision_id=r.approval_revision_id AND l.status='ACTIVE')
+UNION ALL SELECT 'KB activity resource_name 빈값', COUNT(*) FROM activity_log
+  WHERE activity_log_id BETWEEN 8035 AND 8061 AND (resource_name IS NULL OR resource_name='')
+UNION ALL SELECT 'KB 활성 FILE블록 연결없음(껍데기 8394 제외)', COUNT(*) FROM block b JOIN step s ON s.step_id=b.step_id
+  WHERE b.type='FILE' AND b.step_id BETWEEN 8051 AND 8067 AND b.deleted_at IS NULL AND s.status<>'NOT_STARTED'
+    AND NOT EXISTS(SELECT 1 FROM block_file bf WHERE bf.block_id=b.block_id);

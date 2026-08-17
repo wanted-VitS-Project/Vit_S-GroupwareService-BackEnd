@@ -41,133 +41,133 @@ INSERT IGNORE INTO block
   (block_id, step_id, title, type, type_id, owner, row_index, col_span, sort_order, created_by, deleted_at) VALUES
 
 -- ── S1-1 채널 발굴·조건 등재 (step 9001) ─────────────────────────────
-(9001, 9001, '채널 검토 배경',           'TEXT',      9001, 'vitawear-VW101', 0, 2, 0, 'vitawear-VW101', NULL),
+(9001, 9001, '채널 검토 배경',           'TEXT',      9001, 'vitawear-VW101', 0, 1, 0, 'vitawear-VW101', NULL),
 (9002, 9001, '입점 자격 스크리닝',       'CHECKLIST', 9001, 'vitawear-VW101', 0, 1, 1, 'vitawear-VW101', NULL),
 (9003, 9001, '플랫폼 3사 비교',          'TEXT',      9002, 'vitawear-VW102', 1, 1, 0, 'vitawear-VW101', NULL),
-(9004, 9001, '채널 조사 보고서',         'FILE',      NULL, 'vitawear-VW101', 1, 1, 1, 'vitawear-VW101', NULL),
+(9004, 9001, '채널 조사 보고서',         'FILE',      NULL, 'vitawear-VW101', 1, 2, 1, 'vitawear-VW101', NULL),
 (9005, 9001, '카테고리 트래픽 캡처',     'IMAGE',     9001, 'vitawear-VW102', 1, 1, 2, 'vitawear-VW102', NULL),
-(9006, 9001, '조건·일정 역산',           'TEXT',      9003, 'vitawear-VW102', 2, 2, 0, 'vitawear-VW102', NULL),
+(9006, 9001, '조건·일정 역산',           'TEXT',      9003, 'vitawear-VW102', 2, 1, 0, 'vitawear-VW102', NULL),
 (9007, 9001, '결론·미확정 항목',         'TEXT',      9004, 'vitawear-VW101', 2, 1, 1, 'vitawear-VW101', NULL),
 
 -- ── S1-2 사업성 검토·추진 결재 (step 9002) ───────────────────────────
-(9008, 9002, 'AI 사업성 검토 4항목',     'AI',        9001, 'vitawear-VW101', 0, 2, 0, 'vitawear-VW101', NULL),
+(9008, 9002, 'AI 사업성 검토 4항목',     'AI',        9001, 'vitawear-VW101', 0, 1, 0, 'vitawear-VW101', NULL),
 (9009, 9002, '상신 전 확인',             'CHECKLIST', 9002, 'vitawear-VW103', 0, 1, 1, 'vitawear-VW103', NULL),
 (9010, 9002, 'AI 결과 — 사람 확정본',    'TEXT',      9005, 'vitawear-VW101', 1, 1, 0, 'vitawear-VW101', NULL),
 (9011, 9002, '마진 시뮬레이션',          'TEXT',      9006, 'vitawear-VW101', 1, 1, 1, 'vitawear-VW101', NULL),
-(9012, 9002, '사업성 검토 보고서',       'FILE',      NULL, 'vitawear-VW101', 1, 1, 2, 'vitawear-VW101', NULL),
-(9013, 9002, '입점 추진 승인',           'APPROVAL',  9001, 'vitawear-VW103', 2, 2, 0, 'vitawear-VW103', NULL),
+(9012, 9002, '사업성 검토 보고서',       'FILE',      NULL, 'vitawear-VW101', 1, 2, 2, 'vitawear-VW101', NULL),
+(9013, 9002, '입점 추진 승인',           'APPROVAL',  9001, 'vitawear-VW103', 2, 1, 0, 'vitawear-VW103', NULL),
 (9014, 9002, '결재 결과·승인 조건',      'TEXT',      9007, 'vitawear-VW103', 2, 1, 1, 'vitawear-VW103', NULL),
 
 -- ── S2-1 제출물 작성 (step 9003) ─────────────────────────────────────
-(9015, 9003, '투입 인원·R&R',            'TEXT',      9008, 'vitawear-VW101', 0, 2, 0, 'vitawear-VW101', NULL),
+(9015, 9003, '투입 인원·R&R',            'TEXT',      9008, 'vitawear-VW101', 0, 1, 0, 'vitawear-VW101', NULL),
 (9016, 9003, '이미지 규격',              'CHECKLIST', 9003, 'vitawear-VW104', 0, 1, 1, 'vitawear-VW104', NULL),
 (9017, 9003, '스타일별 판매가표',        'TEXT',      9009, 'vitawear-VW102', 1, 1, 0, 'vitawear-VW102', NULL),
-(9018, 9003, '소개서·룩북·판매가 시트',  'FILE',      NULL, 'vitawear-VW104', 1, 1, 1, 'vitawear-VW104', NULL),
+(9018, 9003, '소개서·룩북·판매가 시트',  'FILE',      NULL, 'vitawear-VW104', 1, 2, 1, 'vitawear-VW104', NULL),
 (9019, 9003, '제품컷·룩북 컷',           'IMAGE',     9002, 'vitawear-VW104', 1, 1, 2, 'vitawear-VW104', NULL),
-(9020, 9003, '실질 수수료',              'TEXT',      9010, 'vitawear-VW102', 2, 2, 0, 'vitawear-VW102', NULL),
+(9020, 9003, '실질 수수료',              'TEXT',      9010, 'vitawear-VW102', 2, 1, 0, 'vitawear-VW102', NULL),
 (9021, 9003, '작성 이력',                'TEXT',      9011, 'vitawear-VW101', 2, 1, 1, 'vitawear-VW101', NULL),
 
 -- ── S2-2 품질검토·제출 (step 9004) ───────────────────────────────────
-(9022, 9004, '검토 기준',                'TEXT',      9012, 'vitawear-VW103', 0, 2, 0, 'vitawear-VW103', NULL),
+(9022, 9004, '검토 기준',                'TEXT',      9012, 'vitawear-VW103', 0, 1, 0, 'vitawear-VW103', NULL),
 (9023, 9004, '이미지·사이즈표 검토',     'CHECKLIST', 9004, 'vitawear-VW103', 0, 1, 1, 'vitawear-VW103', NULL),
 (9024, 9004, '서류·작업지시서 검토',     'CHECKLIST', 9005, 'vitawear-VW103', 1, 1, 0, 'vitawear-VW103', NULL),
 (9025, 9004, '검토 지적사항',            'TEXT',      9013, 'vitawear-VW103', 1, 1, 1, 'vitawear-VW103', NULL),
 (9026, 9004, '반려 Before/After·제출 완료', 'IMAGE',  9003, 'vitawear-VW104', 1, 1, 2, 'vitawear-VW104', NULL),
-(9027, 9004, '신청 제출 승인',           'APPROVAL',  9002, 'vitawear-VW103', 2, 2, 0, 'vitawear-VW103', NULL),
+(9027, 9004, '신청 제출 승인',           'APPROVAL',  9002, 'vitawear-VW103', 2, 1, 0, 'vitawear-VW103', NULL),
 (9028, 9004, '송부 기록',                'TEXT',      9014, 'vitawear-VW101', 2, 1, 1, 'vitawear-VW101', NULL),
 
 -- ── S2-3 입점 심사 결과 (step 9005) ──────────────────────────────────
-(9029, 9005, '심사 결과',                'TEXT',      9015, 'vitawear-VW102', 0, 2, 0, 'vitawear-VW102', NULL),
+(9029, 9005, '심사 결과',                'TEXT',      9015, 'vitawear-VW102', 0, 1, 0, 'vitawear-VW102', NULL),
 (9030, 9005, '승인 후 즉시 처리',        'CHECKLIST', 9006, 'vitawear-VW101', 0, 1, 1, 'vitawear-VW101', NULL),
 (9031, 9005, 'MD 피드백',                'TEXT',      9016, 'vitawear-VW102', 1, 1, 0, 'vitawear-VW102', NULL),
-(9032, 9005, '입점 승인 통보서',         'FILE',      NULL, 'vitawear-VW102', 1, 1, 1, 'vitawear-VW102', NULL),
+(9032, 9005, '입점 승인 통보서',         'FILE',      NULL, 'vitawear-VW102', 1, 2, 1, 'vitawear-VW102', NULL),
 (9033, 9005, '승인 통보 화면',           'IMAGE',     9004, 'vitawear-VW102', 1, 1, 2, 'vitawear-VW102', NULL),
-(9034, 9005, '승인 조건',                'TEXT',      9017, 'vitawear-VW101', 2, 3, 0, 'vitawear-VW101', NULL),
+(9034, 9005, '승인 조건',                'TEXT',      9017, 'vitawear-VW101', 2, 1, 0, 'vitawear-VW101', NULL),
 
 -- ── S3-1 계약 체결·계정 세팅 (step 9006) ─────────────────────────────
-(9035, 9006, '계약 조건 요약',           'TEXT',      9018, 'vitawear-VW103', 0, 2, 0, 'vitawear-VW103', NULL),
+(9035, 9006, '계약 조건 요약',           'TEXT',      9018, 'vitawear-VW103', 0, 1, 0, 'vitawear-VW103', NULL),
 (9036, 9006, '계약·계정 세팅',           'CHECKLIST', 9007, 'vitawear-VW108', 0, 1, 1, 'vitawear-VW103', NULL),
 (9037, 9006, '독소 조항 검토 의견',      'TEXT',      9019, 'vitawear-VW103', 1, 1, 0, 'vitawear-VW103', NULL),
-(9038, 9006, '계약서·세팅 확인서',       'FILE',      NULL, 'vitawear-VW103', 1, 1, 1, 'vitawear-VW103', NULL),
+(9038, 9006, '계약서·세팅 확인서',       'FILE',      NULL, 'vitawear-VW103', 1, 2, 1, 'vitawear-VW103', NULL),
 (9039, 9006, '정산 정보',                'TEXT',      9020, 'vitawear-VW108', 1, 1, 2, 'vitawear-VW108', NULL),
-(9040, 9006, '계약 체결 승인',           'APPROVAL',  9003, 'vitawear-VW103', 2, 2, 0, 'vitawear-VW103', NULL),
+(9040, 9006, '계약 체결 승인',           'APPROVAL',  9003, 'vitawear-VW103', 2, 1, 0, 'vitawear-VW103', NULL),
 (9041, 9006, '막힌 지점',                'TEXT',      9021, 'vitawear-VW108', 2, 1, 1, 'vitawear-VW108', NULL),
 
 -- ── S3-2 상품 등록·검수·오픈 (step 9007) ─────────────────────────────
-(9042, 9007, '등록 대상·표준',           'TEXT',      9022, 'vitawear-VW101', 0, 2, 0, 'vitawear-VW101', NULL),
+(9042, 9007, '등록 대상·표준',           'TEXT',      9022, 'vitawear-VW101', 0, 1, 0, 'vitawear-VW101', NULL),
 (9043, 9007, '스타일별 등록',            'CHECKLIST', 9008, 'vitawear-VW102', 0, 1, 1, 'vitawear-VW102', NULL),
-(9044, 9007, '일괄 업로드 시트',         'FILE',      NULL, 'vitawear-VW102', 1, 1, 0, 'vitawear-VW102', NULL),
+(9044, 9007, '일괄 업로드 시트',         'FILE',      NULL, 'vitawear-VW102', 1, 2, 0, 'vitawear-VW102', NULL),
 (9045, 9007, '업로드 오류 이력',         'TEXT',      9023, 'vitawear-VW102', 1, 1, 1, 'vitawear-VW102', NULL),
 (9046, 9007, '상세페이지 시안',          'IMAGE',     9005, 'vitawear-VW104', 1, 1, 2, 'vitawear-VW104', NULL),
-(9047, 9007, '검수 결과',                'TEXT',      9024, 'vitawear-VW101', 2, 2, 0, 'vitawear-VW101', NULL),
+(9047, 9007, '검수 결과',                'TEXT',      9024, 'vitawear-VW101', 2, 1, 0, 'vitawear-VW101', NULL),
 (9048, 9007, '오픈 설정·리스크',         'TEXT',      9025, 'vitawear-VW101', 2, 1, 1, 'vitawear-VW101', NULL),
 
 -- ── S4-1 [1차] 발주·입고·검품 (step 9008) ────────────────────────────
-(9049, 9008, '발주 근거',                'TEXT',      9026, 'vitawear-VW101', 0, 2, 0, 'vitawear-VW101', NULL),
+(9049, 9008, '발주 근거',                'TEXT',      9026, 'vitawear-VW101', 0, 1, 0, 'vitawear-VW101', NULL),
 (9050, 9008, '발주·검품 확인',           'CHECKLIST', 9009, 'vitawear-VW105', 0, 1, 1, 'vitawear-VW105', NULL),
 (9051, 9008, '발주 내역',                'TEXT',      9027, 'vitawear-VW111', 1, 1, 0, 'vitawear-VW101', NULL),
-(9052, 9008, '작업지시서·발주서·거래명세서', 'FILE',   NULL, 'vitawear-VW105', 1, 1, 1, 'vitawear-VW105', NULL),
+(9052, 9008, '작업지시서·발주서·거래명세서', 'FILE',   NULL, 'vitawear-VW105', 1, 2, 1, 'vitawear-VW105', NULL),
 (9053, 9008, '공장 배분·리스크',         'TEXT',      9028, 'vitawear-VW111', 1, 1, 2, 'vitawear-VW101', NULL),
-(9054, 9008, '발주 승인',                'APPROVAL',  9004, 'vitawear-VW103', 2, 2, 0, 'vitawear-VW103', NULL),
+(9054, 9008, '발주 승인',                'APPROVAL',  9004, 'vitawear-VW103', 2, 1, 0, 'vitawear-VW103', NULL),
 (9055, 9008, '입고·검품 결과',           'TEXT',      9029, 'vitawear-VW105', 2, 1, 1, 'vitawear-VW105', NULL),
 
 -- ── S4-2 [1차] 노출·판매·CS (step 9009) ──────────────────────────────
-(9056, 9009, '판매 실적',                'TEXT',      9030, 'vitawear-VW102', 0, 2, 0, 'vitawear-VW102', NULL),
+(9056, 9009, '판매 실적',                'TEXT',      9030, 'vitawear-VW102', 0, 1, 0, 'vitawear-VW102', NULL),
 (9057, 9009, '노출·운영 점검',           'CHECKLIST', 9010, 'vitawear-VW102', 0, 1, 1, 'vitawear-VW102', NULL),
 (9058, 9009, '기획전·쿠폰',              'TEXT',      9031, 'vitawear-VW102', 1, 1, 0, 'vitawear-VW102', NULL),
 (9059, 9009, '스타일별 판매',            'TEXT',      9032, 'vitawear-VW102', 1, 1, 1, 'vitawear-VW102', NULL),
 (9060, 9009, '랭킹·클레임',              'IMAGE',     9006, 'vitawear-VW105', 1, 1, 2, 'vitawear-VW105', NULL),
-(9061, 9009, 'CS·반품',                  'TEXT',      9033, 'vitawear-VW105', 2, 2, 0, 'vitawear-VW105', NULL),
+(9061, 9009, 'CS·반품',                  'TEXT',      9033, 'vitawear-VW105', 2, 1, 0, 'vitawear-VW105', NULL),
 (9062, 9009, '개선 액션',                'TEXT',      9034, 'vitawear-VW105', 2, 1, 1, 'vitawear-VW105', NULL),
 
 -- ── S4-3 [2차] 발주·입고·검품 (step 9010) ────────────────────────────
-(9063, 9010, '발주 근거',                'TEXT',      9035, 'vitawear-VW101', 0, 2, 0, 'vitawear-VW101', NULL),
+(9063, 9010, '발주 근거',                'TEXT',      9035, 'vitawear-VW101', 0, 1, 0, 'vitawear-VW101', NULL),
 (9064, 9010, '발주·검품 확인',           'CHECKLIST', 9011, 'vitawear-VW105', 0, 1, 1, 'vitawear-VW105', NULL),
 (9065, 9010, '발주 내역',                'TEXT',      9036, 'vitawear-VW111', 1, 1, 0, 'vitawear-VW101', NULL),
-(9066, 9010, '작업지시서·발주서',        'FILE',      NULL, 'vitawear-VW105', 1, 1, 1, 'vitawear-VW105', NULL),
+(9066, 9010, '작업지시서·발주서',        'FILE',      NULL, 'vitawear-VW105', 1, 2, 1, 'vitawear-VW105', NULL),
 (9067, 9010, '공장 배분',                'TEXT',      9037, 'vitawear-VW111', 1, 1, 2, 'vitawear-VW101', NULL),
-(9068, 9010, '발주 승인',                'APPROVAL',  9005, 'vitawear-VW103', 2, 2, 0, 'vitawear-VW103', NULL),
+(9068, 9010, '발주 승인',                'APPROVAL',  9005, 'vitawear-VW103', 2, 1, 0, 'vitawear-VW103', NULL),
 (9069, 9010, '입고·검품 결과',           'TEXT',      9038, 'vitawear-VW105', 2, 1, 1, 'vitawear-VW105', NULL),
 
 -- ── S4-4 [2차] 노출·판매·CS (step 9011) — 🔄 진행 중 ─────────────────
-(9070, 9011, '판매 실적',                'TEXT',      9039, 'vitawear-VW102', 0, 2, 0, 'vitawear-VW102', NULL),
+(9070, 9011, '판매 실적',                'TEXT',      9039, 'vitawear-VW102', 0, 1, 0, 'vitawear-VW102', NULL),
 (9071, 9011, '노출·운영 점검',           'CHECKLIST', 9012, 'vitawear-VW102', 0, 1, 1, 'vitawear-VW102', NULL),
 (9072, 9011, '기획전·쿠폰',              'TEXT',      9040, 'vitawear-VW102', 1, 1, 0, 'vitawear-VW102', NULL),
 (9073, 9011, '스타일별 판매',            'TEXT',      9041, 'vitawear-VW102', 1, 1, 1, 'vitawear-VW102', NULL),
 (9074, 9011, '랭킹 캡처',                'IMAGE',     9007, 'vitawear-VW102', 1, 1, 2, 'vitawear-VW102', NULL),
-(9075, 9011, 'CS·반품',                  'TEXT',      9042, 'vitawear-VW105', 2, 2, 0, 'vitawear-VW105', NULL),
+(9075, 9011, 'CS·반품',                  'TEXT',      9042, 'vitawear-VW105', 2, 1, 0, 'vitawear-VW105', NULL),
 (9076, 9011, '진행 메모',                'TEXT',      9043, 'vitawear-VW102', 2, 1, 1, 'vitawear-VW102', NULL),
 
 -- ── S4-5 [3차] 발주·입고·검품 (step 9012) — ⬜ 빈 껍데기 ─────────────
-(9077, 9012, '발주 근거',                'TEXT',      9044, NULL, 0, 2, 0, 'vitawear-VW105', NULL),
+(9077, 9012, '발주 근거',                'TEXT',      9044, NULL, 0, 1, 0, 'vitawear-VW105', NULL),
 (9078, 9012, '발주·검품 확인',           'CHECKLIST', 9013, NULL, 0, 1, 1, 'vitawear-VW105', NULL),
 (9079, 9012, '발주 내역',                'TEXT',      9045, NULL, 1, 1, 0, 'vitawear-VW105', NULL),
-(9080, 9012, '작업지시서·발주서',        'FILE',      NULL, NULL, 1, 1, 1, 'vitawear-VW105', NULL),
+(9080, 9012, '작업지시서·발주서',        'FILE',      NULL, NULL, 1, 2, 1, 'vitawear-VW105', NULL),
 (9081, 9012, '입고·검품 결과',           'TEXT',      9046, NULL, 1, 1, 2, 'vitawear-VW105', NULL),
 
 -- ── S4-6 [3차] 노출·판매·CS (step 9013) — ⬜ 빈 껍데기 ───────────────
-(9082, 9013, '시즌오프 할인 설정',       'TEXT',      9047, NULL, 0, 2, 0, 'vitawear-VW102', NULL),
+(9082, 9013, '시즌오프 할인 설정',       'TEXT',      9047, NULL, 0, 1, 0, 'vitawear-VW102', NULL),
 (9083, 9013, '노출·운영 점검',           'CHECKLIST', 9014, NULL, 0, 1, 1, 'vitawear-VW102', NULL),
 (9084, 9013, '판매 실적',                'TEXT',      9048, NULL, 1, 1, 0, 'vitawear-VW102', NULL),
 (9085, 9013, 'CS·반품',                  'TEXT',      9049, NULL, 1, 1, 1, 'vitawear-VW102', NULL),
 (9086, 9013, '재고 소진 결과',           'TEXT',      9050, NULL, 1, 1, 2, 'vitawear-VW102', NULL),
 
 -- ── S5-1 월정산 (step 9014) — ⭐ 한 스텝에 회차 블록 3개 ─────────────
-(9087, 9014, '정산 기준·구조',           'TEXT',       9051, 'vitawear-VW108', 0, 3, 0, 'vitawear-VW108', NULL),
+(9087, 9014, '정산 기준·구조',           'TEXT',       9051, 'vitawear-VW108', 0, 1, 0, 'vitawear-VW108', NULL),
 (9088, 9014, '1차 정산 (2026-02월분)',   'SETTLEMENT', 9001, 'vitawear-VW108', 1, 1, 0, 'vitawear-VW108', NULL),
 (9089, 9014, '2차 정산 (2026-03월분)',   'SETTLEMENT', 9002, 'vitawear-VW108', 1, 1, 1, 'vitawear-VW108', NULL),
 (9090, 9014, '3차 정산 (2026-04월분)',   'SETTLEMENT', 9003, 'vitawear-VW108', 1, 1, 2, 'vitawear-VW108', NULL),
 (9091, 9014, '회차 공통 확인',           'CHECKLIST',  9015, 'vitawear-VW108', 2, 1, 0, 'vitawear-VW108', NULL),
 (9092, 9014, '대조·이의 이력',           'TEXT',       9052, 'vitawear-VW108', 2, 1, 1, 'vitawear-VW108', NULL),
-(9093, 9014, '정산서·대조 시트',         'FILE',       NULL, 'vitawear-VW108', 2, 1, 2, 'vitawear-VW108', NULL),
-(9094, 9014, '입금 내역·홈택스',         'IMAGE',      9008, 'vitawear-VW108', 3, 3, 0, 'vitawear-VW108', NULL),
+(9093, 9014, '정산서·대조 시트',         'FILE',       NULL, 'vitawear-VW108', 2, 2, 2, 'vitawear-VW108', NULL),
+(9094, 9014, '입금 내역·홈택스',         'IMAGE',      9008, 'vitawear-VW108', 3, 1, 0, 'vitawear-VW108', NULL),
 
 -- ── S6-1 시즌 결산 (step 9015) — ⬜ 빈 껍데기 ────────────────────────
 (9095, 9015, '시즌 총괄',                'TEXT',      9053, NULL, 0, 1, 0, 'vitawear-VW101', NULL),
 (9096, 9015, '월별 추이',                'TEXT',      9054, NULL, 0, 1, 1, 'vitawear-VW101', NULL),
 (9097, 9015, '수익성 계산',              'TEXT',      9055, NULL, 0, 1, 2, 'vitawear-VW101', NULL),
 (9098, 9015, '결산 확인',                'CHECKLIST', 9016, NULL, 1, 1, 0, 'vitawear-VW101', NULL),
-(9099, 9015, '결산 보고서',              'FILE',      NULL, NULL, 1, 1, 1, 'vitawear-VW101', NULL),
+(9099, 9015, '결산 보고서',              'FILE',      NULL, NULL, 1, 2, 1, 'vitawear-VW101', NULL),
 (9100, 9015, '26 F/W 의사결정',          'TEXT',      9056, NULL, 1, 1, 2, 'vitawear-VW101', NULL),
 
 -- ── 삭제 시연용 2 (step 9004) — INV-05 「로그는 산다」 근거 ──────────
