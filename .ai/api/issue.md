@@ -10,18 +10,18 @@
 
 > ✅ **프론트 연동 계약으로 확정된 명세다.** 경로·필드명·타입·상태코드·에러코드를 임의로 바꾸지 않는다.
 
-## 엔드포인트
+## §0 엔드포인트 요약
 
-| API명칭 | METHOD | URL | 권한 |
+| 메서드 | 경로 | 무엇 | 상태 |
 |---|---|---|---|
-| 프로젝트 단위 이슈 목록 조회 | GET | `/api/v1/projects/{projectId}/issues` | 프로젝트 참여자 |
-| 스텝별 이슈 목록 조회 | GET | `/api/v1/steps/{stepId}/issues` | 프로젝트 참여자 |
-| 이슈 생성 | POST | `/api/v1/steps/{stepId}/issues` | 스텝 EDITOR |
-| 이슈 상세 조회 | GET | `/api/v1/issues/{issueId}` | 프로젝트 참여자 |
-| 이슈 부분 수정 | PATCH | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
-| 이슈 상태 변경 | PATCH | `/api/v1/issues/{issueId}/status` | 스텝 EDITOR |
-| 이슈 삭제 | DELETE | `/api/v1/issues/{issueId}` | 스텝 EDITOR |
-| 담당 이슈 캘린더 조회 | GET | `/api/v1/issues/calendar` | 본인 담당 이슈만 |
+| GET | `/api/v1/projects/{projectId}/issues` | [프로젝트 단위 이슈 목록 조회](#8-프로젝트-단위-이슈-목록-조회) | ✅ 확정 |
+| GET | `/api/v1/steps/{stepId}/issues` | [스텝별 이슈 목록 조회](#1-스텝별-이슈-목록-조회) | ✅ 확정 |
+| POST | `/api/v1/steps/{stepId}/issues` | [이슈 생성](#2-이슈-생성) | ✅ 확정 |
+| GET | `/api/v1/issues/{issueId}` | [이슈 상세 조회](#3-이슈-상세-조회) | ✅ 확정 |
+| PATCH | `/api/v1/issues/{issueId}` | [이슈 부분 수정](#4-이슈-부분-수정) | ✅ 확정 |
+| PATCH | `/api/v1/issues/{issueId}/status` | [이슈 상태 변경](#5-이슈-상태-변경) | ✅ 확정 |
+| DELETE | `/api/v1/issues/{issueId}` | [이슈 삭제](#6-이슈-삭제) | ✅ 확정 |
+| GET | `/api/v1/issues/calendar` | [담당 이슈 캘린더 조회](#7-담당-이슈-캘린더-조회) | ✅ 확정 |
 
 ## 공통 응답 형식
 

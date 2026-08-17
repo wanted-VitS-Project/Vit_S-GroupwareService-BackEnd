@@ -2,6 +2,21 @@
 
 **최종 업데이트**: 2026-08-11 (프로필 사진 API 추가 — `me` 업로드/삭제·`me` 응답 `profileImageUrl`, 본인만) · 2026-08-04 (약관 동의 API·게이트 추가 — 최초 로그인 전용·ADMIN 스킵·`termsStatus`) · 2026-08-03 (에러코드 3종 확정) · **담당**: 김동현 · Domain `인사` · SUB-Domain `AUTH`
 
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| POST | `/api/v1/auth/login` | [로그인](#1-로그인) | — | *(비움 · 인증 불필요)* |
+| POST | `/api/v1/auth/logout` | [로그아웃](#2-로그아웃) | — | 전체 사용자 |
+| GET | `/api/v1/auth/me` | [내 정보 조회](#3-내-정보-조회) | — | 전체 사용자 |
+| PATCH | `/api/v1/auth/password` | [비밀번호 변경](#4-비밀번호-변경) | — | 전체 사용자 (본인만) |
+| POST | `/api/v1/auth/terms-agreements` | [약관 동의](#5-약관-동의-최초-로그인-전용) | — | 전체 사용자 (본인만, 최초 로그인 전용) |
+| PUT | `/api/v1/auth/me/profile-image` | [프로필 사진 등록/변경](#5-1-프로필-사진-등록변경) | — | 전체 사용자 (본인만) |
+| DELETE | `/api/v1/auth/me/profile-image` | [프로필 사진 삭제](#5-2-프로필-사진-삭제) | — | 전체 사용자 (본인만) |
+
+> 🖼️ **프로필 사진은 본인만 바꾼다** (2026-08-11 설계). 관리자가 남의 사진을 바꾸는 경로는 없다.
+> 업로드/삭제는 여기(마이페이지), **아바타를 뿌리는 서빙 API 는 employee 도메인**(`GET /api/v1/employees/{userId}/profile-image`, `employee.md` §10)에 있다 — 좌상단·프로젝트 멤버 동그라미·결재선 아바타가 전부 그 URL 하나를 공유한다.
+
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
 
@@ -19,21 +34,6 @@
 > 📌 **프론트가 할 일은 `credentials: 'include'` 하나뿐이다.** 토큰을 저장·갱신하지 않는다.
 > 쿠키는 `HttpOnly` 라 JS 가 읽을 수 없고, 읽을 필요도 없다.
 > **토큰 재발급 API 는 없다** — 세션은 요청이 있을 때마다 자동 연장된다.
-
-## 엔드포인트
-
-| API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|
-| 로그인 | POST | `/api/v1/auth/login` | *(비움 · 인증 불필요)* |
-| 로그아웃 | POST | `/api/v1/auth/logout` | 전체 사용자 |
-| 내 정보 조회 | GET | `/api/v1/auth/me` | 전체 사용자 |
-| 비밀번호 변경 | PATCH | `/api/v1/auth/password` | 전체 사용자 (본인만) |
-| 약관 동의 | POST | `/api/v1/auth/terms-agreements` | 전체 사용자 (본인만, 최초 로그인 전용) |
-| 프로필 사진 등록/변경 | PUT | `/api/v1/auth/me/profile-image` | 전체 사용자 (본인만) |
-| 프로필 사진 삭제 | DELETE | `/api/v1/auth/me/profile-image` | 전체 사용자 (본인만) |
-
-> 🖼️ **프로필 사진은 본인만 바꾼다** (2026-08-11 설계). 관리자가 남의 사진을 바꾸는 경로는 없다.
-> 업로드/삭제는 여기(마이페이지), **아바타를 뿌리는 서빙 API 는 employee 도메인**(`GET /api/v1/employees/{userId}/profile-image`, `employee.md` §10)에 있다 — 좌상단·프로젝트 멤버 동그라미·결재선 아바타가 전부 그 URL 하나를 공유한다.
 
 ---
 
@@ -61,7 +61,7 @@
 |---|---|---|
 | `data.userId` | String | 사번 (`NOT NULL`) |
 | `data.name` | String | 이름 (`NOT NULL`) |
-| `data.role` | String | **서열형** `ADMIN` > `MASTER` > `MEMBER` (`global/PERMISSION.md` §2) |
+| `data.role` | String | **서열형** `ADMIN` > `MASTER` > `MEMBER` (`../docs/global/PERMISSION.md` §2) |
 | `data.termsStatus` | String | `AGREED` · `REQUIRED`. `REQUIRED` 면 **약관 동의 전까지 다른 기능 사용 불가**(비밀번호 변경보다 먼저). ADMIN 은 항상 `AGREED`(스킵) |
 | `data.passwordStatus` | String | `NORMAL` · `RESET_REQUIRED`. `RESET_REQUIRED` 면 변경 전까지 다른 기능 사용 불가 (`ACC-006`) |
 | `data.departmentName` | String | 부서명 (`null` 허용) |

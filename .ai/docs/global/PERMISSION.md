@@ -1,8 +1,26 @@
 # 🔐 권한 체계
 
-**최종 업데이트**: 2026-08-03 (ADMIN 시스템 계정 확정 · 그룹·직급 추가 · `page_code` 재확정 진행) · 이전 2026-08-01
+**최종 업데이트**: 2026-08-16 (§0 TL;DR 신설 — role 서열·`page_code` 카탈로그의 정본 문서로 지정, PAGE.md·USECASE.md 는 이 문서를 링크로 참조 · 🚨 **§5·§6 정산 재설계 반영** — 폐기된 `PAYMENT_CONFIRM`·`TAX_INVOICE_VIEW` 행을 폐기 표기하고 `SETTLEMENT` 행을 실코드 근거로 신설, `FINANCE` 는 **행 존재만 본다(`EDITOR` 아님)** 를 명시) · 이전 2026-08-03 · 이전 2026-08-01
 **작성/관리**: 동훈 · **2026-08-03 수정**: 동현
-**연관 문서**: [`DOMAIN.md`](DOMAIN.md) · [`ERD.md`](ERD.md) · [`PAGE.md`](PAGE.md) · [`PROJECT.md`](PROJECT.md) · [`BLOCK.md`](BLOCK.md)
+**연관 문서**: [`PAGE.md`](PAGE.md) · [`BLOCK.md`](BLOCK.md) · [`DELETE.md`](DELETE.md) · 도메인 계약은 `.ai/docs/domain/`(로컬 전용, [`../README.md`](../README.md) 참조)
+
+## §0 TL;DR
+
+- 이 문서가 정하는 것: "누가 무엇을 할 수 있는가" — 권한 3층(전역 role → 화면 접근 → 프로젝트/스텝) 판정 규칙. **role 서열·`page_code` 카탈로그의 정본**이며 `PAGE.md`·`USECASE.md` 는 이 문서를 링크로만 참조한다.
+- ⚠️ 조용히 깨지는 함정: ① 서열은 `ADMIN` > `MASTER` > `MEMBER` 로 **이름과 반대다.** ② `MASTER` 는 최상위가 아니고 **부여·회수를 못 한다** — 최상위는 `ADMIN`. ③ 정산 블록의 `page_code='FINANCE'` 판정은 **행 존재만 본다 — `EDITOR` 를 요구하지 않는다** (§5).
+
+| 섹션 | 내용 |
+|---|---|
+| §0 | 부서·직급·그룹은 권한 판정에 안 쓴다. 그룹은 다인원 선택 UI 편의일 뿐 저장 대상이 아니다 |
+| §1 | 권한 3층 — 전역 role / `page_permission`(행 없으면 차단) / `project_member`·`step_permission`(행 없으면 상속) |
+| §2 | 전역 role 3종 — `ADMIN`(시스템 계정·실권 최상위) · `MASTER`(CEO 열람+개입) · `MEMBER`(기본값) |
+| §3 | `page_permission` — `page_code` 카탈로그 6개, 부여 대상은 `BIDDING`·`FINANCE` 2개뿐 |
+| §4 | 프로젝트·스텝 권한 — 3값(`VIEWER`/`EDITOR`/`NONE`), 스텝 행 없으면 프로젝트 값을 상속 |
+| §5 | 블록 타입별 추가 제약 — **정산(`SETTLEMENT`) 항목 작성/수정은 스텝 편집 권한**, 재무 「정산현황」 조회 3종만 `page_code='FINANCE'` (구 입금확인·세금계산서 행은 **폐기**) |
+| §6 | 판정 순서 — role → 탭 → 프로젝트 → 스텝 → 블록 제약, 위에서 통과하면 아래는 안 본다 |
+| §7 | 자주 헷갈리는 지점 4개 — `MASTER` 최상위 아님 등 |
+
+---
 
 > 이 문서는 **"누가 무엇을 할 수 있는가"** 만 정의한다.
 
@@ -255,10 +273,26 @@ page_permission(page_code, user_id, permission)
 
 | 블록 | 제약 |
 |------|------|
-| **입금확인** (`PAYMENT_CONFIRM`) | **프로젝트 쪽은 전원 읽기 전용.** 확인 표시 확정은 **`page_code='FINANCE'` + `EDITOR`** 보유자만 |
-| **세금계산서 조회** (`TAX_INVOICE_VIEW`) | 동일 — 연결·해제는 `page_code='FINANCE'` + `EDITOR` |
+| ⛔ ~~**입금확인** (`PAYMENT_CONFIRM`)~~ | ~~프로젝트 쪽은 전원 읽기 전용. 확인 표시 확정은 `page_code='FINANCE'` + `EDITOR` 보유자만~~ → **2026-08-09 `SETTLEMENT` 로 통합.** `V20260809130000` 이 `block_payment_confirm`·`payment` 를 `DROP` 했다 ([`BLOCK.md`](BLOCK.md) §4-5) |
+| ⛔ ~~**세금계산서 조회** (`TAX_INVOICE_VIEW`)~~ | ~~동일 — 연결·해제는 `page_code='FINANCE'` + `EDITOR`~~ → **2026-08-09 `SETTLEMENT` 로 통합.** `tax_invoice_confirm`·구 `tax_invoice` 도 같은 마이그레이션에서 `DROP` ([`BLOCK.md`](BLOCK.md) §4-6) |
+| ⭐ **정산** (`SETTLEMENT`) | **판정이 두 갈래다.** ① 블록 안 **정산 항목 작성/수정과 그 추천 조회는 스텝 편집 권한**이다 — `SettlementEligibilityPolicy.assertEditPermission` → `BlockCatalogPort.hasEditPermission` (실패 시 403 `SETL-001`). ② **재무팀 「정산현황」 조회 3종만** `page_code='FINANCE'` 를 본다 — 없으면 403 **`SETL-009`** (`SettlementQueryService`) |
 
-상세 요구사항 → [`PAY-V1.md`](PAY-V1.md) · [`TAX-V1.md`](TAX-V1.md)
+⭐ **2026-08-16 정정 (실코드 근거).** 폐기된 두 행의 *"프로젝트 쪽은 전원 읽기 전용"* 은 **현행이 아니다.**
+현행 `SETTLEMENT` 블록은 회차 예정치(금액·세액·기한·계좌)를 **스텝 편집 권한자가 직접 작성·수정**한다 ([`BLOCK.md`](BLOCK.md) §4-10).
+
+| 갈래 | 판정 | 엔드포인트 | 실패 |
+|---|---|---|---|
+| **① 블록 안 정산 항목** | **스텝 편집 권한** (③층) — `page_code` 를 안 본다 | `GET`·`PATCH /api/v1/blocks/settlements/{settleId}/items` | 403 `SETL-001` |
+| **② 재무 「정산현황」 3종** | `page_code='FINANCE'` **행 존재** | `GET /api/v1/projects/settlements/filters` · `GET /api/v1/projects/settlements` · `GET /api/v1/projects/{projectId}/settlements` | 403 `SETL-009` |
+
+⚠️ **`FINANCE` 는 행 존재만 본다 — `EDITOR` 를 요구하지 않는다.**
+`PagePermissionMapperAdapter.hasAccess` 는 `ADMIN`·`MASTER` 를 무조건 통과시키고, `MEMBER` 는 `page_permission` 에 그 `page_code` 행이 있으면 **`VIEWER` 라도 통과**한다(`permission` 값을 안 본다).
+`FINANCE` + `EDITOR` 는 **블록이 아니라 재무 원장 API 에 남아 있다** — 입출금·계산서 **매칭/해제·등록·삭제**는 `FinanceCommandService.assertEditAccess` → `hasEditAccess`(`permission = 'EDITOR'`), 실패 시 403 `FINANCE_EDIT_ACCESS_DENIED`.
+즉 **연결·해제는 블록 제약이 아니라 재무 탭(P-40·P-41) 소관**이다.
+
+⚠️ **②는 프로젝트 참여 여부를 안 본다.** 재무팀 화면의 드릴다운이라 프로젝트 `EDITOR` 여도 `FINANCE` 가 없으면 403 이고, 반대로 미참여자여도 `FINANCE` 가 있으면 열린다 (`SettlementQueryService.getProjectSettlementBlocks` 주석).
+
+상세 요구사항 → [`settlement.md`](../../api/settlement.md) · 재무 원장은 재무 도메인 계약 문서(`.ai/docs/domain/` 로컬 전용)
 
 ---
 
@@ -291,11 +325,14 @@ page_permission(page_code, user_id, permission)
      결과가 VIEWER           → 잠금 (보이되 못 고침)
 
 5) 블록 타입 제약 (§5)
-     PAYMENT_CONFIRM · TAX_INVOICE_VIEW 의 확정·연결
-        → page_code='FINANCE' + EDITOR 를 다시 확인
+     SETTLEMENT — 블록 안 정산 항목 작성/수정
+        → 추가 제약 없음. 4) 의 결과(스텝 편집 권한)를 그대로 쓴다
+     ⛔ PAYMENT_CONFIRM · TAX_INVOICE_VIEW 는 폐기됐다 (2026-08-09 · SETTLEMENT 로 통합)
 ```
 
-⚠️ **5) 를 빼먹지 마라.**
+⚠️ **재무 「정산현황」 조회 3종은 이 순서를 타지 않는다.**
+프로젝트 목록·블록 드릴다운(§5 ② 표)은 `1) role` 다음 곧장 **`page_code='FINANCE'` 행만** 보고 끝난다 —
+3)·4) 의 `project_member`·`step_permission` 을 **아예 조회하지 않는다** (없으면 403 `SETL-009`).
 
 ---
 

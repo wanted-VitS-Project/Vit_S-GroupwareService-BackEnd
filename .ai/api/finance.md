@@ -8,30 +8,32 @@
 
 ---
 
-| 상태 | 기능 | METHOD | URL | 권한 |
-|------|------|--------|-----|------|
-| ✅ 확정 | 재무 관리 요약 조회 | GET | `/api/v1/finance/summary` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 조회 | GET | `/api/v1/finance/cash-flows` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 필터 옵션 조회 | GET | `/api/v1/finance/cash-flows/filters` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 조회 | GET | `/api/v1/finance/tax-invoices` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 필터 옵션 조회 | GET | `/api/v1/finance/tax-invoices/filters` | 접근 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 CSV 컬럼 추천 조회 | POST | `/api/v1/finance/tax-invoices/csv/preview` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서(CSV 기반) 업로드 | POST | `/api/v1/finance/tax-invoices/csv` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 매칭 추천 조회 | GET | `/api/v1/finance/tax-invoices/{taxId}/match-candidates` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 블록 매칭 | PATCH | `/api/v1/finance/tax-invoices/{taxId}/match` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 블록 매칭 해제 | PATCH | `/api/v1/finance/tax-invoices/{taxId}/unmatch` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 메모 수정 | PATCH | `/api/v1/finance/tax-invoices/{taxId}` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 삭제(배치) | DELETE | `/api/v1/finance/tax-invoices` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 세금계산서 연결 제외/포함 처리(배치) | PATCH | `/api/v1/finance/tax-invoices/exclude` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 CSV 컬럼 추천 조회 | POST | `/api/v1/finance/cash-flows/csv/preview` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역(CSV 기반) 업로드 | POST | `/api/v1/finance/cash-flows/csv` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 매칭 추천 조회 | GET | `/api/v1/finance/cash-flows/{cashFlowId}/match-candidates` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 블록 매칭 | PATCH | `/api/v1/finance/cash-flows/{cashFlowId}/match` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 블록 매칭 해제 | PATCH | `/api/v1/finance/cash-flows/{cashFlowId}/unmatch` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 직접 등록 | POST | `/api/v1/finance/cash-flows` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 수정 | PATCH | `/api/v1/finance/cash-flows/{cashFlowId}` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 삭제(배치) | DELETE | `/api/v1/finance/cash-flows` | 편집 권한 보유자(재무 관리 페이지) |
-| ✅ 확정 | 입출금 내역 연결 제외 처리(배치) | PATCH | `/api/v1/finance/cash-flows/exclude` | 편집 권한 보유자(재무 관리 페이지) |
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/finance/summary` | [재무 관리 요약 조회](#재무-관리-요약-조회-get-apiv1financesummary) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/cash-flows` | [입출금 내역 조회](#입출금-내역-조회-get-apiv1financecash-flows) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/cash-flows/filters` | [입출금 내역 필터 옵션 조회](#입출금-내역-필터-옵션-조회-get-apiv1financecash-flowsfilters) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/tax-invoices` | [세금계산서 조회](#세금계산서-조회-get-apiv1financetax-invoices) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/tax-invoices/filters` | [세금계산서 필터 옵션 조회](#세금계산서-필터-옵션-조회-get-apiv1financetax-invoicesfilters) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| POST | `/api/v1/finance/tax-invoices/csv/preview` | [세금계산서 CSV 컬럼 추천 조회](#세금계산서-csv-컬럼-추천-조회-post-apiv1financetax-invoicescsvpreview) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| POST | `/api/v1/finance/tax-invoices/csv` | [세금계산서(CSV 기반) 업로드](#세금계산서csv-기반-업로드-post-apiv1financetax-invoicescsv) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/tax-invoices/{taxId}/match-candidates` | [세금계산서 매칭 추천 조회](#세금계산서-매칭-추천-조회-get-apiv1financetax-invoicestaxidmatch-candidates) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/tax-invoices/{taxId}/match` | [세금계산서 블록 매칭](#세금계산서-블록-매칭-patch-apiv1financetax-invoicestaxidmatch) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/tax-invoices/{taxId}/unmatch` | [세금계산서 블록 매칭 해제](#세금계산서-블록-매칭-해제-patch-apiv1financetax-invoicestaxidunmatch) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/tax-invoices/{taxId}` | [세금계산서 메모 수정](#세금계산서-메모-수정-patch-apiv1financetax-invoicestaxid) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| DELETE | `/api/v1/finance/tax-invoices` | [세금계산서 삭제(배치)](#세금계산서-삭제배치-delete-apiv1financetax-invoices) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/tax-invoices/exclude` | [세금계산서 연결 제외/포함 처리(배치)](#세금계산서-연결-제외포함-처리배치-patch-apiv1financetax-invoicesexclude) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| POST | `/api/v1/finance/cash-flows/csv/preview` | [입출금 내역 CSV 컬럼 추천 조회](#입출금-내역-csv-컬럼-추천-조회-post-apiv1financecash-flowscsvpreview) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| POST | `/api/v1/finance/cash-flows/csv` | [입출금 내역(CSV 기반) 업로드](#입출금-내역csv-기반-업로드-post-apiv1financecash-flowscsv) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/cash-flows/{cashFlowId}/match-candidates` | [입출금 내역 매칭 추천 조회](#입출금-내역-매칭-추천-조회-get-apiv1financecash-flowscashflowidmatch-candidates) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/cash-flows/{cashFlowId}/match` | [입출금 내역 블록 매칭](#입출금-내역-블록-매칭-patch-apiv1financecash-flowscashflowidmatch) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/cash-flows/{cashFlowId}/unmatch` | [입출금 내역 블록 매칭 해제](#입출금-내역-블록-매칭-해제-patch-apiv1financecash-flowscashflowidunmatch) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| POST | `/api/v1/finance/cash-flows` | [입출금 내역 직접 등록](#입출금-내역-직접-등록-post-apiv1financecash-flows) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/cash-flows/{cashFlowId}` | [입출금 내역 수정](#입출금-내역-수정-patch-apiv1financecash-flowscashflowid) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| DELETE | `/api/v1/finance/cash-flows` | [입출금 내역 삭제(배치)](#입출금-내역-삭제배치-delete-apiv1financecash-flows) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
+| PATCH | `/api/v1/finance/cash-flows/exclude` | [입출금 내역 연결 제외 처리(배치)](#입출금-내역-연결-제외-처리배치-patch-apiv1financecash-flowsexclude) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
 
 ---
 

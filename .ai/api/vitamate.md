@@ -9,23 +9,23 @@
 
 ---
 
-## 엔드포인트 목록
+## §0 엔드포인트 요약
 
-| 상태 | 기능 | METHOD | URL | 권한 |
-|------|------|--------|-----|------|
-| ✅ 확정 | 문서 분석 요청 | POST | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
-| ✅ 확정 | 검토 템플릿 목록 조회 | GET | `/api/v1/vitamate/review-templates` | 로그인 사용자 |
-| ✅ 확정 | AI 분석 상태 및 결과 조회 | GET | `/api/v1/vitamate/analyses/{analysisId}` | 스텝 접근 권한 |
-| ✅ 확정 | 블록별 분석 실행 이력 조회 | GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | 스텝 접근 권한 |
-| ✅ 확정 | Python 분석 작업 조회 | GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | 내부 서버 |
-| ✅ 확정 | Python 분석 결과 콜백 | POST | `/internal/v1/vitamate/analyses/{analysisId}/callback` | 내부 서버 |
-| ✅ 확정 | 파일 인덱싱 소스 조회 | GET | `/internal/v1/vitamate/file-versions/{fileVersionId}/index-source` | 내부 서버 |
-| ✅ 확정 | 문서 청크 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks` | 내부 서버 |
-| ✅ 확정 | 문서 청크 임베딩 결과 저장 | POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks/embeddings` | 내부 서버 |
-| ✅ 확정 | 파일 인덱싱 상태 콜백 | POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | 내부 서버 |
-| ✅ 확정 | ChromaDB 정리 결과 콜백 | POST | `/internal/v1/vitamate/chroma-cleanup-jobs/{cleanupJobId}/callback` | 내부 서버 |
-| ✅ 확정 | 관리자 ChromaDB 정리 작업 조회 | GET | `/api/v1/admin/vitamate/chroma-cleanup-jobs` | `ADMIN`, `MASTER` |
-| ✅ 확정 | 관리자 ChromaDB 정리 작업 재처리 | POST | `/api/v1/admin/vitamate/chroma-cleanup-jobs/{cleanupJobId}/retry` | `ADMIN`, `MASTER` |
+| 메서드 | 경로 | 무엇 | 상태 |
+|---|---|---|---|
+| POST | `/api/v1/blocks/{blockId}/vitamate/analyses` | [문서 분석 요청](#문서-분석-요청-post-apiv1blocksblockidvitamateanalyses) | ✅ 확정 |
+| GET | `/api/v1/vitamate/review-templates` | [검토 템플릿 목록 조회](#검토-템플릿-목록-조회-get-apiv1vitamatereview-templates) | ✅ 확정 |
+| GET | `/api/v1/vitamate/analyses/{analysisId}` | [AI 분석 상태 및 결과 조회](#ai-분석-상태-및-결과-조회-get-apiv1vitamateanalysesanalysisid) | ✅ 확정 |
+| GET | `/api/v1/blocks/{blockId}/vitamate/analyses` | [블록별 분석 실행 이력 조회](#블록별-분석-실행-이력-조회-get-apiv1blocksblockidvitamateanalyses) | ✅ 확정 |
+| GET | `/internal/v1/vitamate/analyses/{analysisId}/jobs/{attemptId}` | [Python 분석 작업 조회](#python-분석-작업-조회-get-internalv1vitamateanalysesanalysisidjobsattemptid) | ✅ 확정 |
+| POST | `/internal/v1/vitamate/analyses/{analysisId}/callback` | [Python 분석 결과 콜백](#python-분석-결과-콜백-post-internalv1vitamateanalysesanalysisidcallback) | ✅ 확정 |
+| GET | `/internal/v1/vitamate/file-versions/{fileVersionId}/index-source` | [파일 인덱싱 소스 조회](#파일-인덱싱-소스-조회-get-internalv1vitamatefile-versionsfileversionidindex-source) | ✅ 확정 |
+| POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks` | [문서 청크 저장](#문서-청크-저장-post-internalv1vitamatefile-versionsfileversionidchunks) | ✅ 확정 |
+| POST | `/internal/v1/vitamate/file-versions/{fileVersionId}/chunks/embeddings` | [문서 청크 임베딩 결과 저장](#문서-청크-임베딩-결과-저장-post-internalv1vitamatefile-versionsfileversionidchunksembeddings) | ✅ 확정 |
+| POST | `/internal/v1/vitamate/file-indexes/{fileVersionId}/callback` | [파일 인덱싱 상태 콜백](#파일-인덱싱-상태-콜백-post-internalv1vitamatefile-indexesfileversionidcallback) | ✅ 확정 |
+| POST | `/internal/v1/vitamate/chroma-cleanup-jobs/{cleanupJobId}/callback` | [ChromaDB 정리 결과 콜백](#chromadb-정리-결과-callback-post-internalv1vitamatechroma-cleanup-jobscleanupjobidcallback) | ✅ 확정 |
+| GET | `/api/v1/admin/vitamate/chroma-cleanup-jobs` | [관리자 ChromaDB 정리 작업 조회](#관리자-chromadb-정리-작업-조회-get-apiv1adminvitamatechroma-cleanup-jobs) | ✅ 확정 |
+| POST | `/api/v1/admin/vitamate/chroma-cleanup-jobs/{cleanupJobId}/retry` | [관리자 ChromaDB 정리 작업 재처리](#관리자-chromadb-정리-작업-재처리-post-apiv1adminvitamatechroma-cleanup-jobscleanupjobidretry) | ✅ 확정 |
 
 ---
 

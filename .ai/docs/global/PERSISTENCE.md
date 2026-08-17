@@ -1,6 +1,8 @@
 # Persistence Convention
 
-**최종 업데이트**: 2026-08-04  
+**최종 업데이트**: 2026-08-16 (§2 MyBatis XML 컨벤션을 MYBATIS.md 링크로 축약 — 세부 문법 정본은 MYBATIS.md)
+**최종 업데이트**: 2026-08-04 (최초 작성)
+
 **목적**: JPA와 MyBatis를 함께 사용할 때 역할을 명확히 나누고, 팀원이 SQL 위치와 코드 흐름을 쉽게 찾을 수 있게 한다.
 
 ---
@@ -57,52 +59,9 @@
 
 ## 2. MyBatis XML 컨벤션
 
-### 기본 원칙
-
-- MyBatis는 복잡한 조회 SQL이나 동적 조건 검색에 사용한다.
-- SQL은 XML에 작성하고, Mapper 인터페이스에는 메서드 선언만 둔다.
-- `@Select`, `@Insert`, `@Update`, `@Delete`는 사용하지 않는다.
-
-### 파일 위치
-
-```text
-Java Mapper
-src/main/java/com/group3/vitamins/{domain}/infrastructure/persistence/mapper/{Domain}Mapper.java
-
-XML Mapper
-src/main/resources/mapper/{domain}/{Domain}Mapper.xml
-```
-
-예시:
-
-```text
-src/main/java/com/group3/vitamins/vitamate/infrastructure/persistence/mapper/VitamateAnalysisMapper.java
-src/main/resources/mapper/vitamate/VitamateAnalysisMapper.xml
-```
-
-### 작성 규칙
-
-- XML의 `namespace`는 Mapper 인터페이스 전체 경로와 같게 작성한다.
-- XML의 `id`는 Mapper 메서드명과 같게 작성한다.
-- `SELECT *`는 사용하지 않고 필요한 컬럼만 조회한다.
-- 파라미터가 2개 이상이면 `@Param`을 사용한다.
-- 검색 조건이 많으면 `SearchCondition`, `Criteria` 같은 객체로 묶는다.
-- 조회 결과가 복잡하면 전용 Row 클래스를 만든다.
-
-### 동적 SQL 규칙
-
-- 조건 검색은 `<where>`를 사용한다.
-- 선택 수정은 `<set>`을 사용한다.
-- 리스트 조건은 `<foreach>`를 사용한다.
-- 조건 분기는 `<if>` 또는 `<choose>`를 사용한다.
-
-### 금지 사항
-
-- `HashMap` 파라미터 사용 금지
-- XML에서 Java static 메서드 호출 금지
-- XML에 비즈니스 로직 작성 금지
-- `${}` 직접 사용 금지
-- `SELECT *` 사용 금지
+MyBatis XML 세부 규칙(파일 위치, `namespace`/`id` 작성법, 동적 SQL 태그, `HashMap`·`${}`·`SELECT *`·
+XML 비즈니스 로직 금지 등)의 정본은 **[MYBATIS.md](MYBATIS.md)** 다. 이 문서는 "언제 JPA/MyBatis를
+쓰는가"(§1)만 다루고, MyBatis를 쓰기로 정한 뒤의 문법·컨벤션은 MYBATIS.md를 따른다.
 
 ---
 

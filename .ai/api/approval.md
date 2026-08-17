@@ -8,6 +8,27 @@
 **노션**: 확인 필요 — 노션 링크 채워넣기
 **범위**: 결재 블록 관련 API 7개 + 결재관리·처리 API(목록조회 착수, 나머지 4개는 순서대로 추가 예정). 알림 API는 `notification.md` 참고.
 
+## §0 엔드포인트 요약
+
+| 메서드 | 경로 | 무엇 | 상태 | 권한 |
+|---|---|---|---|---|
+| GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | [결재 회차 상세조회](#1-결재-회차-상세조회) | — | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
+| PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | [결재 제목·내용 수정](#2-결재-제목내용-수정) | — | 기안자/대행 기안자 |
+| POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | [결재 문서 추가](#3-결재-문서-추가) | — | 기안자/대행 기안자 |
+| DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | [결재 문서 제거](#4-결재-문서-제거) | — | 기안자/대행 기안자 |
+| PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | [결재선 등록·수정](#5-결재선-등록수정) | — | 기안자/대행 기안자 |
+| POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | [결재 상신](#6-결재-상신) | — | 기안자/대행 기안자 |
+| POST | `/api/v1/approvals/{approvalId}/revisions` | [재상신 회차 생성](#7-재상신-회차-생성) | — | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
+| GET | `/api/v1/approvals` | [결재관리 목록조회](#8-결재관리-목록조회) | — | 로그인 사용자(scope=all은 MASTER) |
+| GET | `/api/v1/approvals/{approvalId}` | [결재 상세조회](#9-결재-상세조회) | — | 1번과 동일 |
+| GET | `/api/v1/approvals/{approvalId}/revisions` | [결재 이력조회](#10-결재-이력조회) | — | 1번과 동일 |
+| POST | `/api/v1/approval-lines/{lineId}/approve` | [결재 승인](#11-결재-승인) | — | 해당 결재선의 결재자 본인 |
+| POST | `/api/v1/approval-lines/{lineId}/reject` | [결재 반려](#12-결재-반려) | — | 해당 결재선의 결재자 본인 |
+
+⭐ **`userId` 계열은 전부 `String`이다.** `employee.user_id`(사번)가 `VARCHAR(20)`이라, `drafterId`/`approverId` 등을 `long`으로 두면 안 된다.
+⭐ **결재 상세 생성은 REST API가 아니다.** `ApprovalBlockDetailAdapter`(블록팀 `BlockDetailPort` 구현체)가 블록 생성 트랜잭션 안에서 `approval`+`approval_revision`(1회차)을 만든다.
+⭐ **부서·직책은 스냅샷 없이 항상 `employee` 라이브 조회다** (`APR-V1.md` INV-11). `approval_line`에 관련 컬럼 없음.
+
 > ✅ **로컬 명세 확정 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 2026-08-11 추가분은 이 로컬 정본을 기준으로 노션·프론트에 동기화한다.
 > 요구사항 근거: [`../docs/domain/결재·알림/APR-V1.md`](../docs/domain/결재·알림/APR-V1.md)
@@ -66,27 +87,6 @@
 > | 포함 | `DRAFT`도 블록 카드와 상세 API에서 동일하게 공개한다. 블록을 볼 수 있는데 내부 내용만 막는 불일치를 두지 않는다 |
 > | 변경 없음 | **쓰기 권한은 그대로 기안자/대행 기안자.** `ADMIN` 차단·회사 경계·에러코드(`APPROVAL_LINE_NOT_VIEWABLE`) 모두 유지 |
 > | 프론트 작업 | 조회 권한 확대만 반영하면 된다. 응답 구조와 필드는 바뀌지 않는다 |
-
-## 엔드포인트
-
-| # | API명칭 | METHOD | URL | 권한 |
-|---|---|---|---|---|
-| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
-| 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자/대행 기안자 |
-| 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자/대행 기안자 |
-| 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자/대행 기안자 |
-| 5 | 결재선 등록·수정 | PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | 기안자/대행 기안자 |
-| 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자/대행 기안자 |
-| 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
-| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(scope=all은 MASTER) |
-| 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 1번과 동일 |
-| 10 | 결재 이력조회 | GET | `/api/v1/approvals/{approvalId}/revisions` | 1번과 동일 |
-| 11 | 결재 승인 | POST | `/api/v1/approval-lines/{lineId}/approve` | 해당 결재선의 결재자 본인 |
-| 12 | 결재 반려 | POST | `/api/v1/approval-lines/{lineId}/reject` | 해당 결재선의 결재자 본인 |
-
-⭐ **`userId` 계열은 전부 `String`이다.** `employee.user_id`(사번)가 `VARCHAR(20)`이라, `drafterId`/`approverId` 등을 `long`으로 두면 안 된다.
-⭐ **결재 상세 생성은 REST API가 아니다.** `ApprovalBlockDetailAdapter`(블록팀 `BlockDetailPort` 구현체)가 블록 생성 트랜잭션 안에서 `approval`+`approval_revision`(1회차)을 만든다.
-⭐ **부서·직책은 스냅샷 없이 항상 `employee` 라이브 조회다** (`APR-V1.md` INV-11). `approval_line`에 관련 컬럼 없음.
 
 ---
 

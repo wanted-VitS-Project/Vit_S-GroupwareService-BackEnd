@@ -1,6 +1,7 @@
 # Flyway 마이그레이션 컨벤션
 
-**최종 업데이트**: 2026-08-04
+**최종 업데이트**: 2026-08-16 (§2 버전 번호 전역 유일 규칙 보강 — 하위 폴더 재귀 스캔 시 실제 충돌 사례 링크 추가)
+**최종 업데이트**: 2026-08-04 (최초 작성)
 **대상**: DB 스키마 변경, 초기 데이터, 마스터 데이터, RDS 반영 작업
 
 > 이 문서는 AI와 팀원이 DB 변경 작업을 할 때 반드시 따라야 하는 Flyway 기준이다.
@@ -42,15 +43,17 @@ src/main/resources/db/migration/vitamate
 파일명 형식:
 
 ```text
-VyyyyMMddHHmm__description.sql
+VyyyyMMddHHmmss__description.sql
 ```
+
+> ⚠️ **14자리(초 단위)다.** 초기 3개(`V202608031739__init_schema` 등)만 12자리로 남아 있고, 이후 마이그레이션 90여 개는 전부 14자리다 (2026-08-16 실측). 새 파일은 반드시 14자리로 — 12자리로 만들면 정렬상 과거로 밀려 순서가 깨진다.
 
 예시:
 
 ```text
-V202608031000__create_user_tables.sql
-V202608031010__create_project_tables.sql
-V202608031020__create_payment_tables.sql
+V20260809130000__replace_payment_and_tax_invoice_with_settlement.sql
+V20260812150000__add_version_settlement.sql
+V20260816170100__add_project_id_to_settlement_block.sql
 ```
 
 규칙:
@@ -61,6 +64,9 @@ V202608031020__create_payment_tables.sql
 - 버전 숫자는 절대 중복되면 안 된다.
 - 새 파일의 버전은 현재 `develop` 또는 RDS에 적용된 최신 버전보다 커야 한다.
 - 여러 명이 동시에 SQL을 작성할 때는 버전 번호를 사전에 배정한다.
+- ⚠️ 버전 번호는 `db/migration` **하위 폴더 전체를 통틀어 전역으로 유일**해야 한다 — Flyway는 하위 폴더를
+  재귀적으로 스캔하므로, 폴더가 달라도(`init`/`bid`/`vitamate` 등) 번호가 겹치면 앱이 기동조차 하지 못한다.
+  실제 충돌 사례는 [CONCURRENCY.md](CONCURRENCY.md) §7-2 참고.
 
 ---
 
