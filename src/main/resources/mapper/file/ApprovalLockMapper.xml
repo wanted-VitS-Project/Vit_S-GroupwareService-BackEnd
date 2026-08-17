@@ -56,4 +56,29 @@
         )
     </select>
 
+    <!--
+      이 파일이 걸린 결재의 결재선에 요청자(user_id)가 있으면 true (2026-08-17, 읽기 접근 fallback).
+      경로: file_version(file_id) → approval_document(file_version_id) → approval_revision → approval_line.
+      현재 첨부·회차 생존(ad·ar.deleted_at IS NULL)·결재선 생존(al.deleted_at IS NULL)만 인정한다.
+      테넌트 격리: 결재자는 project_member 자격이 있어야 결재선에 오르므로(단일 회사 소속) 타 회사 결재선엔
+      요청자가 없다 → user_id 매칭 자체가 회사 경계를 강제한다(암묵 격리, ApprovalViewPolicy 참여 판정과 동일 결).
+    -->
+    <select id="isApprovalLineParticipant" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1
+              FROM file_version fv
+              JOIN approval_document ad
+                ON ad.file_version_id = fv.file_version_id
+               AND ad.deleted_at IS NULL
+              JOIN approval_revision ar
+                ON ar.approval_revision_id = ad.approval_revision_id
+               AND ar.deleted_at IS NULL
+              JOIN approval_line al
+                ON al.approval_revision_id = ar.approval_revision_id
+               AND al.deleted_at IS NULL
+             WHERE fv.file_id = #{fileId}
+               AND al.user_id = #{userId}
+        )
+    </select>
+
 </mapper>

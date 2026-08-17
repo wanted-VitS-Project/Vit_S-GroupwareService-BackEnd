@@ -59,17 +59,20 @@
 
 | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|
-| 버전 이력 조회 | GET | `/api/v1/files/{fileId}/versions` | 스텝 접근 권한 |
-| **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 |
-| 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 |
-| 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 |
+| 버전 이력 조회 | GET | `/api/v1/files/{fileId}/versions` | 스텝 접근 권한 · 결재선 참여† |
+| **버전 단건 조회** | GET | `/api/v1/file-versions/{fileVersionId}` | 스텝 접근 권한 · 결재선 참여† |
+| 다운로드 URL 발급 | GET | `/api/v1/file-versions/{fileVersionId}/download` | 스텝 접근 권한 · 결재선 참여† |
+| 미리보기 조회 | GET | `/api/v1/file-versions/{fileVersionId}/preview` | 스텝 접근 권한 · 결재선 참여† |
 | **파일 버전 목록 조회** (비타메이트 분석 선택용) | GET | `/api/v1/projects/{projectId}/file-versions` | 프로젝트 접근 권한 |
 
 > **버전 단건 조회**는 2026-08-03 추가. 결재 블록이 고정한 `file_version_id` 로 그 버전을 조회하는 인터페이스다 (`BLOCK.md` §4-4).
+> † **결재선 참여**(2026-08-17) — 스텝 권한이 없어도 그 파일이 걸린 결재의 결재선에 있으면 읽기 4종이 통과한다(아래 "읽기 경로의 결재선 참여 예외"). 쓰기·블록 파일목록엔 적용 안 됨.
 
 ## 🔑 공통 원칙
 
 ⛔ **파일 단위 권한이 없다.** 스텝의 편집/열람 권한을 그대로 따른다. 열람이면 미리보기와 다운로드 둘 다 된다 (`FILE-014`).
+
+⭐ **읽기 경로의 결재선 참여 예외** (2026-08-17) — 스텝 권한이 없어도 **그 파일이 걸린 결재의 결재선에 요청자가 있으면** 읽기 4종(버전이력·버전단건·다운로드·미리보기)이 통과한다. 프로젝트 미소속 결재자(대표 직급·MASTER)가 결재 상세는 열리는데(`ApprovalViewPolicy` 참여 판정) 첨부는 403 이던 비대칭을 없앤 것이다. **읽기 전용**이며 그 파일이 걸린 결재로만 한정한다(업로드·수정·삭제·블록 파일목록은 예외 없음). 판정은 파일 도메인이 이미 소유한 `ApprovalLockQueryPort` 에 `isApprovalLineParticipant(fileId, userId)` 를 추가해 `file_version→approval_document→approval_revision→approval_line` 조인으로 확인한다(§7 `existsAnyApprovalReference` 와 같은 어댑터, **결재팀 신설 포트 불필요**).
 
 ### 권한 판정 순서 ⭐ (2026-08-03 · `global/PERMISSION.md` §4·§6 반영)
 

@@ -1,5 +1,6 @@
 package com.group3.vitamins.file.application.service;
 
+import com.group3.vitamins.file.application.port.ApprovalLockQueryPort;
 import com.group3.vitamins.file.application.port.BlockCatalogPort;
 import com.group3.vitamins.file.application.port.FileQueryPort;
 import com.group3.vitamins.file.application.port.FileStoragePort;
@@ -55,6 +56,7 @@ public class FileQueryService implements FileQueryUseCase {
     private final FileStoragePort fileStoragePort;
     private final PdfPreviewPort pdfPreviewPort;
     private final ProjectAccessUseCase projectAccessUseCase;
+    private final ApprovalLockQueryPort approvalLockQueryPort;
 
     /** 미리보기 최대 페이지 수 (§10). */
     private static final int MAX_PREVIEW_PAGES = 5;
@@ -100,7 +102,7 @@ public class FileQueryService implements FileQueryUseCase {
         File file = fileRepository.findById(fileId)
                 .filter(f -> !f.isDeleted())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_NOT_FOUND));
-        requireStepAccess(resolveStepId(fileId), requesterUserId, role);
+        requireReadAccess(resolveStepId(fileId), fileId, requesterUserId, role);
 
         List<FileVersionProjection> versions = fileQueryPort.findCompletedVersions(fileId);
         // 차수 내림차순이라 첫 행이 최신 차수. 비어 있으면 0.
@@ -222,7 +224,7 @@ public class FileQueryService implements FileQueryUseCase {
         File file = fileRepository.findById(version.getFileId())
                 .orElseThrow(() -> new NotFoundException(FileErrorCode.FILE_VERSION_NOT_FOUND));
         Long stepId = resolveStepId(file.getFileId());
-        requireStepAccess(stepId, userId, role);
+        requireReadAccess(stepId, file.getFileId(), userId, role);
         return new VersionContext(version, file);
     }
 
@@ -240,6 +242,25 @@ public class FileQueryService implements FileQueryUseCase {
             return stepAccessUseCase.requireAccess(stepId, userId, role);
         } catch (ForbiddenException | NotFoundException e) {
             throw new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED, e);
+        }
+    }
+
+    /**
+     * 읽기 경로(다운로드·미리보기·버전 단건·버전 목록) 접근 판정. 스텝 열람 권한이 있으면 통과하고,
+     * 없더라도 <b>이 파일이 걸린 결재의 결재선에 요청자가 있으면 통과</b>한다 (2026-08-17).
+     *
+     * <p>프로젝트 미소속 결재자(대표·MASTER)가 결재 상세는 열리는데 첨부는 403 이던 비대칭을 없앤다 —
+     * 결재 상세의 참여 판정({@code ApprovalViewPolicy})을 읽기 파일 접근에도 맞춘다. 그 파일이 걸린 결재로만
+     * 좁히며 <b>쓰기에는 쓰지 않는다</b>(편집·목록 경로는 {@code requireStepAccess} 그대로). 둘 다 아니면 파일 계약 코드.
+     */
+    private void requireReadAccess(Long stepId, Long fileId, String userId, String role) {
+        try {
+            stepAccessUseCase.requireAccess(stepId, userId, role);
+        } catch (ForbiddenException | NotFoundException e) {
+            // 스텝 권한 없음 → 결재선 참여 fallback (그 결재 첨부 읽기로 한정).
+            if (!approvalLockQueryPort.isApprovalLineParticipant(fileId, userId)) {
+                throw new ForbiddenException(FileErrorCode.FILE_ACCESS_PERMISSION_REQUIRED, e);
+            }
         }
     }
 

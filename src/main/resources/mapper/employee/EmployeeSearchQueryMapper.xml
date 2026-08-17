@@ -4,17 +4,19 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <!--
-  사원 이름 검색 (결재선 지정용, employee.md §9). 사원·부서·직급 3테이블 조인 조회.
+  사원 후보 검색 (결재선·참여자 지정용, employee.md §9). 사원·부서·직급 3테이블 조인 조회.
   namespace = Mapper 인터페이스 전체 경로 · id = 메서드명 (팀 MyBatis 컨벤션).
   컬럼 별칭 = EmployeeSearchRow 컴포넌트명이라 record 생성자로 자동 매핑된다(AuthQueryMapper 선례).
 -->
 <mapper namespace="com.group3.vitamins.employee.infrastructure.adapter.EmployeeSearchQueryMapper">
 
     <!--
-      결재자 후보. 시스템 계정·퇴사자·삭제 사원 제외 (is_system=0 · resigned_at IS NULL · deleted_at IS NULL).
+      후보 조회. 시스템 계정·퇴사자·삭제 사원 제외 (is_system=0 · resigned_at IS NULL · deleted_at IS NULL).
       부서·직급은 미배정일 수 있어 LEFT JOIN(동명이인 구분용 표시 필드, null 허용).
+      name·departmentId 는 선택 조건 — 서비스가 "둘 다 null" 을 막으므로 여기선 있는 것만 건다.
+      ⚠️ name 이 null 이면 LIKE 자체를 걸지 않는다 — CONCAT('%',null,'%') 는 아무것도 안 맞아 부서 조회를 죽인다.
     -->
-    <select id="searchByName"
+    <select id="search"
             resultType="com.group3.vitamins.employee.application.result.EmployeeSearchRow">
         SELECT e.user_id          AS userId,
                e.name             AS name,
@@ -28,8 +30,9 @@
            AND e.company_id = #{companyId}
            AND e.resigned_at IS NULL
            AND e.deleted_at IS NULL
-           AND e.name LIKE CONCAT('%', #{name}, '%')
-         ORDER BY e.name ASC
+           <if test="name != null">AND e.name LIKE CONCAT('%', #{name}, '%')</if>
+           <if test="departmentId != null">AND e.department_id = #{departmentId}</if>
+         ORDER BY e.name ASC, e.user_id ASC
     </select>
 
 </mapper>
