@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,9 +107,47 @@ class ApprovalListScopePolicyTest {
                 .isEqualTo(ApprovalErrorCode.APPROVAL_SCOPE_ALL_FORBIDDEN);
     }
 
+    @Test
+    @DisplayName("참여 불가 ADMIN 의 scope=all 은 403 — 퇴사한 인사담당이 회사 전체를 보면 안 된다")
+    void unavailableAdminScopeAllIsRejected() {
+        givenUnavailable("ADMIN");
+
+        assertThatThrownBy(() -> policy.resolveScope("all", REQUESTER))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_SCOPE_ALL_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("참여 불가 ADMIN 의 기본 scope 는 승격되지 않는다 — 특권만 사라지고 drafted 로 남는다")
+    void unavailableAdminIsNotPromoted() {
+        givenUnavailable("ADMIN");
+
+        assertThat(policy.resolveScope("drafted", REQUESTER)).isEqualTo("drafted");
+    }
+
+    @Test
+    @DisplayName("참여 불가 MASTER 의 scope=all 도 403 — 특권 차단은 role 종류와 무관하다")
+    void unavailableMasterScopeAllIsRejected() {
+        givenUnavailable("MASTER");
+
+        assertThatThrownBy(() -> policy.resolveScope("all", REQUESTER))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_SCOPE_ALL_FORBIDDEN);
+    }
+
     private void givenRole(String role) {
         when(employeeCatalogPort.findEmployee(REQUESTER))
                 .thenReturn(Optional.of(new EmployeeSummary(
                         REQUESTER, "홍길동", null, null, role, MY_COMPANY, "ACTIVE", null, null)));
+    }
+
+    /** 퇴사 + 계정 비활성 — {@code participationUnavailable()} 이 true 인 요청자. */
+    private void givenUnavailable(String role) {
+        when(employeeCatalogPort.findEmployee(REQUESTER))
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        REQUESTER, "퇴사자", null, null, role, MY_COMPANY,
+                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
     }
 }

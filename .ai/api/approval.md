@@ -86,14 +86,14 @@
 
 | # | API명칭 | METHOD | URL | 권한 |
 |---|---|---|---|---|
-| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
+| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER·ADMIN(상태 무관) |
 | 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자/대행 기안자 |
 | 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자/대행 기안자 |
 | 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자/대행 기안자 |
 | 5 | 결재선 등록·수정 | PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | 기안자/대행 기안자 |
 | 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자/대행 기안자 |
 | 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
-| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(scope=all은 MASTER) |
+| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(`scope=all`은 MASTER·ADMIN. ADMIN은 기본 scope도 `all`로 해석) |
 | 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 1번과 동일 |
 | 10 | 결재 이력조회 | GET | `/api/v1/approvals/{approvalId}/revisions` | 1번과 동일 |
 | 11 | 결재 승인 | POST | `/api/v1/approval-lines/{lineId}/approve` | 해당 결재선의 결재자 본인 |

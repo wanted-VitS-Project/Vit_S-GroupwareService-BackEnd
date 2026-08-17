@@ -53,20 +53,29 @@ public class ApprovalListScopePolicy {
      * <p>{@code pending}(내가 처리할 결재)은 승격하지 않는다 — ADMIN 은 결재자로 지정될 수 없어 0건이
      * 정답이다. 이걸 {@code all} 로 바꾸면 탭 이름과 내용이 어긋난다.
      *
+     * <p>🚨 <b>참여 불가(퇴사·삭제·계정 비활성) 요청자에게는 특권을 주지 않는다.</b> role 만 보면 퇴사한
+     * ADMIN·MASTER 가 회사 전체 결재를 그대로 열람한다 — 상세조회는 {@code ApprovalViewPolicy} 가
+     * 참여 불가를 막는데 목록만 뚫려 있어 <b>목록에서 제목·기안자·프로젝트가 다 보이는</b> 상태가 된다.
+     * 여기서 막으면 특권만 사라지고 본인 기안 건 조회({@code drafted})는 그대로라, 퇴사 처리 중인
+     * 사원의 기존 동작을 건드리지 않는다.
+     *
      * @return 서비스가 필터를 고를 때 쓸 최종 {@code scope}
-     * @throws ForbiddenException {@code scope=all} 을 전체 조회 권한 없는 role 이 요청했을 때(403)
+     * @throws ForbiddenException 전체 조회 권한이 없는 요청자가 {@code scope=all} 을 요청했을 때(403)
      */
     public String resolveScope(String requestedScope, String requesterId) {
-        String role = employeeCatalogPort.findEmployee(requesterId).map(EmployeeSummary::role).orElse(null);
+        EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId).orElse(null);
+        boolean fullAccess = requester != null
+                && !requester.participationUnavailable()
+                && FULL_ACCESS_ROLES.contains(requester.role());
 
         if (SCOPE_ALL.equals(requestedScope)) {
-            if (role == null || !FULL_ACCESS_ROLES.contains(role)) {
+            if (!fullAccess) {
                 throw new ForbiddenException(ApprovalErrorCode.APPROVAL_SCOPE_ALL_FORBIDDEN);
             }
             return SCOPE_ALL;
         }
 
-        if (ROLE_ADMIN.equals(role) && !SCOPE_PENDING.equals(requestedScope)) {
+        if (fullAccess && ROLE_ADMIN.equals(requester.role()) && !SCOPE_PENDING.equals(requestedScope)) {
             return SCOPE_ALL;
         }
 
