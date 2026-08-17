@@ -31,62 +31,62 @@ INSERT INTO block (block_id, step_id, title, type, type_id, owner, row_index, co
 (9200,9101,'신청 배경','TEXT',9101,'vitawear-VW102',0,1,0,'vitawear-VW102'),
 (9201,9101,'심사 결과','TEXT',9102,'vitawear-VW102',0,1,1,'vitawear-VW102'),
 (9202,9101,'제출 서류 확인','CHECKLIST',9101,'vitawear-VW102',0,1,2,'vitawear-VW102'),
-(9203,9101,'입점 신청 승인','APPROVAL',9006,'vitawear-VW102',1,3,0,'vitawear-VW102'),
+(9203,9101,'입점 신청 승인','APPROVAL',9006,'vitawear-VW102',1,1,0,'vitawear-VW102'),
 -- 9102 계약과 계정 등록
 (9204,9102,'계약 조건','TEXT',9103,'vitawear-VW103',0,1,0,'vitawear-VW103'),
 (9205,9102,'계정 등록','TEXT',9104,'vitawear-VW103',0,1,1,'vitawear-VW103'),
 (9206,9102,'계약 검토 항목','CHECKLIST',9102,'vitawear-VW103',0,1,2,'vitawear-VW103'),
-(9207,9102,'계약 체결 승인','APPROVAL',9007,'vitawear-VW103',1,3,0,'vitawear-VW103'),
+(9207,9102,'계약 체결 승인','APPROVAL',9007,'vitawear-VW103',1,1,0,'vitawear-VW103'),
 -- 9103 상품 등록과 오픈
 (9208,9103,'등록 대상','TEXT',9105,'vitawear-VW104',0,1,0,'vitawear-VW104'),
 (9209,9103,'오픈 결과','TEXT',9106,'vitawear-VW104',0,1,1,'vitawear-VW104'),
 (9210,9103,'등록 확인','CHECKLIST',9103,'vitawear-VW104',0,1,2,'vitawear-VW104'),
-(9211,9103,'오픈 일정 승인','APPROVAL',9008,'vitawear-VW104',1,3,0,'vitawear-VW104'),
+(9211,9103,'오픈 일정 승인','APPROVAL',9008,'vitawear-VW104',1,1,0,'vitawear-VW104'),
 -- 9104 초도 발주와 입고
 (9212,9104,'발주 내역','TEXT',9107,'vitawear-VW105',0,1,0,'vitawear-VW105'),
 (9213,9104,'입고와 검품','TEXT',9108,'vitawear-VW105',0,1,1,'vitawear-VW105'),
 (9214,9104,'발주와 검품 확인','CHECKLIST',9104,'vitawear-VW105',0,1,2,'vitawear-VW105'),
-(9215,9104,'초도 발주 승인','APPROVAL',9009,'vitawear-VW105',1,3,0,'vitawear-VW105'),
+(9215,9104,'초도 발주 승인','APPROVAL',9009,'vitawear-VW105',1,1,0,'vitawear-VW105'),
 -- 9105 9월 판매 운영
 (9216,9105,'판매 실적','TEXT',9109,'vitawear-VW106',0,1,0,'vitawear-VW106'),
 (9217,9105,'문의와 반품','TEXT',9110,'vitawear-VW106',0,1,1,'vitawear-VW106'),
 (9218,9105,'판매 운영 점검','CHECKLIST',9105,'vitawear-VW106',0,1,2,'vitawear-VW106'),
-(9219,9105,'9월 기획전 참여 승인','APPROVAL',9010,'vitawear-VW106',1,3,0,'vitawear-VW106'),
+(9219,9105,'9월 기획전 참여 승인','APPROVAL',9010,'vitawear-VW106',1,1,0,'vitawear-VW106'),
 -- 9106 2차 발주와 입고
 (9220,9106,'발주 근거','TEXT',9111,'vitawear-VW107',0,1,0,'vitawear-VW107'),
 (9221,9106,'입고와 검품','TEXT',9112,'vitawear-VW107',0,1,1,'vitawear-VW107'),
 (9222,9106,'발주와 검품 확인','CHECKLIST',9106,'vitawear-VW107',0,1,2,'vitawear-VW107'),
-(9223,9106,'2차 발주 승인','APPROVAL',9011,'vitawear-VW107',1,3,0,'vitawear-VW107'),
+(9223,9106,'2차 발주 승인','APPROVAL',9011,'vitawear-VW107',1,1,0,'vitawear-VW107'),
 -- 9107 10월 판매 운영
 (9224,9107,'판매 실적','TEXT',9113,'vitawear-VW108',0,1,0,'vitawear-VW108'),
 (9225,9107,'문의와 반품','TEXT',9114,'vitawear-VW108',0,1,1,'vitawear-VW108'),
 (9226,9107,'판매 운영 점검','CHECKLIST',9107,'vitawear-VW108',0,1,2,'vitawear-VW108'),
-(9227,9107,'10월 쿠폰 예산 승인','APPROVAL',9012,'vitawear-VW108',1,3,0,'vitawear-VW108'),
+(9227,9107,'10월 쿠폰 예산 승인','APPROVAL',9012,'vitawear-VW108',1,1,0,'vitawear-VW108'),
 -- 9108 시즌오프 운영
 (9228,9108,'할인 설정','TEXT',9115,'vitawear-VW109',0,1,0,'vitawear-VW109'),
 (9229,9108,'시즌오프 결과','TEXT',9116,'vitawear-VW109',0,1,1,'vitawear-VW109'),
 (9230,9108,'시즌오프 확인','CHECKLIST',9108,'vitawear-VW109',0,1,2,'vitawear-VW109'),
-(9231,9108,'시즌오프 할인율 승인','APPROVAL',9013,'vitawear-VW109',1,3,0,'vitawear-VW109'),
+(9231,9108,'시즌오프 할인율 승인','APPROVAL',9013,'vitawear-VW109',1,1,0,'vitawear-VW109'),
 -- 9109 재고 소진
 (9232,9109,'잔여 재고','TEXT',9117,'vitawear-VW110',0,1,0,'vitawear-VW110'),
 (9233,9109,'소진 결과','TEXT',9118,'vitawear-VW110',0,1,1,'vitawear-VW110'),
 (9234,9109,'재고 처리 확인','CHECKLIST',9109,'vitawear-VW110',0,1,2,'vitawear-VW110'),
-(9235,9109,'잔여 재고 처분 승인','APPROVAL',9014,'vitawear-VW110',1,3,0,'vitawear-VW110'),
+(9235,9109,'잔여 재고 처분 승인','APPROVAL',9014,'vitawear-VW110',1,1,0,'vitawear-VW110'),
 -- 9110 월 정산
 (9236,9110,'정산 기준','TEXT',9119,'vitawear-VW111',0,1,0,'vitawear-VW111'),
 (9237,9110,'회차별 정산','TEXT',9120,'vitawear-VW111',0,1,1,'vitawear-VW111'),
 (9238,9110,'정산 확인','CHECKLIST',9110,'vitawear-VW111',0,1,2,'vitawear-VW111'),
-(9239,9110,'정산 확정 승인','APPROVAL',9015,'vitawear-VW111',1,3,0,'vitawear-VW111'),
+(9239,9110,'정산 확정 승인','APPROVAL',9015,'vitawear-VW111',1,1,0,'vitawear-VW111'),
 -- 9111 반품 정산과 이의
 (9240,9111,'이의 제기','TEXT',9121,'vitawear-VW112',0,1,0,'vitawear-VW112'),
 (9241,9111,'처리 결과','TEXT',9122,'vitawear-VW112',0,1,1,'vitawear-VW112'),
 (9242,9111,'이의 처리 확인','CHECKLIST',9111,'vitawear-VW112',0,1,2,'vitawear-VW112'),
-(9243,9111,'이의 제기 승인','APPROVAL',9016,'vitawear-VW112',1,3,0,'vitawear-VW112'),
+(9243,9111,'이의 제기 승인','APPROVAL',9016,'vitawear-VW112',1,1,0,'vitawear-VW112'),
 -- 9112 시즌 결산
 (9244,9112,'시즌 총괄','TEXT',9123,'vitawear-VW113',0,1,0,'vitawear-VW113'),
 (9245,9112,'수익성','TEXT',9124,'vitawear-VW113',0,1,1,'vitawear-VW113'),
 (9246,9112,'결산 확인','CHECKLIST',9112,'vitawear-VW113',0,1,2,'vitawear-VW113'),
-(9247,9112,'시즌 결산 보고 승인','APPROVAL',9017,'vitawear-VW113',1,3,0,'vitawear-VW113');
+(9247,9112,'시즌 결산 보고 승인','APPROVAL',9017,'vitawear-VW113',1,1,0,'vitawear-VW113');
 
 -- ── 본문 24건 ─────────────────────────────────────────────────────
 INSERT INTO `text` (txt_id, block_id, content) VALUES
