@@ -82,6 +82,14 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
         return blockAccessMapper.existsBlockInCompany(blockId, companyId).isPresent();
     }
 
+    /**
+     * 쓰기 판정 — 결재 수정·상신·대행 기안자 선점의 진입 조건이다.
+     *
+     * <p>⚠️ <b>{@code ADMIN} 은 여기서 계속 {@code false} 다.</b> 2026-08-17 에 열린 것은
+     * {@link #canViewBlock} 뿐이다. 두 메서드가 나란히 있어 한쪽만 고치면 대칭이 맞아 보여서
+     * 무심코 여기까지 열기 쉬운데, 그러면 인사 role 이 남의 결재를 <b>대행 상신</b>할 수 있게 된다
+     * (컴파일도 되고 조회 테스트도 다 통과한다).
+     */
     @Override
     public boolean isStepEditor(Long blockId, String userId, String role) {
         if ("ADMIN".equals(role)) {
@@ -93,12 +101,15 @@ public class ApprovalBlockCatalogAdapter implements BlockCatalogPort {
         return effectivePermission(blockId, userId) == MemberPermission.EDITOR;
     }
 
+    /**
+     * 열람 판정 — {@code ADMIN} 은 2026-08-17 부터 스텝 참여와 무관하게 통과한다(인사 담당의 결재 현황 열람).
+     *
+     * <p>회사 경계는 여기서 보지 않는다. 호출자({@code ApprovalViewPolicy.assertSameCompany})가 role 검사보다
+     * <b>먼저</b> 확인하므로 타 회사 ADMIN 은 여기 도달하지 못한다.
+     */
     @Override
     public boolean canViewBlock(Long blockId, String userId, String role) {
-        if ("ADMIN".equals(role)) {
-            return false;
-        }
-        if ("MASTER".equals(role)) {
+        if ("MASTER".equals(role) || "ADMIN".equals(role)) {
             return true;
         }
         return effectivePermission(blockId, userId) != MemberPermission.NONE;

@@ -107,8 +107,13 @@ public enum ApprovalErrorCode implements ErrorCode {
 
     // --- 9. 결재관리 목록조회 (API 명세 요구사항: MGT-001~004) ---
 
-    /** MGT-003 — MASTER가 아닌 사용자의 scope=all 요청 또는 ADMIN의 결재 목록 접근 시 403 */
-    APPROVAL_SCOPE_ALL_FORBIDDEN("APPROVAL_SCOPE_ALL_FORBIDDEN", "전체 조회는 MASTER만 가능합니다."),
+    /**
+     * MGT-003 — 전체 조회 권한(MASTER·ADMIN) 없는 사용자의 scope=all 요청 시 403.
+     *
+     * <p>code 문자열은 프론트 분기의 계약이라 그대로 두고, 메시지만 2026-08-17 ADMIN 조회 허용에 맞춰 고쳤다
+     * ("MASTER만" 이 더 이상 사실이 아니다). ADMIN 의 목록 접근 자체를 막던 용도는 폐기됐다.
+     */
+    APPROVAL_SCOPE_ALL_FORBIDDEN("APPROVAL_SCOPE_ALL_FORBIDDEN", "전체 조회 권한이 없습니다."),
 
     // --- 11. 결재 승인 (API 명세 요구사항: PRC-001~004) — 이후 반려(PRC-005~009)에서도 공용 ---
 

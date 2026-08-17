@@ -73,13 +73,14 @@ public class ApprovalRevisionController {
 
     @Operation(summary = "결재관리 목록조회",
             description = "scope=drafted(기본)는 요청자 본인이 기안한 결재, pending은 요청자가 현재 ACTIVE인 결재, "
-                    + "all은 MASTER만 전체 결재를 조회한다. ADMIN은 결재 권한이 없다.")
+                    + "all은 MASTER·ADMIN만 회사 전체 결재를 조회한다. ADMIN은 기안자가 될 수 없어 "
+                    + "scope 미지정·drafted 요청도 all로 해석된다(pending은 그대로 0건).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER가 아닌 사용자의 scope=all 요청 또는 ADMIN 접근")
+                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER·ADMIN이 아닌 사용자의 scope=all 요청")
     })
     @GetMapping
     public ApiResponse<ApprovalListResponse> listApprovals(
@@ -112,8 +113,9 @@ public class ApprovalRevisionController {
     }
 
     @Operation(summary = "결재 상세조회",
-            description = "항상 현재 회차를 보여준다(회차 지정 불가). 조회 권한은 회차 상세조회와 동일(기안자·현재 회차 ACTIVE 이상 결재자·MASTER). "
-                    + "원본 블록·스텝·프로젝트로 이동할 수 있는 blockOrigin을 포함한다.")
+            description = "항상 현재 회차를 보여준다(회차 지정 불가). 조회 권한은 회차 상세조회와 동일 — "
+                    + "기안자·대행 기안자·블록이 속한 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자(WAITING 포함)·MASTER·ADMIN이 "
+                    + "회차 상태와 무관하게 조회한다. 원본 블록·스텝·프로젝트로 이동할 수 있는 blockOrigin을 포함한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -121,7 +123,8 @@ public class ApprovalRevisionController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "APPROVAL_NOT_FOUND — 결재 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "APPROVAL_LINE_NOT_VIEWABLE — 차례 안 온 결재자(WAITING)의 조회")
+                    description = "APPROVAL_LINE_NOT_VIEWABLE — 스텝 열람 권한 없음 · 결재선 미참여 · "
+                            + "참여 불가(퇴사·비활성) · 타 회사")
     })
     @GetMapping("/{approvalId}")
     public ApiResponse<ApprovalDetailResponse> getApprovalDetail(
@@ -145,7 +148,8 @@ public class ApprovalRevisionController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "APPROVAL_NOT_FOUND — 결재 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "APPROVAL_LINE_NOT_VIEWABLE — 이력 조회 권한 없음")
+                    description = "APPROVAL_LINE_NOT_VIEWABLE — 이력 조회 권한 없음(스텝 열람 권한 없음 · "
+                            + "전 회차 결재선 미참여 · 참여 불가 · 타 회사). MASTER·ADMIN은 통과")
     })
     @GetMapping("/{approvalId}/revisions")
     public ApiResponse<ApprovalHistoryResponse> getApprovalHistory(
@@ -160,7 +164,8 @@ public class ApprovalRevisionController {
     }
 
     @Operation(summary = "결재 회차 상세조회",
-            description = "기안자·해당 회차 ACTIVE 이상 결재자(과거 이력 포함)·MASTER 만 조회할 수 있다.")
+            description = "기안자·대행 기안자·블록이 속한 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자(WAITING 포함)·"
+                    + "MASTER·ADMIN이 회차 상태와 무관하게 조회할 수 있다(DRAFT 포함).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -168,7 +173,8 @@ public class ApprovalRevisionController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "APPROVAL_NOT_FOUND / APPROVAL_REVISION_NOT_FOUND"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "APPROVAL_LINE_NOT_VIEWABLE — 차례 안 온 결재자(WAITING)의 조회")
+                    description = "APPROVAL_LINE_NOT_VIEWABLE — 스텝 열람 권한 없음 · 결재선 미참여 · "
+                            + "참여 불가(퇴사·비활성) · 타 회사")
     })
     @GetMapping("/{approvalId}/revisions/{revisionId}")
     public ApiResponse<ApprovalRevisionDetailResponse> getRevisionDetail(

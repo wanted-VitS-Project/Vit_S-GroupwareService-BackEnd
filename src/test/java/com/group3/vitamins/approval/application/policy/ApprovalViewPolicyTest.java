@@ -41,6 +41,7 @@ class ApprovalViewPolicyTest {
     private static final String DRAFTER = "vitas-1234567";
     private static final String APPROVER = "vitas-7654321";
     private static final String OTHER_COMPANY_MASTER = "acme-1234567";
+    private static final String OTHER_COMPANY_ADMIN = "acme-7654321";
 
     @Mock
     private EmployeeCatalogPort employeeCatalogPort;
@@ -75,10 +76,35 @@ class ApprovalViewPolicyTest {
     }
 
     @Test
-    @DisplayName("같은 회사 ADMIN도 결재 상세를 조회할 수 없다")
-    void adminIsRejected() {
+    @DisplayName("같은 회사 ADMIN 은 스텝 참여와 무관하게 통과한다 — 2026-08-17 조회 허용")
+    void sameCompanyAdminPasses() {
         givenCurrentCompany(MY_COMPANY);
         givenEmployee(APPROVER, "ADMIN", MY_COMPANY);
+
+        assertThatCode(() -> policy.assertViewable(approval(), List.of(), APPROVER))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("타 회사 ADMIN 은 403 — 조회를 열어도 회사 경계가 먼저다")
+    void otherCompanyAdminIsRejected() {
+        givenCurrentCompany(MY_COMPANY);
+        when(blockCatalogPort.isBlockInCompany(BLOCK_ID, MY_COMPANY)).thenReturn(false);
+
+        assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), OTHER_COMPANY_ADMIN))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
+    }
+
+    @Test
+    @DisplayName("참여 불가로 전환된 ADMIN 은 403 — role 특권보다 참여 불가 검사가 먼저다")
+    void unavailableAdminIsRejected() {
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(APPROVER))
+                .thenReturn(Optional.of(new EmployeeSummary(
+                        APPROVER, "퇴사한 인사담당", null, null, "ADMIN", MY_COMPANY,
+                        "INACTIVE", LocalDate.of(2026, 8, 11), null)));
 
         assertThatThrownBy(() -> policy.assertViewable(approval(), List.of(), APPROVER))
                 .isInstanceOf(ForbiddenException.class)
