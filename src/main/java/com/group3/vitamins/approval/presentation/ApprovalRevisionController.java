@@ -73,13 +73,14 @@ public class ApprovalRevisionController {
 
     @Operation(summary = "결재관리 목록조회",
             description = "scope=drafted(기본)는 요청자 본인이 기안한 결재, pending은 요청자가 현재 ACTIVE인 결재, "
-                    + "all은 MASTER만 전체 결재를 조회한다. ADMIN은 결재 권한이 없다.")
+                    + "all은 MASTER·ADMIN만 회사 전체 결재를 조회한다. ADMIN은 기안자가 될 수 없어 "
+                    + "scope 미지정·drafted 요청도 all로 해석된다(pending은 그대로 0건).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "AUTH_UNAUTHENTICATED — 로그인이 필요합니다"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER가 아닌 사용자의 scope=all 요청 또는 ADMIN 접근")
+                    description = "APPROVAL_SCOPE_ALL_FORBIDDEN — MASTER·ADMIN이 아닌 사용자의 scope=all 요청")
     })
     @GetMapping
     public ApiResponse<ApprovalListResponse> listApprovals(

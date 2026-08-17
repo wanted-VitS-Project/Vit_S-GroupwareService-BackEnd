@@ -30,21 +30,30 @@ import java.util.Set;
 @Slf4j
 public class ApprovalViewPolicy {
 
-    /** MASTER 는 스텝 참여와 무관하게 전부 조회 가능(MGT-005). ADMIN은 결재 권한이 없다. */
-    private static final Set<String> FULL_ACCESS_ROLES = Set.of("MASTER");
+    /**
+     * 스텝 참여와 무관하게 회사 안의 결재를 전부 조회할 수 있는 role(MGT-005).
+     *
+     * <p>⚠️ <b>조회 전용 목록이다.</b> {@code ADMIN} 은 2026-08-17 부터 조회만 열렸고 쓰기는 여전히
+     * 막혀 있다 — 쓰기 판정은 {@code ApprovalBlockCatalogAdapter.isStepEditor} 와
+     * {@code ApprovalRevisionEligibilityPolicy} 가 별도로 하며 거기서는 {@code MASTER} 만 통과한다.
+     * 이 상수를 쓰기 경로에서 재사용하면 인사 role 이 남의 결재를 대행 상신할 수 있게 된다.
+     */
+    private static final Set<String> FULL_ACCESS_ROLES = Set.of("MASTER", "ADMIN");
 
     private final EmployeeCatalogPort employeeCatalogPort;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
     private final BlockCatalogPort blockCatalogPort;
 
-    /** 기안자·대행 기안자·스텝 열람 권한자·결재선 참여자·MASTER만 상태와 무관하게 조회 가능. 아니면 403 */
+    /** 기안자·대행 기안자·스텝 열람 권한자·결재선 참여자·MASTER·ADMIN만 상태와 무관하게 조회 가능. 아니면 403 */
     public void assertViewable(Approval approval, List<ApprovalLine> lines, String requesterId) {
         assertSameCompany(approval, requesterId);
 
         EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId)
                 .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE));
         String role = requester.role();
-        if (requester.participationUnavailable() || "ADMIN".equals(role)) {
+        // 참여 불가(퇴사·삭제·계정 비활성)는 계속 차단한다. ADMIN 차단은 2026-08-17 에 해제됐다 —
+        // 아래 isDrafterSide 의 FULL_ACCESS_ROLES 로 통과한다.
+        if (requester.participationUnavailable()) {
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_NOT_VIEWABLE);
         }
 
