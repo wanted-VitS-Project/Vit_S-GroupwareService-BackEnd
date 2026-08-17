@@ -16,10 +16,11 @@
     -->
     <select id="searchByName"
             resultType="com.group3.vitamins.employee.application.result.EmployeeSearchRow">
-        SELECT e.user_id AS userId,
-               e.name    AS name,
-               d.name    AS department,
-               jp.name   AS position
+        SELECT e.user_id          AS userId,
+               e.name             AS name,
+               d.name             AS department,
+               jp.name            AS position,
+               e.profile_image_key AS profileImageKey
           FROM employee e
           LEFT JOIN department d     ON d.department_id = e.department_id AND d.company_id = e.company_id
           LEFT JOIN job_position jp  ON jp.job_position_id = e.job_position_id AND jp.company_id = e.company_id

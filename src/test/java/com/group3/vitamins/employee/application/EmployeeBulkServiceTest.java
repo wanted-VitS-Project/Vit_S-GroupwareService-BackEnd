@@ -334,7 +334,7 @@ class EmployeeBulkServiceTest {
         @DisplayName("메일 발송이 실패해도 등록은 성공으로 유지하고 emailSentCount 만 줄인다")
         void mailFailureDoesNotFailRegistration() {
             Mockito.doThrow(new MailDeliveryException(new RuntimeException("smtp down")))
-                    .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString());
+                    .when(mailPort).sendInitialPassword(anyString(), anyString(), anyString(), anyString());
             List<ParsedEmployeeRow> rows = List.of(valid(2, "EMP100", "a@b.com"));
 
             BulkRegisterResult r = service.register(registerCmd(rows, false));

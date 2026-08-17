@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.time.Duration;
 
 /**
  * 프로필 사진 서빙(아바타) API — 로그인 사용자 누구나 (`.ai/api/employee.md` §10).
@@ -23,8 +24,9 @@ import java.net.URI;
  * 프론트가 {@code <img src>} 에 그대로 박으면 된다.
  *
  * <p>presigned S3 URL 로 <b>302 redirect</b> 한다(트래픽이 S3 로 직행 → 서버 부하 최소화). presigned 는
- * 1시간마다 만료되므로 이 응답을 캐시하면 안 된다({@code no-store}) — 매 조회가 이 엔드포인트를 거쳐
- * 항상 새로 서명받는다. 업로드/삭제(본인만)는 {@link MyProfileImageController}.
+ * 1시간마다 만료되므로 그보다 짧은 {@code max-age=300}(5분) 으로만 302 응답을 캐시한다 — 목록에 아바타가
+ * 수십 개 반복 노출돼 매 새로고침마다 왕복이 겹치는 깜빡임을 줄이되, 사진 교체는 최대 5분 뒤 반영된다.
+ * 업로드/삭제(본인만)는 {@link MyProfileImageController}.
  */
 @Tag(name = "Employee - 사원", description = "사원 목록·상세·검색·등록·수정·퇴사 — 담당: 김동현")
 @RestController
@@ -49,8 +51,8 @@ public class EmployeeProfileImageController {
         String presignedUrl = profileImageUseCase.resolveViewUrl(userId);
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(URI.create(presignedUrl))
-                // presigned 는 곧 만료되므로 redirect 를 캐시하면 안 된다 — 매번 새로 서명받게 한다.
-                .cacheControl(CacheControl.noStore().cachePrivate())
+                // presigned 만료(1시간)보다 짧은 5분만 캐시 — 왕복 깜빡임은 줄이고 사진 교체 반영 지연은 5분 이내로 묶는다.
+                .cacheControl(CacheControl.maxAge(Duration.ofSeconds(300)).cachePrivate())
                 .build();
     }
 }

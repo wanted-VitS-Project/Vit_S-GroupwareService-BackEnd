@@ -76,6 +76,7 @@
 | `data.content[].accountStatus` | String | `ACTIVE` · `INACTIVE` |
 | `data.content[].passwordStatus` | String | `NORMAL` · `RESET_REQUIRED` |
 | `data.content[].resignedAt` | String | 퇴사일 (`null` = 재직중) |
+| `data.content[].profileImageUrl` | String | 아바타 서빙 경로(§10). 사진 없으면 `null` — presigned 아님, 프론트가 `null` 이면 이니셜 아바타 |
 | `data.page` / `size` / `totalElements` / `totalPages` | | 페이징 |
 
 | 코드 | code | 설명 |
@@ -135,7 +136,7 @@
 | 요구사항 | EMP-004 · EMP-018 · ACC-002~004 · ACC-010 · ACC-021 · ACC-022 · USC-EMP-003 · USC-ACC-002 · USC-ACC-017 · USC-ACC-018 |
 
 ⛔ **계정이 항상 함께 발급된다** (`ACC-002`). 사원만 등록하는 경로는 없다. **화면의 체크박스는 삭제 대상**이다.
-⛔ **로그인 아이디는 사번이다.** 별도로 받지 않는다 (`ACC-003`).
+⛔ **로그인 아이디는 사번이다.** 별도로 받지 않는다 (`ACC-003`). 초기 비밀번호 메일에 **로그인 아이디(사번)를 임시 비밀번호와 함께** 안내한다 (2026-08-17 추가 — 재설정 메일도 동일). 사용자가 아이디를 몰라 로그인 못 하는 구멍을 막는다.
 ⛔ **`ADMIN` 은 `role` 로 지정할 수 없다** (`ACC-001`).
 ⛔ **이메일이 없어도 등록된다.** 다만 초기 비밀번호를 전달할 수 없어 로그인하지 못한다 (`EMP-018` · `ACC-022`).
 
@@ -375,8 +376,9 @@
 | `data[].name` | String | 이름 |
 | `data[].department` | String | 부서명 (동명이인 구분용, `null` 허용) |
 | `data[].position` | String | 직급명 (동명이인 구분용, `null` 허용) |
+| `data[].profileImageUrl` | String | 아바타 서빙 경로(§10). 사진 없으면 `null` — presigned 아님, 결재선 후보 아바타용 |
 
-> 배열(후보 목록)로 내려준다. **급여 등 민감 정보는 포함하지 않는다** — 위 4개 필드만.
+> 배열(후보 목록)로 내려준다. **급여 등 민감 정보는 포함하지 않는다** — 위 필드는 후보 식별·아바타 표시에 필요한 최소치다.
 > ⛔ **시스템 계정(`is_system=1`)과 퇴사자는 결재자 후보에 나오지 않는다** — `is_system=0` · 재직자만 (`EMP-003`).
 
 | 코드 | code | 설명 |
@@ -407,11 +409,11 @@
 ```text
 HTTP/1.1 302 Found
 Location: <presigned S3 URL>
-Cache-Control: no-store, private
+Cache-Control: max-age=300, private
 ```
 
 > ⚠️ **`profileImageUrl` 은 이 경로이지 presigned URL 이 아니다.** 이미지 블록(`image.md`)은 presigned URL 을 JSON 에 직접 담지만, 아바타는 목록마다 수십 개가 반복 노출되고 거의 안 바뀌므로 그 방식이 맞지 않는다. 대신 **안 만료되는 우리 경로**를 내려주고, 만료·재서명은 이 서빙 API 가 내부에서 책임진다.
-> **캐시 전략** — presigned 는 1시간이면 만료되므로 **redirect 응답을 캐시하면 안 된다(`no-store`)** — 매 조회가 이 엔드포인트를 거쳐 항상 새 presigned 를 받는다. 사진을 교체하면 다음 조회부터 새 키로 서명돼 즉시 반영된다.
+> **캐시 전략 (2026-08-17 변경)** — 302 redirect 를 **`max-age=300`(5분)** 로만 캐시한다. 목록에 아바타가 반복 노출돼 매 새로고침마다 왕복이 겹치던 깜빡임을 줄이되, presigned 만료(1시간)보다 짧아 만료된 URL 이 캐시에 남지 않는다. 사진 교체는 **최대 5분 뒤** 반영된다(즉시 아님 — 이전엔 `no-store` 라 즉시였다). private 라 공유 캐시(프록시/CDN)엔 저장되지 않는다.
 
 **Status Code**
 

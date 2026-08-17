@@ -43,8 +43,8 @@ class EmployeeQueryServiceTest {
     @DisplayName("이름으로 검색하면 후보 목록을 그대로 반환한다")
     void returnsCandidates() {
         when(searchPort.searchByName("김", 1L)).thenReturn(List.of(
-                new EmployeeSearchRow("EMP001", "김민준", "개발팀", "대리"),
-                new EmployeeSearchRow("EMP007", "김서연", null, null)
+                new EmployeeSearchRow("EMP001", "김민준", "개발팀", "대리", "profile-images/EMP001/a.png"),
+                new EmployeeSearchRow("EMP007", "김서연", null, null, null)
         ));
 
         List<EmployeeSearchRow> result = queryService.searchByName(new EmployeeSearchQuery("김"));

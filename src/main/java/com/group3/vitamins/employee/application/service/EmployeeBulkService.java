@@ -139,7 +139,7 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             // 메일은 커밋 후. 이메일이 없으면 발송하지 않고 emailNotRegistered 로 남긴다(EMP-019).
             if (row.hasEmail()) {
                 try {
-                    initialPasswordMailPort.sendInitialPassword(row.email(), row.name(), rawPassword);
+                    initialPasswordMailPort.sendInitialPassword(row.email(), row.userId(), row.name(), rawPassword);
                     emailSent++;
                 } catch (MailDeliveryException e) {
                     // 사원·계정은 이미 만들어졌다. 비밀번호만 다시 보내면 되므로 등록은 성공으로 둔다.
