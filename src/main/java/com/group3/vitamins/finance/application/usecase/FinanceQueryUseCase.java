@@ -3,6 +3,8 @@ package com.group3.vitamins.finance.application.usecase;
 import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
+import com.group3.vitamins.finance.application.query.GetCashFlowDetailQuery;
+import com.group3.vitamins.finance.application.query.GetTaxInvoiceDetailQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
@@ -21,6 +23,9 @@ public interface FinanceQueryUseCase {
     //입출금 내역 목록 조회
     CashFlowListView getCashFlows(CashFlowListQuery query);
 
+    //입출금 내역 단건 조회 — 목록 페이지네이션과 무관하게 ID 하나로 바로 가져온다(2026-08-18 신설)
+    CashFlowView getCashFlowDetail(GetCashFlowDetailQuery query);
+
     //입출금 내역 필터 옵션(매칭된 프로젝트 목록) 조회
     CashFlowFilterView getCashFlowFilters(CashFlowFilterQuery query);
 
@@ -29,6 +34,9 @@ public interface FinanceQueryUseCase {
 
     //세금계산서 목록 조회
     TaxInvoiceListView getTaxInvoices(TaxInvoiceListQuery query);
+
+    //세금계산서 단건 조회 — 목록 페이지네이션과 무관하게 ID 하나로 바로 가져온다(2026-08-18 신설)
+    TaxInvoiceView getTaxInvoiceDetail(GetTaxInvoiceDetailQuery query);
 
     //세금계산서 필터 옵션(매칭된 프로젝트 목록) 조회
     TaxInvoiceFilterView getTaxInvoiceFilters(TaxInvoiceFilterQuery query);

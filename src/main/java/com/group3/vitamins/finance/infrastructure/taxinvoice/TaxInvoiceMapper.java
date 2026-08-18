@@ -22,6 +22,12 @@ public interface TaxInvoiceMapper {
             @Param("size") int size,
             @Param("offset") int offset);
 
+    /**
+     * 단건 조회(2026-08-18 신설) — findTaxInvoices와 조인·컬럼이 완전히 동일하고 tax_id로만 좁힌다.
+     * 존재하지 않거나(삭제 포함) 다른 회사 소속이면 null.
+     */
+    TaxInvoiceRow findTaxInvoiceById(@Param("taxId") Long taxId, @Param("companyId") Long companyId);
+
     /** 위 목록과 같은 필터의 전체 개수(페이징용) — sort/size/offset은 개수와 무관해 안 받는다. */
     long countTaxInvoices(
             @Param("companyId") Long companyId,
