@@ -153,6 +153,10 @@ public class FinanceController {
             @RequestParam(required = false) Long projectId,
             @Parameter(description = "적요 또는 입금자명 검색 키워드", example = "환경부")
             @RequestParam(required = false) String keyword,
+            @Parameter(description = "구분 필터(INCOME/OUTCOME). 생략하면 전체", example = "INCOME")
+            @RequestParam(required = false) String type,
+            @Parameter(description = "출처 필터(MANUAL/CSV/API). 생략하면 전체", example = "CSV")
+            @RequestParam(required = false) String sourceType,
             @Parameter(description = "0-base 페이지 번호. 생략하면 0", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "페이지당 개수(최대 100). 생략하면 20", example = "20")
@@ -165,7 +169,7 @@ public class FinanceController {
             Authentication authentication
     ) {
         CashFlowListView view = financeQueryUseCase.getCashFlows(new CashFlowListQuery(
-                startDate, endDate, unlinked, projectId, keyword, page, size, sort,
+                startDate, endDate, unlinked, projectId, keyword, type, sourceType, page, size, sort,
                 authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("입출금 내역 조회 성공", CashFlowListResponse.from(view)));

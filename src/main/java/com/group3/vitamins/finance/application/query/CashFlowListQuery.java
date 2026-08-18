@@ -8,6 +8,8 @@ public record CashFlowListQuery(
         Boolean unlinked,
         Long projectId,
         String keyword,
+        String type,
+        String sourceType,
         int page,
         int size,
         String sort,

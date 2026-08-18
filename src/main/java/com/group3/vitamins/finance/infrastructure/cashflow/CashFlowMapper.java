@@ -19,6 +19,8 @@ public interface CashFlowMapper {
             @Param("unlinked") Boolean unlinked,
             @Param("projectId") Long projectId,
             @Param("keyword") String keyword,
+            @Param("type") String type,
+            @Param("sourceType") String sourceType,
             @Param("sort") String sort,
             @Param("size") int size,
             @Param("offset") int offset);
@@ -30,7 +32,9 @@ public interface CashFlowMapper {
             @Param("endDate") LocalDate endDate,
             @Param("unlinked") Boolean unlinked,
             @Param("projectId") Long projectId,
-            @Param("keyword") String keyword);
+            @Param("keyword") String keyword,
+            @Param("type") String type,
+            @Param("sourceType") String sourceType);
 
     /**
      * 단건 조회(2026-08-18 신설) — findCashFlows와 조인·컬럼이 완전히 동일하고 cash_flow_id로만 좁힌다.

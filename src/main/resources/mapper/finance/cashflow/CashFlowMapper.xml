@@ -34,6 +34,10 @@
         <if test="endDate != null">AND cf.traded_at &lt; DATE_ADD(#{endDate}, INTERVAL 1 DAY)</if>
         <if test="unlinked != null and unlinked == true">AND cf.settle_block_id IS NULL</if>
         <if test="projectId != null">AND p.project_id = #{projectId}</if>
+        <!-- 구분·출처 필터(2026-08-18, 프론트 요청) — 값은 목록 응답의 type/sourceType 그대로.
+             허용값 검증은 안 한다(요청사항: 없는 값이 오면 매칭 0건이면 됨). 빈 문자열은 "필터 없음"으로 본다. -->
+        <if test="type != null and type != ''">AND cf.type = #{type}</if>
+        <if test="sourceType != null and sourceType != ''">AND cf.source_type = #{sourceType}</if>
         <if test="keyword != null and keyword != ''">
             AND (cf.bank_memo LIKE CONCAT('%', #{keyword}, '%') OR cf.depositor_name LIKE CONCAT('%', #{keyword}, '%'))
         </if>
