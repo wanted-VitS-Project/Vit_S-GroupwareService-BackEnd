@@ -63,16 +63,25 @@
          ORDER BY e.name ASC, e.user_id ASC
     </select>
 
-    <!-- §2 부여 인원 수 — 회사 MEMBER 기준(§3 명단과 동일 모집단). -->
-    <select id="countGrants" resultType="long">
-        SELECT COUNT(*)
+    <!--
+      §2 부여 인원 수 (배치) — 부여가능 페이지들을 한 번에 집계한다(page_code 별 GROUP BY).
+      단건 countGrants 와 모집단 동일(회사 MEMBER·비시스템·비삭제). 부여 0 인 페이지는 행이 없어 결과에서 빠진다(→ 서비스가 0).
+    -->
+    <select id="countGrantsByPageCodes"
+            resultType="com.group3.vitamins.pagepermission.application.result.PageGrantCountRow">
+        SELECT pp.page_code AS pageCode,
+               COUNT(*)     AS grantedCount
           FROM page_permission pp
           JOIN employee e ON e.user_id = pp.user_id
            AND e.company_id = #{companyId}
            AND e.is_system = 0
            AND e.deleted_at IS NULL
           JOIN account a ON a.user_id = e.user_id AND a.role = 'MEMBER'
-         WHERE pp.page_code = #{pageCode}
+         WHERE pp.page_code IN
+        <foreach collection="pageCodes" item="code" open="(" separator="," close=")">
+            #{code}
+        </foreach>
+         GROUP BY pp.page_code
     </select>
 
     <!-- §2·§3 전역 권한 인원 = MASTER 사원 수(비시스템·회사). -->
@@ -85,12 +94,22 @@
            AND e.deleted_at IS NULL
     </select>
 
-    <!-- §2 마지막 부여 수정일(yyyy-MM-dd). 회사 사원 기준. 부여 기록 없으면 null. -->
-    <select id="findLastGrantedDate" resultType="java.time.LocalDate">
-        SELECT DATE(MAX(pp.updated_at))
+    <!--
+      §2 마지막 부여 수정일(배치, yyyy-MM-dd) — 부여가능 페이지들을 한 번에(page_code 별 GROUP BY).
+      단건 findLastGrantedDate 와 모집단 동일(회사 사원 기준 — account·role·is_system 필터 없음).
+      GROUP BY 라 각 행은 최소 1건에서 나오므로 lastGrantedDate 는 non-null. 부여 없는 페이지는 결과에서 빠진다(→ null).
+    -->
+    <select id="findLastGrantedDatesByPageCodes"
+            resultType="com.group3.vitamins.pagepermission.application.result.PageLastGrantedDateRow">
+        SELECT pp.page_code             AS pageCode,
+               DATE(MAX(pp.updated_at)) AS lastGrantedDate
           FROM page_permission pp
           JOIN employee e ON e.user_id = pp.user_id AND e.company_id = #{companyId}
-         WHERE pp.page_code = #{pageCode}
+         WHERE pp.page_code IN
+        <foreach collection="pageCodes" item="code" open="(" separator="," close=")">
+            #{code}
+        </foreach>
+         GROUP BY pp.page_code
     </select>
 
     <!--

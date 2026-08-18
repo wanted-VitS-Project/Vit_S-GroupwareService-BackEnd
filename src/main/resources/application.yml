@@ -33,6 +33,11 @@ spring:
     open-in-view: false
     properties:
       hibernate:
+        # 지연로딩 프록시·컬렉션을 건건이 SELECT 하지 않고, 접근 시 최대 이 개수만큼 IN 절로 묶어
+        # 한 번에 읽는다 (N+1 완충). ⚠️ 아래 jdbc.batch_size 는 쓰기(UPDATE/DELETE) 배치라 별개다 —
+        # 이건 읽기측 배치라 이름이 비슷해도 역할이 다르다. LAZY 연관을 유지한 채 목록을 훑는 경로에서
+        # 왕복 수를 N → ceil(N/100) 로 줄인다. fetch join 이 페이징과 충돌하는 지점의 기본 방어선.
+        default_batch_fetch_size: 100
         # ⚠️ 모든 엔티티가 GenerationType.IDENTITY(MySQL AUTO_INCREMENT) 라 INSERT 는
         #    이 설정으로 배치되지 않는다 — Hibernate 는 IDENTITY 전략에서 각 행의 생성된 PK 를
         #    즉시 받아야 해서 INSERT 배치를 지원하지 않는다. 진짜 대량 INSERT 가 필요한 경로는

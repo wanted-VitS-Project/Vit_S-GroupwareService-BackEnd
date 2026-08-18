@@ -3,12 +3,16 @@ package com.group3.vitamins.pagepermission.infrastructure.adapter;
 import com.group3.vitamins.pagepermission.application.port.PagePermissionQueryPort;
 import com.group3.vitamins.pagepermission.application.result.EmployeeRoleRow;
 import com.group3.vitamins.pagepermission.application.result.PageAccessMemberRow;
+import com.group3.vitamins.pagepermission.application.result.PageGrantCountRow;
+import com.group3.vitamins.pagepermission.application.result.PageLastGrantedDateRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * {@link PagePermissionQueryPort} 의 MyBatis 어댑터. 실제 SQL 은 {@link PagePermissionQueryMapper} 와 그 XML 이 갖는다.
@@ -30,8 +34,12 @@ public class PagePermissionQueryAdapter implements PagePermissionQueryPort {
     }
 
     @Override
-    public long countGrants(String pageCode, Long companyId) {
-        return mapper.countGrants(pageCode, companyId);
+    public Map<String, Long> countGrantsByPageCodes(Collection<String> pageCodes, Long companyId) {
+        if (pageCodes == null || pageCodes.isEmpty()) {
+            return Map.of();
+        }
+        return mapper.countGrantsByPageCodes(pageCodes, companyId).stream()
+                .collect(Collectors.toMap(PageGrantCountRow::pageCode, PageGrantCountRow::grantedCount));
     }
 
     @Override
@@ -40,8 +48,13 @@ public class PagePermissionQueryAdapter implements PagePermissionQueryPort {
     }
 
     @Override
-    public LocalDate findLastGrantedDate(String pageCode, Long companyId) {
-        return mapper.findLastGrantedDate(pageCode, companyId);
+    public Map<String, LocalDate> findLastGrantedDatesByPageCodes(Collection<String> pageCodes, Long companyId) {
+        if (pageCodes == null || pageCodes.isEmpty()) {
+            return Map.of();
+        }
+        // GROUP BY 결과라 각 행의 lastGrantedDate 는 non-null → toMap NPE 없음.
+        return mapper.findLastGrantedDatesByPageCodes(pageCodes, companyId).stream()
+                .collect(Collectors.toMap(PageLastGrantedDateRow::pageCode, PageLastGrantedDateRow::lastGrantedDate));
     }
 
     @Override
