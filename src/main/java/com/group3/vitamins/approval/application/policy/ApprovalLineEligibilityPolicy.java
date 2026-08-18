@@ -20,8 +20,14 @@ import java.util.Set;
 @Slf4j
 public class ApprovalLineEligibilityPolicy {
 
-    /** APR-012 — MASTER만 프로젝트 소속 검증 제외. ADMIN은 결재 참여 자체가 불가능하다. */
-    private static final Set<String> MEMBERSHIP_CHECK_EXEMPT_ROLES = Set.of("MASTER");
+    /**
+     * APR-012 — 프로젝트 소속 검증을 면제받는 role. {@code ADMIN} 은 2026-08-18 에 추가됐다.
+     *
+     * <p>⚠️ <b>차단 해제와 이 면제는 한 쌍이다.</b> {@code ADMIN} 은 {@code project_member} 에 등록되지
+     * 않으므로(`PERMISSION.md` §2-4) 아래 role 차단만 풀고 여기에 안 넣으면 소속 검증에서 같은
+     * 에러코드로 다시 걸린다 — 증상이 똑같아 "안 고쳐졌다"로 보인다.
+     */
+    private static final Set<String> MEMBERSHIP_CHECK_EXEMPT_ROLES = Set.of("MASTER", "ADMIN");
 
     /**
      * 대표도 프로젝트 소속 검증에서 제외한다. 대표는 전역 role 이 {@code MEMBER} 라 role 로 구분되지 않아
@@ -53,7 +59,7 @@ public class ApprovalLineEligibilityPolicy {
     }
 
     /**
-     * APR-012 — 결재자마다 존재·참여 가능·회사 일치 확인 + (MASTER·직급 대표 제외) project member 자격을
+     * APR-012 — 결재자마다 존재·참여 가능·회사 일치 확인 + (MASTER·ADMIN·직급 대표 제외) project member 자격을
      * 확인하고, 응답에 필요한 라이브 조회 결과(INV-11)를 입력 순서 그대로 반환한다.
      *
      * <p>회사 검사는 <b>면제 판정보다 먼저</b> 한다. 면제는 "같은 회사 안에서 소속을 안 따진다"는
@@ -78,7 +84,7 @@ public class ApprovalLineEligibilityPolicy {
                         throw new ValidationException(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
                     }
 
-                    if (employee.participationUnavailable() || "ADMIN".equals(employee.role())) {
+                    if (employee.participationUnavailable()) {
                         log.warn("결재선 등록 - 참여 불가 사원 approverId={}", approverId);
                         throw new ValidationException(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
                     }

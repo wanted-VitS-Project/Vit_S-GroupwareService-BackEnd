@@ -3,6 +3,8 @@ package com.group3.vitamins.approval.application.policy;
 import com.group3.vitamins.approval.application.port.EmployeeCatalogPort;
 import com.group3.vitamins.approval.application.port.EmployeeSummary;
 import com.group3.vitamins.approval.domain.exception.ApprovalErrorCode;
+import com.group3.vitamins.approval.domain.model.ApprovalLine;
+import com.group3.vitamins.approval.domain.model.ApprovalLineStatus;
 import com.group3.vitamins.approval.domain.repository.ApprovalRepository;
 import com.group3.vitamins.global.domain.common.error.exception.ForbiddenException;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,11 +50,27 @@ class ApprovalLineProcessingPolicyTest {
         assertForbidden();
     }
 
+    /**
+     * 2026-08-18 — ADMIN 도 결재선에 지정될 수 있게 되면서 승인·반려 차단을 풀었다.
+     * 여기를 막으면 지정된 ADMIN 이 처리를 못 해 결재가 영구 정지한다.
+     */
     @Test
-    void adminCannotProcessApprovalLine() {
+    void adminCanProcessOwnActiveApprovalLine() {
         when(employeeCatalogPort.findEmployee(REQUESTER)).thenReturn(Optional.of(
                 new EmployeeSummary(REQUESTER, "관리자", null, null, "ADMIN", 1L,
                         "ACTIVE", null, null)));
+        ApprovalLine line = ApprovalLine.reconstruct(1L, 2L, REQUESTER, 1,
+                ApprovalLineStatus.ACTIVE, null, null, null, null);
+        when(approvalRepository.findLineByIdForUpdate(1L)).thenReturn(Optional.of(line));
+
+        assertThat(policy.getActiveOwnedLineOrThrow(1L, REQUESTER)).isSameAs(line);
+    }
+
+    @Test
+    void participationUnavailableAdminCannotProcessApprovalLine() {
+        when(employeeCatalogPort.findEmployee(REQUESTER)).thenReturn(Optional.of(
+                new EmployeeSummary(REQUESTER, "관리자", null, null, "ADMIN", 1L,
+                        "INACTIVE", null, null)));
 
         assertForbidden();
     }

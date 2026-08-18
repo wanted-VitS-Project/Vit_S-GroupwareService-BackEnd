@@ -23,9 +23,9 @@ public class ApprovalListScopePolicy {
     /**
      * 회사 전체 결재를 조회할 수 있는 role.
      *
-     * <p>⚠️ <b>조회 전용 목록이다.</b> 쓰기 판정(스텝 EDITOR 취급·결재자 지정 시 project member 검증 면제)
-     * 에는 {@code MASTER} 만 들어간다 — 여기에 role 을 추가해도 쓰기는 열리지 않는다. 두 목록을 하나로
-     * 합치지 마라.
+     * <p>⚠️ <b>조회 전용 목록이다.</b> 기안·상신·대행 선점(스텝 EDITOR 판정)은 여기와 무관하게
+     * {@code MASTER} 만 통과한다 — 여기에 role 을 추가해도 기안 계열 쓰기는 열리지 않는다. 두 목록을
+     * 하나로 합치지 마라.
      */
     private static final Set<String> FULL_ACCESS_ROLES = Set.of("MASTER", "ADMIN");
 
@@ -50,8 +50,9 @@ public class ApprovalListScopePolicy {
      * 자르는데 ADMIN 은 기안자가 될 수 없어 구조적으로 0건이기 때문이다. 예외도 로그도 안 남고 화면에는
      * "결재가 없다"로만 보인다. 프론트가 ADMIN 일 때 {@code scope=all} 을 따로 보내지 않아도 되게 여기서 해석한다.
      *
-     * <p>{@code pending}(내가 처리할 결재)은 승격하지 않는다 — ADMIN 은 결재자로 지정될 수 없어 0건이
-     * 정답이다. 이걸 {@code all} 로 바꾸면 탭 이름과 내용이 어긋난다.
+     * <p>{@code pending}(내가 처리할 결재)은 승격하지 않는다 — 2026-08-18 부터 ADMIN 도 결재자로
+     * 지정될 수 있어 실제 건수가 잡히며, 그게 탭 이름 그대로의 정답이다. 이걸 {@code all} 로 바꾸면
+     * 남의 결재까지 "내가 처리할 결재"로 섞인다.
      *
      * <p>🚨 <b>참여 불가(퇴사·삭제·계정 비활성) 요청자에게는 특권을 주지 않는다.</b> role 만 보면 퇴사한
      * ADMIN·MASTER 가 회사 전체 결재를 그대로 열람한다 — 상세조회는 {@code ApprovalViewPolicy} 가
