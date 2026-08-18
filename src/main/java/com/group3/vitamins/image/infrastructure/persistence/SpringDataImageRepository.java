@@ -51,6 +51,15 @@ public interface SpringDataImageRepository extends JpaRepository<ImageJpaEntity,
                      @Param("deletedAt") LocalDateTime deletedAt);
 
     /**
+     * 단건 삭제 후 뒤쪽 이미지들의 orderIndex를 1씩 당겨 빈자리를 없앤다(2026-08-17, 프론트 요청).
+     * updatedAt은 건드리지 않는다 — 사용자가 직접 손댄 필드가 아니라 삭제의 부수 효과로 밀린 것뿐이다.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ImageJpaEntity i SET i.orderIndex = i.orderIndex - 1 "
+            + "WHERE i.imgBlockId = :imgBlockId AND i.orderIndex > :orderIndex AND i.deletedAt IS NULL")
+    int decrementOrderIndexAfter(@Param("imgBlockId") Long imgBlockId, @Param("orderIndex") int orderIndex);
+
+    /**
      * 블록 삭제 이벤트로 인한 일괄 삭제 — 그 블록의 활성 항목 전부를 소프트 삭제한다.
      */
     @Modifying(clearAutomatically = true)
