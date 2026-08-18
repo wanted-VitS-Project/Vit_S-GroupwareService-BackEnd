@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "자격증 수정 요청")
 public record CertificateUpdateRequest(
-        @Schema(description = "새 자격증명(최대 100자)", example = "소프트웨어공학")
+        @Schema(description = "새 자격증명(최대 100자 · `,` `;` `:` 줄바꿈 금지 — 엑셀 구분자와 충돌)", example = "소프트웨어공학")
         String name
 ) {
 
