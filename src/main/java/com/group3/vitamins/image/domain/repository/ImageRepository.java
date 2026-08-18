@@ -54,6 +54,8 @@ public interface ImageRepository {
     /**
      * 단건 삭제 후 뒤쪽 이미지들의 orderIndex를 1씩 당겨 압축한다(2026-08-17, 프론트 요청) — 수정 API는
      * 배열 위치로 orderIndex를 다시 매겨 이미 압축되지만, 단건 삭제는 대상 하나만 지워 뒤에 구멍이 남는다.
+     * version도 함께 올린다(2026-08-18, CodeRabbit 지적) — 압축 직전 목록을 조회해 간 동시 PATCH가
+     * stale orderIndex로 이 압축을 조용히 덮어쓰지 못하게, 버전 체크에서 걸리도록 한다.
      *
      * @return 영향받은 행 수
      */
