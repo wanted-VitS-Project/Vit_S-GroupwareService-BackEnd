@@ -65,10 +65,11 @@ class TermsAgreementGateFilterTest {
     }
 
     @Test
-    @DisplayName("약관 동의 엔드포인트·로그아웃·내정보는 미동의 상태에서도 통과한다")
+    @DisplayName("약관 동의 엔드포인트·로그아웃·내정보·세션 상태 조회는 미동의 상태에서도 통과한다")
     void allowsExemptPaths() throws Exception {
         for (String path : new String[]{
-                "/api/v1/auth/terms-agreements", "/api/v1/auth/logout", "/api/v1/auth/me"}) {
+                "/api/v1/auth/terms-agreements", "/api/v1/auth/logout", "/api/v1/auth/me",
+                "/api/v1/auth/session"}) {
             Mockito.reset(chain, resolver);
             givenTermsRequired(true);
             when(request.getRequestURI()).thenReturn(path);

@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -13,6 +14,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -37,6 +42,7 @@ public class AuthSessionManager {
 
     private final SecurityContextRepository securityContextRepository;
     private final SessionTerminator sessionTerminator;
+    private final Clock clock;
 
     /**
      * 로그인 성공 → 세션 수립.
@@ -91,6 +97,30 @@ public class AuthSessionManager {
         if (session != null) {
             session.setAttribute(PASSWORD_RESET_REQUIRED, false);
         }
+    }
+
+    /**
+     * 현재 세션의 만료 정보 (`auth.md` §7).
+     *
+     * <p>Spring Session 은 요청에서 세션을 처음 만지는 순간 {@code lastAccessedTime} 을 지금으로 갱신한다.
+     * 따라서 여기서 읽는 값은 "이 요청 시각"이고, 남은 초는 사실상 타임아웃 전체다 — 조회가 곧 연장이다.
+     * 세션이 없으면 미인증이므로 401 로 떨어뜨린다 (인증 필터를 지나왔다면 정상 경로에선 일어나지 않는다).
+     */
+    public SessionStatus currentSessionStatus(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            throw new AuthenticationCredentialsNotFoundException("세션이 없습니다.");
+        }
+        int timeoutSeconds = session.getMaxInactiveInterval();
+        Instant lastAccessed = Instant.ofEpochMilli(session.getLastAccessedTime());
+        Instant expiresAt = lastAccessed.plusSeconds(timeoutSeconds);
+        // 올림 — 갱신 직후 몇 ms 지나 계산돼도 14399 가 아니라 14400 으로 나가게 (프론트가 정책값과 비교한다)
+        long remainingMillis = Duration.between(clock.instant(), expiresAt).toMillis();
+        long remaining = Math.max(0, (remainingMillis + 999) / 1000);
+        return new SessionStatus(
+                timeoutSeconds,
+                LocalDateTime.ofInstant(expiresAt, clock.getZone()),
+                remaining);
     }
 
     /** 로그아웃 — 현재 세션만 끊는다 */

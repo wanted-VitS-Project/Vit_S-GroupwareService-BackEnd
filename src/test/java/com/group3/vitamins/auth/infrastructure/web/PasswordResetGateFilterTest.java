@@ -83,6 +83,17 @@ class PasswordResetGateFilterTest {
     }
 
     @Test
+    @DisplayName("세션 상태 조회 경로도 통과한다 — 비번 변경 화면에서 만료 위젯을 그려야 한다 (auth.md §7)")
+    void allowsSessionStatus() throws Exception {
+        when(request.getRequestURI()).thenReturn("/api/v1/auth/session");
+
+        filter.doFilterInternal(request, response, chain);
+
+        verify(chain, times(1)).doFilter(request, response);
+        verify(resolver, never()).resolveException(any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("이미 변경했으면(플래그 false) 어떤 경로든 통과한다")
     void passesWhenNotRequired() throws Exception {
         when(session.getAttribute(AuthSessionManager.PASSWORD_RESET_REQUIRED)).thenReturn(false);
