@@ -129,6 +129,7 @@ public class EmployeeAdminQueryService implements EmployeeAdminQueryUseCase {
         return new EmployeeListCriteria(
                 normalize(query.keyword()),
                 query.departmentId(),
+                query.includeSubDepartments(),
                 role,
                 accountStatus,
                 mustChangePassword,
