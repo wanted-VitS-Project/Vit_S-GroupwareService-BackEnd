@@ -1,6 +1,6 @@
 # 🎓 학력·자격증 마스터 API — Major & Certificate
 
-**최종 업데이트**: 2026-08-13 (초안→계약 성립 — 전공·자격증 마스터 CRUD. `business_category` 마스터 패턴 복제, 단 **삭제는 hard delete + 참조 차단**)
+**최종 업데이트**: 2026-08-18 (이름 규칙 강화 — `,` `;` `:` · 줄바꿈 금지, 생성·수정 시 `*_INVALID_REQUEST` 400. 엑셀 항목 구분자·`전공:학위` 구분자와 충돌하기 때문) · 2026-08-13 (초안→계약 성립 — 전공·자격증 마스터 CRUD. `business_category` 마스터 패턴 복제, 단 **삭제는 hard delete + 참조 차단**)
 **담당**: 김동현 · Domain `인사` · SUB-Domain `Qualification`
 **요구사항 명세**: [`../docs/domain/인사/HR-V1.md`](../docs/domain/인사/HR-V1.md) §2-G (`MAJ`·`CRT`)
 **미러링 기준**: `business_category` (마스터 CRUD·회사스코프·ADMIN)
@@ -18,7 +18,7 @@
 | 권한 | 관리·조회 모두 **ADMIN**. 비ADMIN 은 `403`(account `ACC_ADMIN_REQUIRED` 재사용) |
 | 테넌시 | 모든 조회/쓰기에 `company_id` 스코프. 이름 UNIQUE 도 회사 내에서만 |
 | 삭제 | **hard delete + 참조 차단**. 사원 학력/자격증이 참조하면 409(`MAJOR_IN_USE`·`CERT_IN_USE`) |
-| 이름 | 회사 내 UNIQUE. 중복 생성/수정은 409 |
+| 이름 | 회사 내 UNIQUE. 중복 생성/수정은 409. **최대 100자 · `,` `;` `:` · 줄바꿈 금지**(400 `*_INVALID_REQUEST`) — 사원 엑셀(`employee.md` §6)이 `,` `;` 줄바꿈을 항목 구분자로, `:` 를 `전공:학위` 구분자로 쓰므로 이름에 들어가면 쪼개진다 (2026-08-18). 기존 데이터는 소급 검사하지 않는다 |
 | 정렬 | 이름 오름차순(한글 정렬은 프론트 `localeCompare('ko')` — 전역 정책) |
 | 사용 수 | 목록에 `employeeCount`(참조 사원 수, 시스템·퇴사 제외) 포함 → 화면 "사원 N" 배지 |
 
@@ -82,7 +82,7 @@
 | 코드 | code | 설명 |
 |---|---|---|
 | 201 | – | 생성 성공 |
-| 400 | `MAJOR_INVALID_REQUEST` | 이름 누락·100자 초과 |
+| 400 | `MAJOR_INVALID_REQUEST` | 이름 누락·100자 초과·금지 문자(`,` `;` `:` 줄바꿈) 포함 |
 | 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
 | 409 | `MAJOR_NAME_DUPLICATED` | 회사 내 동명 전공 존재 |
 
@@ -102,7 +102,7 @@
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 수정 성공 |
-| 400 | `MAJOR_INVALID_REQUEST` | 이름 누락·100자 초과 |
+| 400 | `MAJOR_INVALID_REQUEST` | 이름 누락·100자 초과·금지 문자(`,` `;` `:` 줄바꿈) 포함 |
 | 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
 | 404 | `MAJOR_NOT_FOUND` | 전공 없음(타 회사 포함) |
 | 409 | `MAJOR_NAME_DUPLICATED` | 동명 전공 존재 |
@@ -168,7 +168,7 @@
 | 코드 | code | 설명 |
 |---|---|---|
 | 201 | – | 생성 성공 |
-| 400 | `CERT_INVALID_REQUEST` | 이름 누락·100자 초과 |
+| 400 | `CERT_INVALID_REQUEST` | 이름 누락·100자 초과·금지 문자(`,` `;` `:` 줄바꿈) 포함 |
 | 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
 | 409 | `CERT_NAME_DUPLICATED` | 동명 자격증 존재 |
 
@@ -188,7 +188,7 @@
 | 코드 | code | 설명 |
 |---|---|---|
 | 200 | – | 수정 성공 |
-| 400 | `CERT_INVALID_REQUEST` | 이름 누락·100자 초과 |
+| 400 | `CERT_INVALID_REQUEST` | 이름 누락·100자 초과·금지 문자(`,` `;` `:` 줄바꿈) 포함 |
 | 403 | `ACC_ADMIN_REQUIRED` | ADMIN 아님 |
 | 404 | `CERT_NOT_FOUND` | 자격증 없음 |
 | 409 | `CERT_NAME_DUPLICATED` | 동명 자격증 존재 |
@@ -224,3 +224,6 @@
 | 전공 마스터(`major`) | 이 문서 | `employee_education.major_id` |
 | 자격증 마스터(`certificate`) | 이 문서 | `employee_certificate.certificate_id` |
 | 학위(degree) | enum(`BACHELOR·MASTER·DOCTOR`) — 마스터 아님 | `employee_education.degree` |
+
+> ⭐ **엑셀 자동 생성 경로** (2026-08-18) — `employee.md` §7·§8 의 `autoCreateMasters=true` 는 이 마스터를 **사원 등록 전에 이름만으로 생성**한다.
+> 생성 규칙(이름 검증·회사 내 UNIQUE)은 위 §2·§6 과 동일하며, 이미 같은 이름이 있으면 새로 만들지 않고 그 마스터를 참조한다. 이 경로도 ADMIN 전용이다.
