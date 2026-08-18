@@ -10,6 +10,7 @@ import com.group3.vitamins.auth.presentation.api.request.ChangePasswordRequest;
 import com.group3.vitamins.auth.presentation.api.request.LoginRequest;
 import com.group3.vitamins.auth.presentation.api.response.LoginResponse;
 import com.group3.vitamins.auth.presentation.api.response.MyInfoResponse;
+import com.group3.vitamins.auth.presentation.api.response.SessionStatusResponse;
 import com.group3.vitamins.global.infrastructure.web.ClientIpResolver;
 import com.group3.vitamins.global.presentation.api.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -101,6 +102,22 @@ public class AuthController {
     public ApiResponse<MyInfoResponse> myInfo(@AuthenticationPrincipal String userId) {
         return ApiResponse.success(AuthResponseMessage.MY_INFO_SUCCESS,
                 MyInfoResponse.from(authQueryUseCase.loadProfile(userId)));
+    }
+
+    @Operation(summary = "세션 상태 조회 (조회 겸 연장)",
+            description = "현재 세션의 타임아웃 정책값·만료 예정 시각·남은 초를 반환한다. "
+                    + "세션은 유휴 기준 슬라이딩이라 이 호출 자체가 세션을 연장한다 — remainingSeconds 는 호출 직후 기준이며 "
+                    + "사실상 timeoutSeconds 와 같다. 폴링하지 말고 로그인/새로고침 직후·'세션 연장' 버튼 시점에만 호출한다. "
+                    + "약관·비밀번호 게이트의 예외 경로다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공 (세션 연장됨)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+                    description = "AUTH_UNAUTHENTICATED — 세션 없음/만료")
+    })
+    @GetMapping("/session")
+    public ApiResponse<SessionStatusResponse> sessionStatus(HttpServletRequest httpRequest) {
+        return ApiResponse.success(AuthResponseMessage.SESSION_STATUS_SUCCESS,
+                SessionStatusResponse.from(authSessionManager.currentSessionStatus(httpRequest)));
     }
 
     @Operation(summary = "약관 동의",

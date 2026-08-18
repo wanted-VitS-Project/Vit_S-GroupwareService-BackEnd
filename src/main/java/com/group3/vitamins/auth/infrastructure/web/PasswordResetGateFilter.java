@@ -35,7 +35,9 @@ public class PasswordResetGateFilter extends OncePerRequestFilter {
             "/api/v1/auth/me",                 // 상태를 확인해야 화면을 그린다
             // 최초 로그인은 약관·비번 게이트가 동시에 켜진다. 약관 동의가 두 게이트를 다 통과해야
             // 순서(약관 → 비번)가 성립하므로 여기에도 넣는다 (auth.md §6-7).
-            "/api/v1/auth/terms-agreements"
+            "/api/v1/auth/terms-agreements",
+            // 세션 만료 위젯 — 비번 변경 화면에서도 그려야 한다. 막으면 403 → 프론트 리다이렉트 루프 (auth.md §7)
+            "/api/v1/auth/session"
     );
 
     private final HandlerExceptionResolver resolver;
