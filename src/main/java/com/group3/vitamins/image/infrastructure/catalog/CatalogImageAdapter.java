@@ -74,6 +74,12 @@ public class CatalogImageAdapter implements ImageRepository {
     }
 
     @Override
+    @Transactional
+    public int decrementOrderIndexAfter(Long imgBlockId, int orderIndex) {
+        return springDataImageRepository.decrementOrderIndexAfter(imgBlockId, orderIndex);
+    }
+
+    @Override
     public Optional<ImageItem> findActiveByImgId(Long imgId) {
         return springDataImageRepository.findById(imgId)
                 .filter(entity -> entity.getDeletedAt() == null)

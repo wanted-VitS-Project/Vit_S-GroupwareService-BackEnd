@@ -1,33 +1,12 @@
 # 📝 Approval API — 결재 블록
 
 **상태**: `✅ 확정` — 로컬 정본 확정. 2026-08-11 추가분은 노션·프론트 재동기화 필요 (`../API.md` §0)
+**최종 업데이트**: 2026-08-18 (🔴 `ADMIN` **결재선 지정·승인·반려 허용** — `MASTER`와 동일하게 project member 검증 면제. 기안 계열은 계속 차단)
+**최종 업데이트**: 2026-08-17 (🔴 `ADMIN` 결재 **조회** 허용 — 목록·상세·블록 카드 개방 + `ADMIN` 기본 `scope`를 `all`로 해석. 쓰기는 계속 차단)
 **최종 업데이트**: 2026-08-15 (🔴 결재 조회 권한 확대 — 스텝 열람 권한자 전원 · 상태 무관 조회 · `WAITING` 제외 폐지)
-**최종 업데이트**: 2026-08-12 (`APPROVAL_DELETE_CONFIRM_REQUIRED`(409)·`confirmApprovalCancel` 신설 — 상신 이후 블록 삭제 시 **확인 요구**. 🔴 프론트 공유 필요)
-**최종 업데이트**: 2026-08-11 (참여 불가 전환 실제 알림 2종·대행 전 EDITOR 상세조회 추가)
 **담당**: 이강욱
 **노션**: 확인 필요 — 노션 링크 채워넣기
 **범위**: 결재 블록 관련 API 7개 + 결재관리·처리 API(목록조회 착수, 나머지 4개는 순서대로 추가 예정). 알림 API는 `notification.md` 참고.
-
-## §0 엔드포인트 요약
-
-| 메서드 | 경로 | 무엇 | 상태 | 권한 |
-|---|---|---|---|---|
-| GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | [결재 회차 상세조회](#1-결재-회차-상세조회) | — | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
-| PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | [결재 제목·내용 수정](#2-결재-제목내용-수정) | — | 기안자/대행 기안자 |
-| POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | [결재 문서 추가](#3-결재-문서-추가) | — | 기안자/대행 기안자 |
-| DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | [결재 문서 제거](#4-결재-문서-제거) | — | 기안자/대행 기안자 |
-| PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | [결재선 등록·수정](#5-결재선-등록수정) | — | 기안자/대행 기안자 |
-| POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | [결재 상신](#6-결재-상신) | — | 기안자/대행 기안자 |
-| POST | `/api/v1/approvals/{approvalId}/revisions` | [재상신 회차 생성](#7-재상신-회차-생성) | — | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
-| GET | `/api/v1/approvals` | [결재관리 목록조회](#8-결재관리-목록조회) | — | 로그인 사용자(scope=all은 MASTER) |
-| GET | `/api/v1/approvals/{approvalId}` | [결재 상세조회](#9-결재-상세조회) | — | 1번과 동일 |
-| GET | `/api/v1/approvals/{approvalId}/revisions` | [결재 이력조회](#10-결재-이력조회) | — | 1번과 동일 |
-| POST | `/api/v1/approval-lines/{lineId}/approve` | [결재 승인](#11-결재-승인) | — | 해당 결재선의 결재자 본인 |
-| POST | `/api/v1/approval-lines/{lineId}/reject` | [결재 반려](#12-결재-반려) | — | 해당 결재선의 결재자 본인 |
-
-⭐ **`userId` 계열은 전부 `String`이다.** `employee.user_id`(사번)가 `VARCHAR(20)`이라, `drafterId`/`approverId` 등을 `long`으로 두면 안 된다.
-⭐ **결재 상세 생성은 REST API가 아니다.** `ApprovalBlockDetailAdapter`(블록팀 `BlockDetailPort` 구현체)가 블록 생성 트랜잭션 안에서 `approval`+`approval_revision`(1회차)을 만든다.
-⭐ **부서·직책은 스냅샷 없이 항상 `employee` 라이브 조회다** (`APR-V1.md` INV-11). `approval_line`에 관련 컬럼 없음.
 
 > ✅ **로컬 명세 확정 — 구현 가능.** 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 2026-08-11 추가분은 이 로컬 정본을 기준으로 노션·프론트에 동기화한다.
@@ -75,7 +54,8 @@
 > ✅ **2026-08-11 — 사원 참여 불가 보완 정책.** `employee.resigned_at != null`,
 > `employee.deleted_at != null`, `account.status=INACTIVE` 중 하나라도 해당하면 결재 참여 불가다.
 > 기존 URL·메서드·요청 바디는 유지하고 조회 응답 필드와 `approval.acting_drafter_id`만 추가한다.
-> `ADMIN`은 인사 전용이므로 결재자 지정·결재 조회·`scope=all` 권한이 없다.
+> ~~`ADMIN`은 인사 전용이므로 결재자 지정 권한이 없다.~~ → **2026-08-18 에 결재선 지정·승인·반려는 허용됐다.** 아래 🔴 2026-08-18 항목 참고 (기안 계열은 계속 차단)
+> (~~결재 조회·`scope=all`~~ → **2026-08-17 에 조회는 허용됐다.** 아래 🔴 2026-08-17 항목 참고)
 > 블록 카드의 결재 상세에는 `requiresApproverReplacement`(boolean)를 additive로 추가한다.
 
 > 🔴 **2026-08-15 — 계약 변경 (프론트 공유 필수).** 결재 조회 3종(1·9·10번)의 열람 범위를 넓힌다.
@@ -88,6 +68,57 @@
 > | 변경 없음 | **쓰기 권한은 그대로 기안자/대행 기안자.** `ADMIN` 차단·회사 경계·에러코드(`APPROVAL_LINE_NOT_VIEWABLE`) 모두 유지 |
 > | 프론트 작업 | 조회 권한 확대만 반영하면 된다. 응답 구조와 필드는 바뀌지 않는다 |
 
+> 🔴 **2026-08-17 — 계약 변경 (프론트 공유 필수). `ADMIN`의 결재 조회 차단을 해제한다.**
+> 인사 담당이 회사의 결재 현황을 봐야 한다는 요구가 확인됐다.
+> **위 2026-08-11·2026-08-15 의 "`ADMIN`은 결재 조회 권한이 없다"는 이 항목으로 대체된다.**
+>
+> | 항목 | 내용 |
+> |---|---|
+> | 개방 | 결재관리 목록조회(8번) · 결재 상세조회(9번) · 회차 상세조회(1번) · 블록 카드의 결재 상세. 같은 회사면 스텝 참여와 무관하게 열람 가능(`MASTER`와 동일 범위) |
+> | 신설 | **`ADMIN`의 기본 `scope`를 `all`로 해석한다.** `ADMIN`은 기안자가 될 수 없어 `drafted`가 구조적으로 0건이라, 403만 풀면 빈 목록이 보인다. 덕분에 프론트는 `scope`를 바꾸지 않아도 된다 |
+> | 변경 없음 | **쓰기는 전부 그대로 차단.** 결재자 지정(`APPROVAL_LINE_APPROVER_NOT_MEMBER`) · 기안·수정·상신·결재 처리 · 대행 기안자 선점(스텝 EDITOR 판정)에서 `ADMIN`은 계속 제외된다 |
+> | 변경 없음 | **회사 경계.** 타 회사 `ADMIN`은 계속 403(`APPROVAL_LINE_NOT_VIEWABLE`) — 회사 검사가 role 검사보다 먼저다 |
+> | 변경 없음 | 참여 불가(퇴사·삭제·계정 비활성) `ADMIN`은 계속 403 |
+> | 에러코드 | `APPROVAL_SCOPE_ALL_FORBIDDEN` code 문자열은 **그대로** (메시지 문구만 "전체 조회 권한이 없습니다."로 수정). 프론트 분기 변경 불필요 |
+> | 프론트 작업 | 없음. `ADMIN` 계정에서 결재 메뉴를 숨기고 있었다면 그 가림만 풀면 된다 |
+
+> 🔴 **2026-08-18 — 계약 변경 (프론트 공유 필수). `ADMIN`을 결재선에 지정할 수 있다.**
+> 상위 권한자가 결재 승인 라인에 들어가야 한다는 요구가 확인됐다.
+> **위 2026-08-11·2026-08-17 의 "`ADMIN`은 결재자로 지정할 수 없다"는 이 항목으로 대체된다.**
+> 기안 계열 차단은 그대로다 — `ADMIN`은 결재를 **작성**하지 않는다.
+>
+> | 항목 | 내용 |
+> |---|---|
+> | 개방 | 결재선 등록·수정(5번)에서 `ADMIN`을 결재자로 지정할 수 있다. 참여 불가 결재자의 **대체 결재자**로도 지정 가능 |
+> | 개방 | 결재 승인(11번)·반려(12번)를 `ADMIN`이 수행할 수 있다. **지정만 열고 처리를 막으면 그 결재가 영구 정지하므로 한 쌍이다** |
+> | 신설 | **`ADMIN`은 project member 검증을 면제받는다**(`MASTER`와 동일). `ADMIN`은 `project_member`에 등록되지 않으므로 면제 없이는 지정 자체가 성립하지 않는다 |
+> | 변경 없음 | **기안 계열은 전부 차단 유지.** 기안·제목/내용 수정·문서 추가/제거·상신·재상신 회차 생성·대행 기안자 선점(스텝 EDITOR 판정)에서 `ADMIN`은 계속 제외된다 |
+> | 변경 없음 | **회사 경계·참여 가능 검증.** 타 회사 `ADMIN`, 퇴사·삭제·계정 비활성 `ADMIN`은 계속 400(`APPROVAL_LINE_APPROVER_NOT_MEMBER`). 회사 검사가 면제 판정보다 먼저다 |
+> | 변경 없음 | 요청·응답 필드, URL, 에러코드 문자열 모두 그대로. `scope=drafted → all` 승격 규칙도 유지(`ADMIN`은 여전히 기안자가 될 수 없다) |
+> | 영향 | `scope=pending`("내가 처리할 결재")이 `ADMIN`에게 **더 이상 항상 0건이 아니다** — 실제 배정된 건이 잡힌다 |
+> | 프론트 작업 | 결재선 지정 화면에서 `ADMIN` 사원을 후보로 노출·선택 허용. 후보 검색 API(`employee.md` §9)는 이미 `ADMIN` 사원을 반환하므로 **API 변경 없음** |
+
+## 엔드포인트
+
+| # | API명칭 | METHOD | URL | 권한 |
+|---|---|---|---|---|
+| 1 | 결재 회차 상세조회 | GET | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 스텝 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER·ADMIN(상태 무관) |
+| 2 | 결재 제목·내용 수정 | PATCH | `/api/v1/approvals/{approvalId}/revisions/{revisionId}` | 기안자/대행 기안자 |
+| 3 | 결재 문서 추가 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents` | 기안자/대행 기안자 |
+| 4 | 결재 문서 제거 | DELETE | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/documents/{documentId}` | 기안자/대행 기안자 |
+| 5 | 결재선 등록·수정 | PUT | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/lines` | 기안자/대행 기안자 |
+| 6 | 결재 상신 | POST | `/api/v1/approvals/{approvalId}/revisions/{revisionId}/submit` | 기안자/대행 기안자 |
+| 7 | 재상신 회차 생성 | POST | `/api/v1/approvals/{approvalId}/revisions` | 기안자 또는 기안자 참여 불가 시 최초 선점한 스텝 EDITOR |
+| 8 | 결재관리 목록조회 | GET | `/api/v1/approvals` | 로그인 사용자(`scope=all`은 MASTER·ADMIN. ADMIN은 기본 scope도 `all`로 해석) |
+| 9 | 결재 상세조회 | GET | `/api/v1/approvals/{approvalId}` | 1번과 동일 |
+| 10 | 결재 이력조회 | GET | `/api/v1/approvals/{approvalId}/revisions` | 1번과 동일 |
+| 11 | 결재 승인 | POST | `/api/v1/approval-lines/{lineId}/approve` | 해당 결재선의 결재자 본인 |
+| 12 | 결재 반려 | POST | `/api/v1/approval-lines/{lineId}/reject` | 해당 결재선의 결재자 본인 |
+
+⭐ **`userId` 계열은 전부 `String`이다.** `employee.user_id`(사번)가 `VARCHAR(20)`이라, `drafterId`/`approverId` 등을 `long`으로 두면 안 된다.
+⭐ **결재 상세 생성은 REST API가 아니다.** `ApprovalBlockDetailAdapter`(블록팀 `BlockDetailPort` 구현체)가 블록 생성 트랜잭션 안에서 `approval`+`approval_revision`(1회차)을 만든다.
+⭐ **부서·직책은 스냅샷 없이 항상 `employee` 라이브 조회다** (`APR-V1.md` INV-11). `approval_line`에 관련 컬럼 없음.
+
 ---
 
 ## 1. 결재 회차 상세조회
@@ -95,7 +126,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals/{approvalId}/revisions/{revisionId}` |
-| 인증 필요 | Y · 해당 블록 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
+| 인증 필요 | Y · 해당 블록 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER·ADMIN(상태 무관) |
 | 요구사항 | MGT-005 |
 
 **Request**
@@ -127,9 +158,9 @@
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | 결재 없음 |
 | 404 | Not Found | `APPROVAL_REVISION_NOT_FOUND` | 회차 없음 |
-| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 스텝 열람 권한 없음 · 결재선 미참여 · `ADMIN` · 타 회사 |
+| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 스텝 열람 권한 없음 · 결재선 미참여 · 참여 불가(퇴사·비활성) · 타 회사 |
 
-**비즈니스 규칙**: 열람 판정은 **블록이 속한 스텝의 유효 권한**을 따른다 — 프로젝트 권한을 스텝 오버라이드로 덮은 최종값이 `NONE`이 아니면 회차 상태와 무관하게 열람 가능(블록 목록조회와 동일 기준). 따라서 `DRAFT`도 블록 카드와 상세 API 모두에서 조회할 수 있다. 결재선에 이름이 오른 사람도 **상태 무관** 열람 가능(`WAITING` 제외 규칙 폐지) — 프로젝트 멤버십 검사가 면제되는 대표 직책 결재자를 위해서다. `ADMIN`은 결재 권한이 없어 계속 차단하고, 회사 경계 검사는 role 검사보다 먼저 수행한다. 기안자 참여 불가 시 스텝 EDITOR 예외 조항은 열람 범위가 넓어져 불필요해졌으나, **대행 선점(7번)의 진입 조건으로는 그대로 유지**한다. 조회 권한 확대는 수정·문서 연결·결재선 설정·상신 권한을 넓히지 않는다.
+**비즈니스 규칙**: 열람 판정은 **블록이 속한 스텝의 유효 권한**을 따른다 — 프로젝트 권한을 스텝 오버라이드로 덮은 최종값이 `NONE`이 아니면 회차 상태와 무관하게 열람 가능(블록 목록조회와 동일 기준). 따라서 `DRAFT`도 블록 카드와 상세 API 모두에서 조회할 수 있다. 결재선에 이름이 오른 사람도 **상태 무관** 열람 가능(`WAITING` 제외 규칙 폐지) — 프로젝트 멤버십 검사가 면제되는 대표 직책 결재자를 위해서다. `MASTER`와 `ADMIN`은 스텝 참여와 무관하게 열람 가능하고(`ADMIN`은 2026-08-17 허용), 회사 경계 검사는 role 검사보다 먼저 수행한다. 기안자 참여 불가 시 스텝 EDITOR 예외 조항은 열람 범위가 넓어져 불필요해졌으나, **대행 선점(7번)의 진입 조건으로는 그대로 유지**한다. 조회 권한 확대는 수정·문서 연결·결재선 설정·상신 권한을 넓히지 않는다.
 
 **참여 불가 실제 알림**: 미처리(`ACTIVE`·`WAITING`) 결재자가 참여 불가로 전환되면 현재 유효한 기안자에게 `APPROVAL_APPROVER_UNAVAILABLE`, 현재 기안자 또는 대행 기안자가 참여 불가로 전환되면 유효 스텝 EDITOR 전원에게 `APPROVAL_DRAFTER_UNAVAILABLE`을 발행한다. 둘 다 `targetType=APPROVAL`, `targetId=approvalId`, `targetContext.revisionId=현재 회차`다. 알림 REST API는 변경하지 않는다.
 
@@ -260,7 +291,7 @@ D-2(하드는 「연결 행 7종」뿐, `approval_document` 는 UNIQUE·복합 P
 | 409 | Conflict | `APPROVAL_REVISION_NOT_DRAFT` | DRAFT 전체 치환이 아니거나 IN_PROGRESS에서 참여 불가한 미처리 결재자 교체·제외 외의 변경 |
 | 400 | Bad Request | `APPROVAL_LINE_EMPTY` | 결재자 0명 |
 | 400 | Bad Request | `APPROVAL_LINE_ORDER_INVALID` | 순서 중복/누락 |
-| 400 | Bad Request | `APPROVAL_LINE_APPROVER_NOT_MEMBER` | 신규 결재자가 참여 불가·ADMIN·project member 아님(`MASTER`만 소속 검증 제외) |
+| 400 | Bad Request | `APPROVAL_LINE_APPROVER_NOT_MEMBER` | 신규 결재자가 참여 불가·타 회사·project member 아님(`MASTER`·`ADMIN`·직급 `대표`는 소속 검증 제외) |
 
 **비즈니스 규칙**: DRAFT에서는 기존처럼 전체 치환한다. IN_PROGRESS에서는 `ACTIVE`/`WAITING` 상태이면서 참여 불가인
 결재자만 교체하거나 요청 배열에서 제외할 수 있다. 정상 결재자와 처리 완료 결재자는 수정·제외할 수 없다. 제외할 때는
@@ -269,7 +300,7 @@ ACTIVE 결재자를 교체하면 새 결재자가 같은 순번·ACTIVE 상태�
 ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING도 참여 불가라면 함께 제외한 뒤 요청해야 한다.
 다음 결재자가 없고 앞선 결재선이 모두 승인됐다면 회차·결재를
 `COMPLETED`로 종결하고 기안자에게 완료 알림을 발행한다. 한 요청에서 교체와 제외를 동시에 처리하지 않는다.
-`MASTER`만 project member 검증을 면제하고 `ADMIN`은 결재자로 지정할 수 없다. 원 기안자가 참여 불가이고 아직 대행자가
+`MASTER`·`ADMIN`은 project member 검증을 면제받는다(2026-08-18). 원 기안자가 참여 불가이고 아직 대행자가
 없으면, 같은 회사의 활성 스텝 EDITOR 중 이 교체·제외 요청을 먼저 성공시킨 1인을 대행 기안자로 선점한다.
 
 ---
@@ -338,7 +369,7 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals` |
-| 인증 필요 | Y · `scope=all`은 `MASTER`만(`ADMIN`은 결재 권한 없음) |
+| 인증 필요 | Y · `scope=all`은 `MASTER`·`ADMIN`만 |
 | 요구사항 | MGT-001~004 |
 
 > ⚠️ **2026-08-06 — 원 명세(노션/이강욱 전달분) 대비 정정.** `drafterId`/`approverId`/`currentApproverId`/`lines[].approverId`가
@@ -349,7 +380,7 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 
 | 파라미터 | 위치 | 타입 | 필수 | 설명 |
 |---|---|---|:---:|---|
-| `scope` | Query | String | N | `drafted`(기본) / `pending` / `all` |
+| `scope` | Query | String | N | `drafted`(기본) / `pending` / `all`. ⚠️ `ADMIN`은 `drafted`·미지정도 `all`로 해석된다(아래 비즈니스 규칙) |
 | `status` | Query | String | N | 결재 상태 필터(`DRAFT`/`IN_PROGRESS`/`REJECTED`/`COMPLETED`/`CANCELED`) |
 | `drafterId` | Query | **String** | N | 기안자 필터(사번). `scope=drafted`에선 무시되고 요청자 본인으로 강제됨 |
 | `approverId` | Query | **String** | N | 결재자 필터(사번) — 현재 회차 결재선 기준 |
@@ -385,9 +416,17 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 |---|---|---|---|
 | 200 | OK | – | 조회 성공 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
-| 403 | Forbidden | `APPROVAL_SCOPE_ALL_FORBIDDEN` | `MASTER`가 아닌 사용자의 `scope=all` 요청 |
+| 403 | Forbidden | `APPROVAL_SCOPE_ALL_FORBIDDEN` | `MASTER`·`ADMIN`이 아닌 사용자의 `scope=all` 요청 |
 
-**비즈니스 규칙**: `scope=drafted`(기본) — 원 기안자 또는 대행 기안자가 요청자인 결재 · `scope=pending` — 요청자가 현재 회차에서 `ACTIVE`인 결재만 조회 · `scope=all` — `MASTER`만 허용, 나머지 필터 자유 조합. `ADMIN`은 모든 범위에서 결재 권한이 없다.
+**비즈니스 규칙**: `scope=drafted`(기본) — 원 기안자 또는 대행 기안자가 요청자인 결재 · `scope=pending` — 요청자가 현재 회차에서 `ACTIVE`인 결재만 조회 · `scope=all` — `MASTER`·`ADMIN`만 허용, 나머지 필터 자유 조합.
+
+⚠️ **`ADMIN`의 `scope` 해석 (2026-08-17 신설 · 2026-08-18 일부 정정)** — `ADMIN`은 기안자가 될 수 없어 `drafted`가 **구조적으로 항상 0건**이다. 그래서 `drafted`(및 미지정)는 서버가 `all`로 해석한다. `pending`("내가 처리할 결재")은 승격하지 않는다 — 2026-08-18 부터 `ADMIN`도 결재자로 지정될 수 있어 **실제 배정 건수가 잡히며**, 그게 탭 이름 그대로의 정답이다(이전 판의 "`pending`은 항상 0건" 서술은 폐기).
+
+| 요청 `scope` | `MASTER` | `ADMIN` | 그 외 |
+|---|---|---|---|
+| `all` | `all` | `all` | 403 |
+| `pending` | `pending` | `pending`(실제 배정 건 조회) | `pending` |
+| `drafted`·미지정 | `drafted` | **`all`** | `drafted` |
 
 ---
 
@@ -436,7 +475,7 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 200 | OK | – | 조회 성공 |
 | 401 | Unauthorized | `AUTH_UNAUTHENTICATED` | |
 | 404 | Not Found | `APPROVAL_NOT_FOUND` | 결재 없음 |
-| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 스텝 열람 권한 없음 · 결재선 미참여 · `ADMIN` · 타 회사 |
+| 403 | Forbidden | `APPROVAL_LINE_NOT_VIEWABLE` | 스텝 열람 권한 없음 · 결재선 미참여 · 참여 불가(퇴사·비활성) · 타 회사 |
 
 **비즈니스 규칙**: 조회 권한은 1번(회차 상세조회)과 동일 · 열람 권한자는 상태와 무관하게 항상 **현재 회차**(`approval.current_revision_no`)를 본다 · 회차 지정 불가(지정 조회는 1번 API) · `blockOrigin`으로 원본 블록·스텝·프로젝트 이동 정보 제공(MGT-006).
 

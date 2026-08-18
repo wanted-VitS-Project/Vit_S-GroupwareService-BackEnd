@@ -320,6 +320,9 @@ public class ImageCommandService implements ImageCommandUseCase {
             log.warn("이미지 항목 삭제 경합 발생 - 이미 삭제됨 - imgId={}", command.imgId());
             throw new NotFoundException(ImageErrorCode.ITEM_NOT_FOUND);
         }
+        // 삭제로 생긴 orderIndex 구멍을 메운다(2026-08-17, 프론트 요청) — 뒤쪽 이미지들을 1씩 당겨
+        // 삭제 후에도 1..N으로 이어지게 한다.
+        imageRepository.decrementOrderIndexAfter(before.getImgBlockId(), before.getOrderIndex());
 
         Long blockId = imageBlockRepository.getBlockId(before.getImgBlockId());
         domainEventPublisher.publish(ActivityOccurredEvent.of(

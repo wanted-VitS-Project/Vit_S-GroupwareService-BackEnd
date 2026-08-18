@@ -100,16 +100,17 @@ public class ApprovalQueryService implements ApprovalQueryUseCase {
         log.info("결재관리 목록조회 요청 - scope={}, requesterId={}, page={}, size={}",
                 query.scope(), query.requesterId(), query.page(), query.size());
 
-        listScopePolicy.assertApprovalAccessAllowed(query.requesterId());
+        // ⚠️ 요청 scope 가 아니라 해석된 scope 로 분기한다. ADMIN 은 기본값(drafted)이 all 로 올라가는데,
+        //    query.scope() 로 분기하면 그 승격이 무시돼 본인 기안 필터가 걸리고 결과가 조용히 0건이 된다.
+        String scope = listScopePolicy.resolveScope(query.scope(), query.requesterId());
 
         String drafterId = null;
         String approverId = null;
         String activeApproverId = null;
 
-        switch (query.scope()) {
+        switch (scope) {
             case "pending" -> activeApproverId = query.requesterId();
             case "all" -> {
-                listScopePolicy.assertScopeAllAllowed(query.requesterId());
                 drafterId = query.drafterId();
                 approverId = query.approverId();
             }

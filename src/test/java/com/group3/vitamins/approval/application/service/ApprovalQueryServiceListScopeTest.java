@@ -68,6 +68,7 @@ class ApprovalQueryServiceListScopeTest {
     @Test
     @DisplayName("scope=all 이어도 세션 회사가 매퍼에 전달된다")
     void scopeAllStillPassesCompanyId() {
+        givenResolvedScope("all", "all");
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(MY_COMPANY);
         when(approvalListMapper.findApprovals(any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 anyInt(), anyInt())).thenReturn(List.of());
@@ -83,6 +84,7 @@ class ApprovalQueryServiceListScopeTest {
     @Test
     @DisplayName("scope=drafted 도 본인 필터에 더해 회사가 함께 전달된다")
     void scopeDraftedPassesCompanyIdWithDrafterFilter() {
+        givenResolvedScope("drafted", "drafted");
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(MY_COMPANY);
         when(approvalListMapper.findApprovals(any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 anyInt(), anyInt())).thenReturn(List.of());
@@ -96,6 +98,7 @@ class ApprovalQueryServiceListScopeTest {
     @Test
     @DisplayName("scope=pending 도 결재자 필터에 더해 회사가 함께 전달된다")
     void scopePendingPassesCompanyIdWithActiveApproverFilter() {
+        givenResolvedScope("pending", "pending");
         when(currentCompanyIdProvider.currentCompanyId()).thenReturn(MY_COMPANY);
         when(approvalListMapper.findApprovals(any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 anyInt(), anyInt())).thenReturn(List.of());
@@ -104,6 +107,28 @@ class ApprovalQueryServiceListScopeTest {
 
         verify(approvalListMapper).countApprovals(eq(MY_COMPANY), isNull(), isNull(), isNull(), eq(REQUESTER),
                 isNull(), isNull(), isNull(), isNull());
+    }
+
+    /**
+     * ADMIN 기본 scope 승격이 매퍼까지 도달하는지 — 정책이 {@code all} 을 돌려줬는데 서비스가 요청값
+     * ({@code drafted})으로 분기하면 기안자 필터가 그대로 걸려 결과가 조용히 0건이 된다.
+     */
+    @Test
+    @DisplayName("정책이 승격한 scope 로 분기한다 — 요청이 drafted 여도 all 이면 기안자 필터가 없다")
+    void promotedScopeDropsDrafterFilter() {
+        givenResolvedScope("drafted", "all");
+        when(currentCompanyIdProvider.currentCompanyId()).thenReturn(MY_COMPANY);
+        when(approvalListMapper.findApprovals(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                anyInt(), anyInt())).thenReturn(List.of());
+
+        service.listApprovals(query("drafted"));
+
+        verify(approvalListMapper).countApprovals(eq(MY_COMPANY), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull());
+    }
+
+    private void givenResolvedScope(String requested, String resolved) {
+        when(listScopePolicy.resolveScope(requested, REQUESTER)).thenReturn(resolved);
     }
 
     private ListApprovalsQuery query(String scope) {

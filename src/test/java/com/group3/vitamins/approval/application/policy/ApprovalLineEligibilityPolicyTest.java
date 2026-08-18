@@ -103,11 +103,41 @@ class ApprovalLineEligibilityPolicyTest {
     }
 
     @Test
-    @DisplayName("같은 회사 ADMIN도 결재자로 지정할 수 없다")
-    void adminCannotBeApprover() {
+    @DisplayName("같은 회사 ADMIN 은 project member 가 아니어도 통과한다 (2026-08-18 허용)")
+    void sameCompanyAdminIsExempt() {
         givenBlock();
         givenCurrentCompany(MY_COMPANY);
         givenEmployee(MEMBER, "ADMIN", MY_COMPANY);
+
+        List<EmployeeSummary> result = policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER));
+
+        assertThat(result).singleElement()
+                .extracting(EmployeeSummary::userId)
+                .isEqualTo(MEMBER);
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, MEMBER);
+    }
+
+    @Test
+    @DisplayName("타 회사 ADMIN 은 거부된다 — 소속 면제가 회사 경계까지 열어주지 않는다")
+    void otherCompanyAdminIsRejected() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        givenEmployee(OTHER_COMPANY_MEMBER, "ADMIN", OTHER_COMPANY);
+
+        assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(OTHER_COMPANY_MEMBER)))
+                .isInstanceOf(ValidationException.class)
+                .extracting("errorCode")
+                .isEqualTo(ApprovalErrorCode.APPROVAL_LINE_APPROVER_NOT_MEMBER);
+        verify(blockCatalogPort, never()).isProjectMember(PROJECT_ID, OTHER_COMPANY_MEMBER);
+    }
+
+    @Test
+    @DisplayName("참여 불가 ADMIN 은 거부된다 — 면제는 소속 검증만 풀지 참여 가능 검증은 안 푼다")
+    void unavailableAdminIsRejected() {
+        givenBlock();
+        givenCurrentCompany(MY_COMPANY);
+        when(employeeCatalogPort.findEmployee(MEMBER)).thenReturn(Optional.of(new EmployeeSummary(
+                MEMBER, "관리자", null, null, "ADMIN", MY_COMPANY, "INACTIVE", null, null)));
 
         assertThatThrownBy(() -> policy.assertApproversEligible(BLOCK_ID, List.of(MEMBER)))
                 .isInstanceOf(ValidationException.class)
