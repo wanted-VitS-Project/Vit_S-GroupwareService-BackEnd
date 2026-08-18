@@ -28,7 +28,19 @@
               AND (e.name LIKE CONCAT('%', #{keyword}, '%')
                    OR e.user_id LIKE CONCAT('%', #{keyword}, '%'))
           </if>
-          <if test="departmentId != null">AND e.department_id = #{departmentId}</if>
+          <if test="departmentId != null">
+              <choose>
+                  <!-- 하위 포함: 해당 부서 + 그 직속 하위 부서. 트리가 최대 2단이라 자기 자신 OR 자식만으로 전 소속을 덮는다. -->
+                  <when test="includeSubDepartments">
+                      AND (e.department_id = #{departmentId}
+                           OR e.department_id IN (
+                               SELECT sub.department_id FROM department sub
+                                WHERE sub.parent_id = #{departmentId}
+                                  AND sub.company_id = #{companyId}))
+                  </when>
+                  <otherwise>AND e.department_id = #{departmentId}</otherwise>
+              </choose>
+          </if>
           <if test="role != null">AND a.role = #{role}</if>
           <if test="accountStatus != null">AND a.status = #{accountStatus}</if>
           <if test="mustChangePassword != null">AND a.must_change_password = #{mustChangePassword}</if>

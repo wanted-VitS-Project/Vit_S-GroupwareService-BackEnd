@@ -49,6 +49,7 @@
 |---|---|:---:|---|
 | `keyword` | String | N | 이름 또는 사번 부분 검색 |
 | `departmentId` | Long | N | 부서 필터 |
+| `includeSubDepartments` | Boolean | N | 기본 `false`. **`true` 면 `departmentId` 의 직속뿐 아니라 하위 부서 사원까지 포함**한다 (2026-08-19 추가). `departmentId` 없이 단독으로 주면 무시된다 |
 | `role` | String | N | `MASTER` · `MEMBER` |
 | `status` | String | N | `ACTIVE` · `RESET_REQUIRED` · `INACTIVE` |
 | `resigned` | Boolean | N | 퇴사 여부. **미지정이면 재직자만** |
@@ -56,6 +57,12 @@
 
 ⛔ **시스템 계정은 어떤 조건으로도 조회되지 않는다** (`EMP-003`).
 ⛔ **기본은 재직자만이다.** 화면에 퇴사 필터가 없다.
+
+> 🌲 **`includeSubDepartments` — 부서 관리 화면 "사원 보기" 정합** (2026-08-19)
+> 부서 관리 화면의 인원 배지는 **하위 포함 수**(`department.md` `totalEmployeeCount`)인데, `사원 보기` 링크(`departmentId` 단일 필터)는 직속만 보여줘 숫자가 어긋났다.
+> - `true` 면 필터가 `해당 부서 + 그 직속 하위 부서`가 된다. **계층은 최대 2단**이라(하위 부서는 자식을 갖지 않음) 이 둘로 모든 소속이 덮인다.
+> - `departmentId` 가 하위 부서면 자식이 없어 자기 자신만 남는다(직속과 동일).
+> - 다른 필터를 걸지 않고 `includeSubDepartments=true` 로 부르면 결과 수 = 그 부서의 `totalEmployeeCount`(둘 다 시스템·퇴사 제외 기준).
 
 > ⭐ **`is_system` 의 범위** (2026-08-03 통합) — **사람이 아닌 계정 전부**다.
 > `../docs/global/PERMISSION.md` §2-2 는 *"배치·크롤러가 쓰는 시스템 사원"* 으로, 제 설계는 *"ADMIN 공용 계정용 가상 사원"* 으로 썼다.
