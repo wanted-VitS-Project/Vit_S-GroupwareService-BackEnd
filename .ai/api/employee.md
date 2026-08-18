@@ -363,8 +363,8 @@
 | `data.errors[]` | List\<Object\> | 검증과 같은 구조 |
 | `data.emailSentCount` | int | 초기 비밀번호 메일 발송 성공 건수 |
 | `data.emailNotRegistered[]` | List\<Object\> | `userId` · `name` (`EMP-019`) |
-| `data.createdMasters.majors[]` | List\<Object\> | **이번 등록으로 새로 생성된 전공** `{name, rowCount}`. `autoCreateMasters=false` 면 빈 배열 |
-| `data.createdMasters.certificates[]` | List\<Object\> | 새로 생성된 자격증 `{name, rowCount}` |
+| `data.createdMasters.majors[]` | List\<Object\> | **이번 등록으로 새로 생성했거나 동명 마스터를 재사용한 전공** `{name, rowCount}`. `autoCreateMasters=false` 면 빈 배열 |
+| `data.createdMasters.certificates[]` | List\<Object\> | 새로 생성했거나 동명 재사용한 자격증 `{name, rowCount}` |
 
 > ⭐ **마스터 생성 규칙 (`autoCreateMasters=true`)**
 >

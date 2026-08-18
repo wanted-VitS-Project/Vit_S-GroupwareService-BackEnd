@@ -149,11 +149,13 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             // 학력·자격증은 analyze 에서 해석한 마스터 ID(자동 생성분은 방금 만든 id)·학위로 도메인 객체를 굳힌다(학교·취득일은 엑셀에 없음 → null).
             List<EmployeeEducation> educations = row.educations().stream()
                     .map(e -> new EmployeeEducation(companyId, row.userId(),
-                            e.majorId() != null ? e.majorId() : createdMajorIds.get(e.majorName()), e.degree(), null))
+                            e.majorId() != null ? e.majorId() : requireMasterId(createdMajorIds, e.majorName(), "전공"),
+                            e.degree(), null))
                     .toList();
             List<EmployeeCertificate> certificates = row.certificates().stream()
                     .map(c -> new EmployeeCertificate(companyId, row.userId(),
-                            c.certificateId() != null ? c.certificateId() : createdCertIds.get(c.certificateName()), null))
+                            c.certificateId() != null ? c.certificateId()
+                                    : requireMasterId(createdCertIds, c.certificateName(), "자격증"), null))
                     .toList();
             try {
                 // 사원과 한 트랜잭션으로 저장한다.
@@ -194,6 +196,20 @@ public class EmployeeBulkService implements EmployeeBulkUseCase {
             return Map.of();
         }
         return creator.apply(pending.stream().map(PendingMaster::name).toList());
+    }
+
+    /**
+     * 자동 생성 마스터의 이름→ID 매핑을 꺼낸다. 포트 계약({@link QualificationMasterCreatePort} — "요청한 모든 이름을 키로 갖는다")이
+     * 깨져 매핑이 비면 {@code null} FK 로 새지 말고 즉시 끊는다 — 안 그러면 그 행이 INSERT 에서 무결성 위반으로 실패하고
+     * {@code DataIntegrityViolationException} 이 사번 중복으로 <b>오분류</b>돼 관리자가 원인을 잘못 짚는다.
+     * 마스터는 사원과 독립 생명주기라 여기서 중단해도 데이터 손실이 아니다.
+     */
+    private Long requireMasterId(Map<String, Long> createdIds, String name, String kind) {
+        Long id = createdIds.get(name);
+        if (id == null) {
+            throw new IllegalStateException(kind + " 마스터 자동 생성 ID 누락 - name=" + name);
+        }
+        return id;
     }
 
     // ── 검증·등록 공유 분석 ────────────────────────────────────────────────

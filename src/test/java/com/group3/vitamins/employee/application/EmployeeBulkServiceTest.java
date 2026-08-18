@@ -611,5 +611,19 @@ class EmployeeBulkServiceTest {
             verify(masterCreatePort, never()).createMajors(any(), any(), any());
             verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
         }
+
+        @Test
+        @DisplayName("등록 — 포트 반환 맵에 이름이 없으면 즉시 IllegalStateException (null FK·사번중복 오분류 방지)")
+        void missingMasterIdMappingFailsFast() {
+            // 포트 계약 위반 재현 — 산업공학을 요청했는데 빈 맵을 돌려준다.
+            when(masterCreatePort.createMajors(any(), any(), any())).thenReturn(Map.of());
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "산업공학:학사", null));
+
+            assertThatThrownBy(() -> service.register(registerCmd(rows, false, true)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("산업공학");
+            // null FK 로 저장을 시도하지 않는다 — 사번 중복으로 오분류될 여지 자체를 없앤다.
+            verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
+        }
     }
 }

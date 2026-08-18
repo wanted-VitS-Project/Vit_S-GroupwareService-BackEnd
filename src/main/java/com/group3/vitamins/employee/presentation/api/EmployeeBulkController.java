@@ -62,7 +62,7 @@ public class EmployeeBulkController {
             description = "업로드한 엑셀을 등록하지 않고 검증만 한다(화면 스텝퍼 ②). 행별 오류를 돌려주며 오류가 있어도 성공(200)이다. "
                     + "파일 없음·형식 아님·5MB 초과만 400 이고, 파일을 연 뒤의 오류는 모두 data.errors 로 간다. "
                     + "autoCreateMasters=true(기본 false)면 목록에 없는 전공/자격증을 EDU_NOT_FOUND/CERT_NOT_FOUND 오류 대신 "
-                    + "data.newMasters(등록 시 생성 예정)로 돌려준다 — 화면은 이걸 등록 전에 보여줘야 한다.")
+                    + "data.newMasters(유효 행이 참조하는, 등록 시 생성 예정 이름)로 돌려준다 — 화면은 이걸 등록 전에 보여줘야 한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "검증 완료(오류가 있어도 200)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -91,7 +91,7 @@ public class EmployeeBulkController {
                     + "EMP_HAS_ERRORS(400)로 막고, true 면 오류 행을 빼고 유효 행만 등록한다(부분 등록). 행마다 독립 트랜잭션이라 "
                     + "일부가 실패해도 나머지는 등록된다. 초기 비밀번호는 이메일이 있는 사원에게만 발송된다. "
                     + "autoCreateMasters=true(기본 false)면 목록에 없는 전공/자격증을 사원 등록 전에 마스터로 먼저 만들고 참조한다"
-                    + "(data.createdMasters). 검증 때 보낸 값과 같아야 한다.")
+                    + "(동명 마스터가 이미 있으면 새로 만들지 않고 그것을 재사용 — 둘 다 data.createdMasters 에 담긴다). 검증 때 보낸 값과 같아야 한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "처리 완료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
