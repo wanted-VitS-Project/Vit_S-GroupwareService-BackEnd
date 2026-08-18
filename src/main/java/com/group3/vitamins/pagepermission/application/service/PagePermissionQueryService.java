@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -54,14 +55,24 @@ public class PagePermissionQueryService implements PagePermissionQueryUseCase {
         Long companyId = currentCompanyIdProvider.currentCompanyId();
 
         // 부여 가능한 페이지(BIDDING·FINANCE)만 부여 화면 목록에 뜬다. role 로 여는 페이지는 부여 대상이 아니라 제외.
+        List<String> grantableCodes = Arrays.stream(PageCode.values())
+                .filter(PageCode::isGrantable)
+                .map(PageCode::name)
+                .toList();
+
+        // 집계를 페이지마다 왕복(페이지당 2쿼리)하지 않고 한 번에 받는다 — page_code 별 GROUP BY 2쿼리로 고정.
         long globalRoleCount = pagePermissionQueryPort.countMasters(companyId);
+        Map<String, Long> grantedCounts = pagePermissionQueryPort.countGrantsByPageCodes(grantableCodes, companyId);
+        Map<String, LocalDate> lastGrantedDates =
+                pagePermissionQueryPort.findLastGrantedDatesByPageCodes(grantableCodes, companyId);
+
         List<PageListItemResult> items = new ArrayList<>();
         for (PageCode page : PageCode.values()) {
             if (!page.isGrantable()) {
                 continue;
             }
-            long grantedCount = pagePermissionQueryPort.countGrants(page.name(), companyId);
-            LocalDate lastModifiedAt = pagePermissionQueryPort.findLastGrantedDate(page.name(), companyId);
+            long grantedCount = grantedCounts.getOrDefault(page.name(), 0L);
+            LocalDate lastModifiedAt = lastGrantedDates.get(page.name());
             items.add(new PageListItemResult(
                     page.name(), page.displayName(), page.description(),
                     (int) (grantedCount + globalRoleCount), (int) grantedCount, (int) globalRoleCount,
