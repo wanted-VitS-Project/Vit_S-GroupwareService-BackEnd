@@ -87,9 +87,11 @@ public class FinanceQueryService implements FinanceQueryUseCase {
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<CashFlowRow> rows = cashFlowMapper.findCashFlows(
                 companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword(),
+                query.type(), query.sourceType(),
                 query.sort(), query.size(), query.page() * query.size());
         long totalElements = cashFlowMapper.countCashFlows(
-                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword());
+                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword(),
+                query.type(), query.sourceType());
         int totalPages = (int) Math.ceil((double) totalElements / query.size());
 
         return new CashFlowListView(

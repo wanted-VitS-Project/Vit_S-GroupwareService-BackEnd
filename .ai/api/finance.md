@@ -149,6 +149,8 @@
 | `unlinked` | Boolean | N | 미연결 항목만 조회 (true: 미매칭, 없으면 전체) |
 | `projectId` | Long | N | 매칭 프로젝트 필터 |
 | `keyword` | String | N | 적요(`bankMemo`) 또는 입금자명(`depositorName`) 검색 키워드 |
+| `type` | String | N | 구분 필터. `INCOME`(입금) \| `OUTCOME`(출금). 생략하면 전체 (2026-08-18 추가) |
+| `sourceType` | String | N | 출처 필터. `MANUAL`(직접 등록) \| `CSV`(CSV 업로드) \| `API`. 생략하면 전체 (2026-08-18 추가) |
 | `page` | Int | N | 0-base 페이지 번호. 생략하면 0 (2026-08-12 페이징 추가) |
 | `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
 | `sort` | String | N | 정렬 기준. `TRADED_AT_DESC`(거래일시 최신순, 기본값) \| `TRADED_AT_ASC`(거래일시 오래된순) \| `AMOUNT_DESC`(거래금액 큰순) |
@@ -285,6 +287,11 @@
 - **`unlinked=false`를 명시적으로 보내면 생략과 동일하게 전체 조회** — 명세가 `true`(미매칭만)와 생략
   (전체) 두 경우만 정의해서, `false`는 정의되지 않은 입력이다. 생략과 같은 동작(필터 없음)으로 처리했다.
 - **`keyword` 검색** — `bankMemo` 또는 `depositorName`에 부분 일치(`LIKE %keyword%`)로 구현했다.
+- **✅ `type`/`sourceType` 필터 추가 (2026-08-18, 프론트 요청)** — 값은 목록 응답의 `type`/`sourceType`을
+  그대로 쓴다(새 필드 없음). 기존 `startDate`/`endDate`/`unlinked`/`projectId`/`keyword`와 AND로 묶인다.
+  **허용값 검증은 하지 않는다**(요청사항 — "없는 값이 오면 매칭 0건이면 됨"): 정의되지 않은 값이 오면
+  `WHERE cf.type = ...`가 0건을 반환할 뿐 400을 내지 않는다. 빈 문자열(`?type=`)은 "필터 없음"으로 처리.
+  목록·카운트가 같은 필터 블록을 공유해 `totalElements`가 필터 결과와 정확히 일치한다.
 - **✅ 페이징 추가 (2026-08-12)** — 프론트 요청으로 `page`/`size`/`sort` + `{page,size,totalElements,totalPages}`
   추가(공고·프로젝트 목록과 같은 컨벤션 — `page`≥0·`size`(1~100)·`sort` 허용값 검증, 위반 시
   `FINANCE_PAGE_QUERY_INVALID` 400, silent clamp 아님). **`cashFlows` 키 이름은 유지**(아직 프론트 연동 전이라
