@@ -76,6 +76,51 @@
     </select>
 
     <!--
+        단건 조회(2026-08-18 신설, 프론트 요청) — findTaxInvoices와 SELECT 컬럼·조인이 완전히 동일하고
+        tax_id 하나로만 좁힌다(페이지네이션·정렬·다른 필터 없음).
+    -->
+    <select id="findTaxInvoiceById" resultType="com.group3.vitamins.finance.infrastructure.taxinvoice.TaxInvoiceRow">
+        SELECT
+        ti.tax_id AS taxId,
+        ti.issued_no AS issuedNo,
+        ti.approval_no AS approvalNo,
+        ti.type AS type,
+        ti.buyer_name AS buyerName,
+        ti.buyer_biz_no AS buyerBizNo,
+        ti.supplier_biz_no AS supplierBizNo,
+        ti.sub_biz_no AS subBizNo,
+        ti.ceo_name AS ceoName,
+        ti.item_name AS itemName,
+        ti.supply_amount AS supplyAmount,
+        ti.tax_amount AS taxAmount,
+        ti.total_amount AS totalAmount,
+        ti.memo AS memo,
+        ti.source_type AS sourceType,
+        p.project_id AS projectId,
+        p.name AS projectName,
+        sb.settle_id AS settleId,
+        b.title AS roundName,
+        ti.linked_by AS linkedBy,
+        e.name AS linkedByName,
+        ti.linked_at AS linkedAt,
+        ti.is_excluded AS isExcluded,
+        CASE
+        WHEN ti.settle_block_id IS NULL THEN 'UNLINKED'
+        WHEN sb.deleted_at IS NOT NULL OR b.deleted_at IS NOT NULL THEN 'LINK_BLOCK_DELETED'
+        ELSE 'LINKED'
+        END AS linkStatus
+        FROM tax_invoice ti
+        LEFT JOIN settlement_block sb ON sb.settle_id = ti.settle_block_id
+        LEFT JOIN block b ON b.block_id = sb.block_id
+        LEFT JOIN step st ON st.step_id = b.step_id
+        LEFT JOIN project p ON p.project_id = st.project_id AND p.deleted_at IS NULL
+        LEFT JOIN employee e ON e.user_id = ti.linked_by
+        WHERE ti.deleted_at IS NULL
+        AND ti.company_id = #{companyId}
+        AND ti.tax_id = #{taxId}
+    </select>
+
+    <!--
         필터 옵션 — tax_invoice가 하나라도 연결된 정산 블록을 가진 프로젝트만(cash_flow의 findFilterProjects와
         동일한 사고방식). company_id는 project·tax_invoice 양쪽 다 방어적으로 건다.
     -->

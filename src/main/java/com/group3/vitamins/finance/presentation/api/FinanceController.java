@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
+import com.group3.vitamins.finance.application.query.GetCashFlowDetailQuery;
+import com.group3.vitamins.finance.application.query.GetTaxInvoiceDetailQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
@@ -37,11 +39,13 @@ import com.group3.vitamins.finance.application.usecase.FinanceCommandUseCase.Tax
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowListView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.CashFlowView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.FinanceSummaryView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.MatchCandidatesView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceFilterView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceListView;
 import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceMatchCandidatesView;
+import com.group3.vitamins.finance.application.usecase.FinanceQueryUseCase.TaxInvoiceView;
 import com.group3.vitamins.finance.domain.exception.FinanceErrorCode;
 import com.group3.vitamins.finance.presentation.api.request.CashFlowCsvUploadRequest;
 import com.group3.vitamins.finance.presentation.api.response.CashFlowCsvPreviewResponse;
@@ -167,6 +171,26 @@ public class FinanceController {
         return ResponseEntity.ok(ApiResponse.success("입출금 내역 조회 성공", CashFlowListResponse.from(view)));
     }
 
+    @Operation(summary = "입출금 내역 단건 조회",
+            description = "목록 페이지네이션·필터와 무관하게 입출금 내역 하나를 ID로 바로 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "입출금 내역 단건 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 입출금 내역입니다. (FINANCE_CASH_FLOW_NOT_FOUND)")
+    })
+    @GetMapping("/cash-flows/{cashFlowId}")
+    public ResponseEntity<ApiResponse<CashFlowListResponse.CashFlowItem>> getCashFlowDetail(
+            @Parameter(description = "조회할 입출금 내역 ID", example = "1") @PathVariable Long cashFlowId,
+            Authentication authentication
+    ) {
+        CashFlowView view = financeQueryUseCase.getCashFlowDetail(new GetCashFlowDetailQuery(
+                cashFlowId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("입출금 내역 단건 조회 성공", CashFlowListResponse.CashFlowItem.from(view)));
+    }
+
     @Operation(summary = "입출금 내역 필터 옵션 조회",
             description = "입출금 내역 조회 화면의 프로젝트 필터 옵션을 조회한다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
@@ -221,6 +245,26 @@ public class FinanceController {
                 authentication.getName(), RequesterRole.from(authentication)));
 
         return ResponseEntity.ok(ApiResponse.success("세금계산서 조회 성공", TaxInvoiceListResponse.from(view)));
+    }
+
+    @Operation(summary = "세금계산서 단건 조회",
+            description = "목록 페이지네이션·필터와 무관하게 세금계산서 하나를 ID로 바로 조회한다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "세금계산서 단건 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "접근 권한이 없습니다. (FINANCE_ACCESS_DENIED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "존재하지 않는 세금계산서입니다. (FINANCE_TAX_INVOICE_NOT_FOUND)")
+    })
+    @GetMapping("/tax-invoices/{taxId}")
+    public ResponseEntity<ApiResponse<TaxInvoiceListResponse.TaxInvoiceItem>> getTaxInvoiceDetail(
+            @Parameter(description = "조회할 세금계산서 ID", example = "1") @PathVariable Long taxId,
+            Authentication authentication
+    ) {
+        TaxInvoiceView view = financeQueryUseCase.getTaxInvoiceDetail(new GetTaxInvoiceDetailQuery(
+                taxId, authentication.getName(), RequesterRole.from(authentication)));
+
+        return ResponseEntity.ok(ApiResponse.success("세금계산서 단건 조회 성공", TaxInvoiceListResponse.TaxInvoiceItem.from(view)));
     }
 
     @Operation(summary = "세금계산서 필터 옵션 조회",
