@@ -40,11 +40,16 @@ public class ApprovalLineProcessingPolicy {
     /**
      * 잠금 조회 + 소유자·상태 검증까지 한 번에 끝낸다. {@code lineId} 자체가 없는 경우도
      * {@code APPROVAL_LINE_FORBIDDEN}(403)으로 흡수한다(리소스 존재 여부 비노출, API 명세 확인 필요 표시됨).
+     *
+     * <p>⚠️ <b>{@code ADMIN} 차단은 2026-08-18 에 풀렸다 — 되돌리지 마라.</b> 결재선 지정만 열고 여기를
+     * 막아두면 지정된 {@code ADMIN} 이 승인·반려를 못 해 그 결재가 <b>영구 정지</b>한다(다음 순번은
+     * {@code WAITING} 인 채로 끝). 예외도 안 나고 화면상 "결재 대기"로만 보인다.
+     * 기안 차단({@code ApprovalHandlerService}·{@code isStepEditor})은 그대로다.
      */
     public ApprovalLine getActiveOwnedLineOrThrow(Long lineId, String requesterId) {
         EmployeeSummary requester = employeeCatalogPort.findEmployee(requesterId)
                 .orElseThrow(() -> new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN));
-        if (requester.participationUnavailable() || "ADMIN".equals(requester.role())) {
+        if (requester.participationUnavailable()) {
             throw new ForbiddenException(ApprovalErrorCode.APPROVAL_LINE_FORBIDDEN);
         }
         ApprovalLine line = approvalRepository.findLineByIdForUpdate(lineId)
