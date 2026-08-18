@@ -63,9 +63,11 @@ class PagePermissionQueryServiceTest {
     @DisplayName("§2 부여 가능한 2개만, accessCount = granted + globalRole")
     void listPagesCounts() {
         when(queryPort.countMasters(1L)).thenReturn(2L);
-        when(queryPort.countGrants(eq("BIDDING"), eq(1L))).thenReturn(3L);
-        when(queryPort.countGrants(eq("FINANCE"), eq(1L))).thenReturn(0L);
-        when(queryPort.findLastGrantedDate(Mockito.anyString(), eq(1L))).thenReturn(null);
+        // BIDDING=3 만 부여, FINANCE 는 맵에서 빠짐(→ 0). 날짜는 부여 기록 없어 빈 맵(→ null).
+        when(queryPort.countGrantsByPageCodes(Mockito.anyCollection(), eq(1L)))
+                .thenReturn(Map.of("BIDDING", 3L));
+        when(queryPort.findLastGrantedDatesByPageCodes(Mockito.anyCollection(), eq(1L)))
+                .thenReturn(Map.of());
 
         List<PageListItemResult> result = service.listPages("ADMIN");
 
