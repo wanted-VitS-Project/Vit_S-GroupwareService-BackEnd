@@ -60,7 +60,9 @@ public class EmployeeBulkController {
 
     @Operation(summary = "엑셀 일괄 등록 검증 (ADMIN)",
             description = "업로드한 엑셀을 등록하지 않고 검증만 한다(화면 스텝퍼 ②). 행별 오류를 돌려주며 오류가 있어도 성공(200)이다. "
-                    + "파일 없음·형식 아님·5MB 초과만 400 이고, 파일을 연 뒤의 오류는 모두 data.errors 로 간다.")
+                    + "파일 없음·형식 아님·5MB 초과만 400 이고, 파일을 연 뒤의 오류는 모두 data.errors 로 간다. "
+                    + "autoCreateMasters=true(기본 false)면 목록에 없는 전공/자격증을 EDU_NOT_FOUND/CERT_NOT_FOUND 오류 대신 "
+                    + "data.newMasters(등록 시 생성 예정)로 돌려준다 — 화면은 이걸 등록 전에 보여줘야 한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "검증 완료(오류가 있어도 200)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -72,9 +74,11 @@ public class EmployeeBulkController {
     public ApiResponse<BulkValidateResponse> validateBulk(
             // required=false 라야 파일 part 누락 시 Spring 이 컨트롤러 前에 튕기지 않고 서비스가 EMP_FILE_REQUIRED 로 판정한다.
             @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "autoCreateMasters", defaultValue = "false") boolean autoCreateMasters,
             Authentication authentication) {
 
-        BulkValidateResult result = employeeBulkUseCase.validate(toValidateCommand(file, authentication));
+        BulkValidateResult result = employeeBulkUseCase.validate(
+                toValidateCommand(file, autoCreateMasters, authentication));
 
         String message = result.errorCount() == 0
                 ? "검증 완료"
@@ -85,7 +89,9 @@ public class EmployeeBulkController {
     @Operation(summary = "엑셀 일괄 등록 (ADMIN)",
             description = "검증을 통과한 사원을 실제로 등록한다(화면 스텝퍼 ③). skipErrors=false(기본)면 오류 행이 있을 때 "
                     + "EMP_HAS_ERRORS(400)로 막고, true 면 오류 행을 빼고 유효 행만 등록한다(부분 등록). 행마다 독립 트랜잭션이라 "
-                    + "일부가 실패해도 나머지는 등록된다. 초기 비밀번호는 이메일이 있는 사원에게만 발송된다.")
+                    + "일부가 실패해도 나머지는 등록된다. 초기 비밀번호는 이메일이 있는 사원에게만 발송된다. "
+                    + "autoCreateMasters=true(기본 false)면 목록에 없는 전공/자격증을 사원 등록 전에 마스터로 먼저 만들고 참조한다"
+                    + "(data.createdMasters). 검증 때 보낸 값과 같아야 한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "처리 완료"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -97,10 +103,11 @@ public class EmployeeBulkController {
     public ApiResponse<BulkRegisterResponse> registerBulk(
             @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(value = "skipErrors", defaultValue = "false") boolean skipErrors,
+            @RequestParam(value = "autoCreateMasters", defaultValue = "false") boolean autoCreateMasters,
             Authentication authentication) {
 
         BulkRegisterResult result = employeeBulkUseCase.register(
-                toRegisterCommand(file, skipErrors, authentication));
+                toRegisterCommand(file, skipErrors, autoCreateMasters, authentication));
 
         String message = result.failedCount() == 0
                 ? result.registeredCount() + "건 등록 완료"
@@ -108,21 +115,25 @@ public class EmployeeBulkController {
         return ApiResponse.success(message, BulkRegisterResponse.from(result));
     }
 
-    private ValidateBulkCommand toValidateCommand(MultipartFile file, Authentication authentication) {
+    private ValidateBulkCommand toValidateCommand(MultipartFile file, boolean autoCreateMasters,
+                                                  Authentication authentication) {
         String role = RequesterRole.from(authentication);
         if (file == null || file.isEmpty()) {
             // 파일 없음은 서비스가 EMP_FILE_REQUIRED 로 판정한다(빈 커맨드).
-            return new ValidateBulkCommand(role, null, null, 0);
+            return new ValidateBulkCommand(role, null, null, 0, autoCreateMasters);
         }
-        return new ValidateBulkCommand(role, readBytesWithinLimit(file), file.getOriginalFilename(), file.getSize());
+        return new ValidateBulkCommand(role, readBytesWithinLimit(file), file.getOriginalFilename(), file.getSize(),
+                autoCreateMasters);
     }
 
-    private RegisterBulkCommand toRegisterCommand(MultipartFile file, boolean skipErrors, Authentication authentication) {
+    private RegisterBulkCommand toRegisterCommand(MultipartFile file, boolean skipErrors, boolean autoCreateMasters,
+                                                  Authentication authentication) {
         String role = RequesterRole.from(authentication);
         if (file == null || file.isEmpty()) {
-            return new RegisterBulkCommand(role, null, null, 0, skipErrors);
+            return new RegisterBulkCommand(role, null, null, 0, skipErrors, autoCreateMasters);
         }
-        return new RegisterBulkCommand(role, readBytesWithinLimit(file), file.getOriginalFilename(), file.getSize(), skipErrors);
+        return new RegisterBulkCommand(role, readBytesWithinLimit(file), file.getOriginalFilename(), file.getSize(),
+                skipErrors, autoCreateMasters);
     }
 
     /** 5MB 초과면 바이트를 읽기 전에 막는다(멀티파트 전역 상한 20MB 라 읽어오면 그만큼 메모리를 쓴다). */

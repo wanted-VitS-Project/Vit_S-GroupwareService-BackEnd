@@ -12,7 +12,9 @@ public record BulkRegisterResponse(
         @Schema(description = "실패 건수(검증 오류 + 등록 실패)") int failedCount,
         @Schema(description = "행별 오류(검증 오류 + 등록 실패)") List<BulkRowErrorResponse> errors,
         @Schema(description = "초기 비밀번호 메일 발송 성공 건수") int emailSentCount,
-        @Schema(description = "등록됐지만 이메일이 없는 사원") List<BulkEmployeeRefResponse> emailNotRegistered
+        @Schema(description = "등록됐지만 이메일이 없는 사원") List<BulkEmployeeRefResponse> emailNotRegistered,
+        @Schema(description = "autoCreateMasters=true 로 이번 등록에서 새로 만든(또는 동명 매칭한) 전공/자격증. false 면 빈 배열")
+        BulkMastersResponse createdMasters
 ) {
 
     public static BulkRegisterResponse from(BulkRegisterResult r) {
@@ -20,6 +22,7 @@ public record BulkRegisterResponse(
                 r.totalRows(), r.registeredCount(), r.failedCount(),
                 r.errors().stream().map(BulkRowErrorResponse::from).toList(),
                 r.emailSentCount(),
-                r.emailNotRegistered().stream().map(BulkEmployeeRefResponse::from).toList());
+                r.emailNotRegistered().stream().map(BulkEmployeeRefResponse::from).toList(),
+                BulkMastersResponse.from(r.createdMasters()));
     }
 }

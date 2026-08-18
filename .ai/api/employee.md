@@ -1,6 +1,6 @@
 # 👤 Employee API
 
-**최종 업데이트**: 2026-08-11 (프로필 사진 아바타 서빙 API 추가 §10 — `GET /employees/{userId}/profile-image`, 로그인 사용자 전체) · 2026-08-04 · **담당**: 김동현 · Domain `인사` · SUB-Domain `Employee`
+**최종 업데이트**: 2026-08-18 (엑셀 §7·§8 `autoCreateMasters` 옵션 — 목록에 없는 전공/자격증을 자동 생성. 검증 응답 `newMasters`·등록 응답 `createdMasters` 추가, 기본값 `false` 면 기존 동작 그대로) · 2026-08-11 (프로필 사진 아바타 서빙 API 추가 §10) · **담당**: 김동현 · Domain `인사` · SUB-Domain `Employee`
 
 > 이 파일의 명세가 프론트와의 계약이다. 경로·필드명·타입·상태코드·에러코드를 **한 글자도 바꾸지 않는다** (`../API.md` §0).
 > 변경이 필요하면 코드를 먼저 고치지 말고 **이 md 를 먼저 고친 뒤** 팀에 공유한다.
@@ -257,9 +257,9 @@
 > | 자격증 | `자격증명` · 여러 개는 `;` · `,` · 셀 내 줄바꿈 | `정보처리기사; SQLD` |
 >
 > - 여러 항목 구분자는 **세미콜론(`;`)·쉼표(`,`)·셀 안 줄바꿈(Alt+Enter)** 을 모두 허용하며, 구분자 뒤 공백은 무시한다 (2026-08-17 확대).
->   ⚠️ 쉼표가 든 전공/자격증 마스터 이름은 쪼개지므로 마스터 이름에 쉼표를 넣지 않는다.
+>   ⚠️ 구분자(`,` `;`)·`전공:학위` 의 `:` 가 든 마스터 이름은 쪼개지므로 **마스터 이름에 `,` `;` `:` 를 넣을 수 없다** (2026-08-18 — `qualification.md` 공통 원칙, 생성·수정 시 400).
 > - 학위는 엑셀에선 한글(`학사`·`석사`·`박사`)로 쓰고 파서가 enum(`BACHELOR`·`MASTER`·`DOCTOR`)으로 변환한다.
-> - 전공·자격증명은 **마스터에 등록된 이름과 정확히 일치**해야 한다(목록 밖은 행 오류).
+> - 전공·자격증명은 **마스터에 등록된 이름과 정확히 일치**해야 한다(목록 밖은 행 오류). 단 §7·§8 의 `autoCreateMasters=true` 면 목록 밖 이름을 등록 시 자동 생성한다 (2026-08-18).
 
 | 코드 | code |
 |---|---|
@@ -279,7 +279,12 @@
 ⛔ **등록하지 않는다.** 화면 스텝퍼의 ② 검증 단계 전용이다.
 ⛔ **검증 실패도 `200` 이다.** 팀 응답 포맷의 에러 응답에 `data` 가 없어 행별 오류를 담을 수 없다.
 
-**Request** — `multipart/form-data` · `file` File Y (`.xlsx` · `.xls` · 최대 5MB)
+**Request** — `multipart/form-data`
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `file` | File | Y | `.xlsx` · `.xls` · 최대 5MB |
+| `autoCreateMasters` | Boolean | N | 기본 `false`. **`true` 면 목록에 없는 전공/자격증을 오류로 보지 않고 등록 시 자동 생성 대상(`newMasters`)으로 분류한다** (2026-08-18 추가). 화면 ① 업로드 단계의 체크박스 "목록에 없는 전공/자격증은 자동 등록" |
 
 **Response**
 
@@ -294,6 +299,13 @@
 | `data.errors[].validation` | String | `REQUIRED_COLUMN` · `USER_ID_DUPLICATED` · `DEPARTMENT_NOT_FOUND` · `ADMIN_ROLE_NOT_ALLOWED` · `EDU_NOT_FOUND` · `CERT_NOT_FOUND` |
 | `data.errors[].message` | String | 사람이 읽는 설명 |
 | `data.emailNotRegisteredCount` | int | 이메일 없는 행 수 (`EMP-019`) |
+| `data.newMasters.majors[]` | List\<Object\> | **등록 시 새로 생성될 전공** `{name, rowCount}` — `autoCreateMasters=true` 일 때만 채워진다(`false` 면 빈 배열). `rowCount` = 그 이름을 쓰는 **유효 행** 수 |
+| `data.newMasters.certificates[]` | List\<Object\> | 등록 시 새로 생성될 자격증 `{name, rowCount}` — 위와 동일 |
+
+> ⭐ **`autoCreateMasters` 가 바꾸는 것은 `EDU_NOT_FOUND`·`CERT_NOT_FOUND` 판정뿐이다.** `true` 면 그 두 오류가 사라지고 대신 `newMasters` 에 이름이 쌓인다.
+> 학위 표기 오류·`전공:학위` 형식 오류·이름 100자 초과·**자격증명에 `:` 포함**은 옵션과 무관하게 여전히 `REQUIRED_COLUMN` 행 오류다(마스터 이름 규칙 — `qualification.md` 공통 원칙).
+> ⚠️ **화면은 `newMasters` 를 반드시 보여줘야 한다** — 오타("정보 처리기사")가 그대로 마스터로 생성되는 걸 관리자가 등록 전에 잡을 수 있는 유일한 지점이다.
+> `newMasters` 는 **오류 없는 행 기준**이다. 다른 오류로 빠지는 행이 유일하게 참조하는 이름은 여기에 안 나오고, 등록 때도 생성되지 않는다.
 
 ```json
 { "httpStatus": 200, "message": "120건 중 8건 오류",
@@ -306,7 +318,10 @@
       { "row": 24, "userId": "EMP115", "name": "정대현",
         "validation": "ADMIN_ROLE_NOT_ALLOWED", "message": "엑셀로는 관리자 권한을 부여할 수 없습니다" }
     ],
-    "emailNotRegisteredCount": 5 } }
+    "emailNotRegisteredCount": 5,
+    "newMasters": {
+      "majors": [ { "name": "컴퓨터공학", "rowCount": 14 }, { "name": "산업공학", "rowCount": 3 } ],
+      "certificates": [ { "name": "정보처리기사", "rowCount": 21 } ] } } }
 ```
 
 | 코드 | code | 설명 |
@@ -330,7 +345,13 @@
 ⭐ **부분 등록을 허용한다** (2026-08-03 변경). 07-30 의 "전체 롤백 확정"은 **폐기**됐다.
 화면에 `오류 제외하고 등록 (112건)` 버튼이 있고, 롤백 근거였던 "재업로드 시 중복"은 부분 등록이면 해소된다.
 
-**Request** — `multipart/form-data` · `file` File Y · `skipErrors` Boolean N (기본 `false`)
+**Request** — `multipart/form-data`
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `file` | File | Y | `.xlsx` · `.xls` · 최대 5MB |
+| `skipErrors` | Boolean | N | 기본 `false`. `true` 면 오류 행을 빼고 유효 행만 등록(부분 등록) |
+| `autoCreateMasters` | Boolean | N | 기본 `false`. `true` 면 목록에 없는 전공/자격증을 **사원 등록 전에 마스터로 먼저 생성**한 뒤 참조한다 (2026-08-18 추가). ⚠️ **§7 검증 때 보낸 값과 같아야 한다** — 다르면 검증 화면의 오류/`newMasters` 와 등록 결과가 어긋난다 |
 
 **Response**
 
@@ -342,6 +363,18 @@
 | `data.errors[]` | List\<Object\> | 검증과 같은 구조 |
 | `data.emailSentCount` | int | 초기 비밀번호 메일 발송 성공 건수 |
 | `data.emailNotRegistered[]` | List\<Object\> | `userId` · `name` (`EMP-019`) |
+| `data.createdMasters.majors[]` | List\<Object\> | **이번 등록으로 새로 생성된 전공** `{name, rowCount}`. `autoCreateMasters=false` 면 빈 배열 |
+| `data.createdMasters.certificates[]` | List\<Object\> | 새로 생성된 자격증 `{name, rowCount}` |
+
+> ⭐ **마스터 생성 규칙 (`autoCreateMasters=true`)**
+>
+> | 항목 | 규칙 |
+> |---|---|
+> | 시점 | 사원 행 등록 **전에** 한꺼번에 생성한다. `skipErrors=false` 인데 오류 행이 있으면 `EMP_HAS_ERRORS` 로 끝나며 **마스터도 생성되지 않는다** |
+> | 대상 | §7 `newMasters` 와 동일 — 오류 없는 행이 참조하는, 목록에 없는 이름. 파일 안 여러 행이 같은 이름을 써도 1건만 |
+> | 이름 규칙 | 마스터 이름 규칙(`qualification.md` 공통 원칙 — 100자 · `,` `;` `:` · 줄바꿈 금지)을 그대로 따른다. 위반은 §7 에서 이미 `REQUIRED_COLUMN` 행 오류다 |
+> | 동명 처리 | 생성 직전 같은 이름이 이미 있으면(다른 관리자가 먼저 만든 경우·대소문자만 다른 경우) 새로 만들지 않고 **그 마스터를 참조**한다. `createdMasters` 에는 그대로 표시된다 |
+> | 사원 행 실패 시 | 마스터는 그대로 남는다(사원과 독립 생명주기 — 필요 없으면 마스터 관리 화면에서 삭제, 참조 없으면 삭제 가능) |
 
 > 화면 ③ 결과의 카드 4개가 `totalRows` · `registeredCount` · `failedCount` · `emailNotRegistered.length` 다.
 
