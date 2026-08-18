@@ -126,7 +126,7 @@
 | 항목 | 내용 |
 |------|------|
 | Method · URL | `GET /api/v1/approvals/{approvalId}/revisions/{revisionId}` |
-| 인증 필요 | Y · 해당 블록 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER(상태 무관) |
+| 인증 필요 | Y · 해당 블록 스텝의 열람 권한자(VIEWER 이상)·결재선 참여자·MASTER·ADMIN(상태 무관) |
 | 요구사항 | MGT-005 |
 
 **Request**
@@ -425,7 +425,7 @@ ACTIVE로 전환해 `APPROVAL_REQUESTED` 알림을 발행한다. 다음 WAITING�
 | 요청 `scope` | `MASTER` | `ADMIN` | 그 외 |
 |---|---|---|---|
 | `all` | `all` | `all` | 403 |
-| `pending` | `pending` | `pending`(항상 0건) | `pending` |
+| `pending` | `pending` | `pending`(실제 배정 건 조회) | `pending` |
 | `drafted`·미지정 | `drafted` | **`all`** | `drafted` |
 
 ---
