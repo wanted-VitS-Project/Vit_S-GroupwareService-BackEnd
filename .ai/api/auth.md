@@ -1,6 +1,6 @@
 # 🔐 AUTH API
 
-**최종 업데이트**: 2026-08-11 (프로필 사진 API 추가 — `me` 업로드/삭제·`me` 응답 `profileImageUrl`, 본인만) · 2026-08-04 (약관 동의 API·게이트 추가 — 최초 로그인 전용·ADMIN 스킵·`termsStatus`) · 2026-08-03 (에러코드 3종 확정) · **담당**: 김동현 · Domain `인사` · SUB-Domain `AUTH`
+**최종 업데이트**: 2026-08-18 (세션 상태 조회 API 추가 — `GET /auth/session` · 조회 겸 연장 · 게이트 예외 경로에 포함) · 2026-08-11 (프로필 사진 API 추가 — `me` 업로드/삭제·`me` 응답 `profileImageUrl`, 본인만) · 2026-08-04 (약관 동의 API·게이트 추가 — 최초 로그인 전용·ADMIN 스킵·`termsStatus`) · 2026-08-03 (에러코드 3종 확정) · **담당**: 김동현 · Domain `인사` · SUB-Domain `AUTH`
 
 ## §0 엔드포인트 요약
 
@@ -13,6 +13,7 @@
 | POST | `/api/v1/auth/terms-agreements` | [약관 동의](#5-약관-동의-최초-로그인-전용) | — | 전체 사용자 (본인만, 최초 로그인 전용) |
 | PUT | `/api/v1/auth/me/profile-image` | [프로필 사진 등록/변경](#5-1-프로필-사진-등록변경) | — | 전체 사용자 (본인만) |
 | DELETE | `/api/v1/auth/me/profile-image` | [프로필 사진 삭제](#5-2-프로필-사진-삭제) | — | 전체 사용자 (본인만) |
+| GET | `/api/v1/auth/session` | [세션 상태 조회](#7-세션-상태-조회-조회-겸-연장) | — | 전체 사용자 |
 
 > 🖼️ **프로필 사진은 본인만 바꾼다** (2026-08-11 설계). 관리자가 남의 사진을 바꾸는 경로는 없다.
 > 업로드/삭제는 여기(마이페이지), **아바타를 뿌리는 서빙 API 는 employee 도메인**(`GET /api/v1/employees/{userId}/profile-image`, `employee.md` §10)에 있다 — 좌상단·프로젝트 멤버 동그라미·결재선 아바타가 전부 그 URL 하나를 공유한다.
@@ -34,6 +35,7 @@
 > 📌 **프론트가 할 일은 `credentials: 'include'` 하나뿐이다.** 토큰을 저장·갱신하지 않는다.
 > 쿠키는 `HttpOnly` 라 JS 가 읽을 수 없고, 읽을 필요도 없다.
 > **토큰 재발급 API 는 없다** — 세션은 요청이 있을 때마다 자동 연장된다.
+> 만료 시각을 화면에 띄우거나 "연장" 버튼을 만들려면 `GET /auth/session`(§7)을 쓴다 — 호출 자체가 연장이다.
 
 ---
 
@@ -314,6 +316,54 @@ Request Body 없음 · `data` 는 `null`
 
 ---
 
+## 7. 세션 상태 조회 (조회 겸 연장)
+
+| 항목 | 내용 |
+|------|------|
+| Method · URL | `GET /api/v1/auth/session` |
+| 인증 필요 | Y · 전체 사용자 |
+| 요구사항 | 세션 만료 시각 표시 · 세션 연장 — 요구사항 번호 미부여 (2026-08-18 설계) |
+
+⭐ **호출 자체가 세션을 연장한다.** 세션은 **유휴 기준 슬라이딩**(§6-2)이라 서버가 세션을 만지는 모든 요청이 `lastAccessedTime` 을 갱신한다. 이 API 도 예외가 아니다 — 그래서 응답의 `remainingSeconds` 는 **호출 직후 기준 값**이며 사실상 `timeoutSeconds` 와 같다. "건드리지 않고 남은 시간만 읽는" 모드는 **없다**(Spring Session 구조상 불가).
+⛔ **폴링하지 마라.** 주기적으로 호출하면 세션이 영원히 안 죽는다. 아래 사용법대로 **이벤트 시점에만** 호출한다.
+
+**프론트 사용법**
+
+| 시점 | 할 일 |
+|---|---|
+| 로그인 직후 · 새로고침 직후 | 1회 호출 → `remainingSeconds` 로 카운트다운 시작 (`expiresAt` 은 표시용) |
+| 자기가 다른 API 를 호출할 때마다 | 로컬 타이머를 `now + timeoutSeconds` 로 리셋 (서버도 같은 만큼 늘어난다 — 재호출 불필요) |
+| "세션 연장" 버튼 | 이 API 재호출 → 응답값으로 타이머 리셋 |
+| 카운트다운 0 도달 | 다음 요청이 `401 AUTH_UNAUTHENTICATED` 로 떨어진다. 이 API 도 401 이다 |
+
+> 🔑 **`expiresAt` 이 아니라 `remainingSeconds` 로 카운트다운하라.** `expiresAt` 은 서버 시각이라 클라이언트 시계가 어긋나 있으면 몇 분씩 틀린다. `remainingSeconds` 는 시계와 무관하다.
+
+**Request Body 없음**
+
+**Response**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `data.timeoutSeconds` | int | 유휴 타임아웃 정책값(초). 기본 **14400** (4시간, §6-2). 배포 환경변수 `SESSION_TIMEOUT` 을 따라간다 |
+| `data.expiresAt` | String | 만료 예정 시각 `yyyy-MM-dd HH:mm:ss` (서버 시각 · `NOT NULL`). 표시 전용 |
+| `data.remainingSeconds` | long | 만료까지 남은 초 (호출 직후 기준 · `NOT NULL`). 카운트다운 기준값 |
+
+```json
+{ "httpStatus": 200, "message": "조회 성공",
+  "data": { "timeoutSeconds": 14400, "expiresAt": "2026-08-18 15:03:27", "remainingSeconds": 14400 } }
+```
+
+**Status Code**
+
+| 코드 | code | 설명 |
+|---|---|---|
+| 200 | – | 조회 성공 (세션 연장됨) |
+| 401 | `AUTH_UNAUTHENTICATED` | 세션 없음/만료 |
+
+> 📌 **게이트 예외 경로다** (§6-6 · §6-7). 약관 동의·비밀번호 변경 화면에서도 만료 위젯을 그릴 수 있어야 하므로 두 게이트를 통과한다. 예외에서 빼면 그 화면의 위젯 호출이 `403` 을 받고 프론트 공통 인터셉터가 리다이렉트를 걸어 루프가 생긴다.
+
+---
+
 ## 6. 인증 방식 · 보안 파라미터 (2026-08-03 확정)
 
 > 엔드포인트 명세는 아니지만 **프론트 동작과 에러 분기에 영향**을 주므로 여기 남긴다.
@@ -373,7 +423,7 @@ Request Body 없음 · `data` 는 `null`
 | 항목 | 값 |
 |---|---|
 | 응답 | `403` · **`AUTH_PASSWORD_RESET_REQUIRED`** (2026-08-03 추가·확정) |
-| 예외 경로 | `PATCH /api/v1/auth/password` · `POST /api/v1/auth/logout` · `GET /api/v1/auth/me` · `POST /api/v1/auth/terms-agreements`(약관 게이트와 동시 활성 시 통과 필요, §6-7) |
+| 예외 경로 | `PATCH /api/v1/auth/password` · `POST /api/v1/auth/logout` · `GET /api/v1/auth/me` · `POST /api/v1/auth/terms-agreements`(약관 게이트와 동시 활성 시 통과 필요, §6-7) · `GET /api/v1/auth/session`(만료 위젯, §7 · 2026-08-18 추가) |
 | 판정 | 세션 속성. 매 요청 DB 를 치지 않는다 |
 | 해제 | 비밀번호 변경 성공 시. **세션은 유지**한다 (재로그인시키지 않는다) |
 
@@ -384,7 +434,7 @@ Request Body 없음 · `data` 는 `null`
 | 항목 | 값 |
 |---|---|
 | 응답 | `403` · **`AUTH_TERMS_AGREEMENT_REQUIRED`** (2026-08-04 추가·확정) |
-| 예외 경로 | `POST /api/v1/auth/terms-agreements` · `POST /api/v1/auth/logout` · `GET /api/v1/auth/me` |
+| 예외 경로 | `POST /api/v1/auth/terms-agreements` · `POST /api/v1/auth/logout` · `GET /api/v1/auth/me` · `GET /api/v1/auth/session`(만료 위젯, §7 · 2026-08-18 추가) |
 | 판정 | 세션 속성 `TERMS_AGREEMENT_REQUIRED`. `account.terms_agreed_at IS NULL` 이고 **ADMIN 이 아닐 때** 로그인 시 세운다 |
 | 해제 | 약관 동의(`POST /auth/terms-agreements`) 성공 시. 세션 유지 |
 | ADMIN | 게이트 대상 아님 — 로그인 시 애초에 플래그를 세우지 않는다 |

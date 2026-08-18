@@ -30,7 +30,9 @@ public class TermsAgreementGateFilter extends OncePerRequestFilter {
     private static final Set<String> ALLOWED_PATHS = Set.of(
             "/api/v1/auth/terms-agreements",   // 동의하러 가는 곳
             "/api/v1/auth/logout",             // 안 하고 나갈 자유
-            "/api/v1/auth/me"                  // 상태를 확인해야 화면을 그린다
+            "/api/v1/auth/me",                 // 상태를 확인해야 화면을 그린다
+            // 세션 만료 위젯 — 약관 화면에서도 그려야 한다. 막으면 403 → 프론트 리다이렉트 루프 (auth.md §7)
+            "/api/v1/auth/session"
     );
 
     private final HandlerExceptionResolver resolver;

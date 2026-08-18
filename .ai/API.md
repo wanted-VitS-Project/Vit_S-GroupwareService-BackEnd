@@ -329,7 +329,7 @@ public record SignupRequest(
 
 | code | HTTP | 언제 |
 |------|:----:|------|
-| `AUTH_PASSWORD_RESET_REQUIRED` | 403 | **초기(임시) 비밀번호 미변경 상태.** `PasswordResetGateFilter` 가 세션 속성으로 판정해 허용 경로 4개(`/api/v1/auth/password`·`/logout`·`/me`·`/terms-agreements`) 외 **모든 요청을 차단**한다. 프레임워크 폴백이 아니라 **의도된 게이트**이므로 6종에 세지 않는다 |
+| `AUTH_PASSWORD_RESET_REQUIRED` | 403 | **초기(임시) 비밀번호 미변경 상태.** `PasswordResetGateFilter` 가 세션 속성으로 판정해 허용 경로 5개(`/api/v1/auth/password`·`/logout`·`/me`·`/terms-agreements`·`/session`) 외 **모든 요청을 차단**한다. 프레임워크 폴백이 아니라 **의도된 게이트**이므로 6종에 세지 않는다 |
 
 > 프론트 처리: 이 코드를 받으면 어느 화면에서든 **비밀번호 변경 화면으로 보낸다.** 개별 API 명세에는 안 적힌다 (`auth.md` §6-7).
 >
