@@ -14,8 +14,10 @@
 |---|---|---|---|---|
 | GET | `/api/v1/finance/summary` | [재무 관리 요약 조회](#재무-관리-요약-조회-get-apiv1financesummary) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/cash-flows` | [입출금 내역 조회](#입출금-내역-조회-get-apiv1financecash-flows) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/cash-flows/{cashFlowId}` | [입출금 내역 단건 조회](#입출금-내역-단건-조회-get-apiv1financecash-flowscashflowid) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/cash-flows/filters` | [입출금 내역 필터 옵션 조회](#입출금-내역-필터-옵션-조회-get-apiv1financecash-flowsfilters) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/tax-invoices` | [세금계산서 조회](#세금계산서-조회-get-apiv1financetax-invoices) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/tax-invoices/{taxId}` | [세금계산서 단건 조회](#세금계산서-단건-조회-get-apiv1financetax-invoicestaxid) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/tax-invoices/filters` | [세금계산서 필터 옵션 조회](#세금계산서-필터-옵션-조회-get-apiv1financetax-invoicesfilters) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | POST | `/api/v1/finance/tax-invoices/csv/preview` | [세금계산서 CSV 컬럼 추천 조회](#세금계산서-csv-컬럼-추천-조회-post-apiv1financetax-invoicescsvpreview) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
 | POST | `/api/v1/finance/tax-invoices/csv` | [세금계산서(CSV 기반) 업로드](#세금계산서csv-기반-업로드-post-apiv1financetax-invoicescsv) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
@@ -291,6 +293,76 @@
 
 ---
 
+## 입출금 내역 단건 조회 `GET /api/v1/finance/cash-flows/{cashFlowId}`
+
+**상태**: ✅ 확정 (2026-08-18 신설 — 프론트 요청)
+**인증 필요 여부**: Y
+
+**왜 필요한가** — 상세 화면(`/finance/cash-flows/{id}`)이 목록 페이지네이션과 무관하게 특정 건 하나를
+바로 가져와야 하는데, 그 경로가 없어서 프론트가 "목록을 페이지 단위로 넘기며 그 안에서 찾는" 방식으로
+우회하고 있었다. 건수가 많아지면 상세 하나 여는 데 요청이 여러 번 나가고, 링크·새로고침으로 목록을
+거치지 않고 상세에 바로 들어오는 경로에서는 그 방식 자체가 불가능하다(2026-08-18, 실제 배포 환경에서
+페이지네이션 때문에 상세 진입이 실패하는 사례로 확인).
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `cashFlowId` | Long | Y | 조회할 입출금 내역 ID |
+
+**Request Body**: 없음
+
+**Response Parameter** — 목록 조회의 `cashFlows[]` 항목 하나와 완전히 같은 모양(`CashFlowItem`). 새 응답
+모양을 만들지 않았다(프론트 요청 그대로 — 목록에서 쓰던 매핑 함수를 그대로 재사용할 수 있게).
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.*` | Object | 위 "입출금 내역 조회"의 `data.cashFlows[]` 항목 하나와 필드 전부 동일 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입출금 내역 단건 조회 성공",
+  "data": {
+    "cashFlowId": 224,
+    "tradedAt": "2026-08-13T14:30:00",
+    "bankTxnId": "신한은행-20260813143000-D1B6E7",
+    "type": "INCOME",
+    "amount": 50000000,
+    "depositorName": "(주)테스트클라이언트",
+    "bankMemo": "계약금 입금",
+    "sourceType": "MANUAL",
+    "projectId": 1,
+    "projectName": "재무 요약 테스트용 프로젝트",
+    "settleId": 8,
+    "roundName": "정산 블록 매칭 테스트",
+    "linkedBy": "vitas-ADMIN001",
+    "linkedByName": "시스템 관리자1",
+    "linkedAt": "2026-08-13T23:28:18",
+    "isExcluded": false,
+    "linkStatus": "LINKED"
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "입출금 내역 단건 조회 성공" |
+| 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_CASH_FLOW_NOT_FOUND` | "존재하지 않는 입출금 내역입니다." (삭제된 건 포함) |
+
+> **구현 메모** — 권한·조인·컬럼 전부 목록 조회(`findCashFlows`)와 동일하고, `WHERE cash_flow_id = ?`
+> 하나만 다르다(페이지네이션·정렬·필터 없음). 다른 회사 소유 건을 조회하면 `company_id` 불일치로
+> `FINANCE_CASH_FLOW_NOT_FOUND`(크로스테넌트 차단, 목록 조회와 동일 원칙).
+
+---
+
 ## 입출금 내역 필터 옵션 조회 `GET /api/v1/finance/cash-flows/filters`
 
 **상태**: ✅ 확정
@@ -465,6 +537,42 @@
   페이지)이라 `FINANCE_ACCESS_DENIED`를 그대로 재사용했다.
 - **`keyword` 검색** — `approvalNo` 또는 `buyerName`에 부분 일치(`LIKE %keyword%`)로 구현했다(입출금 내역의
   `bankMemo`/`depositorName` 검색과 같은 방식).
+
+---
+
+## 세금계산서 단건 조회 `GET /api/v1/finance/tax-invoices/{taxId}`
+
+**상태**: ✅ 확정 (2026-08-18 신설 — 프론트 요청)
+**인증 필요 여부**: Y
+
+왜 필요한지·응답 모양·구현 방식은 위 "입출금 내역 단건 조회"와 완전히 동일한 컨벤션이다 — 세금계산서
+버전.
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxId` | Long | Y | 조회할 세금계산서 ID |
+
+**Request Body**: 없음
+
+**Response Parameter** — 목록 조회의 `taxInvoices[]` 항목 하나와 완전히 같은 모양(`TaxInvoiceItem`).
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.*` | Object | 위 "세금계산서 조회"의 `data.taxInvoices[]` 항목 하나와 필드 전부 동일 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 단건 조회 성공" |
+| 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." (삭제된 건 포함) |
+
+> **구현 메모** — 목록 조회(`findTaxInvoices`)와 권한·조인·컬럼 전부 동일하고 `WHERE tax_id = ?`만 다르다.
 
 ---
 

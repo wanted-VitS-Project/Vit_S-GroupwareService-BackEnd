@@ -32,6 +32,12 @@ public interface CashFlowMapper {
             @Param("projectId") Long projectId,
             @Param("keyword") String keyword);
 
+    /**
+     * 단건 조회(2026-08-18 신설) — findCashFlows와 조인·컬럼이 완전히 동일하고 cash_flow_id로만 좁힌다.
+     * 존재하지 않거나(삭제 포함) 다른 회사 소속이면 null.
+     */
+    CashFlowRow findCashFlowById(@Param("cashFlowId") Long cashFlowId, @Param("companyId") Long companyId);
+
     /** 필터 옵션용 — cash_flow가 하나라도 연결된 정산 블록을 가진 프로젝트만. */
     List<CashFlowFilterProjectRow> findFilterProjects(@Param("companyId") Long companyId);
 
