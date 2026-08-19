@@ -4,6 +4,8 @@ import com.group3.vitamins.finance.application.port.PagePermissionPort;
 import com.group3.vitamins.finance.application.query.CashFlowFilterQuery;
 import com.group3.vitamins.finance.application.query.CashFlowListQuery;
 import com.group3.vitamins.finance.application.query.FinanceSummaryQuery;
+import com.group3.vitamins.finance.application.query.GetCashFlowDetailQuery;
+import com.group3.vitamins.finance.application.query.GetTaxInvoiceDetailQuery;
 import com.group3.vitamins.finance.application.query.MatchCandidatesQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceFilterQuery;
 import com.group3.vitamins.finance.application.query.TaxInvoiceListQuery;
@@ -85,9 +87,11 @@ public class FinanceQueryService implements FinanceQueryUseCase {
         Long companyId = currentCompanyIdProvider.currentCompanyId();
         List<CashFlowRow> rows = cashFlowMapper.findCashFlows(
                 companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword(),
+                query.type(), query.sourceType(),
                 query.sort(), query.size(), query.page() * query.size());
         long totalElements = cashFlowMapper.countCashFlows(
-                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword());
+                companyId, query.startDate(), query.endDate(), query.unlinked(), query.projectId(), query.keyword(),
+                query.type(), query.sourceType());
         int totalPages = (int) Math.ceil((double) totalElements / query.size());
 
         return new CashFlowListView(
@@ -107,11 +111,32 @@ public class FinanceQueryService implements FinanceQueryUseCase {
         }
     }
 
+    /**
+     * 단건 조회(2026-08-18 신설, 프론트 요청) — 목록 페이지네이션·필터와 무관하게 ID 하나로 바로
+     * 가져온다. 링크·새로고침으로 목록을 거치지 않고 상세에 바로 들어오는 경로, 건수가 많아 페이지를
+     * 여러 번 넘겨야 하는 경우 둘 다 이걸로 해결한다.
+     */
+    @Override
+    public CashFlowView getCashFlowDetail(GetCashFlowDetailQuery query) {
+        log.info("입출금 내역 단건 조회 요청 - cashFlowId={}, userId={}", query.cashFlowId(), query.userId());
+
+        assertFinanceAccess(query.userId(), query.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        CashFlowRow row = cashFlowMapper.findCashFlowById(query.cashFlowId(), companyId);
+        if (row == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_CASH_FLOW_NOT_FOUND);
+        }
+
+        return toCashFlowView(row);
+    }
+
     private CashFlowView toCashFlowView(CashFlowRow row) {
         return new CashFlowView(
                 row.cashFlowId(),
                 row.tradedAt(),
                 row.bankTxnId(),
+                row.bankName(),
                 row.type(),
                 row.amount(),
                 row.depositorName(),
@@ -204,6 +229,22 @@ public class FinanceQueryService implements FinanceQueryUseCase {
                 rows.stream().map(this::toTaxInvoiceView).toList(),
                 query.page(), query.size(), totalElements, totalPages
         );
+    }
+
+    /** 단건 조회(2026-08-18 신설) — 세금계산서 버전, getCashFlowDetail과 동일한 이유·구조. */
+    @Override
+    public TaxInvoiceView getTaxInvoiceDetail(GetTaxInvoiceDetailQuery query) {
+        log.info("세금계산서 단건 조회 요청 - taxId={}, userId={}", query.taxId(), query.userId());
+
+        assertFinanceAccess(query.userId(), query.role());
+
+        Long companyId = currentCompanyIdProvider.currentCompanyId();
+        TaxInvoiceRow row = taxInvoiceMapper.findTaxInvoiceById(query.taxId(), companyId);
+        if (row == null) {
+            throw new NotFoundException(FinanceErrorCode.FINANCE_TAX_INVOICE_NOT_FOUND);
+        }
+
+        return toTaxInvoiceView(row);
     }
 
     private TaxInvoiceView toTaxInvoiceView(TaxInvoiceRow row) {

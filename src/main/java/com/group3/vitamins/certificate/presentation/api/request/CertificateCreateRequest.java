@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "자격증 생성 요청")
 public record CertificateCreateRequest(
-        @Schema(description = "자격증명(최대 100자)", example = "정보처리기사")
+        @Schema(description = "자격증명(최대 100자 · `,` `;` `:` 줄바꿈 금지 — 엑셀 구분자와 충돌)", example = "정보처리기사")
         String name
 ) {
 

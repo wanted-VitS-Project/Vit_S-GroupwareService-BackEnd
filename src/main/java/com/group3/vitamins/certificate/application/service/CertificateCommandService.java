@@ -14,6 +14,7 @@ import com.group3.vitamins.certificate.domain.exception.CertificateErrorCode;
 import com.group3.vitamins.certificate.domain.model.Certificate;
 import com.group3.vitamins.certificate.domain.repository.CertificateRepository;
 import com.group3.vitamins.qualification.application.policy.QualificationAdminPolicy;
+import com.group3.vitamins.qualification.domain.model.QualificationNameRule;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -30,8 +31,6 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 @Transactional
 public class CertificateCommandService implements CertificateCommandUseCase {
-
-    private static final int MAX_NAME_LENGTH = 100;
 
     private final QualificationAdminPolicy adminPolicy;
     private final CurrentCompanyIdProvider currentCompanyIdProvider;
@@ -96,10 +95,11 @@ public class CertificateCommandService implements CertificateCommandUseCase {
         }
     }
 
+    /** 이름 규칙은 {@link QualificationNameRule} 공용 — 비어있음·100자 초과·금지 문자(`,` `;` `:` 줄바꿈)는 400. */
     private String validateName(String name) {
-        if (name == null || name.isBlank() || name.strip().length() > MAX_NAME_LENGTH) {
+        if (!QualificationNameRule.isValid(name)) {
             throw new ValidationException(CertificateErrorCode.CERT_INVALID_REQUEST);
         }
-        return name.strip();
+        return QualificationNameRule.normalize(name);
     }
 }

@@ -9,10 +9,12 @@ import com.group3.vitamins.employee.application.port.EmployeeBulkReferenceQueryP
 import com.group3.vitamins.employee.application.port.EmployeeExcelParserPort;
 import com.group3.vitamins.employee.application.port.EmployeeExcelTemplatePort;
 import com.group3.vitamins.employee.application.port.InitialPasswordMailPort;
+import com.group3.vitamins.employee.application.port.QualificationMasterCreatePort;
 import com.group3.vitamins.employee.application.result.BulkRegisterResult;
 import com.group3.vitamins.employee.application.result.BulkValidateResult;
 import com.group3.vitamins.employee.application.result.BulkValidation;
 import com.group3.vitamins.employee.application.result.ParsedEmployeeRow;
+import com.group3.vitamins.employee.application.result.PendingMaster;
 import com.group3.vitamins.employee.application.service.EmployeeBulkService;
 import com.group3.vitamins.employee.application.service.EmployeeRegistrationWriter;
 import com.group3.vitamins.employee.domain.exception.EmployeeErrorCode;
@@ -39,6 +41,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -62,6 +65,7 @@ class EmployeeBulkServiceTest {
     private InitialPasswordMailPort mailPort;
     private CompanyCodeQueryPort companyCodeQueryPort;
     private CurrentCompanyIdProvider currentCompanyIdProvider;
+    private QualificationMasterCreatePort masterCreatePort;
     private EmployeeBulkService service;
 
     @BeforeEach
@@ -75,10 +79,11 @@ class EmployeeBulkServiceTest {
         mailPort = Mockito.mock(InitialPasswordMailPort.class);
         companyCodeQueryPort = Mockito.mock(CompanyCodeQueryPort.class);
         currentCompanyIdProvider = Mockito.mock(CurrentCompanyIdProvider.class);
+        masterCreatePort = Mockito.mock(QualificationMasterCreatePort.class);
         service = new EmployeeBulkService(
                 new EmployeeAdminPolicy(), templatePort, parserPort, referencePort,
                 registrationWriter, tempPasswordGenerator, passwordEncoder, mailPort,
-                companyCodeQueryPort, currentCompanyIdProvider);
+                companyCodeQueryPort, currentCompanyIdProvider, masterCreatePort);
 
         // 기본 스텁 — 개발팀/대리는 존재, 기존 사번 없음(빈 Set), 회사코드 vitas, 회사ID 1, 해싱·비번은 고정
         when(referencePort.resolveDepartmentIdsByName(any(), eq(1L))).thenReturn(Map.of("개발팀", 10L));
@@ -104,13 +109,21 @@ class EmployeeBulkServiceTest {
     }
 
     private ValidateBulkCommand validateCmd(List<ParsedEmployeeRow> rows) {
+        return validateCmd(rows, false);
+    }
+
+    private ValidateBulkCommand validateCmd(List<ParsedEmployeeRow> rows, boolean autoCreateMasters) {
         when(parserPort.parse(any())).thenReturn(rows);
-        return new ValidateBulkCommand(ADMIN, new byte[]{1}, "emp.xlsx", 100L);
+        return new ValidateBulkCommand(ADMIN, new byte[]{1}, "emp.xlsx", 100L, autoCreateMasters);
     }
 
     private RegisterBulkCommand registerCmd(List<ParsedEmployeeRow> rows, boolean skipErrors) {
+        return registerCmd(rows, skipErrors, false);
+    }
+
+    private RegisterBulkCommand registerCmd(List<ParsedEmployeeRow> rows, boolean skipErrors, boolean autoCreateMasters) {
         when(parserPort.parse(any())).thenReturn(rows);
-        return new RegisterBulkCommand(ADMIN, new byte[]{1}, "emp.xlsx", 100L, skipErrors);
+        return new RegisterBulkCommand(ADMIN, new byte[]{1}, "emp.xlsx", 100L, skipErrors, autoCreateMasters);
     }
 
     private Consumer<Throwable> hasCode(Object expected) {
@@ -125,9 +138,9 @@ class EmployeeBulkServiceTest {
     void nonAdminRejected() {
         assertThatThrownBy(() -> service.getTemplate("MASTER"))
                 .isInstanceOf(DomainException.class);
-        assertThatThrownBy(() -> service.validate(new ValidateBulkCommand("MASTER", new byte[]{1}, "a.xlsx", 1)))
+        assertThatThrownBy(() -> service.validate(new ValidateBulkCommand("MASTER", new byte[]{1}, "a.xlsx", 1, false)))
                 .isInstanceOf(DomainException.class);
-        assertThatThrownBy(() -> service.register(new RegisterBulkCommand("MASTER", new byte[]{1}, "a.xlsx", 1, true)))
+        assertThatThrownBy(() -> service.register(new RegisterBulkCommand("MASTER", new byte[]{1}, "a.xlsx", 1, true, false)))
                 .isInstanceOf(DomainException.class);
         verify(parserPort, never()).parse(any());  // 권한에서 막혀 파싱까지 가지 않는다
     }
@@ -148,14 +161,14 @@ class EmployeeBulkServiceTest {
         @Test
         @DisplayName("파일이 없으면 EMP_FILE_REQUIRED")
         void required() {
-            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[0], "a.xlsx", 0)))
+            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[0], "a.xlsx", 0, false)))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_REQUIRED));
         }
 
         @Test
         @DisplayName("엑셀 확장자가 아니면 EMP_FILE_TYPE_INVALID")
         void type() {
-            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[]{1}, "a.csv", 10)))
+            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[]{1}, "a.csv", 10, false)))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_TYPE_INVALID));
         }
 
@@ -163,7 +176,7 @@ class EmployeeBulkServiceTest {
         @DisplayName("신고 size 가 5MB 를 초과하면 EMP_FILE_SIZE_EXCEEDED")
         void size() {
             long over = 5L * 1024 * 1024 + 1;
-            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[]{1}, "a.xlsx", over)))
+            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, new byte[]{1}, "a.xlsx", over, false)))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED));
         }
 
@@ -171,7 +184,7 @@ class EmployeeBulkServiceTest {
         @DisplayName("실제 content 길이가 5MB 를 초과하면 size 가 작아도 EMP_FILE_SIZE_EXCEEDED")
         void contentLengthExceeds() {
             byte[] big = new byte[5 * 1024 * 1024 + 1];
-            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, big, "a.xlsx", 100L)))
+            assertThatThrownBy(() -> service.validate(new ValidateBulkCommand(ADMIN, big, "a.xlsx", 100L, false)))
                     .satisfies(hasCode(EmployeeErrorCode.EMP_FILE_SIZE_EXCEEDED));
         }
 
@@ -468,6 +481,149 @@ class EmployeeBulkServiceTest {
             assertThat(eduCap.getValue().get(0).majorId()).isEqualTo(3L);
             assertThat(certCap.getValue()).extracting(EmployeeCertificate::certificateId)
                     .containsExactly(7L, 8L);                            // 줄바꿈 구분
+        }
+    }
+
+    // ---- 학력/자격증 자동 생성 (autoCreateMasters, employee.md §7·§8 2026-08-18) ----------
+
+    @Nested
+    @DisplayName("autoCreateMasters — 목록에 없는 전공/자격증 자동 생성")
+    class AutoCreateMasters {
+
+        private ParsedEmployeeRow rowQ(int n, String userId, String education, String certificate) {
+            return new ParsedEmployeeRow(n, userId, "홍길동", "개발팀", "대리",
+                    "2026-01-01", "a@b.com", null, "MEMBER", education, certificate);
+        }
+
+        @Test
+        @DisplayName("옵션이 꺼져 있으면(기본) 기존과 동일 — NOT_FOUND 오류이고 newMasters 는 빈 값")
+        void offKeepsNotFound() {
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "없는전공:학사", "없는자격증"));
+
+            BulkValidateResult r = service.validate(validateCmd(rows, false));
+
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors().get(0).validation()).isEqualTo(BulkValidation.EDU_NOT_FOUND);
+            assertThat(r.newMasters().isEmpty()).isTrue();
+        }
+
+        @Test
+        @DisplayName("켜면 없는 전공/자격증은 오류가 아니라 newMasters 로 간다 — 첫 등장 순·이름별 유효 행 수")
+        void onCollectsNewMasters() {
+            when(referencePort.resolveMajorIdsByName(any(), any())).thenReturn(Map.of("컴퓨터공학", 3L));
+            List<ParsedEmployeeRow> rows = List.of(
+                    rowQ(2, "EMP100", "컴퓨터공학:학사; 산업공학:석사", "정보처리기사; SQLD"),
+                    rowQ(3, "EMP101", "산업공학:학사", "정보처리기사; 정보처리기사"), // 같은 행 중복은 1로 센다
+                    rowQ(4, "EMP102", "데이터과학:박사", null));
+
+            BulkValidateResult r = service.validate(validateCmd(rows, true));
+
+            assertThat(r.errorCount()).isZero();
+            assertThat(r.validCount()).isEqualTo(3);
+            assertThat(r.newMasters().majors()).extracting(PendingMaster::name, PendingMaster::rowCount)
+                    .containsExactly(tuple("산업공학", 2), tuple("데이터과학", 1));   // 컴퓨터공학은 기존 마스터라 제외
+            assertThat(r.newMasters().certificates()).extracting(PendingMaster::name, PendingMaster::rowCount)
+                    .containsExactly(tuple("정보처리기사", 2), tuple("SQLD", 1));
+        }
+
+        @Test
+        @DisplayName("다른 오류로 빠지는 행만 참조하는 이름은 newMasters 에 안 나온다(유효 행 기준)")
+        void onlyValidRowsContribute() {
+            List<ParsedEmployeeRow> rows = List.of(
+                    new ParsedEmployeeRow(2, "EMP100", "홍길동", "없는부서", "대리", "2026-01-01", null, null, "MEMBER",
+                            "산업공학:학사", null),                       // 부서 없음 → 오류 행
+                    rowQ(3, "EMP101", "데이터과학:학사", null));
+
+            BulkValidateResult r = service.validate(validateCmd(rows, true));
+
+            assertThat(r.errorCount()).isEqualTo(1);
+            assertThat(r.errors().get(0).validation()).isEqualTo(BulkValidation.DEPARTMENT_NOT_FOUND);
+            assertThat(r.newMasters().majors()).extracting(PendingMaster::name).containsExactly("데이터과학");
+        }
+
+        @Test
+        @DisplayName("켜도 만들 수 없는 이름은 REQUIRED_COLUMN — 자격증명의 ':' · 101자 전공명")
+        void invalidMasterNameIsRowError() {
+            List<ParsedEmployeeRow> rows = List.of(
+                    rowQ(2, "EMP100", null, "TOEIC:900"),
+                    rowQ(3, "EMP101", "a".repeat(101) + ":학사", null));
+
+            BulkValidateResult r = service.validate(validateCmd(rows, true));
+
+            assertThat(r.errorCount()).isEqualTo(2);
+            assertThat(r.errors()).extracting(e -> e.validation())
+                    .containsOnly(BulkValidation.REQUIRED_COLUMN);
+            assertThat(r.errors().get(0).message()).contains("자격증명");
+            assertThat(r.errors().get(1).message()).contains("전공명");
+        }
+
+        @Test
+        @DisplayName("등록 — 사원 쓰기 전에 마스터를 만들고, 그 id 로 학력/자격증을 채워 저장한다 · createdMasters 반환")
+        void registerCreatesMastersFirst() {
+            when(referencePort.resolveMajorIdsByName(any(), any())).thenReturn(Map.of("컴퓨터공학", 3L));
+            when(masterCreatePort.createMajors(eq(List.of("산업공학")), eq(1L), eq(ADMIN)))
+                    .thenReturn(Map.of("산업공학", 40L));
+            when(masterCreatePort.createCertificates(eq(List.of("정보처리기사")), eq(1L), eq(ADMIN)))
+                    .thenReturn(Map.of("정보처리기사", 70L));
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "컴퓨터공학:학사; 산업공학:석사", "정보처리기사"));
+
+            BulkRegisterResult r = service.register(registerCmd(rows, false, true));
+
+            assertThat(r.registeredCount()).isEqualTo(1);
+            assertThat(r.createdMasters().majors()).extracting(PendingMaster::name).containsExactly("산업공학");
+            assertThat(r.createdMasters().certificates()).extracting(PendingMaster::name).containsExactly("정보처리기사");
+
+            // 마스터 생성 → 사원 쓰기 순서
+            var order = Mockito.inOrder(masterCreatePort, registrationWriter);
+            order.verify(masterCreatePort).createMajors(any(), any(), any());
+            order.verify(masterCreatePort).createCertificates(any(), any(), any());
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeEducation>> eduCap = ArgumentCaptor.forClass(List.class);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmployeeCertificate>> certCap = ArgumentCaptor.forClass(List.class);
+            order.verify(registrationWriter).register(any(), anyString(), anyString(), eduCap.capture(), certCap.capture());
+            assertThat(eduCap.getValue()).extracting(EmployeeEducation::majorId).containsExactly(3L, 40L); // 기존 id + 새 id
+            assertThat(certCap.getValue()).extracting(EmployeeCertificate::certificateId).containsExactly(70L);
+        }
+
+        @Test
+        @DisplayName("등록 — 자동 생성 대상이 없으면 포트를 부르지 않는다(옵션 꺼짐 포함)")
+        void noPendingNoPortCall() {
+            when(referencePort.resolveMajorIdsByName(any(), any())).thenReturn(Map.of("컴퓨터공학", 3L));
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "컴퓨터공학:학사", null));
+
+            service.register(registerCmd(rows, false, true));
+            service.register(registerCmd(rows, false, false));
+
+            verify(masterCreatePort, never()).createMajors(any(), any(), any());
+            verify(masterCreatePort, never()).createCertificates(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("등록 — skipErrors=false 인데 오류 행이 있으면 EMP_HAS_ERRORS 로 끝나며 마스터도 만들지 않는다")
+        void hasErrorsBlocksMasterCreation() {
+            List<ParsedEmployeeRow> rows = List.of(
+                    rowQ(2, "EMP100", "산업공학:학사", null),
+                    row(3, null, "이름", "개발팀", null, "2026-01-01", null, "MEMBER")); // 사번 누락 → 오류
+
+            assertThatThrownBy(() -> service.register(registerCmd(rows, false, true)))
+                    .satisfies(hasCode(EmployeeErrorCode.EMP_HAS_ERRORS));
+            verify(masterCreatePort, never()).createMajors(any(), any(), any());
+            verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
+        }
+
+        @Test
+        @DisplayName("등록 — 포트 반환 맵에 이름이 없으면 즉시 IllegalStateException (null FK·사번중복 오분류 방지)")
+        void missingMasterIdMappingFailsFast() {
+            // 포트 계약 위반 재현 — 산업공학을 요청했는데 빈 맵을 돌려준다.
+            when(masterCreatePort.createMajors(any(), any(), any())).thenReturn(Map.of());
+            List<ParsedEmployeeRow> rows = List.of(rowQ(2, "EMP100", "산업공학:학사", null));
+
+            assertThatThrownBy(() -> service.register(registerCmd(rows, false, true)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("산업공학");
+            // null FK 로 저장을 시도하지 않는다 — 사번 중복으로 오분류될 여지 자체를 없앤다.
+            verify(registrationWriter, never()).register(any(), anyString(), anyString(), any(), any());
         }
     }
 }

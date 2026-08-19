@@ -124,6 +124,22 @@ class EmployeeAdminQueryServiceTest {
         }
 
         @Test
+        @DisplayName("includeSubDepartments=true 는 criteria 로 그대로 전달된다 (기본은 false)")
+        void includeSubDepartmentsFlows() {
+            when(port.count(any())).thenReturn(1L);
+            when(port.findPage(any())).thenReturn(List.of(listRow("EMP001")));
+
+            service.listEmployees(new EmployeeListQuery("ADMIN", null, 10L, true, null, null, null, 0, 20));
+
+            ArgumentCaptor<EmployeeListCriteria> captor = ArgumentCaptor.forClass(EmployeeListCriteria.class);
+            verify(port).findPage(captor.capture());
+            assertThat(captor.getValue().includeSubDepartments()).isTrue();
+            assertThat(captor.getValue().departmentId()).isEqualTo(10L);
+            // 기본값은 false
+            assertThat(query("ADMIN", null, null, null, 0, 20).includeSubDepartments()).isFalse();
+        }
+
+        @Test
         @DisplayName("허용되지 않는 role 필터는 EMP_INVALID_PARAMETER")
         void rejectsInvalidRole() {
             assertThatThrownBy(() -> service.listEmployees(query("ADMIN", "SUPERUSER", null, null, 0, 20)))
@@ -215,7 +231,7 @@ class EmployeeAdminQueryServiceTest {
 
     private EmployeeListQuery query(String requesterRole, String role, String status,
                                     Boolean resigned, int page, int size) {
-        return new EmployeeListQuery(requesterRole, null, null, role, status, resigned, page, size);
+        return new EmployeeListQuery(requesterRole, null, null, false, role, status, resigned, page, size);
     }
 
     private EmployeeListRow listRow(String userId) {

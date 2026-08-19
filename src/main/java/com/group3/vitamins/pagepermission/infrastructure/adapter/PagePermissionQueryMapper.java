@@ -2,10 +2,11 @@ package com.group3.vitamins.pagepermission.infrastructure.adapter;
 
 import com.group3.vitamins.pagepermission.application.result.EmployeeRoleRow;
 import com.group3.vitamins.pagepermission.application.result.PageAccessMemberRow;
+import com.group3.vitamins.pagepermission.application.result.PageGrantCountRow;
+import com.group3.vitamins.pagepermission.application.result.PageLastGrantedDateRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
@@ -20,11 +21,13 @@ public interface PagePermissionQueryMapper {
 
     List<PageAccessMemberRow> findMasterMembers(@Param("companyId") Long companyId);
 
-    long countGrants(@Param("pageCode") String pageCode, @Param("companyId") Long companyId);
+    List<PageGrantCountRow> countGrantsByPageCodes(
+            @Param("pageCodes") Collection<String> pageCodes, @Param("companyId") Long companyId);
 
     long countMasters(@Param("companyId") Long companyId);
 
-    LocalDate findLastGrantedDate(@Param("pageCode") String pageCode, @Param("companyId") Long companyId);
+    List<PageLastGrantedDateRow> findLastGrantedDatesByPageCodes(
+            @Param("pageCodes") Collection<String> pageCodes, @Param("companyId") Long companyId);
 
     List<EmployeeRoleRow> findEmployeeRoles(@Param("userIds") Collection<String> userIds, @Param("companyId") Long companyId);
 }

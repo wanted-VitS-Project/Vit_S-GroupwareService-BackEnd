@@ -72,6 +72,8 @@ public class EmployeeController {
             @RequestParam(required = false) String keyword,
             @Parameter(description = "부서 필터")
             @RequestParam(required = false) Long departmentId,
+            @Parameter(description = "하위 부서 포함 여부 (기본 false). departmentId 와 함께 쓸 때만 의미 있음")
+            @RequestParam(defaultValue = "false") boolean includeSubDepartments,
             @Parameter(description = "권한 필터 (MASTER · MEMBER)")
             @RequestParam(required = false) String role,
             @Parameter(description = "상태 필터 (ACTIVE · RESET_REQUIRED · INACTIVE)")
@@ -87,7 +89,7 @@ public class EmployeeController {
         EmployeePageResponse data = EmployeePageResponse.from(
                 employeeAdminQueryUseCase.listEmployees(new EmployeeListQuery(
                         currentRole(authentication),
-                        keyword, departmentId, role, status, resigned, page, size)));
+                        keyword, departmentId, includeSubDepartments, role, status, resigned, page, size)));
 
         return ApiResponse.success(EmployeeResponseMessage.LIST_SUCCESS, data);
     }

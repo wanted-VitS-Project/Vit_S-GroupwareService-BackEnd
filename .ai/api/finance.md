@@ -14,8 +14,10 @@
 |---|---|---|---|---|
 | GET | `/api/v1/finance/summary` | [재무 관리 요약 조회](#재무-관리-요약-조회-get-apiv1financesummary) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/cash-flows` | [입출금 내역 조회](#입출금-내역-조회-get-apiv1financecash-flows) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/cash-flows/{cashFlowId}` | [입출금 내역 단건 조회](#입출금-내역-단건-조회-get-apiv1financecash-flowscashflowid) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/cash-flows/filters` | [입출금 내역 필터 옵션 조회](#입출금-내역-필터-옵션-조회-get-apiv1financecash-flowsfilters) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/tax-invoices` | [세금계산서 조회](#세금계산서-조회-get-apiv1financetax-invoices) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
+| GET | `/api/v1/finance/tax-invoices/{taxId}` | [세금계산서 단건 조회](#세금계산서-단건-조회-get-apiv1financetax-invoicestaxid) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | GET | `/api/v1/finance/tax-invoices/filters` | [세금계산서 필터 옵션 조회](#세금계산서-필터-옵션-조회-get-apiv1financetax-invoicesfilters) | ✅ 확정 | 접근 권한 보유자(재무 관리 페이지) |
 | POST | `/api/v1/finance/tax-invoices/csv/preview` | [세금계산서 CSV 컬럼 추천 조회](#세금계산서-csv-컬럼-추천-조회-post-apiv1financetax-invoicescsvpreview) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
 | POST | `/api/v1/finance/tax-invoices/csv` | [세금계산서(CSV 기반) 업로드](#세금계산서csv-기반-업로드-post-apiv1financetax-invoicescsv) | ✅ 확정 | 편집 권한 보유자(재무 관리 페이지) |
@@ -147,6 +149,8 @@
 | `unlinked` | Boolean | N | 미연결 항목만 조회 (true: 미매칭, 없으면 전체) |
 | `projectId` | Long | N | 매칭 프로젝트 필터 |
 | `keyword` | String | N | 적요(`bankMemo`) 또는 입금자명(`depositorName`) 검색 키워드 |
+| `type` | String | N | 구분 필터. `INCOME`(입금) \| `OUTCOME`(출금). 생략하면 전체 (2026-08-18 추가) |
+| `sourceType` | String | N | 출처 필터. `MANUAL`(직접 등록) \| `CSV`(CSV 업로드) \| `API`. 생략하면 전체 (2026-08-18 추가) |
 | `page` | Int | N | 0-base 페이지 번호. 생략하면 0 (2026-08-12 페이징 추가) |
 | `size` | Int | N | 페이지당 개수. 생략하면 20, 최대 100 |
 | `sort` | String | N | 정렬 기준. `TRADED_AT_DESC`(거래일시 최신순, 기본값) \| `TRADED_AT_ASC`(거래일시 오래된순) \| `AMOUNT_DESC`(거래금액 큰순) |
@@ -164,6 +168,7 @@
 | `data.cashFlows[].cashFlowId` | Long | 입출금 내역 ID |
 | `data.cashFlows[].tradedAt` | LocalDateTime | 거래 일시 |
 | `data.cashFlows[].bankTxnId` | String | 거래고유번호 |
+| `data.cashFlows[].bankName` | String | 은행명 (2026-08-19 추가) |
 | `data.cashFlows[].type` | String | 구분 (INCOME/OUTCOME) |
 | `data.cashFlows[].amount` | BigDecimal | 거래 금액 |
 | `data.cashFlows[].depositorName` | String | 입금자명/수취인명 |
@@ -195,6 +200,7 @@
         "cashFlowId": 1,
         "tradedAt": "2026-07-15T10:30:00",
         "bankTxnId": "신한-20260715103000",
+        "bankName": "신한은행",
         "type": "INCOME",
         "amount": 30000000,
         "depositorName": "(주)한국기술공사",
@@ -214,6 +220,7 @@
         "cashFlowId": 5,
         "tradedAt": "2026-06-30T09:00:00",
         "bankTxnId": "신한-20260630090000",
+        "bankName": "신한은행",
         "type": "INCOME",
         "amount": 270000000,
         "depositorName": "환경부",
@@ -233,6 +240,7 @@
         "cashFlowId": 8,
         "tradedAt": "2026-05-10T11:00:00",
         "bankTxnId": "신한-20260510110000",
+        "bankName": "신한은행",
         "type": "INCOME",
         "amount": 90000000,
         "depositorName": "환경부",
@@ -283,11 +291,98 @@
 - **`unlinked=false`를 명시적으로 보내면 생략과 동일하게 전체 조회** — 명세가 `true`(미매칭만)와 생략
   (전체) 두 경우만 정의해서, `false`는 정의되지 않은 입력이다. 생략과 같은 동작(필터 없음)으로 처리했다.
 - **`keyword` 검색** — `bankMemo` 또는 `depositorName`에 부분 일치(`LIKE %keyword%`)로 구현했다.
+- **✅ `type`/`sourceType` 필터 추가 (2026-08-18, 프론트 요청)** — 값은 목록 응답의 `type`/`sourceType`을
+  그대로 쓴다(새 필드 없음). 기존 `startDate`/`endDate`/`unlinked`/`projectId`/`keyword`와 AND로 묶인다.
+  빈 문자열(`?type=`)은 "필터 없음"으로 처리(생략과 동일). 목록·카운트가 같은 필터 블록
+  (`cashFlowJoinsAndFilters`)을 공유해 `totalElements`가 필터 결과와 정확히 일치한다.
+- **허용값 검증은 하지 않는다** (요청사항 — "프론트가 허용값만 보냄, 없는 값은 무시/400 무관"). 두 컬럼은
+  **ENUM**(`type`=INCOME/OUTCOME, `source_type`=MANUAL/CSV/API)이라 `WHERE cf.type = #{type}`로 비교한다:
+  - **비멤버 값**(`FOO` 등) → 매칭 0건 (400 아님).
+  - **대소문자 변형**(`income` 등) → MySQL ENUM 비교가 대소문자 무시라 **해당 ENUM 값에 매칭됨**
+    (`income`이면 INCOME 행). 반환 결과가 의미상 정확하고(사용자가 원한 그 타입) 프론트가 대문자만
+    보내는 계약이라, `BINARY`/명시적 대소문자 구분은 적용하지 않고 유지하기로 결정(2026-08-18, CodeRabbit
+    리뷰 검토 후). 엄격히 "미정의=0건"이 필요해지면 그때 `= BINARY #{type}`로 좁힌다.
 - **✅ 페이징 추가 (2026-08-12)** — 프론트 요청으로 `page`/`size`/`sort` + `{page,size,totalElements,totalPages}`
   추가(공고·프로젝트 목록과 같은 컨벤션 — `page`≥0·`size`(1~100)·`sort` 허용값 검증, 위반 시
   `FINANCE_PAGE_QUERY_INVALID` 400, silent clamp 아님). **`cashFlows` 키 이름은 유지**(아직 프론트 연동 전이라
   `content`로 바꿀 필요 없다고 확인). `sort` 기본값 `TRADED_AT_DESC` — 이전 고정 정렬(`tradedAt` 내림차순)과
   동작이 같다(생략 시 회귀 없음).
+- **✅ `bankName` 추가 (2026-08-19, 프론트 요청)** — 프론트가 은행명을 얻으려고 `bankTxnId`를 `-`로 잘라
+  앞부분을 은행명으로 되읽고 있었는데, `bankTxnId` 접두어가 은행명 앞 4자만 쓰다 보니(`generateBankTxnId`)
+  "카카오뱅크"→"카카오뱅", "새마을금고"→"새마을금"처럼 8개 은행 옵션 중 3개가 깨져서 나갔다. `bankTxnId`는
+  중복 판정용 식별자로 그대로 두고, 은행명은 이미 있는 `cash_flow.bank_name` 컬럼을 그대로 노출해 프론트의
+  문자열 파싱 우회를 없앴다.
+
+---
+
+## 입출금 내역 단건 조회 `GET /api/v1/finance/cash-flows/{cashFlowId}`
+
+**상태**: ✅ 확정 (2026-08-18 신설 — 프론트 요청)
+**인증 필요 여부**: Y
+
+**왜 필요한가** — 상세 화면(`/finance/cash-flows/{id}`)이 목록 페이지네이션과 무관하게 특정 건 하나를
+바로 가져와야 하는데, 그 경로가 없어서 프론트가 "목록을 페이지 단위로 넘기며 그 안에서 찾는" 방식으로
+우회하고 있었다. 건수가 많아지면 상세 하나 여는 데 요청이 여러 번 나가고, 링크·새로고침으로 목록을
+거치지 않고 상세에 바로 들어오는 경로에서는 그 방식 자체가 불가능하다(2026-08-18, 실제 배포 환경에서
+페이지네이션 때문에 상세 진입이 실패하는 사례로 확인).
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `cashFlowId` | Long | Y | 조회할 입출금 내역 ID |
+
+**Request Body**: 없음
+
+**Response Parameter** — 목록 조회의 `cashFlows[]` 항목 하나와 완전히 같은 모양(`CashFlowItem`). 새 응답
+모양을 만들지 않았다(프론트 요청 그대로 — 목록에서 쓰던 매핑 함수를 그대로 재사용할 수 있게).
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.*` | Object | 위 "입출금 내역 조회"의 `data.cashFlows[]` 항목 하나와 필드 전부 동일 |
+
+**Success Example**
+
+```json
+{
+  "httpStatus": 200,
+  "message": "입출금 내역 단건 조회 성공",
+  "data": {
+    "cashFlowId": 224,
+    "tradedAt": "2026-08-13T14:30:00",
+    "bankTxnId": "신한은행-20260813143000-D1B6E7",
+    "bankName": "신한은행",
+    "type": "INCOME",
+    "amount": 50000000,
+    "depositorName": "(주)테스트클라이언트",
+    "bankMemo": "계약금 입금",
+    "sourceType": "MANUAL",
+    "projectId": 1,
+    "projectName": "재무 요약 테스트용 프로젝트",
+    "settleId": 8,
+    "roundName": "정산 블록 매칭 테스트",
+    "linkedBy": "vitas-ADMIN001",
+    "linkedByName": "시스템 관리자1",
+    "linkedAt": "2026-08-13T23:28:18",
+    "isExcluded": false,
+    "linkStatus": "LINKED"
+  }
+}
+```
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "입출금 내역 단건 조회 성공" |
+| 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_CASH_FLOW_NOT_FOUND` | "존재하지 않는 입출금 내역입니다." (삭제된 건 포함) |
+
+> **구현 메모** — 권한·조인·컬럼 전부 목록 조회(`findCashFlows`)와 동일하고, `WHERE cash_flow_id = ?`
+> 하나만 다르다(페이지네이션·정렬·필터 없음). 다른 회사 소유 건을 조회하면 `company_id` 불일치로
+> `FINANCE_CASH_FLOW_NOT_FOUND`(크로스테넌트 차단, 목록 조회와 동일 원칙).
 
 ---
 
@@ -465,6 +560,42 @@
   페이지)이라 `FINANCE_ACCESS_DENIED`를 그대로 재사용했다.
 - **`keyword` 검색** — `approvalNo` 또는 `buyerName`에 부분 일치(`LIKE %keyword%`)로 구현했다(입출금 내역의
   `bankMemo`/`depositorName` 검색과 같은 방식).
+
+---
+
+## 세금계산서 단건 조회 `GET /api/v1/finance/tax-invoices/{taxId}`
+
+**상태**: ✅ 확정 (2026-08-18 신설 — 프론트 요청)
+**인증 필요 여부**: Y
+
+왜 필요한지·응답 모양·구현 방식은 위 "입출금 내역 단건 조회"와 완전히 동일한 컨벤션이다 — 세금계산서
+버전.
+
+**Path Parameter**
+
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+| --- | --- | --- | --- |
+| `taxId` | Long | Y | 조회할 세금계산서 ID |
+
+**Request Body**: 없음
+
+**Response Parameter** — 목록 조회의 `taxInvoices[]` 항목 하나와 완전히 같은 모양(`TaxInvoiceItem`).
+
+| 파라미터명 | 타입 | 설명 |
+| --- | --- | --- |
+| `httpStatus` | int | HTTP 상태 코드 |
+| `message` | String | 응답 메시지 |
+| `data.*` | Object | 위 "세금계산서 조회"의 `data.taxInvoices[]` 항목 하나와 필드 전부 동일 |
+
+**Status Code**
+
+| 코드 | 상태 | code | 설명 |
+| --- | --- | --- | --- |
+| 200 | OK | — | "세금계산서 단건 조회 성공" |
+| 403 | Forbidden | `FINANCE_ACCESS_DENIED` | "접근 권한이 없습니다." |
+| 404 | Not Found | `FINANCE_TAX_INVOICE_NOT_FOUND` | "존재하지 않는 세금계산서입니다." (삭제된 건 포함) |
+
+> **구현 메모** — 목록 조회(`findTaxInvoices`)와 권한·조인·컬럼 전부 동일하고 `WHERE tax_id = ?`만 다르다.
 
 ---
 

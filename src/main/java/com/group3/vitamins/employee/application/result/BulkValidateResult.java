@@ -8,12 +8,13 @@ public record BulkValidateResult(
         int validCount,
         int errorCount,
         List<BulkRowError> errors,
-        int emailNotRegisteredCount
+        int emailNotRegisteredCount,
+        PendingMasters newMasters
 ) {
 
     public static BulkValidateResult from(BulkAnalysis analysis) {
         return new BulkValidateResult(
                 analysis.totalRows(), analysis.validCount(), analysis.errorCount(),
-                analysis.errors(), analysis.emailNotRegisteredCount());
+                analysis.errors(), analysis.emailNotRegisteredCount(), analysis.newMasters());
     }
 }
