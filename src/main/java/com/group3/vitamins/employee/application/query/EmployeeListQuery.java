@@ -9,6 +9,7 @@ package com.group3.vitamins.employee.application.query;
  * @param requesterRole 요청자 전역 권한 (ADMIN 판정용)
  * @param keyword       이름 또는 사번 부분 검색 (null 허용)
  * @param departmentId  부서 필터 (null 허용)
+ * @param includeSubDepartments true 면 departmentId 의 하위 부서 사원까지 포함 (departmentId 없으면 무시)
  * @param role          {@code MASTER} · {@code MEMBER} 필터 (null 허용)
  * @param status        {@code ACTIVE} · {@code RESET_REQUIRED} · {@code INACTIVE} 필터 (null 허용)
  * @param resigned      퇴사 여부. null 이면 재직자만
@@ -19,6 +20,7 @@ public record EmployeeListQuery(
         String requesterRole,
         String keyword,
         Long departmentId,
+        boolean includeSubDepartments,
         String role,
         String status,
         Boolean resigned,

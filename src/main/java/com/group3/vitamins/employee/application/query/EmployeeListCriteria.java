@@ -9,6 +9,7 @@ package com.group3.vitamins.employee.application.query;
  *
  * @param keyword            이름·사번 부분 검색 (null 이면 미적용)
  * @param departmentId       부서 필터 (null 이면 미적용)
+ * @param includeSubDepartments true 면 departmentId + 직속 하위 부서까지(트리 2단) 조회. departmentId 가 null 이면 무의미
  * @param role               MASTER·MEMBER 필터 (null 이면 미적용)
  * @param accountStatus      계정 상태 필터 ACTIVE·INACTIVE (null 이면 미적용)
  * @param mustChangePassword 비밀번호 변경 필요 여부 필터 (null 이면 미적용)
@@ -20,6 +21,7 @@ package com.group3.vitamins.employee.application.query;
 public record EmployeeListCriteria(
         String keyword,
         Long departmentId,
+        boolean includeSubDepartments,
         String role,
         String accountStatus,
         Boolean mustChangePassword,
