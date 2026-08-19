@@ -39,6 +39,8 @@ public record CashFlowListResponse(
             LocalDateTime tradedAt,
             @Schema(description = "거래고유번호", example = "신한-20260715103000")
             String bankTxnId,
+            @Schema(description = "은행명", example = "신한은행")
+            String bankName,
             @Schema(description = "구분 (INCOME/OUTCOME)", example = "INCOME")
             String type,
             @Schema(description = "거래 금액", example = "30000000")
@@ -75,7 +77,7 @@ public record CashFlowListResponse(
 
         public static CashFlowItem from(CashFlowView view) {
             return new CashFlowItem(
-                    view.cashFlowId(), view.tradedAt(), view.bankTxnId(), view.type(), view.amount(),
+                    view.cashFlowId(), view.tradedAt(), view.bankTxnId(), view.bankName(), view.type(), view.amount(),
                     view.depositorName(), view.bankMemo(), view.sourceType(), view.projectId(),
                     view.projectName(), view.settleId(), view.roundName(), view.linkedBy(),
                     view.linkedByName(), view.linkedAt(), view.isExcluded(), view.linkStatus()

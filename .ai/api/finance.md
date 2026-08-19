@@ -168,6 +168,7 @@
 | `data.cashFlows[].cashFlowId` | Long | 입출금 내역 ID |
 | `data.cashFlows[].tradedAt` | LocalDateTime | 거래 일시 |
 | `data.cashFlows[].bankTxnId` | String | 거래고유번호 |
+| `data.cashFlows[].bankName` | String | 은행명 (2026-08-19 추가) |
 | `data.cashFlows[].type` | String | 구분 (INCOME/OUTCOME) |
 | `data.cashFlows[].amount` | BigDecimal | 거래 금액 |
 | `data.cashFlows[].depositorName` | String | 입금자명/수취인명 |
@@ -199,6 +200,7 @@
         "cashFlowId": 1,
         "tradedAt": "2026-07-15T10:30:00",
         "bankTxnId": "신한-20260715103000",
+        "bankName": "신한은행",
         "type": "INCOME",
         "amount": 30000000,
         "depositorName": "(주)한국기술공사",
@@ -218,6 +220,7 @@
         "cashFlowId": 5,
         "tradedAt": "2026-06-30T09:00:00",
         "bankTxnId": "신한-20260630090000",
+        "bankName": "신한은행",
         "type": "INCOME",
         "amount": 270000000,
         "depositorName": "환경부",
@@ -237,6 +240,7 @@
         "cashFlowId": 8,
         "tradedAt": "2026-05-10T11:00:00",
         "bankTxnId": "신한-20260510110000",
+        "bankName": "신한은행",
         "type": "INCOME",
         "amount": 90000000,
         "depositorName": "환경부",
@@ -289,14 +293,25 @@
 - **`keyword` 검색** — `bankMemo` 또는 `depositorName`에 부분 일치(`LIKE %keyword%`)로 구현했다.
 - **✅ `type`/`sourceType` 필터 추가 (2026-08-18, 프론트 요청)** — 값은 목록 응답의 `type`/`sourceType`을
   그대로 쓴다(새 필드 없음). 기존 `startDate`/`endDate`/`unlinked`/`projectId`/`keyword`와 AND로 묶인다.
-  **허용값 검증은 하지 않는다**(요청사항 — "없는 값이 오면 매칭 0건이면 됨"): 정의되지 않은 값이 오면
-  `WHERE cf.type = ...`가 0건을 반환할 뿐 400을 내지 않는다. 빈 문자열(`?type=`)은 "필터 없음"으로 처리.
-  목록·카운트가 같은 필터 블록을 공유해 `totalElements`가 필터 결과와 정확히 일치한다.
+  빈 문자열(`?type=`)은 "필터 없음"으로 처리(생략과 동일). 목록·카운트가 같은 필터 블록
+  (`cashFlowJoinsAndFilters`)을 공유해 `totalElements`가 필터 결과와 정확히 일치한다.
+- **허용값 검증은 하지 않는다** (요청사항 — "프론트가 허용값만 보냄, 없는 값은 무시/400 무관"). 두 컬럼은
+  **ENUM**(`type`=INCOME/OUTCOME, `source_type`=MANUAL/CSV/API)이라 `WHERE cf.type = #{type}`로 비교한다:
+  - **비멤버 값**(`FOO` 등) → 매칭 0건 (400 아님).
+  - **대소문자 변형**(`income` 등) → MySQL ENUM 비교가 대소문자 무시라 **해당 ENUM 값에 매칭됨**
+    (`income`이면 INCOME 행). 반환 결과가 의미상 정확하고(사용자가 원한 그 타입) 프론트가 대문자만
+    보내는 계약이라, `BINARY`/명시적 대소문자 구분은 적용하지 않고 유지하기로 결정(2026-08-18, CodeRabbit
+    리뷰 검토 후). 엄격히 "미정의=0건"이 필요해지면 그때 `= BINARY #{type}`로 좁힌다.
 - **✅ 페이징 추가 (2026-08-12)** — 프론트 요청으로 `page`/`size`/`sort` + `{page,size,totalElements,totalPages}`
   추가(공고·프로젝트 목록과 같은 컨벤션 — `page`≥0·`size`(1~100)·`sort` 허용값 검증, 위반 시
   `FINANCE_PAGE_QUERY_INVALID` 400, silent clamp 아님). **`cashFlows` 키 이름은 유지**(아직 프론트 연동 전이라
   `content`로 바꿀 필요 없다고 확인). `sort` 기본값 `TRADED_AT_DESC` — 이전 고정 정렬(`tradedAt` 내림차순)과
   동작이 같다(생략 시 회귀 없음).
+- **✅ `bankName` 추가 (2026-08-19, 프론트 요청)** — 프론트가 은행명을 얻으려고 `bankTxnId`를 `-`로 잘라
+  앞부분을 은행명으로 되읽고 있었는데, `bankTxnId` 접두어가 은행명 앞 4자만 쓰다 보니(`generateBankTxnId`)
+  "카카오뱅크"→"카카오뱅", "새마을금고"→"새마을금"처럼 8개 은행 옵션 중 3개가 깨져서 나갔다. `bankTxnId`는
+  중복 판정용 식별자로 그대로 두고, 은행명은 이미 있는 `cash_flow.bank_name` 컬럼을 그대로 노출해 프론트의
+  문자열 파싱 우회를 없앴다.
 
 ---
 
@@ -338,6 +353,7 @@
     "cashFlowId": 224,
     "tradedAt": "2026-08-13T14:30:00",
     "bankTxnId": "신한은행-20260813143000-D1B6E7",
+    "bankName": "신한은행",
     "type": "INCOME",
     "amount": 50000000,
     "depositorName": "(주)테스트클라이언트",

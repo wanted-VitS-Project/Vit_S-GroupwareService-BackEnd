@@ -13,6 +13,7 @@ public record CashFlowRow(
         Long cashFlowId,
         LocalDateTime tradedAt,
         String bankTxnId,
+        String bankName,
         String type,
         BigDecimal amount,
         String depositorName,

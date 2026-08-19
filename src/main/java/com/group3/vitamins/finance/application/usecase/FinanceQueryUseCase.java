@@ -63,6 +63,7 @@ public interface FinanceQueryUseCase {
             Long cashFlowId,
             LocalDateTime tradedAt,
             String bankTxnId,
+            String bankName,
             String type,
             BigDecimal amount,
             String depositorName,
