@@ -136,6 +136,7 @@ public class FinanceQueryService implements FinanceQueryUseCase {
                 row.cashFlowId(),
                 row.tradedAt(),
                 row.bankTxnId(),
+                row.bankName(),
                 row.type(),
                 row.amount(),
                 row.depositorName(),
